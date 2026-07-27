@@ -4,7 +4,7 @@
 
 ### 🔐 Security & Privacy
 - **Data Sovereignty**: Threat intelligence data never leaves your infrastructure
-- **Aviation Compliance**: Meets strict aviation cybersecurity requirements
+- **Regulatory Compliance**: Meets strict critical infrastructure cybersecurity requirements
 - **No Data Leakage**: Sensitive IOCs, emails, files analyzed locally
 - **Audit Trail**: Full control over what's processed where
 
@@ -224,7 +224,7 @@ llm:
 Example Modelfile:
 ```
 FROM llama3.1:8b
-SYSTEM You are a senior SOC analyst specializing in aviation cybersecurity.
+SYSTEM You are a senior SOC analyst specializing in critical infrastructure cybersecurity.
 PARAMETER temperature 0.3
 ```
 
@@ -235,11 +235,11 @@ PARAMETER temperature 0.3
 | Cost | FREE | $3-15 per million tokens |
 | Privacy | ✅ 100% local | ❌ Data sent to cloud |
 | Speed | ⚡ Fast (local) | 🌐 Network dependent |
-| Compliance | ✅ Aviation-ready | ❌ May violate policies |
+| Compliance | ✅ Compliance-ready | ❌ May violate policies |
 | Rate Limits | ✅ None | ❌ API quotas |
 | Offline | ✅ Works offline | ❌ Requires internet |
 
-## Recommended Setup for Aviation SOCs
+## Recommended Setup for Critical Infrastructure SOCs
 
 ```yaml
 llm:

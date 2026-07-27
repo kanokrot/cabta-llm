@@ -11,7 +11,7 @@ class LLMAnalyzer:
     """
     LLM-powered threat analysis using LOCAL (Ollama) or CLOUD (Anthropic) models.
     
-    **LOCAL-FIRST APPROACH** (Recommended for Aviation/Critical Infrastructure):
+    **LOCAL-FIRST APPROACH** (Recommended for Critical Infrastructure):
     - Uses Ollama for local, private analysis
     - No data leaves your infrastructure
     - Free, unlimited usage
@@ -82,7 +82,7 @@ class LLMAnalyzer:
             else:
                 findings_summary = f"🚨 **MALICIOUS**: {sources_flagged} out of {sources_checked} sources flagged this IOC."
             
-            prompt = f"""You are a senior SOC analyst at  Technologies specializing in aviation cybersecurity. 
+            prompt = f"""You are a senior SOC analyst specializing in critical infrastructure cybersecurity. 
 
 Analyze this IOC investigation and provide a professional, actionable analysis:
 

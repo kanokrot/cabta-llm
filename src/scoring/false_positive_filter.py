@@ -12,7 +12,7 @@ class FalsePositiveFilter:
     Features:
     - Trusted vendor whitelist
     - Common tool signatures
-    - Aviation industry whitelists
+    - Industry-specific whitelists
     """
     
     # Trusted software vendors
