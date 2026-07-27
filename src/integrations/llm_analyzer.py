@@ -1,5 +1,5 @@
 """
-Author: Ugur AtesLLM-powered intelligent analysis using Local (Ollama) or Cloud (Anthropic) models."""
+Author: Ugur AtesLLM-powered intelligent analysis using Local (Ollama) or Cloud () models."""
 
 import aiohttp
 import json
