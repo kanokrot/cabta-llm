@@ -82,7 +82,7 @@ class LLMAnalyzer:
             else:
                 findings_summary = f"🚨 **MALICIOUS**: {sources_flagged} out of {sources_checked} sources flagged this IOC."
             
-            prompt = f"""You are a senior SOC analyst at TAV Technologies specializing in aviation cybersecurity. 
+            prompt = f"""You are a senior SOC analyst at  Technologies specializing in aviation cybersecurity. 
 
 Analyze this IOC investigation and provide a professional, actionable analysis:
 
@@ -183,7 +183,7 @@ Keep it concise and factual."""
                 'composite_score': email_data.get('composite_score', 0)
             }
             
-            prompt = f"""You are a SOC analyst at TAV Technologies specializing in email security and phishing detection.
+            prompt = f"""You are a SOC analyst at specializing in email security and phishing detection.
 
 Analyze this email investigation:
 
@@ -397,7 +397,7 @@ Be specific and reference the actual IOC findings in your analysis."""
 
     def _build_standard_file_prompt(self, file_data: Dict, context: Dict) -> str:
         """Build standard LLM prompt for binary/script files."""
-        return f"""You are a malware analyst at TAV Technologies. Analyze this file investigation:
+        return f"""You are a malware analyst at  Technologies. Analyze this file investigation:
 
 File Information:
 - Filename: {context['filename']}
@@ -677,7 +677,7 @@ Be specific and reference the tool findings in your analysis."""
             registry_keys = analysis_result.get('registry_keys', [])
             
             # Construct prompt
-            prompt = f"""You are a detection engineer at TAV Technologies. Generate detection rules based on this analysis.
+            prompt = f"""You are a detection engineer at  Technologies. Generate detection rules based on this analysis.
 
 Analysis Context:
 - IOC: {ioc or filename or sha256}
