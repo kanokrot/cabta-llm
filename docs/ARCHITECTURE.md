@@ -326,7 +326,7 @@ api_keys:
 # LLM Configuration
 llm:
   provider: "ollama"    # ollama, openai, anthropic
-  model: "llama3.1:8b"
+  model: "llama3.2:3b"
   api_key: ""
   base_url: "http://localhost:11434"
 

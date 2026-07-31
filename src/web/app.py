@@ -232,6 +232,15 @@ def create_app() -> FastAPI:
     except Exception as exc:
         logger.warning(f"[WEB] MCPClientManager not available: {exc}")
 
+        # --- เพิ่มการสร้าง LLMAnalyzer ---
+        app.state.llm_analyzer = None
+    try:
+        from src.integrations.llm_analyzer import LLMAnalyzer
+        app.state.llm_analyzer = LLMAnalyzer(config)
+        logger.info("[WEB] LLMAnalyzer initialized")
+    except Exception as exc:
+        logger.warning(f"[WEB] LLMAnalyzer not available: {exc}")
+
     try:
         from src.agent.agent_loop import AgentLoop
         app.state.agent_loop = AgentLoop(
@@ -239,6 +248,8 @@ def create_app() -> FastAPI:
             tool_registry=app.state.tool_registry or ToolRegistry(),
             agent_store=app.state.agent_store,
             mcp_client=app.state.mcp_client,
+            # --- ส่ง llm_analyzer เข้า AgentLoop ---
+            llm_analyzer=app.state.llm_analyzer,
         )
         logger.info("[WEB] AgentLoop initialized")
     except Exception as exc:
