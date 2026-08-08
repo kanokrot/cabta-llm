@@ -4,7 +4,7 @@ AI-Powered SOC Platform for Threat Analysis, IOC Investigation & Email Forensics
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-2.0.0-green.svg)](https://github.com/ugurrates/CABTA)
+[![Version](https://img.shields.io/badge/version-2.0.0-green.svg)](https://github.com/kanokrot/cabta-llm)
 
 CABTA is a comprehensive, local-first security analysis platform designed for SOC analysts, incident responders, and threat hunters. It features a modern web dashboard, 20+ threat intelligence sources, advanced malware analysis, email forensics, and AI-powered investigation with local LLM support via Ollama.
 
@@ -41,6 +41,8 @@ CABTA is a comprehensive, local-first security analysis platform designed for SO
 | **Detection Rule Generation** | Auto-generated KQL, Splunk SPL, Sigma, YARA, Snort, FortiMail, Proofpoint, Mimecast rules |
 | **Case Management** | Track investigations, link analyses, add notes |
 | **STIX 2.1 Export** | Export IOCs as STIX bundles with TLP marking |
+| **Incident Ticketing** | Auto-creates a SQLite-backed ticket when an analysis resolves to a configurable verdict (MALICIOUS/SUSPICIOUS by default) |
+| **RAG-Augmented Investigation** | Optional ChromaDB knowledge base (playbooks + MITRE mappings) retrieved into agent prompts for more grounded recommendations |
 
 ### v2.0 New Capabilities
 
@@ -138,8 +140,8 @@ CABTA is a comprehensive, local-first security analysis platform designed for SO
 
 ```bash
 # Clone repository
-git clone https://github.com/ugurrates/CABTA.git
-cd CABTA
+git clone https://github.com/kanokrot/cabta-llm.git
+cd cabta-llm
 
 # Create virtual environment
 python -m venv venv
@@ -155,7 +157,7 @@ cp config.yaml.example config.yaml
 # Edit config.yaml with your API keys (optional - works without them)
 
 # Verify installation
-python test_setup.py
+pytest
 ```
 
 ### Start the Web Dashboard
@@ -173,12 +175,22 @@ Open http://localhost:3003 in your browser.
 curl -fsSL https://ollama.com/install.sh | sh   # Linux
 # or download from https://ollama.com for Windows/Mac
 
-# Pull recommended model
-ollama pull llama3.1:8b
+# Pull recommended model (default is tuned for low-VRAM GPUs, e.g. 4GB)
+ollama pull llama3.2:3b
 
 # Verify
 ollama list
 ```
+
+### RAG Knowledge Base (Optional)
+
+CABTA can retrieve relevant playbook/MITRE context into agent prompts via a lightweight local vector store (ChromaDB + `sentence-transformers/all-MiniLM-L6-v2`, CPU-only so it doesn't compete with Ollama for VRAM):
+
+```bash
+pip install chromadb sentence-transformers --break-system-packages
+```
+
+Seed data lives in `data/rag_knowledge/*.yaml`; the store persists under `~/.blue-team-assistant/rag_store` by default.
 
 ---
 
@@ -197,8 +209,14 @@ api_keys:
 # LLM Configuration
 llm:
   provider: "ollama"           # ollama, openai, anthropic
-  ollama_model: "llama3.1:8b"
+  ollama_model: "llama3.2:3b"
   ollama_endpoint: "http://localhost:11434"
+
+# Ticketing (optional)
+ticketing:
+  create_on_verdict:            # Verdicts that auto-create an incident ticket
+    - "MALICIOUS"
+    - "SUSPICIOUS"
 ```
 
 ### API Key Sources
@@ -303,6 +321,14 @@ CABTA uses a multi-layered scoring architecture:
 | N/A | **SPAM** | Unsolicited but not malicious |
 | N/A | **RANSOMWARE** | Ransomware-specific verdict |
 
+The scoring engine is the single source of truth for the final verdict (`src/integrations/verdict_validator.py`) — the LLM only explains/summarizes findings and never overrides the deterministic score.
+
+---
+
+## Incident Ticketing
+
+When an analysis resolves to a verdict listed in `ticketing.create_on_verdict` (MALICIOUS/SUSPICIOUS by default), CABTA automatically opens an incident ticket in a local SQLite database (`data/tickets/tickets.db`). Tickets track the IOC, verdict, status, summary, and recommendations, and are viewable at `/tickets` or via `GET /api/tickets`.
+
 ---
 
 ## Threat Intelligence Sources
@@ -342,54 +368,124 @@ Rules include sender-based, URL-based, attachment-based, and behavioral detectio
 ---
 
 ## Project Structure
-
+ 
 ```
 CABTA/
 |-- src/
-|   |-- analyzers/           # File type analyzers
-|   |   |-- pe_analyzer.py          # PE analysis + deep inspection
-|   |   |-- ransomware_analyzer.py  # Ransomware detection
+|   |-- agent/                   # AI agent & playbook-driven triage
+|   |   |-- agent_loop.py               # Main orchestration loop (THINK/ACT/OBSERVE)
+|   |   |-- agent_response_parsing.py   # LLM response/JSON parsing helpers
+|   |   |-- agent_tool_selection.py     # Tool filtering & prompt-block building
+|   |   |-- agent_llm_backends.py       # Ollama/Anthropic chat & generate adapters
+|   |   |-- agent_state.py              # Session/investigation state
+|   |   |-- agent_store.py              # Persistence for agent data
+|   |   |-- correlation.py              # Alert-to-IOC correlation
+|   |   |-- mcp_client.py               # MCP tool server client
+|   |   |-- memory.py                   # RAG / knowledge retrieval
+|   |   |-- playbook_engine.py          # YAML playbook execution
+|   |   |-- sandbox_orchestrator.py     # Sandbox submission coordination
+|   |   |-- tool_registry.py            # Available tool registry
+|   |   +-- adapters/                   # Agent tool adapters
+|   |-- analyzers/                # File type analyzers
+|   |   |-- pe_analyzer.py              # PE analysis + deep inspection
+|   |   |-- ransomware_analyzer.py      # Ransomware detection
 |   |   |-- beacon_config_extractor.py  # Cobalt Strike beacon extraction
-|   |   |-- memory_analyzer.py      # Volatility 3 memory forensics
-|   |   |-- bec_detector.py         # Business Email Compromise detection
-|   |   |-- email_threat_indicators.py  # 10 email threat checks
-|   |   |-- text_analyzer.py        # C2/IOC text file analysis
-|   |   |-- apk_analyzer.py         # Android APK risk scoring
-|   |   |-- file_type_router.py     # Magic bytes + MIME routing
-|   |   +-- ...                     # ELF, Mach-O, Office, PDF, Script, Archive
-|   |-- integrations/        # External service integrations
-|   |   |-- llm_analyzer.py         # Ollama/Anthropic LLM analysis
-|   |   |-- threat_actor_profiler.py # 20 APT group database
-|   |   |-- stix_generator.py       # STIX 2.1 indicator export
-|   |   +-- threat_intel.py         # 20+ TI source clients
-|   |-- scoring/              # Multi-layered scoring engine
-|   |   |-- tool_based_scoring.py    # Per-tool weighted scoring
-|   |   |-- intelligent_scoring.py   # Source-weighted IOC scoring
-|   |   |-- adaptive_scoring.py      # Kill-chain & combo detection
-|   |   +-- enhanced_scoring.py      # BEC/ransomware scoring
-|   |-- detection/            # Detection rule generation
-|   |   |-- rule_generator.py        # KQL, Sigma, YARA, Snort
-|   |   +-- llm_rule_generator.py    # LLM-assisted rule generation
-|   |-- tools/                # High-level analysis tools
-|   |   |-- malware_analyzer.py      # File analysis pipeline
-|   |   |-- email_analyzer.py        # Email analysis pipeline
-|   |   +-- ioc_investigator.py      # IOC investigation pipeline
-|   |-- utils/                # Utilities
-|   |   |-- dga_detector.py          # 7-heuristic DGA detection
-|   |   |-- domain_age_checker.py    # WHOIS domain age checking
-|   |   +-- entropy_analyzer.py      # Shannon entropy analysis
-|   |-- web/                  # FastAPI web application
-|   |   |-- app.py                   # Application factory
-|   |   +-- routes/                  # API & page routes
-|   |-- reporting/            # Report generation
-|   +-- mcp_servers/          # MCP tool servers
-|-- templates/                # Jinja2 HTML templates
-|-- static/                   # CSS, JS, images
-|-- data/                     # Playbooks, YARA rules, hash DB
-|-- examples/                 # Sample test files
-|-- tests/                    # Test suite
-|-- config.yaml.example       # Configuration template
-+-- requirements.txt          # Python dependencies
+|   |   |-- memory_analyzer.py          # Volatility 3 memory forensics
+|   |   |-- bec_detector.py             # Business Email Compromise detection
+|   |   |-- email_threat_indicators.py  # Email threat checks
+|   |   |-- text_analyzer.py            # C2/IOC text file analysis
+|   |   |-- apk_analyzer.py             # Android APK risk scoring
+|   |   |-- firmware_analyzer.py        # Firmware inspection
+|   |   |-- file_type_router.py         # Magic bytes + MIME routing
+|   |   |-- deobfuscators/              # Script de-obfuscation helpers
+|   |   +-- ...                         # ELF, Mach-O, Office, PDF, Script, Archive
+|   |-- cache/                    # Result caching
+|   |   |-- analysis_cache.py           # Analysis result cache
+|   |   +-- ioc_cache.py                # IOC lookup cache
+|   |-- decoders/                 # Gateway URL decoders
+|   |   |-- proofpoint_decoder.py       # Proofpoint URL Defense decoder
+|   |   +-- safelinks_decoder.py        # Microsoft Safe Links decoder
+|   |-- detection/                # Detection rule generation
+|   |   |-- rule_generator.py           # KQL, Sigma, YARA, Snort
+|   |   +-- llm_rule_generator.py       # LLM-assisted rule generation
+|   |-- integrations/             # External service integrations
+|   |   |-- llm_analyzer.py             # Ollama/Anthropic LLM analysis
+|   |   |-- threat_actor_profiler.py    # 20 APT group database
+|   |   |-- stix_generator.py           # STIX 2.1 indicator export
+|   |   |-- threat_intel.py             # 20+ TI source clients
+|   |   |-- threat_intel_extended.py    # Additional TI source clients
+|   |   |-- sandboxes.py                # Sandbox client(s)
+|   |   |-- sandbox_integration.py      # Sandbox result integration
+|   |   |-- sandbox_submitter.py        # Sandbox submission handling
+|   |   |-- ticketing.py                # SQLite incident ticket creation
+|   |   +-- verdict_validator.py        # Verdict consistency validation (scoring is authoritative)
+|   |-- mcp_servers/              # MCP tool servers (11)
+|   |   |-- flare_tools.py
+|   |   |-- forensics_tools.py
+|   |   |-- free_osint_tools.py
+|   |   |-- ghidra_tools.py
+|   |   |-- malwoverview_tools.py
+|   |   |-- mobsf_tools.py
+|   |   |-- network_tools.py
+|   |   |-- osint_tools.py
+|   |   |-- remnux_tools.py
+|   |   |-- threat_intel_tools.py
+|   |   +-- vulnerability_tools.py
+|   |-- models/                   # Shared data models
+|   |   +-- analysis_result.py
+|   |-- rag/                      # Retrieval-augmented generation
+|   |   +-- rag_knowledge_base.py       # ChromaDB knowledge base for agent prompts
+|   |-- reporting/                # Report generation
+|   |   |-- advanced_report_generator.py
+|   |   |-- executive_pdf.py
+|   |   |-- executive_summary.py
+|   |   |-- html_generator.py
+|   |   |-- html_report_generator.py
+|   |   |-- markdown_generator.py
+|   |   |-- mitre_navigator.py          # MITRE ATT&CK Navigator layer export
+|   |   |-- raw_output_collector.py
+|   |   |-- soc_output_formatter.py
+|   |   +-- timeline_generator.py
+|   |-- scoring/                  # Multi-layered scoring engine
+|   |   |-- tool_based_scoring.py       # Per-tool weighted scoring
+|   |   |-- intelligent_scoring.py      # Source-weighted IOC scoring
+|   |   |-- adaptive_scoring.py         # Kill-chain & combo detection
+|   |   |-- enhanced_scoring.py         # BEC/ransomware scoring
+|   |   |-- false_positive_filter.py    # FP filtering
+|   |   +-- signature_verifier.py       # Signature verification
+|   |-- tools/                    # High-level analysis tools
+|   |   |-- malware_analyzer.py         # File analysis pipeline
+|   |   |-- email_analyzer.py           # Email analysis pipeline
+|   |   |-- ioc_investigator.py         # IOC investigation pipeline
+|   |   +-- external_tool_runner.py     # External CLI tool execution
+|   |-- utils/                    # Utilities
+|   |   |-- dga_detector.py             # 7-heuristic DGA detection
+|   |   |-- domain_age_checker.py       # WHOIS domain age checking
+|   |   |-- entropy_analyzer.py         # Shannon entropy analysis
+|   |   |-- mitre_kill_chain.py         # Kill-chain stage mapping
+|   |   |-- mitre_mapper.py             # MITRE technique mapping
+|   |   +-- rate_limiter.py             # API rate limiting
+|   |-- web/                      # FastAPI web application
+|   |   |-- app.py                      # Application factory
+|   |   |-- analysis_manager.py         # Analysis job management
+|   |   |-- case_store.py               # Case management persistence
+|   |   |-- websocket.py                # Real-time updates
+|   |   +-- routes/                     # API & page routes (incl. tickets.py)
+|   |-- server.py                 # MCP/agent server entry point
+|   +-- soc_agent.py              # SOC agent entry point
+|-- templates/                    # Jinja2 HTML templates
+|-- static/                       # CSS, JS, images
+|-- data/
+|   |-- fuzzy_hash_db.json        # Fuzzy hash database
+|   |-- playbooks/                # Agent playbooks (10 files)
+|   |-- rag_knowledge/            # RAG seed data (playbooks + MITRE mappings)
+|   +-- tickets/                  # SQLite incident ticket database
+|-- docs/                         # Architecture, installation, usage docs
+|-- examples/                     # Sample test files
+|-- tests/                        # Test suite
+|-- docker-compose.sandbox.yml    # Sandbox environment definition
+|-- config.yaml.example           # Configuration template
++-- requirements.txt              # Python dependencies
 ```
 
 ---
@@ -423,6 +519,12 @@ CABTA/
 | GET | `/api/config/health` | System health check |
 | GET | `/api/config/tools` | Available analysis tools |
 | GET/POST | `/api/config/settings` | Application settings |
+
+### Ticketing
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/tickets` | List all auto-created incident tickets |
 
 Full API documentation available at http://localhost:3003/api/docs (Swagger UI).
 
@@ -463,7 +565,7 @@ CABTA can run as an MCP (Model Context Protocol) server for integration with MCP
 }
 ```
 
-Available MCP servers: `remnux_tools`, `flare_tools`, `forensics_tools`, `threat_intel_tools`, `osint_tools`, `network_tools`, `vulnerability_tools`.
+Available MCP servers: `remnux_tools`, `flare_tools`, `forensics_tools`, `threat_intel_tools`, `osint_tools`, `network_tools`, `vulnerability_tools`, `free_osint_tools`, `ghidra_tools`, `malwoverview_tools`, `mobsf_tools`.
 
 ---
 
@@ -478,8 +580,8 @@ Available MCP servers: `remnux_tools`, `flare_tools`, `forensics_tools`, `threat
 ### Development Setup
 
 ```bash
-git clone https://github.com/ugurrates/CABTA.git
-cd CABTA
+git clone https://github.com/kanokrot/cabta-llm.git
+cd cabta-llm
 pip install -r requirements.txt
 pip install pytest black flake8
 pytest
@@ -495,10 +597,12 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Author
 
-**Ugur Ates**
+**Original Author: Ugur Ates**
 - GitHub: [@ugurrates](https://github.com/ugurrates)
 - Medium: [@ugur.can.ates](https://medium.com/@ugur.can.ates)
 - LinkedIn: [Ugur Ates](https://www.linkedin.com/in/ugurcanates/)
+
+This fork ([kanokrot/cabta-llm](https://github.com/kanokrot/cabta-llm)) is maintained by [@kanokrot](https://github.com/kanokrot), building on the original CABTA project.
 
 ---
 
