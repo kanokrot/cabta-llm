@@ -73,58 +73,87 @@ CABTA is a comprehensive, local-first security analysis platform designed for SO
 ## Architecture
 
 ```
-+--------------------------------------------------------------------+
-|                            CABTA v2.0                               |
-+--------------------------------------------------------------------+
-|                                                                      |
-|  +------------------+  +------------------+  +------------------+    |
-|  |   Web Dashboard  |  |    Agent Chat    |  |    REST API      |    |
-|  |   (FastAPI +     |  |   (AI-powered    |  |   /api/analysis  |    |
-|  |    Jinja2)       |  |    investigation)|  |   /api/reports   |    |
-|  +--------+---------+  +--------+---------+  +--------+---------+    |
-|           |                      |                      |            |
-|           +----------------------+----------------------+            |
-|                                  |                                   |
-|  +---------------------------------------------------------------+  |
-|  |                        TOOLS LAYER                             |  |
-|  |  +--------------+ +--------------+ +------------------------+ |  |
-|  |  |   Malware    | |    Email     | |   IOC Investigator     | |  |
-|  |  |   Analyzer   | |   Analyzer   | | (IP/Domain/URL/Hash)   | |  |
-|  |  +--------------+ +--------------+ +------------------------+ |  |
-|  +---------------------------------------------------------------+  |
-|                                  |                                   |
-|  +---------------------------------------------------------------+  |
-|  |                      ANALYZERS LAYER                           |  |
-|  |  +------+ +------+ +------+ +------+ +------+ +------+       |  |
-|  |  |  PE  | | ELF  | |Office| | PDF  | |Script| |  APK |       |  |
-|  |  +------+ +------+ +------+ +------+ +------+ +------+       |  |
-|  |  +------+ +------+ +------+ +------+ +------+ +------+       |  |
-|  |  |Ransom| |Beacon| |Memory| | Text | |Archive| | BEC |       |  |
-|  |  |ware  | |Config| |Foren.| |Analyz| |      | |Detect|       |  |
-|  |  +------+ +------+ +------+ +------+ +------+ +------+       |  |
-|  +---------------------------------------------------------------+  |
-|                                  |                                   |
-|  +---------------------------------------------------------------+  |
-|  |                    INTEGRATIONS LAYER                          |  |
-|  |  +-----------------+ +------------------+ +-----------------+ |  |
-|  |  | Threat Intel    | |  LLM Analyzer    | | STIX Generator  | |  |
-|  |  | (20+ sources)   | |  (Ollama/Cloud)  | | (STIX 2.1)      | |  |
-|  |  +-----------------+ +------------------+ +-----------------+ |  |
-|  |  +-----------------+ +------------------+ +-----------------+ |  |
-|  |  | Threat Actor    | |  DGA Detector    | | Domain Age      | |  |
-|  |  | Profiler (20grp)| |  (7 heuristics)  | | Checker (WHOIS) | |  |
-|  |  +-----------------+ +------------------+ +-----------------+ |  |
-|  +---------------------------------------------------------------+  |
-|                                  |                                   |
-|  +---------------------------------------------------------------+  |
-|  |                      SCORING & OUTPUT                          |  |
-|  |  +-----------+ +----------+ +-------+ +-------+ +-----------+ |  |
-|  |  | Adaptive  | | Tool-    | | HTML  | | MITRE | | Detection | |  |
-|  |  | Scoring   | | Based    | |Report | | Nav.  | | Rules     | |  |
-|  |  | Engine    | | Scoring  | |       | |       | | Generator | |  |
-|  |  +-----------+ +----------+ +-------+ +-------+ +-----------+ |  |
-|  +---------------------------------------------------------------+  |
-+----------------------------------------------------------------------+
+=================================================================
+ AI THREAT INTELLIGENCE AUTOMATION PLATFORM — SYSTEM WORKFLOW
+=================================================================
+
+[SECURITY DATA SOURCES / ENTRY POINTS]
+  - Direct IOC input          → Flow A (ioc_investigator.py)
+  - Chat goal (analyst asks)  → Flow B (agent_loop.py, ReAct)
+  - Alert / SIEM event        → Flow C (playbook_engine.py, YAML)
+------------------------------------------------------------------
+
+① ALERT / IOC INGESTION
+   รับ input เข้าระบบ 3 ทาง ตามช่องทางด้านบน
+   Component: FastAPI endpoint / playbook trigger
+
+② CACHE CHECK (Flow C only)
+   recall_previous_analysis — เช็คว่าเคยวิเคราะห์ IOC นี้มาก่อนหรือยัง
+   Component: recall_ioc tool
+
+③ IOC EXTRACTION
+   extract_iocs — ดึง IOC ทั้งหมดจาก text/alert (IP, domain, hash, URL, email)
+   Component: regex/NLP extractor
+
+④ CONTEXT ENRICHMENT
+   Flow A : TI lookup จาก 20+ threat intel sources
+   Flow B : เรียก investigate_ioc / analyze_malware / analyze_email ผ่าน shared tool registry
+   Flow C : enrichment ผ่าน 17 MCP tools ตามลำดับที่ fix ไว้ (alert_triage.yaml)
+   Flow C→incident_response.yaml : enrichment เพิ่ม (hash/IP/domain/URL intel + OSINT: Shodan, MISP, HudsonRock, Ransomwatch)
+   Component: ThreatIntelligence integration, MCP servers (threat_intel_tools, remnux_tools, osint-tools, forensics-tools)
+
+⑤ RISK CALCULATION (deterministic)
+   Flow A/B : Scoring engine คำนวณ threat_score → verdict (MALICIOUS/SUSPICIOUS/CLEAN)
+   Flow C (alert_triage) : อ่าน verdict จาก context ที่ flatten ไว้แล้ว (เรียก scoring ผ่าน tool เดียวกัน)
+   ⚠ GAP: incident_response.yaml ไม่ใช้ scoring engine เลย — ตัดสินใจจาก raw condition ตรงๆ
+       (hash_threat_check.malicious / ip_reputation.blocklisted / feodo_check.found)
+   Component: ToolBasedScoring (VERDICT_THRESHOLDS: MALICIOUS 70 / SUSPICIOUS 40 / CLEAN 0)
+
+⑥ LLM NARRATIVE + VALIDATION
+   LLM (Llama3.2:3b) สรุปผลเป็นภาษาธรรมชาติ — ไม่ตัดสิน verdict เอง
+   validate_llm_analysis() บังคับ verdict ให้ตรงกับ threat_score + เช็ค hallucination
+   Component: llm_analyzer.py, Ollama local inference
+
+------------------------------------------------------------------
+ BRANCH ตาม severity
+------------------------------------------------------------------
+   CLEAN / Informational        → ไม่สร้าง ticket, จบ flow
+   MALICIOUS / SUSPICIOUS       → สร้าง ticket + ต้อง investigate
+   PHISHING (email เท่านั้น)     → สร้าง ticket (ต้อง normalize verdict list — ทำแล้ว)
+------------------------------------------------------------------
+
+⑦ HUMAN-IN-THE-LOOP APPROVAL
+   Flow B/C : approve_action / reject_action / _wait_for_approval
+   incident_response.yaml : requires_approval บังคับที่ isolate_device, block_malicious_indicators,
+                             quarantine_artifacts (การกระทำที่กระทบระบบจริง)
+   Component: approval queue ในโครง agent_loop / playbook_engine
+
+⑧ CONTAINMENT ACTIONS (incident_response.yaml เท่านั้น)
+   immediate_containment (isolate) → block_malicious_indicators → quarantine_artifacts
+   ⚠ GAP: ทำงานแยกขาดจาก ticketing system ของ Flow A/B/C — ไม่มี ticket_id ผูกกับ action พวกนี้
+   Component: isolate_device / block_ip / quarantine_file tools
+
+⑨ VERIFICATION & RECOVERY (incident_response.yaml เท่านั้น)
+   verify_clean → cve_check → kev_check (CISA KEV)
+   Component: search_logs, vulnerability-tools MCP
+
+⑩ REPORTING & CLOSURE
+   Flow A            : create_incident_ticket(result) — ครบ ทำงานถูกต้อง
+   Flow C (alert_triage) : summary รวม highest verdict + เช็ค ticket ที่สร้างระหว่างทาง — แก้แล้ว (Phase 3)
+   incident_response.yaml : document_incident (action: final_answer) สร้างแค่ report text
+   ⚠ GAP: ไม่เรียก create_incident_ticket, ไม่มี verdict summary, ไม่เชื่อมกับ audit trail ของระบบหลัก
+   Component: ticketing.py / playbook_engine._find_highest_verdict()
+
+=================================================================
+ GAP SUMMARY (สำหรับสไลด์ "Gaps" — สิ่งที่ diagram เดิมแบบ linear ไม่ได้บอก)
+=================================================================
+ 1. incident_response.yaml ไม่ผ่าน scoring engine เลย — ใช้ raw condition ของตัวเอง
+ 2. incident_response.yaml ไม่เรียก ticketing — containment/eradication ที่ทำไปไม่มี ticket ผูกไว้
+ 3. incident_response.yaml ไม่มี audit trail แบบ highest-verdict ที่เพิ่งแก้ใน alert_triage.yaml
+ 4. Notification (Email/LINE/Teams) ยังไม่ได้ implement — และ LINE Notify / Teams webhook เดิม
+    ถูก deprecate ไปแล้ว ต้องใช้ LINE Messaging API และ Teams Power Automate Workflows แทน
+=================================================================
+
 ```
 
 ---
