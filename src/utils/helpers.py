@@ -60,26 +60,22 @@ def normalize_score(score: float, max_score: float = 100.0) -> int:
 def determine_verdict(score: int) -> str:
     """
     Determine verdict based on threat score.
-    
+    Thresholds match the Verdicts table in README.md exactly.
+
     Args:
         score: Threat score (0-100)
-    
+
     Returns:
-        Verdict: 'CLEAN', 'LOW_RISK', 'SUSPICIOUS', 'MALICIOUS'
-    
-    Example:
-        >>> verdict = determine_verdict(85)
-        >>> print(verdict)
-        'MALICIOUS'
+        Verdict: 'MALICIOUS', 'SUSPICIOUS', 'CLEAN', 'UNKNOWN'
     """
-    if score >= 80:
+    if score >= 70:
         return 'MALICIOUS'
-    elif score >= 60:
+    elif score >= 40:
         return 'SUSPICIOUS'
-    elif score >= 30:
-        return 'LOW_RISK'
-    else:
+    elif score >= 1:
         return 'CLEAN'
+    else:
+        return 'UNKNOWN'
 def format_timestamp(timestamp: Optional[datetime] = None) -> str:
     """
     Format timestamp for reports.

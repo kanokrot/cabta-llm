@@ -248,76 +248,76 @@ class FileTypeRouter:
         except Exception as e:
             logger.warning(f"[ROUTER] Magic byte detection failed: {e}")
         
-        # 2. Magic library check
-        if MAGIC_AVAILABLE:
-            try:
-                mime = magic.from_file(file_path, mime=True)
-                file_magic = magic.from_file(file_path)
-                metadata['mime_type'] = mime
-                metadata['magic_description'] = file_magic
-                
-                # Check MIME patterns
-                for pattern, file_type in FileTypeRouter.MIME_PATTERNS.items():
-                    if pattern in mime:
-                        metadata['detection_method'] = 'libmagic_mime'
-                        logger.info(f"[ROUTER] Detected {file_type.value} by MIME: {mime}")
-                        return (file_type, metadata)
-                
-                # Additional magic description checks
-                if 'PE32' in file_magic or 'PE32+' in file_magic:
-                    metadata['detection_method'] = 'libmagic_desc'
-                    metadata['pe_type'] = 'PE32+' if 'PE32+' in file_magic else 'PE32'
-                    return (FileType.PE, metadata)
-                
-                if 'ELF' in file_magic:
-                    metadata['detection_method'] = 'libmagic_desc'
-                    return (FileType.ELF, metadata)
-                
-                if 'Mach-O' in file_magic:
-                    metadata['detection_method'] = 'libmagic_desc'
-                    return (FileType.MACHO, metadata)
-                
-            except Exception as e:
-                logger.warning(f"[ROUTER] libmagic detection failed: {e}")
-        
-        # 3. Extension-based fallback
+        # 2. Extension-based fallback (run before generic content checks)
         if metadata['extension'] in FileTypeRouter.EXTENSION_MAP:
             metadata['detection_method'] = 'extension'
             file_type = FileTypeRouter.EXTENSION_MAP[metadata['extension']]
             logger.info(f"[ROUTER] Detected {file_type.value} by extension: {metadata['extension']}")
             return (file_type, metadata)
-        
-        # 4. Script detection by content
+
+        # 3. Script detection by content
         try:
             with open(file_path, 'rb') as f:
                 start = f.read(512)
-            
+
             # Shebang check
             if start.startswith(b'#!'):
                 metadata['detection_method'] = 'shebang'
                 shebang = start.split(b'\n')[0].decode('utf-8', errors='ignore')
                 metadata['shebang'] = shebang
                 return (FileType.SCRIPT, metadata)
-            
+
             # PowerShell detection
             if b'param(' in start.lower() or b'function ' in start.lower():
                 if b'$' in start:  # PowerShell variable
                     metadata['detection_method'] = 'content_heuristic'
                     return (FileType.SCRIPT, metadata)
-            
+
             # VBScript detection
             if b'dim ' in start.lower() or b'sub ' in start.lower():
                 metadata['detection_method'] = 'content_heuristic'
                 return (FileType.SCRIPT, metadata)
-            
+
             # Batch file detection
             if b'@echo off' in start.lower() or b'rem ' in start.lower():
                 metadata['detection_method'] = 'content_heuristic'
                 return (FileType.SCRIPT, metadata)
-        
+
         except Exception as e:
             logger.warning(f"[ROUTER] Content detection failed: {e}")
-        
+
+        # 4. Magic library check (as a deeper, more generic check)
+        if MAGIC_AVAILABLE:
+            try:
+                mime = magic.from_file(file_path, mime=True)
+                file_magic = magic.from_file(file_path)
+                metadata['mime_type'] = mime
+                metadata['magic_description'] = file_magic
+
+                # Check MIME patterns
+                for pattern, file_type in FileTypeRouter.MIME_PATTERNS.items():
+                    if pattern in mime:
+                        metadata['detection_method'] = 'libmagic_mime'
+                        logger.info(f"[ROUTER] Detected {file_type.value} by MIME: {mime}")
+                        return (file_type, metadata)
+
+                # Additional magic description checks
+                if 'PE32' in file_magic or 'PE32+' in file_magic:
+                    metadata['detection_method'] = 'libmagic_desc'
+                    metadata['pe_type'] = 'PE32+' if 'PE32+' in file_magic else 'PE32'
+                    return (FileType.PE, metadata)
+
+                if 'ELF' in file_magic:
+                    metadata['detection_method'] = 'libmagic_desc'
+                    return (FileType.ELF, metadata)
+
+                if 'Mach-O' in file_magic:
+                    metadata['detection_method'] = 'libmagic_desc'
+                    return (FileType.MACHO, metadata)
+
+            except Exception as e:
+                logger.warning(f"[ROUTER] libmagic detection failed: {e}")
+
         # 5. Check if it's a text/readable file before declaring unknown
         try:
             with open(file_path, 'rb') as f:
