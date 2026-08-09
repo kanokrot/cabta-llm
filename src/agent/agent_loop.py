@@ -518,6 +518,18 @@ class AgentLoop:
                     approved = await self._wait_for_approval(session_id, state)
                     if state.is_terminal():
                         break
+
+                    # Persist audit trail entry for the approval decision
+                    self.store.add_audit_entry(
+                        session_id=session_id,
+                        action=tool_name,
+                        action_type='approval_granted' if approved else 'approval_rejected',
+                        actor='human',
+                        requires_approval=True,
+                        before_state=decision.get('params', {}),
+                        status='approved' if approved else 'rejected',
+                    )
+
                     if not approved:
                         # Rejected - skip tool and re-think
                         state.add_finding({
@@ -826,6 +838,7 @@ class AgentLoop:
         logger.info(f"[AGENT] _act: tool={tool_name}, params={params}")
 
         start = time.time()
+        tool_def = None
         try:
             tool_def = self.tools.get_tool(tool_name)
             if tool_def is None:
@@ -857,6 +870,17 @@ class AgentLoop:
             json.dumps(params, default=str),
             json.dumps(result, default=str),
             duration_ms,
+        )
+
+        # Persist audit trail entry for this tool call
+        self.store.add_audit_entry(
+            session_id=state.session_id,
+            action=tool_name,
+            action_type='tool_call',
+            actor='agent',
+            requires_approval=bool(tool_def.requires_approval) if tool_def else False,
+            after_state=result,
+            status='error' if isinstance(result, dict) and 'error' in result else 'success',
         )
 
         return result
