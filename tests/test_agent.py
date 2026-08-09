@@ -1317,13 +1317,13 @@ class TestNewAgentTools:
         assert result.get("cached") is False
 
     def test_total_tool_count_no_instances(self, tool_registry):
-        """Without tool instances, should get 6 tools (extract_iocs, generate_rules, yara_scan + 3 new)."""
+        """Without tool instances, should get 9 tools (extract_iocs, generate_rules, yara_scan, sandbox_submit, correlate_findings, recall_ioc + 3 new)."""
         tool_registry.register_default_tools({})
         count = len(tool_registry.list_tools())
-        assert count == 6
+        assert count == 9
 
     def test_total_tool_count_with_mock_instances(self, tool_registry):
-        """With mock tool instances, should get 10 tools (7 original + 3 new)."""
+        """With mock tool instances, should get 13 tools (10 original + 3 new)."""
         mock_ioc = MagicMock()
         mock_ioc.investigate = AsyncMock(return_value={"score": 50})
         mock_mal = MagicMock()
@@ -1338,7 +1338,7 @@ class TestNewAgentTools:
             email_analyzer=mock_email,
         )
         count = len(tool_registry.list_tools())
-        assert count == 10
+        assert count == 13
 
 
 # ====================================================================== #
@@ -1420,7 +1420,7 @@ class TestAppComponentWiring:
 
         app = create_app()
         tools = app.state.tool_registry.list_tools()
-        assert len(tools) == 10
+        assert len(tools) == 13
 
     def test_cross_tool_wiring(self):
         from src.web.app import create_app

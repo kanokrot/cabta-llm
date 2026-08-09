@@ -5,11 +5,140 @@ Each tool is described by a ToolDefinition (JSON-schema parameters, source, cate
 and optionally backed by a local async executor function.
 """
 
+import json
 import logging
+import shutil
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Callable, Coroutine, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------- #
+#  Simulated Containment Actions (P0.1)
+#
+#  These are demo/proof-of-concept stand-ins for real EDR/firewall
+#  integrations. They never touch the network or host stack - each one
+#  only appends a JSON record to a local file under data/simulated_actions/.
+# ---------------------------------------------------------------------- #
+
+_SIMULATED_ACTIONS_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "simulated_actions"
+
+
+def _append_json_record(file_path: Path, record: Dict[str, Any]) -> None:
+    """Append *record* to the JSON array stored at *file_path* (create if missing)."""
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+    records: List[Dict[str, Any]] = []
+    if file_path.exists():
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                loaded = json.load(f)
+            if isinstance(loaded, list):
+                records = loaded
+        except (json.JSONDecodeError, OSError):
+            records = []
+    records.append(record)
+    with open(file_path, "w", encoding="utf-8") as f:
+        json.dump(records, f, indent=2, default=str)
+
+
+async def isolate_device(device_id: str, isolation_type: str = "network", **_kw) -> Dict[str, Any]:
+    """SIMULATED ACTION — ไม่ใช่ EDR/firewall integration จริง เขียน record ลง local JSON เท่านั้น สำหรับ demo/proof-of-concept
+
+    Simulate isolating a device/host from the network. Appends a record to
+    data/simulated_actions/isolated_devices.json.
+    """
+    try:
+        record = {
+            "device_id": device_id,
+            "isolation_type": isolation_type,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+        out_file = _SIMULATED_ACTIONS_DIR / "isolated_devices.json"
+        _append_json_record(out_file, record)
+        return {
+            "status": "success",
+            "simulated": True,
+            "message": f"Simulated isolation of device '{device_id}' recorded.",
+            "record": record,
+            "record_file": str(out_file),
+        }
+    except Exception as exc:
+        logger.error(f"[TOOLS] isolate_device failed: {exc}", exc_info=True)
+        return {"status": "error", "simulated": True, "error": str(exc)}
+
+
+async def block_ip(ip_address: str, reason: str = "", **_kw) -> Dict[str, Any]:
+    """SIMULATED ACTION — ไม่ใช่ EDR/firewall integration จริง เขียน record ลง local JSON เท่านั้น สำหรับ demo/proof-of-concept
+
+    Simulate blocking an IP address at the perimeter. Appends a record to
+    data/simulated_actions/blocklist.json.
+    """
+    try:
+        record = {
+            "ip_address": ip_address,
+            "reason": reason,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+        out_file = _SIMULATED_ACTIONS_DIR / "blocklist.json"
+        _append_json_record(out_file, record)
+        return {
+            "status": "success",
+            "simulated": True,
+            "message": f"Simulated block of IP '{ip_address}' recorded.",
+            "record": record,
+            "record_file": str(out_file),
+        }
+    except Exception as exc:
+        logger.error(f"[TOOLS] block_ip failed: {exc}", exc_info=True)
+        return {"status": "error", "simulated": True, "error": str(exc)}
+
+
+async def quarantine_file(file_path: str, **_kw) -> Dict[str, Any]:
+    """SIMULATED ACTION — ไม่ใช่ EDR/firewall integration จริง เขียน record ลง local JSON เท่านั้น สำหรับ demo/proof-of-concept
+
+    Simulate quarantining a file: copies (never moves) it into
+    data/simulated_actions/quarantine/ and records metadata to
+    data/simulated_actions/quarantine_log.json. If *file_path* does not
+    exist on disk (common when it comes from an IOC rather than a real
+    local path), records "simulated, source file not found" instead of
+    raising.
+    """
+    try:
+        quarantine_dir = _SIMULATED_ACTIONS_DIR / "quarantine"
+        quarantine_dir.mkdir(parents=True, exist_ok=True)
+        log_file = _SIMULATED_ACTIONS_DIR / "quarantine_log.json"
+
+        source = Path(file_path)
+        if source.is_file():
+            dest = quarantine_dir / source.name
+            shutil.copy2(str(source), str(dest))
+            record = {
+                "file_path": file_path,
+                "quarantined_path": str(dest),
+                "note": "simulated, file copied to quarantine",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
+        else:
+            record = {
+                "file_path": file_path,
+                "quarantined_path": None,
+                "note": "simulated, source file not found",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
+        _append_json_record(log_file, record)
+        return {
+            "status": "success",
+            "simulated": True,
+            "message": record["note"],
+            "record": record,
+            "record_file": str(log_file),
+        }
+    except Exception as exc:
+        logger.error(f"[TOOLS] quarantine_file failed: {exc}", exc_info=True)
+        return {"status": "error", "simulated": True, "error": str(exc)}
 
 
 @dataclass
@@ -369,8 +498,7 @@ class ToolRegistry:
         # -------------------------------------------------------------- #
         async def _extract_iocs(text: str, **_kw) -> Dict:
             from ..utils.ioc_extractor import IOCExtractor
-            extractor = IOCExtractor()
-            iocs = extractor.extract(text)
+            iocs = IOCExtractor.extract_all(text)
             return {"iocs": iocs}
 
         self.register_local_tool(
@@ -397,10 +525,61 @@ class ToolRegistry:
         # -------------------------------------------------------------- #
         async def _generate_rules(analysis_result: Dict = None, rule_type: str = 'all', **_kw) -> Dict:
             from ..detection.rule_generator import RuleGenerator
-            generator = RuleGenerator(config)
-            if analysis_result is None:
-                analysis_result = {}
-            return generator.generate(analysis_result, rule_type)
+
+            if not analysis_result:
+                return {"error": "analysis_result is required to generate detection rules."}
+
+            if 'ioc' in analysis_result and 'ioc_type' in analysis_result:
+                context = {
+                    'verdict': analysis_result.get('verdict', 'Unknown'),
+                    'malware_family': analysis_result.get('malware_family', 'Unknown'),
+                }
+                rules = RuleGenerator.generate_ioc_rules(
+                    analysis_result['ioc'], analysis_result['ioc_type'], context
+                )
+            elif 'email_data' in analysis_result or 'from' in analysis_result or 'subject' in analysis_result:
+                email_data = dict(analysis_result.get('email_data', analysis_result))
+                if 'sender_domain' not in email_data:
+                    sender = email_data.get('from', '')
+                    email_data['sender_domain'] = (
+                        sender.split('@')[-1].split('>')[0] if '@' in sender else ''
+                    )
+                if 'malicious_iocs' not in email_data:
+                    ioc_results = analysis_result.get('ioc_analysis', {}).get('results', [])
+                    email_data['malicious_iocs'] = [
+                        r.get('ioc') for r in ioc_results if r.get('verdict') == 'MALICIOUS'
+                    ][:10]
+                rules = RuleGenerator.generate_email_rules(email_data)
+            elif 'hashes' in analysis_result or 'file_info' in analysis_result or 'sha256' in analysis_result or 'filename' in analysis_result:
+                file_data = dict(analysis_result)
+                if 'sha256' not in file_data and 'hashes' in analysis_result:
+                    file_data['sha256'] = analysis_result['hashes'].get('sha256', '')
+                    file_data['md5'] = analysis_result['hashes'].get('md5', '')
+                if 'filename' not in file_data and 'file_info' in analysis_result:
+                    file_data['filename'] = analysis_result['file_info'].get('name', '')
+                rules = RuleGenerator.generate_file_rules(file_data)
+            else:
+                return {
+                    "error": (
+                        "Unrecognized analysis_result shape. Expected an IOC result "
+                        "(with 'ioc'/'ioc_type'), a file analysis result (with "
+                        "'hashes'/'file_info'), or an email analysis result "
+                        "(with 'email_data'/'from'/'subject')."
+                    )
+                }
+
+            if rule_type != 'all':
+                if rule_type in rules:
+                    rules = {rule_type: rules[rule_type]}
+                else:
+                    return {
+                        "error": (
+                            f"Rule type '{rule_type}' is not supported for this "
+                            f"analysis_result type. Available types: {list(rules.keys())}"
+                        )
+                    }
+
+            return {"rules": rules}
 
         self.register_local_tool(
             name="generate_rules",
@@ -587,6 +766,95 @@ class ToolRegistry:
             },
             category="analysis",
             executor=_recall_ioc,
+        )
+
+        # -------------------------------------------------------------- #
+        # 11. isolate_device (SIMULATED containment action, P0.1)
+        # -------------------------------------------------------------- #
+        self.register_local_tool(
+            name="isolate_device",
+            description=(
+                "SIMULATED: Isolate a device/host from the network to prevent lateral "
+                "movement. Does not perform a real EDR/firewall action - records the "
+                "action to a local JSON file for demo/proof-of-concept purposes."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "device_id": {
+                        "type": "string",
+                        "description": "Identifier (hostname, IP, or asset ID) of the device to isolate.",
+                    },
+                    "isolation_type": {
+                        "type": "string",
+                        "description": "Type of isolation to simulate (e.g. 'network').",
+                        "default": "network",
+                    },
+                },
+                "required": ["device_id"],
+            },
+            category="edr",
+            executor=isolate_device,
+            requires_approval=True,
+            is_dangerous=True,
+        )
+
+        # -------------------------------------------------------------- #
+        # 12. block_ip (SIMULATED containment action, P0.1)
+        # -------------------------------------------------------------- #
+        self.register_local_tool(
+            name="block_ip",
+            description=(
+                "SIMULATED: Block an IP address at the perimeter. Does not perform a "
+                "real firewall/EDR action - records the action to a local JSON file "
+                "for demo/proof-of-concept purposes."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "ip_address": {
+                        "type": "string",
+                        "description": "IP address to block.",
+                    },
+                    "reason": {
+                        "type": "string",
+                        "description": "Reason for blocking this IP.",
+                        "default": "",
+                    },
+                },
+                "required": ["ip_address"],
+            },
+            category="edr",
+            executor=block_ip,
+            requires_approval=True,
+            is_dangerous=True,
+        )
+
+        # -------------------------------------------------------------- #
+        # 13. quarantine_file (SIMULATED containment action, P0.1)
+        # -------------------------------------------------------------- #
+        self.register_local_tool(
+            name="quarantine_file",
+            description=(
+                "SIMULATED: Quarantine a malicious file. Does not perform a real "
+                "EDR quarantine action - copies the file (if present on disk) into "
+                "a local quarantine folder and records the action to a local JSON "
+                "file for demo/proof-of-concept purposes."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "file_path": {
+                        "type": "string",
+                        "description": "Path to the file to quarantine.",
+                    },
+                },
+                "required": ["file_path"],
+            },
+            category="edr",
+            executor=quarantine_file,
+            requires_approval=True,
+            is_dangerous=True,
         )
 
         logger.info(
