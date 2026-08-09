@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}Incident Tickets - CABTA{% endblock %}
+{% block page_title %}Incident Tickets{% endblock %}
+{% block page_subtitle %}<span class="page-subtitle">Auto-generated tickets from investigation verdicts</span>{% endblock %}
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h4 class="mb-1"><i class="bi bi-ticket-perforated me-2"></i>Incident Tickets</h4>
+            <p class="text-muted mb-0">Auto-generated incident tickets from IOC / file / email investigations</p>
+        </div>
+        <span class="badge bg-secondary">{{ tickets|length }} ticket(s)</span>
+    </div>
+
+    {% if not tickets %}
+    <div class="card">
+        <div class="card-body text-center py-5 text-muted">
+            <i class="bi bi-inbox fs-1 d-block mb-2"></i>
+            No incident tickets yet. Tickets are created automatically when an
+            investigation verdict matches the configured trigger list.
+        </div>
+    </div>
+    {% else %}
+    <div class="card">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>Ticket ID</th>
+                        <th>IOC</th>
+                        <th>Verdict</th>
+                        <th>Status</th>
+                        <th>Created</th>
+                        <th>Analysis ID</th>
+                        <th>Recommendations</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for t in tickets %}
+                    <tr>
+                        <td><code class="small">{{ t.ticket_id[:8] }}...</code></td>
+                        <td><strong>{{ t.ioc }}</strong></td>
+                        <td>
+                            {% if t.verdict == 'MALICIOUS' %}
+                                <span class="badge bg-danger">MALICIOUS</span>
+                            {% elif t.verdict == 'SUSPICIOUS' %}
+                                <span class="badge bg-warning text-dark">SUSPICIOUS</span>
+                            {% elif t.verdict == 'CLEAN' %}
+                                <span class="badge bg-success">CLEAN</span>
+                            {% else %}
+                                <span class="badge bg-secondary">UNKNOWN</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="badge {% if t.status == 'open' %}bg-info text-dark{% else %}bg-secondary{% endif %}">
+                                {{ t.status }}
+                            </span>
+                        </td>
+                        <td class="small text-muted">{{ t.created_at }}</td>
+                        <td><code class="small">{{ t.analysis_id }}</code></td>
+                        <td class="small">
+                            {% if t.recommendations %}
+                                <button class="btn btn-sm btn-outline-secondary" type="button"
+                                        data-bs-toggle="collapse" data-bs-target="#rec-{{ t.id }}">
+                                    View
+                                </button>
+                                <div class="collapse mt-2" id="rec-{{ t.id }}">
+                                    <ul class="mb-0 ps-3">
+                                        {% for r in t.recommendations %}
+                                        <li>{{ r }}</li>
+                                        {% endfor %}
+                                    </ul>
+                                </div>
+                            {% else %}
+                                <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

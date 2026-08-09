@@ -289,6 +289,10 @@
     }
 
     /* ── View modal enhancements ── */
+    #viewPlaybookModal .modal-body {
+        max-height: 70vh;
+        overflow-y: auto !important;
+    }
     .view-modal-banner {
         padding: 1rem 1.25rem;
         border-radius: 6px;
@@ -482,7 +486,8 @@
         {% for pb in playbooks %}
         <div class="col-xl-4 col-md-6 playbook-col"
              data-pb-name="{{ pb.name | default('') | e }}"
-             data-pb-desc="{{ pb.description | default('') | e }}">
+             data-pb-desc="{{ pb.description | default('') | e }}"
+             data-pb-category="{{ pb.category | default('') | e }}">
             <div class="playbook-card">
                 <div class="pb-title">
                     <i class="bi bi-journal-code me-2 text-accent"></i>{{ pb.name | default('Unnamed') | e }}
@@ -558,7 +563,7 @@
 
 <!-- View Playbook Detail Modal -->
 <div class="modal fade" id="viewPlaybookModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
         <div class="modal-content" style="background-color: var(--bg-secondary); color: var(--text-primary); border-color: var(--border-color);">
             <div class="modal-header" style="border-bottom-color: var(--border-color);">
                 <h5 class="modal-title" id="viewPlaybookTitle"><i class="bi bi-journal-code me-2 text-accent"></i>Playbook Details</h5>
@@ -1003,12 +1008,17 @@ var Playbooks = (function () {
 
         setLastRun(playbookId);
 
+        var runController = new AbortController();
+        var runTimeout = setTimeout(function () { runController.abort(); }, 15000);
+
         fetch('/api/playbooks/' + encodeURIComponent(playbookId) + '/run', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(params)
+            body: JSON.stringify(params),
+            signal: runController.signal
         })
         .then(function (r) {
+            clearTimeout(runTimeout);
             if (!r.ok) throw new Error('HTTP ' + r.status);
             return r.json();
         })
@@ -1026,9 +1036,11 @@ var Playbooks = (function () {
             }
         })
         .catch(function (err) {
+            clearTimeout(runTimeout);
             btn.disabled = false;
             btn.textContent = 'Execute';
-            showNotification('Failed: ' + err.message, 'error');
+            var msg = err.name === 'AbortError' ? 'Request timed out.' : err.message;
+            showNotification('Failed: ' + msg, 'error');
         });
     });
 
@@ -1044,8 +1056,12 @@ var Playbooks = (function () {
         runBtnFooter.style.display = 'none';
         modal.show();
 
-        fetch('/api/playbooks/' + encodeURIComponent(playbookId))
+        var viewController = new AbortController();
+        var viewTimeout = setTimeout(function () { viewController.abort(); }, 15000);
+
+        fetch('/api/playbooks/' + encodeURIComponent(playbookId), { signal: viewController.signal })
         .then(function (r) {
+            clearTimeout(viewTimeout);
             if (!r.ok) throw new Error('HTTP ' + r.status);
             return r.json();
         })
@@ -1297,10 +1313,11 @@ var Playbooks = (function () {
             runBtnFooter.setAttribute('data-playbook-name', pbName);
         })
         .catch(function (err) {
+            clearTimeout(viewTimeout);
             while (body.firstChild) body.removeChild(body.firstChild);
             var errDiv = document.createElement('div');
             errDiv.className = 'text-danger py-3';
-            errDiv.textContent = 'Error: ' + err.message;
+            errDiv.textContent = err.name === 'AbortError' ? 'Error: request timed out.' : 'Error: ' + err.message;
             body.appendChild(errDiv);
         });
     }

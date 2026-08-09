@@ -842,6 +842,9 @@
                 <h5 class="mb-0">Analysis Results</h5>
             </div>
             <div>
+                <a class="btn btn-sm btn-outline-success me-1" id="btnViewFullReport" href="#" target="_blank" rel="noopener" title="View full report" style="display:none;">
+                    <i class="bi bi-file-earmark-text me-1"></i>View Full Report
+                </a>
                 <button class="btn btn-sm btn-outline-primary me-1" id="btnExportJson" title="Export as JSON">
                     <i class="bi bi-filetype-json me-1"></i>JSON
                 </button>
@@ -876,6 +879,7 @@
     var resultsBody = document.getElementById('iocResultsBody');
     var btnExportJson = document.getElementById('btnExportJson');
     var btnPrintReport = document.getElementById('btnPrintReport');
+    var btnViewFullReport = document.getElementById('btnViewFullReport');
 
     var lastResultData = null;
     var currentMode = 'single'; /* 'single' or 'bulk' */
@@ -1290,9 +1294,14 @@
             '<div><div class="verdict-label">' + escHtml(verdictLabel) + '</div>' +
             '<div class="verdict-sublabel">' + escHtml(verdictSub) + '</div></div></div>';
 
-        /* --- C2 ALERT (Critical - prominent) --- */
+        /* --- C2 ALERT (Critical - prominent) ---
+         * Gated on score/verdict too: a single weak substring match (e.g. Shodan
+         * banner heuristics or an unvetted GitHub feed hit) can set is_c2 even
+         * when the overall threat score is low. Don't show the highest-severity
+         * banner on the page for a low-confidence signal that didn't even count
+         * toward sources_flagged. */
         var c2Info = extractC2Info(data);
-        if (c2Info.is_c2) {
+        if (c2Info.is_c2 && verdict !== 'clean' && score >= 40) {
             html += '<div class="c2-alert-card">' +
                 '<div class="c2-alert-header"><i class="bi bi-radioactive"></i> COMMAND &amp; CONTROL DETECTED</div>';
             if (c2Info.frameworks.length > 0) {
@@ -1561,6 +1570,16 @@
     };
 
     /* ========================================================
+       VIEW FULL REPORT BUTTON
+    ======================================================== */
+    function showViewFullReportButton(analysisId) {
+        if (!btnViewFullReport) return;
+        if (!analysisId) { btnViewFullReport.style.display = 'none'; return; }
+        btnViewFullReport.href = '/api/reports/' + encodeURIComponent(analysisId) + '/html';
+        btnViewFullReport.style.display = '';
+    }
+
+    /* ========================================================
        PROGRESS HELPER
     ======================================================== */
     function setProgress(pct, message) {
@@ -1613,6 +1632,7 @@
                 setProgress(100, 'Analysis complete.');
                 progressSpinner.style.display = 'none';
                 resultsArea.style.display = 'block';
+                showViewFullReportButton(data && data.analysis_id);
 
                 /* Use structured renderer if data has structured fields, else fall back */
                 if (data && (data.sources || data.verdict || data.threat_score !== undefined || data.score !== undefined)) {
@@ -1670,6 +1690,7 @@
                             setProgress(100, 'Analysis loaded.');
                             progressSpinner.style.display = 'none';
                             resultsArea.style.display = 'block';
+                            showViewFullReportButton(analysisId);
                             renderSanitizedResult(resultsBody, renderStructuredResult(innerResult));
                         });
                 }

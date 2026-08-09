@@ -220,6 +220,7 @@
     .verdict-suspicious { background: rgba(245,158,11,0.15); color: #f59e0b; border: 1px solid rgba(245,158,11,0.3); }
     .verdict-clean { background: rgba(34,197,94,0.15); color: #22c55e; border: 1px solid rgba(34,197,94,0.3); }
     .verdict-info { background: rgba(56,189,248,0.15); color: #38bdf8; border: 1px solid rgba(56,189,248,0.3); }
+    .verdict-unknown { background: rgba(148,163,184,0.15); color: #94a3b8; border: 1px solid rgba(148,163,184,0.3); }
 
     /* ===== Input Area ===== */
     .chat-input-area {
@@ -770,7 +771,10 @@ var AgentChat = (function() {
     // ===== Tool Source Detection =====
     function isToolMCP(toolName) {
         if (!toolName) return false;
-        return toolName.indexOf('mcp_') === 0 || toolName.indexOf('mcp:') === 0 || toolName.indexOf('mcp.') === 0;
+         // [FIX] ใช้กฎเดียวกับ backend (agent_loop.py): มีจุดคั่น = MCP tool
+         // // ชื่อจริงคือรูปแบบ "server_name.tool_name" เช่น "threat_intel_tools.blocklist_check"
+         // // ไม่ใช่การขึ้นต้นด้วย "mcp_"/"mcp:"/"mcp."
+        return toolName.indexOf('.') !== -1;
     }
 
     function getMCPServerName(toolName) {
@@ -1057,13 +1061,25 @@ var AgentChat = (function() {
     }
 
     // ===== Verdict Detection =====
+// ===== Verdict Detection =====
     function detectVerdict(text) {
-        if (!text) return null;
-        var lower = text.toLowerCase();
-        if (lower.match(/\b(malicious|zararli|kotu|infected|trojan|ransomware|backdoor)\b/)) return 'malicious';
-        if (lower.match(/\b(suspicious|supheli|potentially|anomal|risk)\b/)) return 'suspicious';
-        if (lower.match(/\b(clean|temiz|benign|safe|legitimate|harmless)\b/)) return 'clean';
-        return null;
+    if (!text) return null;
+
+    // [FIX] เช็ค label "Verdict: X" ก่อนเป็นอันดับแรก — แม่นกว่าและไม่โดน
+    // คำปฏิเสธหลอก เช่น "none of these appear to be malicious"
+    // ต้องรองรับ "unknown" ด้วย ไม่งั้น backend ที่ตั้งใจส่ง verdict=UNKNOWN
+    // (เช่น กรณี findings มีแต่ tool error ไม่มีหลักฐานจริง) จะไม่ match
+    // label นี้ แล้วหลุดไป fallback keyword scan ซึ่งอาจ mis-detect เป็น
+    // suspicious/malicious จากคำอื่นในข้อความ (เช่น "risk", "anomal")
+    var labelMatch = text.match(/verdict[:\s\*]+\s*(malicious|suspicious|clean|unknown)/i);
+    if (labelMatch) return labelMatch[1].toLowerCase();
+
+    // Fallback: keyword scan แบบเดิม (ใช้เมื่อไม่มี label ชัดเจน)
+    var lower = text.toLowerCase();
+    if (lower.match(/\b(malicious|zararli|kotu|infected|trojan|ransomware|backdoor)\b/)) return 'malicious';
+    if (lower.match(/\b(suspicious|supheli|potentially|anomal|risk)\b/)) return 'suspicious';
+    if (lower.match(/\b(clean|temiz|benign|safe|legitimate|harmless)\b/)) return 'clean';
+    return null;
     }
 
     // ===== Timer =====
@@ -1094,6 +1110,11 @@ var AgentChat = (function() {
         loadTools();
         loadPlaybooks();
         checkOllamaHealth();
+        var params = new URLSearchParams(location.search);
+        var sid = params.get('session');
+        if (sid) {
+            switchSession(sid);
+        }
     }
 
     function checkOllamaHealth() {
@@ -1386,6 +1407,8 @@ var AgentChat = (function() {
                 setCurrentPhase('observe');
                 break;
             case 'tool_call':
+                currentStep = msg.step || currentStep;
+                updateProgress(currentStep, maxSteps);
                 addToolCall(msg.tool, msg.args, msg.source);
                 setCurrentTool(msg.tool || '');
                 setCurrentPhase('act');
@@ -1393,6 +1416,8 @@ var AgentChat = (function() {
                 if (isToolMCP(msg.tool)) investigationData.mcp_tools.push(msg.tool);
                 break;
             case 'tool_result':
+                currentStep = msg.step || currentStep;
+                updateProgress(currentStep, maxSteps);
                 var trDuration = stopToolTimer();
                 addToolResult(msg.tool || 'tool', msg.result || msg.result_preview || msg.content || '', msg.source, trDuration || msg.duration);
                 hideLiveToolIndicator();
@@ -1548,7 +1573,7 @@ var AgentChat = (function() {
             var verdict = detectVerdict(text);
             var verdictHtml = '';
             if (verdict) {
-                var vIcon = verdict === 'malicious' ? 'bi-exclamation-triangle-fill' : verdict === 'suspicious' ? 'bi-exclamation-circle-fill' : 'bi-check-circle-fill';
+                var vIcon = verdict === 'malicious' ? 'bi-exclamation-triangle-fill' : verdict === 'suspicious' ? 'bi-exclamation-circle-fill' : verdict === 'unknown' ? 'bi-question-circle-fill' : 'bi-check-circle-fill';
                 verdictHtml = '<div style="margin-bottom:0.4rem;"><span class="verdict-badge verdict-' + verdict + '"><i class="bi ' + vIcon + '"></i> ' + verdict.toUpperCase() + '</span></div>';
             }
             div.innerHTML = '<div class="bubble-label">Agent</div>' + verdictHtml + '<div class="agent-content">' + renderMarkdown(text) + '</div>';

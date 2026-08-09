@@ -434,6 +434,11 @@
                                     <i class="bi bi-folder2-open"></i> Case Management
                                 </a>
                             </li>
+                            <li>
+                                <a class="dropdown-item {% if request.url.path == '/tickets' %}active{% endif %}" href="/tickets">
+                                    <i class="bi bi-ticket-perforated"></i> Incident Tickets
+                                </a>
+                            </li>
                         </ul>
                     </div>
 
@@ -517,6 +522,7 @@
     <script src="/static/js/charts.js?v=5"></script>
     <script src="/static/js/dashboard.js?v=5"></script>
     <script src="/static/js/analysis.js?v=5"></script>
+    <script src="/static/js/modal-fix.js?v=1"></script>
 
     <script>
         // Theme icon sync

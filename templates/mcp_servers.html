@@ -215,10 +215,10 @@
 <!-- Header description -->
 <div class="d-flex justify-content-between align-items-center mb-3">
     <p class="mb-0" style="color: var(--text-secondary);">
-        MCP sunucu baglantilarini yapilandirin ve yonetin. / Configure and manage MCP server connections.
+        Configure and manage MCP server connections.
     </p>
     <button class="btn btn-sm btn-ghost" onclick="MCPServers.loadServers()">
-        <i class="bi bi-arrow-clockwise me-1"></i>Yenile / Refresh
+        <i class="bi bi-arrow-clockwise me-1"></i>Refresh
     </button>
 </div>
 
@@ -232,28 +232,28 @@
         <div class="sc-icon text-accent"><i class="bi bi-hdd-network"></i></div>
         <div>
             <div class="sc-value">{{ total_count }}</div>
-            <div class="sc-label">Toplam / Total</div>
+            <div class="sc-label">Total</div>
         </div>
     </div>
     <div class="summary-card">
         <div class="sc-icon" style="color:var(--color-success)"><i class="bi bi-check-circle-fill"></i></div>
         <div>
             <div class="sc-value" id="connectedCount">0</div>
-            <div class="sc-label">Bagli / Connected</div>
+            <div class="sc-label">Connected</div>
         </div>
     </div>
     <div class="summary-card">
         <div class="sc-icon" style="color:#f59e0b"><i class="bi bi-download"></i></div>
         <div>
             <div class="sc-value">{{ installable_count }}</div>
-            <div class="sc-label">Kurulabilir / Installable</div>
+            <div class="sc-label">Installable</div>
         </div>
     </div>
     <div class="summary-card">
         <div class="sc-icon" style="color:#6b7280"><i class="bi bi-clock-history"></i></div>
         <div>
             <div class="sc-value">{{ planned_count }}</div>
-            <div class="sc-label">Planli / Planned</div>
+            <div class="sc-label">Planned</div>
         </div>
     </div>
 </div>
@@ -261,14 +261,14 @@
 <!-- Category filter pills -->
 <div class="category-filters" id="categoryFilters">
     <span class="category-pill active" data-category="all">
-        <i class="bi bi-grid-3x3-gap"></i> Tumu / All
+        <i class="bi bi-grid-3x3-gap"></i> All
         <span class="pill-count">{{ total_count }}</span>
     </span>
     {% if active_categories is defined %}
     {% for cat in active_categories %}
     {% set cat_count = servers | selectattr('category', 'equalto', cat.key) | list | length %}
     <span class="category-pill" data-category="{{ cat.key }}"
-          title="{{ cat.get('description_tr', '') }}">
+          title="{{ cat.get('description', '') }}">
         <i class="{{ cat.get('icon', 'bi-server') }}"></i>
         {{ cat.get('label', cat.key) }}
         <span class="pill-count">{{ cat_count }}</span>
@@ -280,26 +280,26 @@
 <!-- Status filter buttons -->
 <div class="d-flex gap-2 mb-3">
     <button class="btn btn-sm btn-ghost status-filter-btn active" data-status="all"
-            title="Tum sunuculari goster / Show all servers">
-        Tumu / All
+            title="Show all servers">
+        All
     </button>
     <button class="btn btn-sm btn-ghost status-filter-btn" data-status="requires_install"
-            title="Kurulabilir paketler / Installable packages">
-        <i class="bi bi-download me-1" style="color:#f59e0b"></i>Kurulabilir / Installable
+            title="Installable packages">
+        <i class="bi bi-download me-1" style="color:#f59e0b"></i>Installable
     </button>
     <button class="btn btn-sm btn-ghost status-filter-btn" data-status="planned"
-            title="Henuz paketi yok / No package yet">
-        <i class="bi bi-clock-history me-1" style="color:#6b7280"></i>Planli / Planned
+            title="No package yet">
+        <i class="bi bi-clock-history me-1" style="color:#6b7280"></i>Planned
     </button>
 </div>
 
 <!-- Servers Table -->
 <div class="card">
     <div class="card-header d-flex justify-content-between align-items-center">
-        <h6 class="mb-0"><i class="bi bi-hdd-network me-2 text-accent"></i>Yapilandirilmis Sunucular / Configured Servers</h6>
+        <h6 class="mb-0"><i class="bi bi-hdd-network me-2 text-accent"></i>Configured Servers</h6>
         <button class="btn btn-sm btn-outline-info" onclick="MCPServers.checkAll()"
-                title="Tum sunucularin kullanilabilirligini kontrol et / Check availability of all servers">
-            <i class="bi bi-patch-check me-1"></i>Tumunu Kontrol Et / Check All
+                title="Check availability of all servers">
+            <i class="bi bi-patch-check me-1"></i>Check All
         </button>
     </div>
     <div class="card-body p-0">
@@ -308,11 +308,11 @@
                 <thead>
                     <tr>
                         <th style="width:36px;"></th>
-                        <th>Sunucu / Name</th>
+                        <th>Name</th>
                         <th>Transport</th>
-                        <th>Durum / Status</th>
-                        <th>Araclar / Tools</th>
-                        <th>Islemler / Actions</th>
+                        <th>Status</th>
+                        <th>Tools</th>
+                        <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody id="serversBody">
@@ -347,7 +347,7 @@
                                 <div class="category-group-header">
                                     <i class="{{ cat_meta.get('icon', 'bi-server') if cat_meta.get is defined else 'bi-server' }}"></i>
                                     {{ cat_meta.get('label', cat.replace('_', ' ').title()) if cat_meta.get is defined else cat.replace('_', ' ').title() }}
-                                    <small class="text-muted ms-2">{{ cat_meta.get('description_tr', '') if cat_meta.get is defined else '' }}</small>
+                                    <small class="text-muted ms-2">{{ cat_meta.get('description', '') if cat_meta.get is defined else '' }}</small>
                                 </div>
                             </td>
                         </tr>
@@ -359,7 +359,7 @@
                             <td>
                                 {% if is_connected %}
                                 <button class="btn btn-sm btn-ghost p-0 toggle-tools-btn"
-                                        title="Araclari goster / Show tools">
+                                        title="Show tools">
                                     <i class="bi bi-chevron-right"></i>
                                 </button>
                                 {% endif %}
@@ -368,7 +368,7 @@
                                 <strong>{{ srv.name | default('Unknown') | e }}</strong>
                                 {% if package_url %}
                                 <a href="{{ package_url }}" target="_blank" rel="noopener" class="package-link ms-1"
-                                   title="Paket sayfasi / Package page">
+                                   title="Package page">
                                     <i class="bi bi-box-arrow-up-right"></i>
                                 </a>
                                 {% endif %}
@@ -386,13 +386,13 @@
                                 <span class="status-badge {{ display_status }}" id="status-{{ srv.name | e }}">
                                     <span class="status-dot-lg {{ display_status }}"></span>
                                     {% if display_status == 'connected' %}
-                                        Bagli / Connected
+                                        Connected
                                     {% elif display_status == 'not_installed' %}
-                                        Kurulum Gerekli / Not Installed
+                                        Not Installed
                                     {% elif display_status == 'planned' %}
-                                        Planli / Planned
+                                        Planned
                                     {% else %}
-                                        Baglanti Kesildi / Disconnected
+                                        Disconnected
                                     {% endif %}
                                 </span>
                                 <span class="check-spinner" id="spinner-{{ srv.name | e }}"></span>
@@ -402,28 +402,28 @@
                                 <div class="d-flex gap-1 flex-wrap">
                                     {# Check availability button #}
                                     <button class="btn btn-sm btn-outline-warning server-check-btn"
-                                            title="Kullanilabilirligi kontrol et / Check availability"
+                                            title="Check availability"
                                             data-server-name="{{ srv.name | e }}">
                                         <i class="bi bi-patch-question"></i>
                                     </button>
                                     {% if is_connected %}
                                     <button class="btn btn-sm btn-outline-secondary server-disconnect-btn"
-                                            title="Baglanti kes / Disconnect" data-server-name="{{ srv.name | e }}">
+                                            title="Disconnect" data-server-name="{{ srv.name | e }}">
                                         <i class="bi bi-pause-circle"></i>
                                     </button>
                                     {% else %}
                                     <button class="btn btn-sm btn-accent server-connect-btn"
-                                            title="Baglan / Connect" data-server-name="{{ srv.name | e }}">
+                                            title="Connect" data-server-name="{{ srv.name | e }}">
                                         <i class="bi bi-play-circle"></i>
                                     </button>
                                     {% endif %}
                                     <button class="btn btn-sm btn-outline-info server-tools-btn"
-                                            title="Araclari listele / List tools" data-server-name="{{ srv.name | e }}">
+                                            title="List tools" data-server-name="{{ srv.name | e }}">
                                         <i class="bi bi-tools"></i>
                                     </button>
                                     {% if install_cmd %}
                                     <button class="btn btn-sm btn-outline-success server-install-info-btn"
-                                            title="Kurulum bilgisi / Install info"
+                                            title="Install info"
                                             data-server-name="{{ srv.name | e }}"
                                             data-install-cmd="{{ install_cmd | e }}"
                                             data-install-note="{{ install_note | e }}">
@@ -431,7 +431,7 @@
                                     </button>
                                     {% endif %}
                                     <button class="btn btn-sm btn-outline-danger server-delete-btn"
-                                            title="Kaldir / Remove" data-server-name="{{ srv.name | e }}">
+                                            title="Remove" data-server-name="{{ srv.name | e }}">
                                         <i class="bi bi-trash"></i>
                                     </button>
                                 </div>
@@ -442,8 +442,8 @@
                         <tr id="noServersRow">
                             <td colspan="6" class="text-center py-5 text-muted">
                                 <i class="bi bi-hdd-network fs-1 d-block mb-2 opacity-50"></i>
-                                MCP sunucusu yapilandirilmamis. / No MCP servers configured.<br>
-                                <small>Ilk MCP sunucunuzu eklemek icin "Add Server" dugmesine tiklayin.</small>
+                                No MCP servers configured.<br>
+                                <small>Click "Add Server" to add your first MCP server.</small>
                             </td>
                         </tr>
                     {% endif %}
@@ -458,14 +458,14 @@
     <div class="modal-dialog modal-lg">
         <div class="modal-content" style="background-color: var(--bg-secondary); color: var(--text-primary); border-color: var(--border-color);">
             <div class="modal-header" style="border-bottom-color: var(--border-color);">
-                <h5 class="modal-title"><i class="bi bi-plus-circle me-2 text-accent"></i>MCP Sunucusu Ekle / Add MCP Server</h5>
+                <h5 class="modal-title"><i class="bi bi-plus-circle me-2 text-accent"></i>Add MCP Server</h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
                 <form id="addServerForm">
                     <div class="row g-3">
                         <div class="col-md-6">
-                            <label for="serverName" class="form-label">Sunucu Adi / Server Name <span class="text-danger">*</span></label>
+                            <label for="serverName" class="form-label">Server Name <span class="text-danger">*</span></label>
                             <input type="text" id="serverName" class="form-control" required placeholder="e.g. my-mcp-server"
                                 style="background:var(--bg-tertiary);border-color:var(--border-color);color:var(--text-primary);">
                         </div>
@@ -473,49 +473,49 @@
                             <label for="serverTransport" class="form-label">Transport <span class="text-danger">*</span></label>
                             <select id="serverTransport" class="form-select"
                                 style="background:var(--bg-tertiary);border-color:var(--border-color);color:var(--text-primary);">
-                                <option value="stdio">stdio (Yerel Islem / Local Process)</option>
+                                <option value="stdio">stdio (Local Process)</option>
                                 <option value="sse">SSE (Server-Sent Events)</option>
                                 <option value="http">HTTP (Streamable HTTP)</option>
                             </select>
                         </div>
                         <div class="col-12" id="stdioFields">
-                            <label for="serverCommand" class="form-label">Komut / Command</label>
+                            <label for="serverCommand" class="form-label">Command</label>
                             <input type="text" id="serverCommand" class="form-control"
                                    placeholder="e.g. npx -y @modelcontextprotocol/server-filesystem"
                                    style="background:var(--bg-tertiary);border-color:var(--border-color);color:var(--text-primary);">
                         </div>
                         <div class="col-12" id="stdioArgsField">
-                            <label for="serverArgs" class="form-label">Argümanlar / Arguments (her satira bir tane / one per line)</label>
+                            <label for="serverArgs" class="form-label">Arguments (one per line)</label>
                             <textarea id="serverArgs" class="form-control" rows="2" placeholder="/path/to/allowed/dir"
                                 style="background:var(--bg-tertiary);border-color:var(--border-color);color:var(--text-primary);"></textarea>
                         </div>
                         <div class="col-12" id="urlField" style="display:none;">
-                            <label for="serverUrl" class="form-label">Sunucu URL / Server URL</label>
+                            <label for="serverUrl" class="form-label">Server URL</label>
                             <input type="url" id="serverUrl" class="form-control" placeholder="http://localhost:8080/mcp"
                                 style="background:var(--bg-tertiary);border-color:var(--border-color);color:var(--text-primary);">
                         </div>
                         <div class="col-12" id="tokenField" style="display:none;">
-                            <label for="serverToken" class="form-label">Kimlik Dogrulama / Auth Token (istege bagli / optional)</label>
+                            <label for="serverToken" class="form-label">Auth Token (optional)</label>
                             <input type="password" id="serverToken" class="form-control" placeholder="Bearer token for authentication"
                                 style="background:var(--bg-tertiary);border-color:var(--border-color);color:var(--text-primary);">
                         </div>
                         <div class="col-12">
-                            <label for="serverEnv" class="form-label">Ortam Degiskenleri / Environment Variables (JSON, istege bagli / optional)</label>
+                            <label for="serverEnv" class="form-label">Environment Variables (JSON, optional)</label>
                             <textarea id="serverEnv" class="form-control" rows="2" placeholder='{"API_KEY": "your-key"}'
                                 style="background:var(--bg-tertiary);border-color:var(--border-color);color:var(--text-primary);font-family:monospace;font-size:0.85rem;"></textarea>
                         </div>
                         <div class="col-12">
-                            <label for="serverDescription" class="form-label">Aciklama / Description</label>
-                            <input type="text" id="serverDescription" class="form-control" placeholder="Bu sunucu ne sagliyor? / What does this server provide?"
+                            <label for="serverDescription" class="form-label">Description</label>
+                            <input type="text" id="serverDescription" class="form-control" placeholder="What does this server provide?"
                                 style="background:var(--bg-tertiary);border-color:var(--border-color);color:var(--text-primary);">
                         </div>
                     </div>
                 </form>
             </div>
             <div class="modal-footer" style="border-top-color: var(--border-color);">
-                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Iptal / Cancel</button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
                 <button type="button" class="btn btn-accent btn-sm" id="addServerBtn">
-                    <i class="bi bi-plus-lg me-1"></i>Sunucu Ekle / Add Server
+                    <i class="bi bi-plus-lg me-1"></i>Add Server
                 </button>
             </div>
         </div>
@@ -527,11 +527,11 @@
     <div class="modal-dialog modal-lg">
         <div class="modal-content" style="background-color: var(--bg-secondary); color: var(--text-primary); border-color: var(--border-color);">
             <div class="modal-header" style="border-bottom-color: var(--border-color);">
-                <h5 class="modal-title"><i class="bi bi-tools me-2 text-accent"></i>Sunucu Araclari / Server Tools</h5>
+                <h5 class="modal-title"><i class="bi bi-tools me-2 text-accent"></i>Server Tools</h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body" id="toolsModalBody">
-                <div class="text-center py-4 text-muted">Yukleniyor... / Loading...</div>
+                <div class="text-center py-4 text-muted">Loading...</div>
             </div>
         </div>
     </div>
@@ -542,7 +542,7 @@
     <div class="modal-dialog">
         <div class="modal-content" style="background-color: var(--bg-secondary); color: var(--text-primary); border-color: var(--border-color);">
             <div class="modal-header" style="border-bottom-color: var(--border-color);">
-                <h5 class="modal-title"><i class="bi bi-terminal me-2 text-accent"></i>Kurulum Bilgisi / Install Info</h5>
+                <h5 class="modal-title"><i class="bi bi-terminal me-2 text-accent"></i>Install Info</h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body" id="installInfoBody">
@@ -685,7 +685,7 @@ var MCPServers = (function () {
         td.colSpan = 6;
         td.style.background = 'var(--bg-tertiary)';
         td.style.padding = '0.75rem 1rem';
-        td.textContent = 'Araclar yukleniyor... / Loading tools...';
+        td.textContent = 'Loading tools...';
         toolRow.appendChild(td);
         parentRow.parentNode.insertBefore(toolRow, parentRow.nextSibling);
 
@@ -698,12 +698,12 @@ var MCPServers = (function () {
             var tools = data.tools || [];
             while (td.firstChild) td.removeChild(td.firstChild);
             if (!tools.length) {
-                td.textContent = 'Arac bulunamadi. / No tools discovered.';
+                td.textContent = 'No tools discovered.';
                 return;
             }
             var label = document.createElement('strong');
             label.className = 'small d-block mb-2';
-            label.textContent = 'Mevcut Araclar / Available Tools (' + tools.length + ')';
+            label.textContent = 'Available Tools (' + tools.length + ')';
             td.appendChild(label);
 
             var container = document.createElement('div');
@@ -720,7 +720,7 @@ var MCPServers = (function () {
             td.appendChild(container);
         })
         .catch(function (err) {
-            td.textContent = 'Araclar yuklenemedi / Failed to load tools: ' + err.message;
+            td.textContent = 'Failed to load tools: ' + err.message;
             td.className = 'text-danger';
         });
     }
@@ -753,7 +753,7 @@ var MCPServers = (function () {
         .catch(function(err) {
             if (spinner) spinner.style.display = 'none';
             if (window.BTADashboard && window.BTADashboard.showToast) {
-                window.BTADashboard.showToast('Kontrol basarisiz / Check failed: ' + err.message, 'error');
+                window.BTADashboard.showToast('Check failed: ' + err.message, 'error');
             }
         });
     }
@@ -781,7 +781,7 @@ var MCPServers = (function () {
         if (installCmd) {
             var cmdLabel = document.createElement('strong');
             cmdLabel.className = 'small';
-            cmdLabel.textContent = 'Kurulum komutu / Install command:';
+            cmdLabel.textContent = 'Install command:';
             body.appendChild(cmdLabel);
 
             var code = document.createElement('code');
@@ -838,7 +838,7 @@ var MCPServers = (function () {
                 payload.env = JSON.parse(envText);
             } catch (ex) {
                 if (window.BTADashboard && window.BTADashboard.showToast) {
-                    window.BTADashboard.showToast('Gecersiz JSON / Invalid JSON in environment variables', 'error');
+                    window.BTADashboard.showToast('Invalid JSON in environment variables', 'error');
                 }
                 return;
             }
@@ -846,7 +846,7 @@ var MCPServers = (function () {
 
         var btn = document.getElementById('addServerBtn');
         btn.disabled = true;
-        btn.textContent = 'Ekleniyor... / Adding...';
+        btn.textContent = 'Adding...';
 
         fetch('/api/mcp/servers', {
             method: 'POST',
@@ -859,7 +859,7 @@ var MCPServers = (function () {
         })
         .then(function () {
             btn.disabled = false;
-            btn.textContent = 'Sunucu Ekle / Add Server';
+            btn.textContent = 'Add Server';
             var modalEl = document.getElementById('addServerModal');
             var modal = bootstrap.Modal.getInstance(modalEl);
             if (modal) modal.hide();
@@ -867,9 +867,9 @@ var MCPServers = (function () {
         })
         .catch(function (err) {
             btn.disabled = false;
-            btn.textContent = 'Sunucu Ekle / Add Server';
+            btn.textContent = 'Add Server';
             if (window.BTADashboard && window.BTADashboard.showToast) {
-                window.BTADashboard.showToast('Basarisiz / Failed: ' + err.message, 'error');
+                window.BTADashboard.showToast('Failed: ' + err.message, 'error');
             }
         });
     });
@@ -882,13 +882,13 @@ var MCPServers = (function () {
         })
         .then(function () {
             if (window.BTADashboard && window.BTADashboard.showToast) {
-                window.BTADashboard.showToast(serverName + ' sunucusuna baglandi / Connected to ' + serverName, 'success');
+                window.BTADashboard.showToast('Connected to ' + serverName, 'success');
             }
             window.location.reload();
         })
         .catch(function (err) {
             if (window.BTADashboard && window.BTADashboard.showToast) {
-                window.BTADashboard.showToast('Baglanti basarisiz / Connection failed: ' + err.message, 'error');
+                window.BTADashboard.showToast('Connection failed: ' + err.message, 'error');
             }
         });
     }
@@ -901,19 +901,19 @@ var MCPServers = (function () {
         })
         .then(function () {
             if (window.BTADashboard && window.BTADashboard.showToast) {
-                window.BTADashboard.showToast(serverName + ' baglantisi kesildi / Disconnected from ' + serverName, 'success');
+                window.BTADashboard.showToast('Disconnected from ' + serverName, 'success');
             }
             window.location.reload();
         })
         .catch(function (err) {
             if (window.BTADashboard && window.BTADashboard.showToast) {
-                window.BTADashboard.showToast('Baglanti kesme basarisiz / Disconnect failed: ' + err.message, 'error');
+                window.BTADashboard.showToast('Disconnect failed: ' + err.message, 'error');
             }
         });
     }
 
     function deleteServer(serverName) {
-        if (!confirm('"' + serverName + '" MCP sunucusu silinsin mi? Bu islem geri alinamaz.\nDelete MCP server "' + serverName + '"? This cannot be undone.')) return;
+        if (!confirm('Delete MCP server "' + serverName + '"? This cannot be undone.')) return;
 
         fetch('/api/mcp/servers/' + encodeURIComponent(serverName), { method: 'DELETE' })
         .then(function (r) {
@@ -923,7 +923,7 @@ var MCPServers = (function () {
         .then(function () { window.location.reload(); })
         .catch(function (err) {
             if (window.BTADashboard && window.BTADashboard.showToast) {
-                window.BTADashboard.showToast('Silme basarisiz / Delete failed: ' + err.message, 'error');
+                window.BTADashboard.showToast('Delete failed: ' + err.message, 'error');
             }
         });
     }
@@ -931,7 +931,7 @@ var MCPServers = (function () {
     function listTools(serverName) {
         var modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('toolsModal'));
         var body = document.getElementById('toolsModalBody');
-        body.textContent = serverName + ' icin araclar yukleniyor... / Loading tools for ' + serverName + '...';
+        body.textContent = 'Loading tools for ' + serverName + '...';
         modal.show();
 
         fetch('/api/mcp/servers/' + encodeURIComponent(serverName) + '/tools')
@@ -943,7 +943,7 @@ var MCPServers = (function () {
             while (body.firstChild) body.removeChild(body.firstChild);
             var tools = data.tools || [];
             if (tools.length === 0) {
-                body.textContent = 'Arac bulunamadi. Sunucu bagli mi? / No tools discovered. Is the server connected?';
+                body.textContent = 'No tools discovered. Is the server connected?';
                 return;
             }
             var list = document.createElement('div');
@@ -974,7 +974,7 @@ var MCPServers = (function () {
             while (body.firstChild) body.removeChild(body.firstChild);
             var errDiv = document.createElement('div');
             errDiv.className = 'text-danger py-3';
-            errDiv.textContent = 'Hata / Error: ' + err.message;
+            errDiv.textContent = 'Error: ' + err.message;
             body.appendChild(errDiv);
         });
     }
@@ -989,7 +989,7 @@ var MCPServers = (function () {
         })
         .catch(function(err) {
             if (window.BTADashboard && window.BTADashboard.showToast) {
-                window.BTADashboard.showToast('Yenileme basarisiz / Failed to refresh: ' + err.message, 'error');
+                window.BTADashboard.showToast('Failed to refresh: ' + err.message, 'error');
             }
         });
     }
@@ -1017,7 +1017,7 @@ var MCPServers = (function () {
                     var dot = document.createElement('span');
                     dot.className = 'status-dot-lg connected';
                     statusEl.appendChild(dot);
-                    statusEl.appendChild(document.createTextNode('Bagli / Connected'));
+                    statusEl.appendChild(document.createTextNode('Connected'));
                 }
 
                 // Update tool count
@@ -1037,7 +1037,7 @@ var MCPServers = (function () {
                     if (isConnected && connectBtn && !disconnectBtn) {
                         var newBtn = document.createElement('button');
                         newBtn.className = 'btn btn-sm btn-outline-secondary server-disconnect-btn';
-                        newBtn.title = 'Baglanti kes / Disconnect';
+                        newBtn.title = 'Disconnect';
                         newBtn.setAttribute('data-server-name', srv.name);
                         var icon = document.createElement('i');
                         icon.className = 'bi bi-pause-circle';
@@ -1052,7 +1052,7 @@ var MCPServers = (function () {
                     if (chevronCell && !chevronCell.querySelector('.toggle-tools-btn')) {
                         var toggleBtn = document.createElement('button');
                         toggleBtn.className = 'btn btn-sm btn-ghost p-0 toggle-tools-btn';
-                        toggleBtn.title = 'Araclari goster / Show tools';
+                        toggleBtn.title = 'Show tools';
                         var chevIcon = document.createElement('i');
                         chevIcon.className = 'bi bi-chevron-right';
                         toggleBtn.appendChild(chevIcon);
