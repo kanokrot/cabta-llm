@@ -1,0 +1,20 @@
+- id: playbook_suspicious_ioc_001
+  text: >
+    เมื่อ IOC ได้รับ verdict เป็น SUSPICIOUS, ให้เน้นการเฝ้าระวังและวิเคราะห์ตามแนวทาง NIST SP 800-61 Rev. 3 (Detect & Identify Functions):
+    1. **Enhanced Monitoring (เพิ่มการเฝ้าระวัง):**
+       - เพิ่ม IOC เข้าสู่ monitoring watchlist ใน SIEM/EDR เพื่อติดตามกิจกรรมที่เกี่ยวข้องเป็นพิเศษ
+       - เพิ่มระดับการบันทึก log (logging verbosity) สำหรับระบบที่เกี่ยวข้องชั่วคราว หากทำได้
+    2. **Analysis and Correlation (วิเคราะห์และหาความสัมพันธ์):**
+       - ค้นหา log ย้อนหลังและปัจจุบันเพื่อหากิจกรรมที่เกี่ยวข้องกับ IOC
+       - ตรวจสอบ alert อื่นๆ ที่อาจมีความสัมพันธ์กับ host หรือ user เดียวกันเพื่อมองหารูปแบบ (TTPs)
+    3. **Threat Intelligence Enrichment (เก็บข้อมูลเชิงลึก):**
+       - ใช้เครื่องมือ Threat Intelligence เพื่อหาข้อมูลเพิ่มเติมเกี่ยวกับ IOC (เช่น passive DNS, WHOIS, file reputation)
+       - วิเคราะห์พฤติกรรมของ traffic ที่เกี่ยวข้องเพื่อหา C2-like patterns หรือ data exfiltration indicators
+    4. **Define Escalation Criteria (กำหนดเกณฑ์ยกระดับ):**
+       - ระบุเงื่อนไขที่ชัดเจนในการยกระดับเป็น MALICIOUS (เช่น พบการดาวน์โหลดมัลแวร์, ยืนยันการเชื่อมต่อ C2)
+       - หากไม่พบกิจกรรมน่าสงสัยเพิ่มเติมภายในเวลาที่กำหนด (เช่น 72 ชม.) ให้พิจารณาลดระดับเป็น BENIGN
+  metadata:
+    category: playbook
+    verdict: SUSPICIOUS
+    ioc_type: any
+    source: "NIST SP 800-61 Rev. 3, aligned with CSF 2.0 Detect and Identify Functions"

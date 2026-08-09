@@ -1,7 +1,7 @@
 name: Phishing Investigation
 description: >
-  Email phishing sorusturmasi - header analizi, URL kontrolu,
-  ek dosya analizi, gonderen dogrulama, verdict belirleme.
+  Email phishing investigation - header analysis, URL check,
+  attachment analysis, sender verification, verdict determination.
 trigger_type: manual
 input_params:
   - name: email_path
@@ -12,100 +12,100 @@ input_params:
     required: false
 
 steps:
-  # ===== Email Analizi =====
+  # ===== Email Analysis =====
   - name: parse_email
     tool: analyze_email
     params:
       file_path: "{{email_path}}"
-    description: Email header, body, attachment analizi
+    description: Email header, body, and attachment analysis
 
   - name: extract_iocs
     tool: extract_iocs
     params:
       text: "{{parse_email.body}}"
-    description: Email body'den IOC cikar (URL, IP, domain, hash)
+    description: Extract IOCs (URL, IP, domain, hash) from the email body
 
-  # ===== Gonderen Dogrulama =====
+  # ===== Sender Verification =====
   - name: sender_domain_check
     tool: mcp:osint-tools/whois_lookup
     params:
       target: "{{parse_email.sender_domain}}"
-    description: Gonderen domain WHOIS bilgisi - ne zaman kayit edilmis?
+    description: Sender domain WHOIS information - when was it registered?
 
   - name: sender_email_security
     tool: mcp:osint-tools/email_security_check
     params:
       domain: "{{parse_email.sender_domain}}"
-    description: SPF, DKIM, DMARC kontrolu - email spoofing tespiti
+    description: SPF, DKIM, DMARC check - email spoofing detection
 
   - name: sender_dns
     tool: mcp:osint-tools/dns_resolve
     params:
       domain: "{{parse_email.sender_domain}}"
-    description: Gonderen domain DNS kayitlari
+    description: Sender domain DNS records
 
   # ===== Free OSINT Enrichment =====
   - name: sender_typosquat
     tool: mcp:free-osint/typosquat_detect
     params:
       domain: "{{parse_email.sender_domain}}"
-    description: Typosquat tespiti - gonderen domain mesru domain'in sahte kopyasi mi?
+    description: Typosquat detection - is the sender domain a fake copy of a legitimate domain?
 
   - name: sender_hudsonrock
     tool: mcp:free-osint/hudsonrock_check
     params:
       domain: "{{parse_email.sender_domain}}"
-    description: HudsonRock info-stealer kurban kontrolu - gonderen domain calisanlari ele gecirilmis mi?
+    description: HudsonRock info-stealer victim check - have employees of the sender domain been compromised?
 
   - name: paste_leak_check
     tool: mcp:free-osint/paste_site_search
     params:
       query: "{{parse_email.sender_domain}}"
-    description: Paste site arama - gonderen domain ile iliskili credential leak kontrolu
+    description: Paste site search - credential leak check associated with the sender domain
 
-  # ===== URL Analizi =====
+  # ===== URL Analysis =====
   - name: url_openphish
     tool: mcp:free-osint/openphish_lookup
     for_each: "extract_iocs.urls"
     params:
       url: "{{item}}"
-    description: OpenPhish phishing URL feed kontrolu
+    description: OpenPhish phishing URL feed check
 
   - name: url_check
     tool: mcp:threat-intel-free/urlhaus_lookup
     for_each: "extract_iocs.urls"
     params:
       indicator: "{{item}}"
-    description: URL'leri URLhaus'ta kontrol et
+    description: Check URLs on URLhaus
 
   - name: url_headers
     tool: mcp:osint-tools/http_headers
     for_each: "extract_iocs.urls"
     params:
       url: "{{item}}"
-    description: URL'lerin HTTP header'larini kontrol et
+    description: Check HTTP headers of the URLs
 
   - name: url_ssl
     tool: mcp:osint-tools/ssl_certificate_info
     for_each: "extract_iocs.domains"
     params:
       host: "{{item}}"
-    description: URL domain'lerinin SSL sertifika kontrolu
+    description: SSL certificate check for URL domains
 
-  # ===== Ek Dosya Analizi =====
+  # ===== Attachment Analysis =====
   - name: attachment_triage
     tool: mcp:forensics-tools/file_metadata
     for_each: "parse_email.attachments"
     params:
       file_path: "{{item.path}}"
-    description: Ek dosya metadata ve hash analizi
+    description: Attachment metadata and hash analysis
 
   - name: attachment_hash_check
     tool: mcp:threat-intel-free/malwarebazaar_hash_lookup
     for_each: "parse_email.attachments"
     params:
       hash_value: "{{item.sha256}}"
-    description: Ek dosya hash'lerini MalwareBazaar'da kontrol et
+    description: Check attachment hashes on MalwareBazaar
 
   - name: attachment_macro_check
     tool: mcp:remnux/olevba_analyze
@@ -114,7 +114,7 @@ steps:
       file_path: "{{item.path}}"
     condition:
       if: "{{item.type}} in ['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'docm', 'xlsm']"
-    description: Office ek dosyalarinda macro kontrolu
+    description: Macro check in Office attachments
 
   # ===== IP Reputation =====
   - name: sender_ip_check
@@ -123,7 +123,7 @@ steps:
       ip: "{{parse_email.sender_ip}}"
     condition:
       if: "{{parse_email.sender_ip}}"
-    description: Gonderen IP blocklist kontrolu
+    description: Sender IP blocklist check
 
   - name: sender_ip_geo
     tool: mcp:osint-tools/geoip_lookup
@@ -131,7 +131,7 @@ steps:
       ip: "{{parse_email.sender_ip}}"
     condition:
       if: "{{parse_email.sender_ip}}"
-    description: Gonderen IP GeoIP bilgisi
+    description: Sender IP GeoIP information
 
   # ===== Threat Intel =====
   - name: threatfox_check
@@ -139,7 +139,7 @@ steps:
     for_each: "extract_iocs.all_iocs"
     params:
       indicator: "{{item}}"
-    description: Tum IOC'lari ThreatFox'ta kontrol et
+    description: Check all IOCs on ThreatFox
 
   # ===== Verdict =====
   - name: evaluate_phishing
@@ -153,10 +153,10 @@ steps:
     params:
       analysis_result: "{{parse_email}}"
       iocs: "{{extract_iocs}}"
-    description: Phishing onaylandi - engelleme kurallari uret
+    description: Phishing confirmed - generate blocking rules
 
   - name: document_benign
     action: final_answer
     description: >
-      Phishing analiz raporu: gonderen dogrulama, URL analizi,
-      ek dosya kontrolu, IOC listesi, verdict ve aksiyonlar
+      Phishing analysis report: sender verification, URL analysis,
+      attachment check, IOC list, verdict, and actions

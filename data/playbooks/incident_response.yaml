@@ -1,139 +1,139 @@
 name: Incident Response
 description: >
-  Kapsamli olay mudahale playbook'u - tanimlama, sinirlandirma, temizleme, kurtarma.
-  NIST SP 800-61 ve SANS IR adimlarina uygun. MCP araclariyla otomatik IOC zenginlestirme,
-  tehdit istihbarati kontrolu, forensik analiz ve tespit kurali uretimi.
+  Comprehensive incident response playbook based on the NIST CSF 2.0 functions (Detect, Respond, Recover).
+  Compliant with NIST SP 800-61 Rev. 3 and SANS IR steps. Automated IOC enrichment,
+  threat intelligence check, forensic analysis, and detection rule generation using MCP tools.
 trigger_type: manual
 input_params:
   - name: incident_description
-    description: Olay aciklamasi / Incident description text
+    description: Incident description text
     required: true
   - name: incident_targets
-    description: Etkilenen sistemler (IP, hostname) / Affected systems
+    description: Affected systems (IP, hostname)
     required: false
   - name: incident_severity
-    description: Baslangic onem derecesi (low/medium/high/critical) / Initial severity
+    description: Initial severity level (low/medium/high/critical)
     required: false
 
 steps:
-  # ===== Pre-Phase: Cache Kontrolu =====
+  # ===== Pre-Phase: Cache Check =====
   - name: recall_previous_analysis
     tool: recall_ioc
     params:
       text: "{{incident_description}}"
-    description: Onceki analizlerin cache'ini kontrol et - daha once incelenmis IOC var mi?
+    description: Check cache of previous analyses - are there any previously investigated IOCs?
 
-  # ===== Phase 1: Identification (Tanimlama) =====
+  # ===== Phase 1: Identification =====
   - name: extract_incident_iocs
     tool: extract_iocs
     params:
       text: "{{incident_description}}"
-    description: Olay aciklamasindan tum IOC'lari cikar (IP, domain, hash, URL, email)
+    description: Extract all IOCs from the incident description (IP, domain, hash, URL, email)
 
   - name: timeline_analysis
     tool: mcp:forensics-tools/timeline_csv_parse
     params:
       source: "{{incident_targets}}"
       timerange: 72h
-    description: Olayla iliskili zaman cizelgesi analizi - olaylarin kronolojik sirasini belirle
+    description: Timeline analysis related to the incident - determine the chronological order of events
 
   - name: hash_threat_check
     tool: mcp:threat-intel-free/malwarebazaar_hash_lookup
     for_each: "extract_incident_iocs.hashes"
     params:
       hash_value: "{{item}}"
-    description: Hash'leri MalwareBazaar'da kontrol et - bilinen malware mi?
+    description: Check hashes in MalwareBazaar - is it known malware?
 
   - name: ip_reputation
     tool: mcp:threat-intel-free/blocklist_check
     for_each: "extract_incident_iocs.ips"
     params:
       ip: "{{item}}"
-    description: IP'leri blocklist'lerde kontrol et
+    description: Check IPs in blocklists
 
   - name: ip_geoip
     tool: mcp:osint-tools/geoip_lookup
     for_each: "extract_incident_iocs.ips"
     params:
       ip: "{{item}}"
-    description: IP'lerin cografi konum bilgisi
+    description: Geographic location information of IPs
 
   - name: domain_whois
     tool: mcp:osint-tools/whois_lookup
     for_each: "extract_incident_iocs.domains"
     params:
       target: "{{item}}"
-    description: Domain WHOIS bilgisi - kayit tarihi ve sahiplik
+    description: Domain WHOIS information - registration date and ownership
 
   - name: domain_dns
     tool: mcp:osint-tools/dns_resolve
     for_each: "extract_incident_iocs.domains"
     params:
       domain: "{{item}}"
-    description: Domain DNS cozumlemesi
+    description: Domain DNS resolution
 
   - name: incident_dns_lookup
     tool: mcp:network-analysis/dns_lookup
     for_each: "extract_incident_iocs.domains"
     params:
       domain: "{{item}}"
-    description: Olayla iliskili domainlerin DNS kayitlarini sorgula - A, MX, TXT, NS kayitlari
+    description: Query DNS records for domains associated with the incident - A, MX, TXT, NS records
 
   - name: suspicious_port_check
     tool: mcp:network-analysis/port_check
     for_each: "extract_incident_iocs.ips"
     params:
       ip: "{{item}}"
-    description: Suphe cekici portlari kontrol et - bilinen C2, backdoor veya tunel portlari
+    description: Check suspicious ports - known C2, backdoor, or tunneling ports
 
   - name: url_check
     tool: mcp:threat-intel-free/urlhaus_lookup
     for_each: "extract_incident_iocs.urls"
     params:
       indicator: "{{item}}"
-    description: URL'leri URLhaus'ta kontrol et
+    description: Check URLs in URLhaus
 
   - name: threatfox_check
     tool: mcp:threat-intel-free/threatfox_ioc_lookup
     for_each: "extract_incident_iocs.all_iocs"
     params:
       indicator: "{{item}}"
-    description: Tum IOC'lari ThreatFox'ta kontrol et
+    description: Check all IOCs in ThreatFox
 
   - name: feodo_check
     tool: mcp:threat-intel-free/feodo_tracker_check
     for_each: "extract_incident_iocs.ips"
     params:
       ip: "{{item}}"
-    description: IP'leri Feodo Tracker (C2 botnet) listesinde kontrol et
+    description: Check IPs in the Feodo Tracker (C2 botnet) list
 
   - name: tor_check
     tool: mcp:threat-intel-free/tor_exit_node_check
     for_each: "extract_incident_iocs.ips"
     params:
       ip: "{{item}}"
-    description: IP'lerin Tor exit node olup olmadigini kontrol et
+    description: Check whether IPs are Tor exit nodes
 
   - name: zeek_log_analysis
     tool: mcp:network-analysis/analyze_zeek_logs
     params:
       target: "{{incident_targets}}"
       iocs: "{{extract_incident_iocs.all_iocs}}"
-    description: Zeek (Bro) IDS loglarini analiz et - ag baglantilari, DNS sorgusu ve dosya transferi tespiti
+    description: Analyze Zeek (Bro) IDS logs - detection of network connections, DNS queries, and file transfers
 
   - name: suricata_alert_analysis
     tool: mcp:network-analysis/analyze_suricata_alerts
     params:
       target: "{{incident_targets}}"
       iocs: "{{extract_incident_iocs.all_iocs}}"
-    description: Suricata IDS/IPS alertlerini analiz et - imza tabanli tehdit tespiti
+    description: Analyze Suricata IDS/IPS alerts - signature-based threat detection
 
   - name: malwoverview_triage
     tool: mcp:malwoverview/malwoverview_hash_lookup
     for_each: "extract_incident_iocs.hashes"
     params:
       hash_value: "{{item}}"
-    description: Malwoverview ile derinlemesine hash istihbarati
+    description: In-depth hash intelligence with Malwoverview
 
   # ===== Phase 1b: Free OSINT Enrichment =====
   - name: ip_shodan_internetdb
@@ -141,29 +141,29 @@ steps:
     for_each: "extract_incident_iocs.ips"
     params:
       ip: "{{item}}"
-    description: Shodan InternetDB ile IP acik port, CVE ve servis kontrolu (FREE)
+    description: Check open ports, CVEs, and services for IPs via Shodan InternetDB (FREE)
 
   - name: ioc_circl_misp
     tool: mcp:free-osint/circl_misp_feed_check
     for_each: "extract_incident_iocs.hashes"
     params:
       ioc: "{{item}}"
-    description: CIRCL MISP hashlookup kontrolu - bilinen dosya mi?
+    description: CIRCL MISP hashlookup check - is it a known file?
 
   - name: ransomware_activity_check
     tool: mcp:free-osint/ransomwatch_check
     params:
       query: "{{incident_description}}"
-    description: Ransomwatch ile ransomware grup aktivitesi kontrolu - olay ransomware ile iliskili mi?
+    description: Check ransomware group activity with Ransomwatch - is the incident related to ransomware?
 
   - name: domain_hudsonrock_check
     tool: mcp:free-osint/hudsonrock_check
     for_each: "extract_incident_iocs.domains"
     params:
       domain: "{{item}}"
-    description: HudsonRock info-stealer kurban kontrolu - domain calisan bilgileri ele gecirilmis mi?
+    description: HudsonRock info-stealer victim check - have domain employee credentials been compromised?
 
-  # ===== Phase 2: Containment (Sinirlandirma) =====
+  # ===== Phase 2: Containment =====
   - name: evaluate_severity
     condition:
       if: "{{hash_threat_check.malicious}} or {{ip_reputation.blocklisted}} or {{feodo_check.found}}"
@@ -176,23 +176,23 @@ steps:
       target: "{{incident_targets}}"
       isolation_type: network
     description: >
-      Etkilenen sistemleri agdan izole et - lateral movement'i engelle.
-      KRITIK: Bu adim onay gerektirir.
+      Isolate affected systems from the network - prevent lateral movement.
+      CRITICAL: This step requires approval.
     requires_approval: true
 
   - name: lnk_file_analysis
     tool: mcp:forensics-tools/parse_lnk_file
     params:
       target: "{{incident_targets}}"
-    description: Windows LNK dosyalarini analiz et - lateral movement ve kullanici aktivite kaniti
+    description: Analyze Windows LNK files - evidence of lateral movement and user activity
 
   - name: block_malicious_indicators
     tool: block_ip
     params:
       indicators: "{{threatfox_check.malicious_iocs}}"
     description: >
-      Onaylanan zararli IP, domain ve hash'leri perimetrede engelle.
-      Firewall, proxy ve EDR kurallarini guncelle.
+      Block confirmed malicious IPs, domains, and hashes at the perimeter.
+      Update firewall, proxy, and EDR rules.
     requires_approval: true
 
   - name: monitor_and_assess
@@ -200,7 +200,7 @@ steps:
     params:
       query: "{{extract_incident_iocs.all_iocs}}"
       timerange: 72h
-    description: Ek kanit icin loglari ara ve yayilimi degerlendir
+    description: Search logs for additional evidence and assess the scope/spread
 
   - name: cross_correlate_findings
     tool: correlate_findings
@@ -213,15 +213,15 @@ steps:
         port_check: "{{suspicious_port_check}}"
       log_search: "{{monitor_and_assess}}"
       timeline: "{{timeline_analysis}}"
-    description: Tum bulgulari cross-korelasyon ile eslestir - ortak saldiri kaliplari ve TTP'leri belirle
+    description: Cross-correlate all findings - determine common attack patterns and TTPs
 
-  # ===== Phase 3: Eradication (Temizleme) =====
+  # ===== Phase 3: Eradication =====
   - name: forensic_file_analysis
     tool: mcp:forensics-tools/file_metadata
     for_each: "extract_incident_iocs.file_paths"
     params:
       file_path: "{{item}}"
-    description: Zararli dosyalarin forensik metadata analizi
+    description: Forensic metadata analysis of malicious files
 
   - name: prefetch_analysis
     tool: mcp:forensics-tools/parse_windows_prefetch
@@ -230,20 +230,20 @@ steps:
       prefetch_path: "{{item}}"
     condition:
       if: "{{incident_targets.os}} == 'windows'"
-    description: Windows Prefetch analizi - program calistirma gecmisi
+    description: Windows Prefetch analysis - program execution history
 
   - name: event_log_analysis
     tool: mcp:forensics-tools/analyze_event_log
     params:
       log_source: "{{incident_targets}}"
       event_ids: [4624, 4625, 4648, 4672, 4688, 4697, 4698, 4720, 7045]
-    description: Windows Event Log analizi - oturum acma, yeni servis, zamanlanmis gorev
+    description: Windows Event Log analysis - logins, new services, scheduled tasks
 
   - name: yara_scan
     tool: mcp:remnux/yara_scan
     params:
       target_path: "{{incident_targets.suspicious_dir}}"
-    description: Etkilenen sistemde YARA taramasi
+    description: YARA scan on affected system
 
   - name: generate_detection_rules
     tool: generate_rules
@@ -254,22 +254,22 @@ steps:
         - sigma
         - yara
         - snort
-    description: Tespit kurallari uret - kalan izleri bul
+    description: Generate detection rules - find remaining traces
 
   - name: quarantine_artifacts
     tool: quarantine_file
     params:
       targets: "{{forensic_file_analysis.malicious_artifacts}}"
-    description: Zararli dosya ve artifact'lari karantinaya al
+    description: Quarantine malicious files and artifacts
     requires_approval: true
 
-  # ===== Phase 4: Recovery (Kurtarma) =====
+  # ===== Phase 4: Recovery =====
   - name: verify_clean
     tool: search_logs
     params:
       query: "{{extract_incident_iocs.all_iocs}}"
       timerange: 24h
-    description: Temizleme sonrasi dogrulama - zararli aktivite kalmadi mi?
+    description: Post-cleanup verification - ensures no remaining malicious activity
 
   - name: cve_check
     tool: mcp:vulnerability-tools/cve_search
@@ -277,7 +277,7 @@ steps:
       keyword: "{{extract_incident_iocs.vulnerability_refs}}"
     condition:
       if: "{{extract_incident_iocs.cve_ids}}"
-    description: Iliskili CVE'leri NVD'de ara
+    description: Search NVD for associated CVEs
 
   - name: kev_check
     tool: mcp:vulnerability-tools/kev_check
@@ -286,17 +286,17 @@ steps:
       cve_id: "{{item}}"
     condition:
       if: "{{extract_incident_iocs.cve_ids}}"
-    description: CVE'lerin CISA KEV (aktif istismar) listesinde olup olmadigini kontrol et
+    description: Check whether CVEs are in the CISA KEV (Known Exploited Vulnerabilities) list
 
-  # ===== Phase 5: Documentation (Dokumantasyon) =====
+  # ===== Phase 5: Documentation =====
   - name: document_incident
     action: final_answer
     description: >
-      Olay mudahale raporu olustur:
-      - Olay zaman cizelgesi (timeline)
-      - Etkilenen sistemler ve kullanicilar
-      - Alinan aksiyonlar (izolasyon, engelleme, karantina)
-      - IOC listesi ve tehdit istihbarati sonuclari
-      - Tespit kurallari (Sigma, YARA, Snort)
-      - CVE/zafiyet bilgileri
-      - Ogrenilen dersler ve iyilestirme onerileri
+      Generate incident response report:
+      - Incident timeline
+      - Affected systems and users
+      - Actions taken (isolation, blocking, quarantine)
+      - IOC list and threat intelligence results
+      - Detection rules (Sigma, YARA, Snort)
+      - CVE/vulnerability information
+      - Lessons learned and improvement recommendations

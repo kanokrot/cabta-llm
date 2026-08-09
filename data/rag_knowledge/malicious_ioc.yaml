@@ -1,0 +1,24 @@
+- id: playbook_malicious_ioc_001
+  text: >
+    เมื่อ IOC ได้รับการยืนยันว่าเป็น MALICIOUS, ให้ปฏิบัติตามกระบวนการจัดการเหตุการณ์ตามแนวทาง NIST SP 800-61 Rev. 3 ดังนี้
+    1. **Respond Function (การตอบสนองต่อเหตุการณ์)**
+       - **Containment (จำกัดความเสียหาย):**
+         - Block IOCs (IPs, Domains, Hashes) ที่ Firewall, Proxy, และ EDR ทันที
+         - Isolate host ที่ได้รับผลกระทบออกจาก production network
+         - Disable บัญชีผู้ใช้ที่ถูกบุกรุกชั่วคราว
+       - **Eradication (กำจัดภัยคุกคาม):**
+         - กำจัดมัลแวร์และสิ่งแปลกปลอม (artifacts) ทั้งหมดออกจากระบบที่ได้รับผลกระทบ
+         - ทำการ threat hunting ใน SIEM หรือ logs เพื่อหาขอบเขตของเหตุการณ์ทั้งหมด
+         - Reset credentials ที่อาจถูกขโมยไป
+    2. **Recover Function (การกู้คืนระบบ)**
+       - นำ host ที่ผ่านการตรวจสอบความปลอดภัยแล้วกลับเข้าสู่ network
+       - ติดตามการทำงานของระบบอย่างใกล้ชิดเพื่อตรวจจับความผิดปกติที่อาจเกิดขึ้นอีก
+       - Restore ข้อมูลจาก backup ที่เชื่อถือได้หากข้อมูลได้รับความเสียหาย
+    3. **Post-Incident Activities (กิจกรรมหลังเกิดเหตุ)**
+       - จัดทำเอกสารสรุปเหตุการณ์ (incident report) ซึ่งประกอบด้วยการวิเคราะห์ root cause, บทเรียนที่ได้รับ (lessons learned), และแนวทางการปรับปรุง
+       - บันทึก IOCs และ TTPs ของผู้โจมตีลงในฐานข้อมูล Threat Intelligence
+  metadata:
+    category: playbook
+    verdict: MALICIOUS
+    ioc_type: any
+    source: "NIST SP 800-61 Rev. 3, aligned with CSF 2.0 Respond and Recover Functions"

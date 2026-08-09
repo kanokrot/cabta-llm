@@ -1,0 +1,10 @@
+- id: playbook_newly_registered_domain
+  text: >
+    Domain ที่เพิ่งจดทะเบียนเป็น indicator ที่ต้องให้ความสนใจเป็นพิเศษในการทำ enrichment และ threat hunting:
+    - **High-Risk Indicator:** Domain ที่มีอายุต่ำกว่า 30-60 วันมักมีความเสี่ยงสูงกว่าปกติ เนื่องจากผู้โจมตีมักใช้ domain ที่เพิ่งจดทะเบียนใหม่สำหรับแคมเปญ Phishing หรือ C2 server เพื่อหลีกเลี่ยง reputation-based blocking.
+    - **Correlation with DGA:** หาก domain ที่เพิ่งจดทะเบียนใหม่มีลักษณะเป็น Domain Generation Algorithm (DGA) (เช่น entropy สูง, รูปแบบสุ่ม), ความเสี่ยงจะยิ่งสูงขึ้นมาก เพราะเป็นเทคนิคที่ botnet ส่วนใหญ่ใช้ในการติดต่อกับ C2 server.
+    - **Enrichment Steps:** ควรตรวจสอบ domain age, ประวัติ WHOIS, passive DNS, และ certificate transparency logs. มองหาความผิดปกติเช่น การใช้ privacy guard, การจดทะเบียนผ่าน registrar ที่เป็นที่นิยมของผู้ไม่หวังดี, หรือการใช้ free SSL certificate.
+  metadata:
+    category: playbook
+    topic: domain_enrichment
+    source: "Internal heuristic based on common threat intelligence practices"

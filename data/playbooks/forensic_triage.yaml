@@ -1,0 +1,125 @@
+name: Basic Host Forensic Triage
+category: Forensics
+description: >
+  Basic host-level forensic triage - collect volatile memory evidence and disk artifacts,
+  check file/IP/domain reputation, persistence check, analyze event logs, IOC extraction,
+  ATT&CK mapping, and verdict determination.
+trigger_type: manual
+input_params:
+  - name: host_identifier
+    description: Hostname or IP address of the affected host
+    required: true
+  - name: suspicious_file_path
+    description: Path to a suspicious file found on the host (if known)
+    required: false
+  - name: reported_by
+    description: Who reported/flagged this host
+    required: false
+
+steps:
+  # ===== Collection =====
+  - name: collect_system_info
+    tool: mcp:forensics-tools/system_info
+    params:
+      host: "{{host_identifier}}"
+    description: Collect basic host info (hostname, OS, current time, logged-in users)
+
+  - name: collect_running_processes
+    tool: mcp:forensics-tools/process_list
+    params:
+      host: "{{host_identifier}}"
+    description: Snapshot of currently running processes (volatile data)
+
+  - name: collect_network_connections
+    tool: mcp:forensics-tools/netstat_capture
+    params:
+      host: "{{host_identifier}}"
+    description: Snapshot of active network connections (volatile data)
+
+  - name: collect_event_logs
+    tool: mcp:forensics-tools/event_log_collect
+    params:
+      host: "{{host_identifier}}"
+      time_range: "last_24h"
+    description: Collect relevant event/syslog entries around the incident window
+
+  - name: collect_suspicious_file
+    tool: mcp:forensics-tools/file_metadata
+    params:
+      file_path: "{{suspicious_file_path}}"
+    condition:
+      if: "{{suspicious_file_path}}"
+    description: Collect metadata and hash (MD5/SHA256) of the suspicious file before further handling
+
+  # ===== Examination =====
+  - name: persistence_check
+    tool: mcp:forensics-tools/autoruns_check
+    params:
+      host: "{{host_identifier}}"
+    description: Check startup items, scheduled tasks, and registry run keys for persistence mechanisms
+
+  - name: hash_reputation_check
+    tool: mcp:threat-intel-free/malwarebazaar_hash_lookup
+    params:
+      hash_value: "{{collect_suspicious_file.sha256}}"
+    condition:
+      if: "{{suspicious_file_path}}"
+    description: Check the collected file hash against MalwareBazaar
+
+  - name: process_ip_reputation
+    tool: mcp:threat-intel-free/blocklist_check
+    for_each: "collect_network_connections.remote_ips"
+    params:
+      ip: "{{item}}"
+    description: Check remote IPs from active connections against blocklists
+
+  - name: process_ip_geo
+    tool: mcp:osint-tools/geoip_lookup
+    for_each: "collect_network_connections.remote_ips"
+    params:
+      ip: "{{item}}"
+    description: GeoIP lookup for remote connection IPs
+
+  # ===== Analysis =====
+  - name: extract_iocs
+    tool: extract_iocs
+    params:
+      text: "{{collect_event_logs.raw_text}}"
+    description: Extract IOCs (IP, domain, hash) from collected logs and process data
+
+  - name: threatfox_check
+    tool: mcp:threat-intel-free/threatfox_ioc_lookup
+    for_each: "extract_iocs.all_iocs"
+    params:
+      indicator: "{{item}}"
+    description: Check all extracted IOCs against ThreatFox
+
+  - name: map_attack_technique
+    tool: mcp:forensics-tools/mitre_attack_mapper
+    params:
+      findings:
+        persistence: "{{persistence_check}}"
+        network: "{{process_ip_reputation}}"
+        file: "{{hash_reputation_check}}"
+    description: Map observed artifacts to MITRE ATT&CK techniques (e.g., T1547, T1071)
+
+  # ===== Verdict =====
+  - name: evaluate_triage
+    condition:
+      if: "{{hash_reputation_check.malicious}} or {{process_ip_reputation.malicious}} or {{persistence_check.suspicious}}"
+      then: confirm_incident
+      else: document_benign
+
+  - name: confirm_incident
+    tool: generate_rules
+    action: final_answer
+    params:
+      analysis_result: "{{map_attack_technique}}"
+      iocs: "{{extract_iocs}}"
+    description: Incident confirmed - generate blocking rules and recommend action to SOC
+
+  - name: document_benign
+    action: final_answer
+    description: >
+      Forensic triage report: system info, process/network snapshot,
+      persistence check, IOC list, ATT&CK mapping, verdict, and actions

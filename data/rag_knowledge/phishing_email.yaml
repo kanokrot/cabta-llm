@@ -1,0 +1,21 @@
+- id: playbook_phishing_email
+  text: >
+    เมื่อมี email ที่ต้องสงสัยหรือยืนยันว่าเป็น Phishing, ให้ดำเนินการตามแนวทาง NIST SP 800-61 Rev. 3:
+    1. **Respond Function (การตอบสนองต่อเหตุการณ์):**
+       - **Containment (จำกัดความเสียหาย):**
+         - ใช้ EDR หรือ Mail Gateway ค้นหาและลบ (search and purge) email ที่ต้องสงสัยออกจากทุก inbox
+         - Block sender (email, domain, IP) ที่ระบบป้องกัน email
+         - Block IOCs (URLs, Hashes) ที่พบใน email ที่ Web Proxy และ EDR
+       - **Investigation (สอบสวน):**
+         - ตรวจสอบขอบเขต (scope) ว่ามีผู้ใช้รายใดได้รับ email นี้อีกบ้าง
+         - วิเคราะห์ logs เพื่อหาผู้ใช้ที่อาจตกเป็นเหยื่อ (คลิกลิงก์, เปิดไฟล์, กรอกข้อมูล)
+         - สำหรับผู้ใช้ที่ตกเป็นเหยื่อ, ให้เริ่มกระบวนการ Incident Response สำหรับเครื่องที่ได้รับผลกระทบทันที
+    2. **Recover Function (การสื่อสารและกู้คืน):**
+       - แจ้งเตือนผู้ใช้กลุ่มเป้าหมายให้ระมัดระวัง
+       - สำหรับผู้ใช้ที่ตกเป็นเหยื่อ, ให้ทำการ reset credentials และตรวจสอบกิจกรรมที่น่าสงสัยในบัญชี
+       - ส่ง phishing email ตัวอย่าง (พร้อม header) ให้ทีม Threat Intelligence เพื่อวิเคราะห์และปรับปรุงระบบป้องกัน
+  metadata:
+    category: playbook
+    verdict: PHISHING
+    ioc_type: email
+    source: "Aligned with NIST SP 800-61 Rev. 3 (CSF 2.0 Respond/Recover Functions) and CISA guidelines"

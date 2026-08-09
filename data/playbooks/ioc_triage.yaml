@@ -1,7 +1,7 @@
 name: IOC Triage
 description: >
-  Suspicious IOC (IP, domain, hash, URL) icin otomatik triaj.
-  Birden fazla free threat intel kaynagi ile zenginlestirme.
+  Automated triage for suspicious IOCs (IP, domain, hash, URL).
+  Enrichment using multiple free threat intelligence sources.
 trigger_type: manual
 input_params:
   - name: ioc
@@ -16,16 +16,16 @@ steps:
     tool: extract_iocs
     params:
       text: "{{ioc}}"
-    description: IOC tipini otomatik tespit et
+    description: Automatically detect IOC type
 
-  # ===== IP Analizi =====
+  # ===== IP Analysis =====
   - name: geoip
     tool: mcp:osint-tools/geoip_lookup
     params:
       ip: "{{ioc}}"
     condition:
       if: "{{ioc_type}} == 'ip' or {{identify_ioc_type.ips}}"
-    description: GeoIP lokasyon ve ASN bilgisi
+    description: GeoIP location and ASN information
 
   - name: reverse_dns
     tool: mcp:osint-tools/reverse_dns
@@ -33,7 +33,7 @@ steps:
       ip: "{{ioc}}"
     condition:
       if: "{{ioc_type}} == 'ip' or {{identify_ioc_type.ips}}"
-    description: Reverse DNS cozumlemesi
+    description: Reverse DNS resolution
 
   - name: feodo_check
     tool: mcp:threat-intel-free/feodo_tracker_check
@@ -41,7 +41,7 @@ steps:
       ip: "{{ioc}}"
     condition:
       if: "{{ioc_type}} == 'ip' or {{identify_ioc_type.ips}}"
-    description: Feodo Tracker botnet C2 kontrolu
+    description: Feodo Tracker botnet C2 check
 
   - name: tor_check
     tool: mcp:threat-intel-free/tor_exit_node_check
@@ -49,7 +49,7 @@ steps:
       ip: "{{ioc}}"
     condition:
       if: "{{ioc_type}} == 'ip' or {{identify_ioc_type.ips}}"
-    description: Tor exit node kontrolu
+    description: Tor exit node check
 
   - name: blocklist_check
     tool: mcp:threat-intel-free/blocklist_check
@@ -57,16 +57,16 @@ steps:
       ip: "{{ioc}}"
     condition:
       if: "{{ioc_type}} == 'ip' or {{identify_ioc_type.ips}}"
-    description: Spamhaus, DShield, Blocklist.de kontrolu
+    description: Spamhaus, DShield, Blocklist.de check
 
-  # ===== Domain Analizi =====
+  # ===== Domain Analysis =====
   - name: whois
     tool: mcp:osint-tools/whois_lookup
     params:
       target: "{{ioc}}"
     condition:
       if: "{{ioc_type}} == 'domain'"
-    description: WHOIS kayit bilgisi
+    description: WHOIS record information
 
   - name: dns_resolve
     tool: mcp:osint-tools/dns_resolve
@@ -74,7 +74,7 @@ steps:
       domain: "{{ioc}}"
     condition:
       if: "{{ioc_type}} == 'domain'"
-    description: DNS kayitlari
+    description: DNS records
 
   - name: ssl_check
     tool: mcp:osint-tools/ssl_certificate_info
@@ -82,7 +82,7 @@ steps:
       host: "{{ioc}}"
     condition:
       if: "{{ioc_type}} == 'domain'"
-    description: SSL sertifika bilgisi
+    description: SSL certificate information
 
   - name: subdomains
     tool: mcp:osint-tools/subdomain_enumerate
@@ -90,7 +90,7 @@ steps:
       domain: "{{ioc}}"
     condition:
       if: "{{ioc_type}} == 'domain'"
-    description: Subdomain kesfet (crt.sh)
+    description: Discover subdomains (crt.sh)
 
   # ===== Free OSINT Enrichment =====
   - name: shodan_ip_check
@@ -99,13 +99,13 @@ steps:
       ip: "{{ioc}}"
     condition:
       if: "{{ioc_type}} == 'ip' or {{identify_ioc_type.ips}}"
-    description: Shodan InternetDB ile IP acik port, CVE, servis kontrolu (FREE)
+    description: Check open ports, CVEs, and services for IP via Shodan InternetDB (FREE)
 
   - name: circl_misp_check
     tool: mcp:free-osint/circl_misp_feed_check
     params:
       ioc: "{{ioc}}"
-    description: CIRCL MISP European CERT threat intel kontrolu
+    description: CIRCL MISP European CERT threat intel check
 
   - name: crtsh_check
     tool: mcp:free-osint/crtsh_subdomain_search
@@ -113,61 +113,61 @@ steps:
       domain: "{{ioc}}"
     condition:
       if: "{{ioc_type}} == 'domain'"
-    description: crt.sh Certificate Transparency ile subdomain kesfif
+    description: Subdomain discovery via crt.sh Certificate Transparency
 
-  # ===== URL Analizi =====
+  # ===== URL Analysis =====
   - name: openphish_check
     tool: mcp:free-osint/openphish_lookup
     params:
       url: "{{ioc}}"
     condition:
       if: "{{ioc_type}} == 'url'"
-    description: OpenPhish phishing URL feed kontrolu
+    description: OpenPhish phishing URL feed check
 
   - name: urlhaus_check
     tool: mcp:threat-intel-free/urlhaus_lookup
     params:
       indicator: "{{ioc}}"
-    description: URLhaus'ta kontrol et
+    description: Check in URLhaus
 
-  # ===== Hash Analizi =====
+  # ===== Hash Analysis =====
   - name: malwarebazaar_check
     tool: mcp:threat-intel-free/malwarebazaar_hash_lookup
     params:
       hash_value: "{{ioc}}"
     condition:
       if: "{{ioc_type}} == 'hash'"
-    description: MalwareBazaar'da hash kontrol et
+    description: Check hash in MalwareBazaar
 
-  # ===== Genel =====
+  # ===== General =====
   - name: threatfox_check
     tool: mcp:threat-intel-free/threatfox_ioc_lookup
     params:
       indicator: "{{ioc}}"
-    description: ThreatFox'ta IOC kontrol et
+    description: Check IOC in ThreatFox
 
   - name: threat_intel_lookup
     tool: investigate_ioc
     params:
       ioc: "{{ioc}}"
-    description: Dahili tehdit istihbarati kontrolu
+    description: Internal threat intelligence check
 
-  # ===== Karar =====
+  # ===== Verdict / Decision =====
   - name: evaluate_verdict
     condition:
       if: "{{threat_intel_lookup.threat_score}} >= 70 or {{blocklist_check.malicious}} or {{feodo_check.malicious}}"
       then: escalate
       else: document
-    description: Tehdit seviyesini degerlendir
+    description: Evaluate threat level
 
   - name: escalate
     tool: generate_rules
     params:
       analysis_result: "{{threat_intel_lookup}}"
-    description: Zararli IOC icin tespit kurallari uret
+    description: Generate detection rules for malicious IOC
 
   - name: document
     action: final_answer
     description: >
-      IOC triaj raporu: GeoIP, WHOIS, DNS, threat intel sonuclari,
-      blocklist durumu, verdict ve aksiyonlar
+      IOC triage report: GeoIP, WHOIS, DNS, threat intel results,
+      blocklist status, verdict, and actions

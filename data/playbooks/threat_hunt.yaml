@@ -1,62 +1,62 @@
 name: Threat Hunt
 description: >
-  Proaktif tehdit avlama playbook'u - hipotez tabanli gizli tehdit arama.
-  MITRE ATT&CK framework'u ile esleme, MCP araclariyla otomatik IOC zenginlestirme,
-  network analizi, forensik inceleme ve tespit kurali uretimi.
+  Proactive threat hunting playbook - hypothesis-based hidden threat search.
+  MITRE ATT&CK framework mapping, automated IOC enrichment with MCP tools,
+  network analysis, forensic investigation, and detection rule generation.
 trigger_type: manual
 input_params:
   - name: hunt_hypothesis
-    description: Tehdit avlama hipotezi / Threat hunting hypothesis
+    description: Threat hunting hypothesis
     required: true
   - name: hunt_timerange
-    description: Arama zaman araligi (ornek 7d, 30d) / Search time range
+    description: Search time range (e.g., 7d, 30d)
     required: false
   - name: known_indicators
-    description: Bilinen IOC'lar (IP, domain, hash) / Known IOCs
+    description: Known IOCs (IP, domain, hash)
     required: false
   - name: target_systems
-    description: Hedef sistemler / Target systems
+    description: Target systems
     required: false
 
 steps:
-  # ===== Phase 1: Hipotez ve Istihbarat =====
+  # ===== Phase 1: Hypothesis and Intelligence =====
   - name: recall_previous_iocs
     tool: recall_ioc
     params:
       hypothesis: "{{hunt_hypothesis}}"
       known_indicators: "{{known_indicators}}"
-    description: Onceki analizlerden cache'lenmis IOC'lari geri cagir - tekrar sorgulamayi onle
+    description: Recall cached IOCs from previous analyses - prevent redundant querying
 
   - name: define_hypothesis
     action: input
     params:
       prompt: "{{hunt_hypothesis}}"
     description: >
-      Tehdit avlama hipotezini tanimla ve beklenen dusman TTP'lerini belirle.
-      Ornek: "APT grubu X, supply chain saldirisi ile hedef aliyor"
+      Define the threat hunting hypothesis and identify expected adversary TTPs.
+      Example: "APT group X is targeting via supply chain attack"
 
   - name: map_to_mitre
     tool: extract_iocs
     params:
       text: "{{hunt_hypothesis}}"
-    description: Hipotezi MITRE ATT&CK teknikleriyle esle, ilgili veri kaynaklarini belirle
+    description: Map the hypothesis to MITRE ATT&CK techniques, identify relevant data sources
 
   - name: search_all_threat_intel
     tool: search_threat_intel
     params:
       hypothesis: "{{hunt_hypothesis}}"
       indicators: "{{known_indicators}}"
-    description: 20+ kaynaktan tehdit istihbarati ara - kapsamli IOC ve TTP zenginlestirme
+    description: Search threat intelligence across 20+ sources - comprehensive IOC and TTP enrichment
 
   - name: gather_threat_intel
     tool: mcp:threat-intel-free/threatfox_recent_iocs
     params: {}
-    description: Guncel ThreatFox IOC'larini topla - hipotezle iliskili tehditler
+    description: Gather recent ThreatFox IOCs - threats related to the hypothesis
 
   - name: gather_recent_malware
     tool: mcp:threat-intel-free/recent_malware_samples
     params: {}
-    description: Son malware orneklerini topla - guncel tehdit ornekleriyle hipotez dogrulama
+    description: Gather recent malware samples - validate hypothesis with current threat samples
 
   - name: check_known_hashes
     tool: mcp:threat-intel-free/malwarebazaar_hash_lookup
@@ -65,7 +65,7 @@ steps:
       hash_value: "{{item}}"
     condition:
       if: "{{known_indicators.hashes}}"
-    description: Bilinen hash'leri MalwareBazaar'da kontrol et
+    description: Check known hashes on MalwareBazaar
 
   - name: check_known_ips
     tool: mcp:threat-intel-free/blocklist_check
@@ -74,7 +74,7 @@ steps:
       ip: "{{item}}"
     condition:
       if: "{{known_indicators.ips}}"
-    description: Bilinen IP'leri blocklist'lerde kontrol et
+    description: Check known IPs on blocklists
 
   - name: check_known_domains
     tool: mcp:osint-tools/whois_lookup
@@ -83,7 +83,7 @@ steps:
       target: "{{item}}"
     condition:
       if: "{{known_indicators.domains}}"
-    description: Bilinen domain'lerin WHOIS bilgisi
+    description: WHOIS information for known domains
 
   - name: domain_ssl_check
     tool: mcp:osint-tools/ssl_certificate_info
@@ -92,7 +92,7 @@ steps:
       host: "{{item}}"
     condition:
       if: "{{known_indicators.domains}}"
-    description: Domain SSL sertifika kontrolu - sahte sertifika tespiti
+    description: Domain SSL certificate check - fake certificate detection
 
   - name: ip_geoip
     tool: mcp:osint-tools/geoip_lookup
@@ -101,7 +101,7 @@ steps:
       ip: "{{item}}"
     condition:
       if: "{{known_indicators.ips}}"
-    description: IP cografi konum bilgisi
+    description: IP geolocation information
 
   - name: feodo_check
     tool: mcp:threat-intel-free/feodo_tracker_check
@@ -110,7 +110,7 @@ steps:
       ip: "{{item}}"
     condition:
       if: "{{known_indicators.ips}}"
-    description: Feodo Tracker C2 botnet kontrolu
+    description: Feodo Tracker C2 botnet check
 
   - name: malwoverview_enrichment
     tool: mcp:malwoverview/malwoverview_hash_lookup
@@ -119,7 +119,7 @@ steps:
       hash_value: "{{item}}"
     condition:
       if: "{{known_indicators.hashes}}"
-    description: Malwoverview ile hash istihbarati zenginlestirme
+    description: Hash intelligence enrichment via Malwoverview
 
   # ===== Phase 1b: Free OSINT Enrichment =====
   - name: shodan_ip_recon
@@ -129,39 +129,39 @@ steps:
       ip: "{{item}}"
     condition:
       if: "{{known_indicators.ips}}"
-    description: Shodan InternetDB ile IP acik port, CVE ve servis kontrolu (FREE)
+    description: IP open port, CVE, and service check via Shodan InternetDB (FREE)
 
   - name: malpedia_search
     tool: mcp:free-osint/malpedia_malware_search
     params:
       query: "{{hunt_hypothesis}}"
-    description: Malpedia malware ailesi arama - hipotezdeki malware ailesini Malpedia'da ara
+    description: Malpedia malware family search - search for the malware family in the hypothesis on Malpedia
 
   - name: ransomwatch_activity
     tool: mcp:free-osint/ransomwatch_check
     params:
       query: "{{hunt_hypothesis}}"
-    description: Ransomwatch ile ransomware grup aktivitesi ve kurban kontrolu
+    description: Ransomware group activity and victim check via Ransomwatch
 
   - name: darksearch_intel
     tool: mcp:free-osint/darksearch_query
     params:
       query: "{{hunt_hypothesis}}"
-    description: Dark web arama (Ahmia.fi) - tehdit aktouru aktivitesi ve veri sizintisi tespiti
+    description: Dark web search (Ahmia.fi) - threat actor activity and data leak detection
 
   - name: epss_top_threats
     tool: mcp:free-osint/epss_top_exploited
     params:
       top_n: 20
-    description: EPSS en cok istismar edilen CVE'ler - guncel exploit trendleri ile hipotez dogrulama
+    description: EPSS top exploited CVEs - hypothesis validation against current exploit trends
 
   - name: paste_leak_search
     tool: mcp:free-osint/paste_site_search
     params:
       query: "{{hunt_hypothesis}}"
-    description: Paste site arama - credential leak ve veri sizintisi tespiti
+    description: Paste site search - credential leak and data breach detection
 
-  # ===== Phase 2: Hunt Sorgulari Olusturma =====
+  # ===== Phase 2: Generating Hunt Queries =====
   - name: build_hunt_queries
     tool: generate_rules
     params:
@@ -175,15 +175,15 @@ steps:
         - kql
         - spl
         - yara
-    description: SIEM ve EDR platformlari icin avlama sorgulari uret
+    description: Generate hunting queries for SIEM and EDR platforms
 
-  # ===== Phase 3: Hunt Yurutme =====
+  # ===== Phase 3: Executing the Hunt =====
   - name: execute_hunt
     tool: search_logs
     params:
       query: "{{build_hunt_queries.queries}}"
       timerange: "{{hunt_timerange}}"
-    description: Mevcut log kaynaklarinda avlama sorgularini calistir
+    description: Execute hunting queries across existing log sources
 
   - name: network_ioc_analysis
     tool: mcp:network-analysis/analyze_network_iocs
@@ -191,21 +191,21 @@ steps:
       iocs: "{{known_indicators}}"
     condition:
       if: "{{known_indicators}}"
-    description: Network IOC'larini analiz et - DNS, baglanti, trafik
+    description: Analyze network IOCs - DNS, connection, traffic
 
   - name: zeek_log_analysis
     tool: mcp:network-analysis/analyze_zeek_logs
     params:
       timerange: "{{hunt_timerange}}"
       indicators: "{{known_indicators}}"
-    description: Zeek log analizi - ag baglanti kayitlarinda supheli aktivite ara
+    description: Zeek log analysis - search for suspicious activity in network connection logs
 
   - name: suricata_alert_analysis
     tool: mcp:network-analysis/analyze_suricata_alerts
     params:
       timerange: "{{hunt_timerange}}"
       indicators: "{{known_indicators}}"
-    description: Suricata alert analizi - IDS/IPS alarmlariyla tehdit eslemesi
+    description: Suricata alert analysis - threat matching against IDS/IPS alerts
 
   - name: suspicious_port_scan
     tool: mcp:network-analysis/port_check
@@ -214,7 +214,7 @@ steps:
       ip: "{{item}}"
     condition:
       if: "{{known_indicators.ips}}"
-    description: Supheli IP'lerde port taramasi - acik servis ve arka kapi tespiti
+    description: Port scan on suspicious IPs - open service and backdoor detection
 
   - name: dns_lookup_indicators
     tool: mcp:network-analysis/dns_lookup
@@ -223,9 +223,9 @@ steps:
       domain: "{{item}}"
     condition:
       if: "{{known_indicators.domains}}"
-    description: DNS lookup - domain cozumleme ve supheli DNS kayit analizi
+    description: DNS lookup - domain resolution and suspicious DNS record analysis
 
-  # ===== Phase 4: Bulgu Analizi =====
+  # ===== Phase 4: Findings Analysis =====
   - name: analyze_results
     condition:
       if: "{{execute_hunt.results_count}} > 0"
@@ -237,7 +237,7 @@ steps:
     for_each: "execute_hunt.suspicious_indicators"
     params:
       indicator: "{{item}}"
-    description: Suphelileri ThreatFox'ta zenginlestir
+    description: Enrich suspicious items on ThreatFox
 
   - name: cross_correlate_findings
     tool: correlate_findings
@@ -248,7 +248,7 @@ steps:
       zeek_results: "{{zeek_log_analysis}}"
       suricata_results: "{{suricata_alert_analysis}}"
       threat_intel: "{{gather_threat_intel}}"
-    description: Tum bulgu kaynaklarini cross-korelasyon ile eslestir - false positive azaltma ve tehdit dogrulama
+    description: Cross-correlate all finding sources - false positive reduction and threat validation
 
   - name: suspicious_file_forensics
     tool: mcp:forensics-tools/file_metadata
@@ -257,7 +257,7 @@ steps:
       file_path: "{{item}}"
     condition:
       if: "{{execute_hunt.suspicious_files}}"
-    description: Supheli dosyalarin forensik analizi
+    description: Forensic analysis of suspicious files
 
   - name: pe_analysis
     tool: mcp:remnux/pe_analyze
@@ -266,7 +266,7 @@ steps:
       file_path: "{{item}}"
     condition:
       if: "{{execute_hunt.suspicious_executables}}"
-    description: Supheli PE dosyalarinin yapisal analizi
+    description: Structural analysis of suspicious PE files
 
   - name: capa_analysis
     tool: mcp:flare/capa_analyze
@@ -275,7 +275,7 @@ steps:
       file_path: "{{item}}"
     condition:
       if: "{{execute_hunt.suspicious_executables}}"
-    description: CAPA ile yetenek analizi - malware davranislari
+    description: Capability analysis via CAPA - malware behaviors
 
   - name: yara_scan
     tool: mcp:remnux/yara_scan
@@ -283,9 +283,9 @@ steps:
       target_path: "{{target_systems.suspicious_dirs}}"
     condition:
       if: "{{target_systems.suspicious_dirs}}"
-    description: Hedef dizinlerde YARA taramasi
+    description: YARA scan on target directories
 
-  # ===== Phase 5: Karar =====
+  # ===== Phase 5: Decision =====
   - name: evaluate_findings
     condition:
       if: "{{triage_findings.confirmed_threats}} > 0"
@@ -298,17 +298,17 @@ steps:
       playbook: incident_response
       incident_description: "{{triage_findings}}"
     description: >
-      Onaylanan tehditler icin olay mudahale is akisina yonlendir.
-      Hunt bulguları IR ekibine aktarilir.
+      Route to incident response workflow for confirmed threats.
+      Hunt findings are transferred to the IR team.
 
   - name: refine_hypothesis
     action: final_answer
     description: >
-      Hunt sonuclarini belgele, hipotezi rafine et ve takip avlarini planla.
-      Bulgu olmasa bile negatif sonuclar degerlidir.
+      Document hunt results, refine hypothesis, and plan follow-up hunts.
+      Even if no findings are discovered, negative results are valuable.
 
   - name: document_negative
     action: final_answer
     description: >
-      Negatif bulgulari belgele - tehdit tespit edilmedi.
-      Hunt backlog'u guncelle, hipotez revizyonu yap.
+      Document negative findings - no threat detected.
+      Update hunt backlog, perform hypothesis revision.
