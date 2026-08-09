@@ -18,6 +18,7 @@ from ..analyzers.email_threat_indicators import EmailThreatIndicators  # Enhance
 from ..analyzers.bec_detector import BECDetector  # BEC detection
 from ..detection.rule_generator import RuleGenerator
 from ..reporting.raw_output_collector import RawOutputCollector
+from ..integrations.ticketing import create_incident_ticket
 
 logger = logging.getLogger(__name__)
 class EmailAnalyzer:
@@ -49,7 +50,7 @@ class EmailAnalyzer:
         self.ioc_investigator = None
         self.file_analyzer = None
     
-    async def analyze(self, email_path: str) -> Dict:
+    async def analyze(self, email_path: str, analysis_id: str = None) -> Dict:
         """
         Comprehensive email analysis with SOC-grade techniques.
         
@@ -312,6 +313,9 @@ class EmailAnalyzer:
                     'malicious_iocs': [r.get('ioc') for r in ioc_results if r.get('verdict') == 'MALICIOUS'][:10]
                 })
             }
+
+            if 'ioc' not in result:
+                result['ioc'] = email_data.get('from', 'unknown')
             
             # ==================== RAW OUTPUT CAPTURE ====================
             # Capture content
@@ -361,7 +365,14 @@ class EmailAnalyzer:
             result['raw_output'] = raw_collector.get_all_raw_data()
             
             logger.info(f"[EMAIL] Analysis complete: {verdict} (base: {base_score}, composite: {composite_score}/100)")
-            
+
+            ticket_verdicts = self.config.get("ticketing", {}).get("create_on_verdict_email", ["PHISHING", "SUSPICIOUS"])
+            if verdict in ticket_verdicts and analysis_id:
+                try:
+                    create_incident_ticket(result, analysis_id)
+                except Exception as e:
+                    logger.error(f"[EMAIL] Failed to create incident ticket: {e}")
+
             return result
         
         except Exception as e:
