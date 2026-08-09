@@ -12,15 +12,21 @@ A playbook is a list of steps.  Each step invokes a tool and can branch
 based on the outcome (``on_success`` / ``on_failure`` / ``condition``).
 """
 
+import asyncio
 import json
 import logging
 import operator
 import re
+import threading
 import time
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
+
+# Import threat intel for enrichment
+from ..integrations.threat_intel import ThreatIntelligence
+
 
 logger = logging.getLogger(__name__)
 
@@ -264,6 +270,22 @@ def safe_evaluate_condition(condition: str, context: Dict) -> bool:
         return False
 
 
+_VERDICT_SEVERITY = {"MALICIOUS": 4, "PHISHING": 3, "SUSPICIOUS": 2, "SPAM": 1, "CLEAN": 0}
+
+
+def _find_highest_verdict(context: Dict) -> Optional[str]:
+    """สแกน context หา verdict ทุกตัวที่เกิดจาก tool results ระหว่าง playbook
+    แล้วคืนตัวที่รุนแรงที่สุด (read-only, ไม่แก้ context)"""
+    found = []
+    for key, val in context.items():
+        if key == "verdict" or key.endswith("_verdict"):
+            if isinstance(val, str) and val.upper() in _VERDICT_SEVERITY:
+                found.append(val.upper())
+    if not found:
+        return None
+    return max(found, key=lambda v: _VERDICT_SEVERITY[v])
+
+
 # ---------------------------------------------------------------------------
 # Engine
 # ---------------------------------------------------------------------------
@@ -292,6 +314,13 @@ class PlaybookEngine:
         """
         self.agent_loop = agent_loop
         self.store = agent_store
+        # Initialize ThreatIntelligence for context enrichment
+        # TODO: This assumes the agent_loop's config is available. Refactor if needed.
+        if hasattr(agent_loop, 'config'):
+            self.threat_intel = ThreatIntelligence(agent_loop.config)
+        else:
+            self.threat_intel = None
+            logger.warning("[PLAYBOOK] ThreatIntelligence not initialized for enrichment.")
 
         # Built-in playbooks directory
         self._playbooks_dir = Path(__file__).parent.parent.parent / "data" / "playbooks"
@@ -406,6 +435,7 @@ class PlaybookEngine:
             results.append({
                 "id": pid,
                 "name": pb.get("name", pid),
+                "category": pb.get("category", "General"),
                 "description": pb.get("description", ""),
                 "step_count": len(pb.get("_parsed_steps", pb.get("steps", []))),
                 "source": pb.get("source", "unknown"),
@@ -474,14 +504,154 @@ class PlaybookEngine:
     #  Execution
     # ------------------------------------------------------------------ #
 
-    async def execute(
+    def _resolve_playbook(
+        self, playbook_id: str, input_data: Any,
+    ) -> Tuple[Dict, str, List["PlaybookStep"], Dict]:
+        """
+        Look up a playbook by ID (exact, case-insensitive, or by name) and
+        normalise *input_data* to a dict.
+
+        Returns
+        -------
+        (pb, resolved_playbook_id, steps, normalised_input_data)
+
+        Raises
+        ------
+        ValueError
+            If the playbook doesn't exist or has no steps.
+        """
+        # --- FIX: original code had a SyntaxError here (except/elif were
+        # mis-indented as if nested inside the `try` body, and `elif` had no
+        # matching top-level `if`). This made the entire module fail to
+        # import. Corrected below. ---
+        if isinstance(input_data, str):
+            try:
+                input_data = json.loads(input_data) if input_data.strip() else {}
+            except json.JSONDecodeError:
+                input_data = {}
+        elif not isinstance(input_data, dict):
+            input_data = {}
+
+        # --- FIX: avoid pointless full-cache scan when playbook_id is
+        # already an exact key match; only fall back to case-insensitive /
+        # name-based lookup when a direct hit isn't found. ---
+        pb = self._cache.get(playbook_id)
+        if pb is None:
+            for cached_id, cached_pb in self._cache.items():
+                if (cached_id.lower() == playbook_id.lower() or
+                        cached_pb.get("name", "").lower() == playbook_id.lower()):
+                    pb = cached_pb
+                    playbook_id = cached_id
+                    break
+
+        if pb is None:
+            raise ValueError(f"Playbook '{playbook_id}' not found")
+
+        steps: List[PlaybookStep] = pb.get("_parsed_steps", [])
+        if not steps:
+            raise ValueError(f"Playbook '{playbook_id}' has no steps")
+
+        input_data = self._fill_required_input_params(pb, input_data)
+
+        return pb, playbook_id, steps, input_data
+
+    @staticmethod
+    def _fill_required_input_params(pb: Dict, input_data: Dict) -> Dict:
+        """
+        Ensure every ``required: true`` entry in the playbook's
+        ``input_params`` has a value in *input_data*.
+
+        Callers (e.g. the chat API) often don't know a playbook's exact
+        parameter names in advance and instead pass generic keys like
+        ``query`` / ``user_input`` / ``message``. Without this, a template
+        like ``{{alert_text}}`` is left un-interpolated whenever the caller's
+        key doesn't happen to match the playbook's declared param name.
+
+        Missing required params are backfilled from the first generic key
+        that has a value, in this priority order: ``query``, ``user_input``,
+        ``message``. Params that already have a value in *input_data* are
+        left untouched.
+        """
+        required_params = [
+            p.get("name") for p in pb.get("input_params", [])
+            if isinstance(p, dict) and p.get("required") and p.get("name")
+        ]
+        if not required_params:
+            return input_data
+
+        fallback_value = None
+        for generic_key in ("query", "user_input", "message"):
+            if input_data.get(generic_key):
+                fallback_value = input_data[generic_key]
+                break
+
+        if fallback_value is None:
+            return input_data
+
+        for name in required_params:
+            if not input_data.get(name):
+                input_data[name] = fallback_value
+
+        return input_data
+
+    async def start(
         self,
         playbook_id: str,
-        input_data: Dict,
+        input_data: Any,
         case_id: Optional[str] = None,
     ) -> str:
         """
-        Execute a playbook.
+        Start a playbook run in the background and return immediately.
+
+        Mirrors ``AgentLoop.investigate()``: the playbook is resolved and the
+        session is created synchronously (so callers get an instant 404 for
+        an unknown ``playbook_id``), then the actual step-by-step execution
+        runs on a background thread so the HTTP request that triggered it
+        doesn't block for the playbook's full duration.
+
+        Returns
+        -------
+        str
+            Session ID. Poll/subscribe to it (e.g. via ``/ws/agent/{id}``)
+            for progress.
+        """
+        pb, playbook_id, steps, input_data = self._resolve_playbook(playbook_id, input_data)
+
+        goal = f"Playbook: {pb.get('name', playbook_id)}"
+        session_id = self.store.create_session(
+            goal=goal, case_id=case_id, playbook_id=playbook_id,
+        )
+
+        def _run():
+            asyncio.run(
+                self._execute_session(session_id, playbook_id, pb, steps, input_data, case_id)
+            )
+
+        threading.Thread(
+            target=_run, daemon=True, name=f"playbook-{session_id}",
+        ).start()
+
+        logger.info(
+            "[PLAYBOOK] Started %s in background (session %s)",
+            playbook_id, session_id,
+        )
+        return session_id
+
+    async def execute(
+        self,
+        playbook_id: str,
+        input_data: Any,
+        case_id: Optional[str] = None,
+    ) -> str:
+        """
+        Execute a playbook and block until it finishes (or hits an approval
+        checkpoint).
+
+        Use this for callers that already run off the request thread (e.g.
+        the ``trigger_playbook`` action, or the LLM's ``run_playbook``
+        decision inside ``AgentLoop``'s background thread). For
+        HTTP-request-triggered runs, prefer ``start()`` instead so the
+        request doesn't block for the playbook's full duration.
 
         Parameters
         ----------
@@ -497,19 +667,27 @@ class PlaybookEngine:
         str
             Session ID of the execution.
         """
-        pb = self._cache.get(playbook_id)
-        if pb is None:
-            raise ValueError(f"Playbook '{playbook_id}' not found")
-
-        steps: List[PlaybookStep] = pb.get("_parsed_steps", [])
-        if not steps:
-            raise ValueError(f"Playbook '{playbook_id}' has no steps")
+        pb, playbook_id, steps, input_data = self._resolve_playbook(playbook_id, input_data)
 
         # Create a session
         goal = f"Playbook: {pb.get('name', playbook_id)}"
         session_id = self.store.create_session(
             goal=goal, case_id=case_id, playbook_id=playbook_id,
         )
+        return await self._execute_session(
+            session_id, playbook_id, pb, steps, input_data, case_id,
+        )
+
+    async def _execute_session(
+        self,
+        session_id: str,
+        playbook_id: str,
+        pb: Dict,
+        steps: List["PlaybookStep"],
+        input_data: Dict,
+        case_id: Optional[str],
+    ) -> str:
+        """Run all steps of an already-resolved playbook for an existing session."""
 
         # Execution context (variables available to steps)
         context: Dict[str, Any] = {
@@ -518,6 +696,9 @@ class PlaybookEngine:
             "input": input_data,
             **input_data,
         }
+
+        # Auto-enrich context from IPs if enabled in the playbook
+        context = await self._enrich_context_if_needed(pb, context)
 
         # Build step lookup by name
         step_map: Dict[str, PlaybookStep] = {s.name: s for s in steps}
@@ -573,6 +754,11 @@ class PlaybookEngine:
                         ),
                     )
                     self.store.update_session_status(session_id, "waiting_approval")
+                    self.agent_loop._notify(session_id, {
+                        "type": "approval_required",
+                        "tool": current_step.tool,
+                        "description": current_step.description or current_step.name,
+                    })
 
                     # In a real system this would block until approval arrives.
                     # For now we log and return -- the UI / API layer handles
@@ -718,11 +904,21 @@ class PlaybookEngine:
                         iter_context = {**context, "item": item, "item_index": i}
                         params = self._interpolate_params(current_step.params, iter_context)
 
+                        self.agent_loop._notify(session_id, {
+                            "type": "tool_call", "step": step_number,
+                            "tool": current_step.tool, "args": params,
+                        })
                         start = time.time()
                         result = await self._run_tool(
                             current_step.tool, params, current_step.timeout,
                         )
                         duration_ms = int((time.time() - start) * 1000)
+                        self.agent_loop._notify(session_id, {
+                            "type": "tool_result", "step": step_number,
+                            "tool": current_step.tool,
+                            "result_preview": str(result)[:500],
+                            "duration": duration_ms,
+                        })
 
                         iteration_results.append(result)
 
@@ -748,11 +944,21 @@ class PlaybookEngine:
                     # Single execution
                     params = self._interpolate_params(current_step.params, context)
 
+                    self.agent_loop._notify(session_id, {
+                        "type": "tool_call", "step": step_number,
+                        "tool": current_step.tool, "args": params,
+                    })
                     start = time.time()
                     result = await self._run_tool(
                         current_step.tool, params, current_step.timeout,
                     )
                     duration_ms = int((time.time() - start) * 1000)
+                    self.agent_loop._notify(session_id, {
+                        "type": "tool_result", "step": step_number,
+                        "tool": current_step.tool,
+                        "result_preview": str(result)[:500],
+                        "duration": duration_ms,
+                    })
 
                     # Record step
                     self.store.add_step(
@@ -787,11 +993,15 @@ class PlaybookEngine:
                 )
 
             # All steps completed
-            self.store.update_session_status(
-                session_id, "completed",
-                summary=f"Playbook '{pb.get('name', playbook_id)}' completed "
-                        f"({step_number} steps executed)",
+            highest_verdict = _find_highest_verdict(context)
+            summary = (
+                f"Playbook '{pb.get('name', playbook_id)}' completed "
+                f"({step_number} steps executed)"
             )
+            if highest_verdict:
+                summary += f" — highest verdict: {highest_verdict}"
+            self.store.update_session_status(session_id, "completed", summary=summary)
+            self.agent_loop._notify(session_id, {"type": "completed", "summary": summary})
             logger.info(
                 "[PLAYBOOK] Completed %s (session %s, %d steps)",
                 playbook_id, session_id, step_number,
@@ -811,6 +1021,7 @@ class PlaybookEngine:
             self.store.update_session_status(
                 session_id, "failed", summary=f"Error: {str(exc)[:200]}",
             )
+            self.agent_loop._notify(session_id, {"type": "failed", "error": str(exc)[:200]})
 
         return session_id
 
@@ -833,6 +1044,84 @@ class PlaybookEngine:
         - ``file_type in ('PE', 'ELF')``
         """
         return safe_evaluate_condition(condition, context)
+
+    async def _enrich_context_if_needed(self, pb: Dict, context: Dict) -> Dict:
+        """
+        If the playbook has `auto_enrich_context: true`, find related IOCs.
+
+        Specifically, if the context only contains an IP address, this function
+        will attempt to find related domains and file hashes from VirusTotal
+        to allow other playbook steps (like file analysis) to run.
+        """
+        if not pb.get("auto_enrich_context"):
+            return context
+
+        if not self.threat_intel:
+            logger.warning("[PLAYBOOK] Skipping enrichment: ThreatIntel not available.")
+            return context
+
+        has_ips = bool(context.get("ip_addresses") or context.get("ip_address"))
+        has_domains = bool(context.get("domains") or context.get("domain"))
+        has_hashes = bool(context.get("file_hashes") or context.get("hash"))
+
+        if not (has_ips and not has_domains and not has_hashes):
+            return context
+
+        ips = context.get("ip_addresses") or [context.get("ip_address")]
+        ips = [ip for ip in ips if ip]
+
+        if not ips:
+            return context
+
+        logger.info(f"[PLAYBOOK] Auto-enriching context for {len(ips)} IP(s)...")
+
+        if "domains" not in context:
+            context["domains"] = []
+        if "file_hashes" not in context:
+            context["file_hashes"] = []
+
+        for ip in ips:
+            try:
+                logger.debug(f"[PLAYBOOK] Getting raw VT report for IP: {ip}")
+                report = await asyncio.wait_for(
+                    self.threat_intel.get_raw_virustotal_report(ip, "ipv4"),
+                    timeout=15.0,
+                )
+
+                if "error" in report or "data" not in report:
+                    logger.warning(f"[PLAYBOOK] Enrichment for {ip} failed: {report.get('error', 'No data')}")
+                    continue
+
+                relationships = report["data"].get("relationships", {})
+
+                # Extract domains from resolutions
+                resolutions = relationships.get("resolutions", {}).get("data", [])
+                found_domains = [res["id"] for res in resolutions if res.get("type") == "domain"]
+                new_domains = [d for d in found_domains if d not in context["domains"]]
+                if new_domains:
+                    context["domains"].extend(new_domains)
+                    logger.info(f"[PLAYBOOK] Enriched {len(new_domains)} domains for {ip}")
+
+                # Extract hashes from files
+                comm_files = relationships.get("communicating_files", {}).get("data", [])
+                down_files = relationships.get("downloaded_files", {}).get("data", [])
+                found_hashes = [f["id"] for f in comm_files + down_files]
+                new_hashes = [h for h in found_hashes if h not in context["file_hashes"]]
+                if new_hashes:
+                    context["file_hashes"].extend(new_hashes)
+                    logger.info(f"[PLAYBOOK] Enriched {len(new_hashes)} file hashes for {ip}")
+
+            except asyncio.TimeoutError:
+                logger.warning(
+                    f"[PLAYBOOK] Context enrichment timed out for IP: {ip}. Proceeding."
+                )
+            except Exception as e:
+                logger.warning(
+                    f"[PLAYBOOK] Context enrichment failed for IP: {ip} (error: {e}). Proceeding."
+                )
+
+        return context
+
 
     # ------------------------------------------------------------------ #
     #  Helpers
