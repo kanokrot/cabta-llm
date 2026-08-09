@@ -129,6 +129,7 @@ class AgentLoop:
         llm_analyzer=None,
         mcp_client=None,
         playbook_engine=None,
+        notification_manager=None,
     ):
         self.config = config
         self.tools = tool_registry
@@ -136,6 +137,7 @@ class AgentLoop:
         self.llm = llm_analyzer
         self.mcp_client = mcp_client
         self._playbook_engine = playbook_engine
+        self.notification_manager = notification_manager
 
         agent_cfg = config.get('agent', {})
         self.max_steps = agent_cfg.get('max_steps', 50)
@@ -415,6 +417,21 @@ class AgentLoop:
                         session_id, state.step_count, 'final_answer',
                         json.dumps(decision, default=str),
                     )
+
+                    # Alert on high-severity verdicts (MALICIOUS/SUSPICIOUS by
+                    # default -- configurable via notifications.create_on_verdict).
+                    if self.notification_manager is not None and \
+                            verdict in getattr(self.notification_manager, 'create_on_verdict', []):
+                        try:
+                            self.notification_manager.notify("verdict_alert", {
+                                "ioc": state.goal,
+                                "verdict": verdict,
+                                "session_id": session_id,
+                            })
+                        except Exception as notify_exc:
+                            logger.warning(
+                                f"[AGENT] Notification dispatch failed: {notify_exc}"
+                            )
                     break
 
                 # ---- Check for run_playbook action ----

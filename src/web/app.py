@@ -252,6 +252,15 @@ def create_app() -> FastAPI:
     except Exception as exc:
         logger.warning(f"[WEB] LLMAnalyzer not available: {exc}")
 
+    # Notification Manager
+    app.state.notification_manager = None
+    try:
+        from src.integrations.notifications import NotificationManager
+        app.state.notification_manager = NotificationManager(config)
+        logger.info("[WEB] NotificationManager initialized")
+    except Exception as exc:
+        logger.warning(f"[WEB] NotificationManager not available: {exc}")
+
     # Agent Loop
     try:
         from src.agent.agent_loop import AgentLoop
@@ -261,6 +270,7 @@ def create_app() -> FastAPI:
             agent_store=app.state.agent_store,
             mcp_client=app.state.mcp_client,
             llm_analyzer=app.state.llm_analyzer,
+            notification_manager=app.state.notification_manager,
         )
         logger.info("[WEB] AgentLoop initialized")
     except Exception as exc:
@@ -272,6 +282,7 @@ def create_app() -> FastAPI:
         app.state.playbook_engine = PlaybookEngine(
             agent_loop=app.state.agent_loop,
             agent_store=app.state.agent_store,
+            notification_manager=app.state.notification_manager,
         )
         # Wire playbook engine back into agent loop so LLM can trigger playbooks
         if app.state.agent_loop is not None:

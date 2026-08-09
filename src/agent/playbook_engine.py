@@ -302,7 +302,7 @@ class PlaybookEngine:
     handles MCP tool routing, local tools, and result recording.
     """
 
-    def __init__(self, agent_loop, agent_store):
+    def __init__(self, agent_loop, agent_store, notification_manager=None):
         """
         Parameters
         ----------
@@ -311,9 +311,13 @@ class PlaybookEngine:
             method.
         agent_store
             An ``AgentStore`` instance for persistence.
+        notification_manager
+            Optional ``NotificationManager`` used to alert on approval
+            checkpoints and executed approved actions. May be ``None``.
         """
         self.agent_loop = agent_loop
         self.store = agent_store
+        self.notification_manager = notification_manager
         # Initialize ThreatIntelligence for context enrichment
         # TODO: This assumes the agent_loop's config is available. Refactor if needed.
         if hasattr(agent_loop, 'config'):
@@ -781,6 +785,7 @@ class PlaybookEngine:
                 tool_result=json.dumps(result, default=str)[:10000],
                 duration_ms=duration_ms,
             )
+            action_status = "error" if isinstance(result, dict) and "error" in result else "success"
             self.store.add_audit_entry(
                 session_id=session_id,
                 action=pending_step.tool,
@@ -790,8 +795,19 @@ class PlaybookEngine:
                 before_state=params,
                 after_state=result,
                 approved_by=metadata.get("approver"),
-                status="error" if isinstance(result, dict) and "error" in result else "success",
+                status=action_status,
             )
+            if self.notification_manager:
+                try:
+                    self.notification_manager.notify("action_executed", {
+                        "tool": pending_step.tool,
+                        "session_id": session_id,
+                        "status": action_status,
+                    })
+                except Exception as notify_exc:
+                    logger.warning(
+                        "[PLAYBOOK] Notification dispatch failed: %s", notify_exc,
+                    )
 
             context[pending_step.name] = result
             context["last_result"] = result
@@ -896,6 +912,17 @@ class PlaybookEngine:
                         before_state=self._interpolate_params(current_step.params, context),
                         status="pending",
                     )
+                    if self.notification_manager:
+                        try:
+                            self.notification_manager.notify("approval_required", {
+                                "tool": current_step.tool,
+                                "session_id": session_id,
+                                "description": current_step.description or current_step.name,
+                            })
+                        except Exception as notify_exc:
+                            logger.warning(
+                                "[PLAYBOOK] Notification dispatch failed: %s", notify_exc,
+                            )
                     # Persist context + pending step so execute_from_step can
                     # resume exactly where this run paused.
                     self.store.update_session_metadata(session_id, {
