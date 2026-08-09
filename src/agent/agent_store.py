@@ -132,6 +132,20 @@ class AgentStore:
             logger.info(f"[AGENT] Deleted session {session_id}")
         return deleted
 
+    def update_session_metadata(self, session_id: str, metadata: Dict) -> None:
+        """Persist arbitrary session metadata as JSON (e.g. a paused
+        playbook's context + pending step, so execute_from_step can
+        reconstruct exactly where execution left off)."""
+        metadata_json = json.dumps(metadata, default=str)
+        with self._lock:
+            conn = self._connect()
+            conn.execute(
+                "UPDATE agent_sessions SET metadata = ? WHERE id = ?",
+                (metadata_json, session_id),
+            )
+            conn.commit()
+            conn.close()
+
     def update_session_findings(
         self, session_id: str, findings: List[Dict],
     ) -> None:
