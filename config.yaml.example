@@ -1,6 +1,3 @@
-# Blue Team Assistant Configuration
-# Copy this file to config.yaml and add your API keys
-
 # API Keys (Optional - tool works without them but with limited features)
 api_keys:
   virustotal: ""          # https://www.virustotal.com/gui/my-apikey
@@ -14,7 +11,7 @@ api_keys:
 # LLM Configuration (Optional - for AI-powered analysis)
 llm:
   provider: "ollama"      # Options: ollama, openai, anthropic
-  model: "llama3.1:8b"    # Model name
+  model: "llama3.2:3b"    # Model name
   api_key: ""             # Required for openai/anthropic
   base_url: "http://localhost:11434"  # Ollama default
 
@@ -30,6 +27,14 @@ output:
   default_format: "cli"   # Options: cli, json, html
   save_reports: true      # Auto-save HTML reports
   report_dir: "./reports" # Report output directory
+
+# Ticketing
+ticketing:
+  # Verdicts that should automatically create an incident ticket.
+  # Available options: MALICIOUS, SUSPICIOUS, UNKNOWN, SAFE
+  create_on_verdict:
+    - "MALICIOUS"
+    - "SUSPICIOUS"
 
 # Logging
 logging:
