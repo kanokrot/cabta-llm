@@ -20,6 +20,7 @@ from .agent_store import AgentStore
 from .tool_registry import ToolRegistry
 from .agent_response_parsing import (
     extract_verdict,
+    extract_deterministic_verdict,
     normalise_decision,
     parse_tool_call_response,
     extract_json,
@@ -782,10 +783,11 @@ class AgentLoop:
             if has_native_tools and raw.strip():
                 # If we already have findings → real conclusion
                 if state.findings:
+                    deterministic_verdict = extract_deterministic_verdict(state.findings)
                     return {
                         "action": "final_answer",
                         "answer": raw.strip(),
-                        "verdict": extract_verdict(raw),
+                        "verdict": deterministic_verdict if deterministic_verdict else extract_verdict(raw),
                         "reasoning": "LLM provided text response after tool use",
                     }
                 # No findings yet → auto-dispatch

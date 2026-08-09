@@ -212,3 +212,15 @@ def extract_json(text: str) -> Optional[Dict]:
 
 def truncate(s: str, max_len: int) -> str:
     return s if len(s) <= max_len else s[:max_len] + "..."
+
+
+def extract_deterministic_verdict(findings: list) -> Optional[str]:
+    """สแกน findings ย้อนหลังหา verdict ที่เป็น deterministic จาก tool result (ถ้ามี)
+    เพื่อใช้แทน verdict ที่ LLM เดาเองจาก text"""
+    for f in reversed(findings):
+        result = f.get("result")
+        if isinstance(result, dict):
+            v = result.get("verdict")
+            if isinstance(v, str) and v.strip():
+                return v.strip()
+    return None
