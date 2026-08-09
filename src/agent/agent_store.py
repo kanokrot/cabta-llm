@@ -114,6 +114,24 @@ class AgentStore:
 
         logger.info(f"[AGENT] Session {session_id} -> {status}")
 
+    def delete_session(self, session_id: str) -> bool:
+        """Delete a session and all its associated steps. Returns True if a session was deleted."""
+        with self._lock:
+            conn = self._connect()
+            conn.execute(
+                "DELETE FROM agent_steps WHERE session_id = ?", (session_id,),
+            )
+            cur = conn.execute(
+                "DELETE FROM agent_sessions WHERE id = ?", (session_id,),
+            )
+            deleted = cur.rowcount > 0
+            conn.commit()
+            conn.close()
+
+        if deleted:
+            logger.info(f"[AGENT] Deleted session {session_id}")
+        return deleted
+
     def update_session_findings(
         self, session_id: str, findings: List[Dict],
     ) -> None:

@@ -1318,12 +1318,22 @@ function downloadJSON() {{
             </div>
         </div>"""
     
+    def _render_ai_recommendations_html(self, result: Dict) -> str:
+        """Render case-specific LLM recommendations as extra <li> items, or '' if none."""
+        e = self._escape
+        llm_recs = result.get('llm_analysis', {}).get('recommendations', [])
+        if not llm_recs:
+            return ''
+        items = "".join(f"<li>🤖 <strong>AI:</strong> {e(r)}</li>" for r in llm_recs[:5])
+        return f'<li class="text-muted" style="list-style:none;margin-top:8px;"><hr></li>{items}'
+
     def _render_file_recommendations(self, result: Dict) -> str:
         """Render file analysis recommendations."""
         verdict = result.get('verdict', 'UNKNOWN')
-        
+        ai_recs = self._render_ai_recommendations_html(result)
+
         if verdict == 'MALICIOUS':
-            return """
+            return f"""
             <div class="card" style="border-color:#dc3545;">
                 <div class="card-header bg-danger"><h4>🚨 SECTION 13: IMMEDIATE ACTIONS REQUIRED</h4></div>
                 <div class="card-body">
@@ -1335,11 +1345,12 @@ function downloadJSON() {{
                         <li><strong>ISOLATE</strong> affected systems</li>
                         <li><strong>PRESERVE</strong> evidence for forensic analysis</li>
                         <li><strong>REPORT</strong> to threat intel team</li>
+                        {ai_recs}
                     </ol>
                 </div>
             </div>"""
         elif verdict == 'SUSPICIOUS':
-            return """
+            return f"""
             <div class="card" style="border-color:#ffc107;">
                 <div class="card-header bg-warning"><h4>⚠️ SECTION 13: INVESTIGATION REQUIRED</h4></div>
                 <div class="card-body">
@@ -1349,11 +1360,12 @@ function downloadJSON() {{
                         <li><strong>REVIEW</strong> in isolated environment</li>
                         <li><strong>CHECK</strong> for similar samples</li>
                         <li><strong>ESCALATE</strong> if confirmed malicious</li>
+                        {ai_recs}
                     </ol>
                 </div>
             </div>"""
         else:
-            return """
+            return f"""
             <div class="card" style="border-color:#28a745;">
                 <div class="card-header bg-success"><h4>✅ SECTION 13: ROUTINE MONITORING</h4></div>
                 <div class="card-body">
@@ -1361,6 +1373,7 @@ function downloadJSON() {{
                         <li>No immediate action required</li>
                         <li>Continue standard monitoring</li>
                         <li>Document for baseline</li>
+                        {ai_recs}
                     </ul>
                 </div>
             </div>"""
@@ -1599,9 +1612,10 @@ function downloadJSON() {{
     def _render_email_recommendations(self, result: Dict) -> str:
         """Render email analysis recommendations."""
         verdict = result.get('verdict', 'UNKNOWN')
-        
+        ai_recs = self._render_ai_recommendations_html(result)
+
         if verdict in ['MALICIOUS', 'PHISHING']:
-            return """
+            return f"""
             <div class="card" style="border-color:#dc3545;">
                 <div class="card-header bg-danger"><h4>🚨 SECTION 12: IMMEDIATE ACTIONS REQUIRED</h4></div>
                 <div class="card-body">
@@ -1614,11 +1628,12 @@ function downloadJSON() {{
                         <li><strong>CHECK</strong> if any user opened attachments</li>
                         <li><strong>NOTIFY</strong> affected users</li>
                         <li><strong>REPORT</strong> to anti-phishing services</li>
+                        {ai_recs}
                     </ol>
                 </div>
             </div>"""
         elif verdict in ['SUSPICIOUS', 'SPAM']:
-            return """
+            return f"""
             <div class="card" style="border-color:#ffc107;">
                 <div class="card-header bg-warning"><h4>⚠️ SECTION 12: INVESTIGATION REQUIRED</h4></div>
                 <div class="card-body">
@@ -1627,15 +1642,16 @@ function downloadJSON() {{
                         <li><strong>SUBMIT</strong> attachments to sandbox</li>
                         <li><strong>VERIFY</strong> sender legitimacy</li>
                         <li><strong>MONITOR</strong> for similar emails</li>
+                        {ai_recs}
                     </ol>
                 </div>
             </div>"""
         else:
-            return """
+            return f"""
             <div class="card" style="border-color:#28a745;">
                 <div class="card-header bg-success"><h4>✅ SECTION 12: ROUTINE MONITORING</h4></div>
                 <div class="card-body">
-                    <ul><li>No immediate action required</li><li>Continue standard monitoring</li></ul>
+                    <ul><li>No immediate action required</li><li>Continue standard monitoring</li>{ai_recs}</ul>
                 </div>
             </div>"""
     
@@ -1692,7 +1708,8 @@ function downloadJSON() {{
         """Render IOC recommendations."""
         verdict = result.get('verdict', 'UNKNOWN')
         e = self._escape
-        
+        ai_recs = self._render_ai_recommendations_html(result)
+
         if verdict == 'MALICIOUS':
             return f"""
             <div class="card" style="border-color:#dc3545;">
@@ -1704,6 +1721,7 @@ function downloadJSON() {{
                         <li><strong>HUNT</strong> for historical connections</li>
                         <li><strong>INVESTIGATE</strong> any systems that communicated</li>
                         <li><strong>SHARE</strong> with threat intel team</li>
+                        {ai_recs}
                     </ol>
                 </div>
             </div>"""
@@ -1717,15 +1735,16 @@ function downloadJSON() {{
                         <li><strong>INVESTIGATE</strong> context</li>
                         <li><strong>CHECK</strong> additional sources</li>
                         <li><strong>ESCALATE</strong> if confirmed</li>
+                        {ai_recs}
                     </ol>
                 </div>
             </div>"""
         else:
-            return """
+            return f"""
             <div class="card" style="border-color:#28a745;">
                 <div class="card-header bg-success"><h4>✅ ROUTINE MONITORING</h4></div>
                 <div class="card-body">
-                    <ul><li>No immediate action required</li><li>Continue monitoring</li></ul>
+                    <ul><li>No immediate action required</li><li>Continue monitoring</li>{ai_recs}</ul>
                 </div>
             </div>"""
     

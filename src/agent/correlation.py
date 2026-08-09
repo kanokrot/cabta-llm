@@ -104,6 +104,19 @@ _PRIVATE_IP_PREFIXES = ("10.", "127.", "192.168.", "0.", "169.254.", "172.16.",
                          "172.17.", "172.18.", "172.19.", "172.2", "172.30.",
                          "172.31.")
 
+# Fields that hold the raw identity of the IOC/artifact itself (its name or
+# value), as opposed to evidence *about* it. These are excluded from TTP
+# keyword scanning: an IOC whose name happens to contain a keyword (e.g. a
+# domain literally named "c2-callback.example.net") is not itself evidence
+# that C2 behaviour was observed -- only descriptions of what the IOC
+# actually did (sandbox output, analyst notes, tool findings) count as
+# evidence.
+_IOC_IDENTITY_KEYS = frozenset({
+    "ioc", "value", "domain", "domains", "ip", "ips", "ip_address",
+    "ip_addresses", "url", "urls", "hash", "hashes", "sha256", "sha1",
+    "md5", "type", "ioc_type", "id", "name", "file_name", "filename",
+})
+
 
 class CorrelationEngine:
     """Cross-analysis finding correlation engine.
@@ -401,7 +414,12 @@ class CorrelationEngine:
 
     @staticmethod
     def _finding_to_text(finding: Dict) -> str:
-        """Convert a finding dict to a flat text string for regex scanning."""
+        """Convert a finding dict to a flat text string for regex scanning.
+
+        Used for IOC *extraction* (regex-based), where scanning the raw
+        value fields is exactly what we want. Do not reuse this for TTP
+        keyword matching -- see ``_finding_to_evidence_text`` for that.
+        """
         parts: List[str] = []
 
         def _walk(obj: Any, depth: int = 0) -> None:
@@ -415,6 +433,32 @@ class CorrelationEngine:
             elif isinstance(obj, (list, tuple)):
                 for item in obj:
                     _walk(item, depth + 1)
+
+        _walk(finding)
+        return " ".join(parts)
+
+    @staticmethod
+    def _finding_to_evidence_text(finding: Dict) -> str:
+        """Convert a finding dict to flat text for TTP *behavioural* keyword
+        matching, skipping fields that merely name/identify the IOC
+        (``_IOC_IDENTITY_KEYS``). Only descriptive/evidence text -- analyst
+        notes, tool output, sandbox behaviour descriptions -- should
+        influence which ATT&CK techniques get flagged.
+        """
+        parts: List[str] = []
+
+        def _walk(obj: Any, depth: int = 0, skip_key: Optional[str] = None) -> None:
+            if depth > 8:
+                return
+            if isinstance(obj, str):
+                if skip_key is None or skip_key.lower() not in _IOC_IDENTITY_KEYS:
+                    parts.append(obj)
+            elif isinstance(obj, dict):
+                for k, v in obj.items():
+                    _walk(v, depth + 1, skip_key=k)
+            elif isinstance(obj, (list, tuple)):
+                for item in obj:
+                    _walk(item, depth + 1, skip_key=skip_key)
 
         _walk(finding)
         return " ".join(parts)
@@ -455,16 +499,30 @@ class CorrelationEngine:
     # ================================================================== #
 
     def _detect_ttps(self, findings: List[Dict]) -> List[Dict[str, Any]]:
-        """Scan findings for behavioural indicators and map to ATT&CK TTPs."""
+        """Scan findings for behavioural indicators and map to ATT&CK TTPs.
+
+        Only scans evidence/context text (analyst notes, tool output,
+        descriptions) -- never the raw IOC value/name itself, since a
+        keyword coincidentally appearing in an IOC's name (e.g. a domain
+        called "c2-callback.example.net") is not evidence that behaviour
+        was actually observed.
+        """
         combined_text = " ".join(
-            self._finding_to_text(f) for f in findings
+            self._finding_to_evidence_text(f) for f in findings
         ).lower()
 
         seen: Dict[str, Dict[str, Any]] = {}
 
-        # Keyword matching
+        # Keyword matching. Short/ambiguous keywords use word-boundary regex
+        # so they only match standalone tokens, not substrings inside other
+        # words (e.g. "tor" must not match inside "vector" or "history").
         for keyword, tid, tname, tactic in _TTP_PATTERNS:
-            if keyword in combined_text:
+            if len(keyword) <= 4 and " " not in keyword:
+                matched = re.search(rf"\b{re.escape(keyword)}\b", combined_text) is not None
+            else:
+                matched = keyword in combined_text
+
+            if matched:
                 if tid not in seen:
                     seen[tid] = {
                         "technique_id": tid,
