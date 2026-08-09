@@ -84,3 +84,14 @@ package-lock.json
 
 # --- Docker ---
 docker-compose.override.yml
+
+# Debug/scratch scripts
+tools/debug_scripts/*.pyc
+*.tmp.py
+temp_*.py
+
+# --- Miscellaneous ---
+scripts/adhoc/
+data/simulated_actions/
+output.html
+
