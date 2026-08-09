@@ -144,7 +144,7 @@ For complex analysis, use larger context:
 
 ```yaml
 llm:
-  ollama_model: llama3.1:8b
+  ollama_model: llama3.2:3b
   # Add context size parameter
   context_size: 8192  # Default: 2048
 ```
