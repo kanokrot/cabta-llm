@@ -39,7 +39,7 @@ async def send_message(request: Request, body: ChatMessage):
         try:
             # Parse input params from message
             input_data = {"query": body.message, "user_input": body.message}
-            session_id = await engine.execute(
+            session_id = await engine.start(
                 body.playbook_id, input_data, case_id=None,
             )
             return {

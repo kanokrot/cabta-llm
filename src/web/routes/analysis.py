@@ -121,7 +121,7 @@ def _run_ioc_analysis_bg(mgr, job_id: str, value: str, ioc_type: str) -> None:
         if hasattr(investigator, 'set_progress_callback'):
             investigator.set_progress_callback(_on_source_progress)
 
-        result = asyncio.run(investigator.investigate(value))
+        result = asyncio.run(investigator.investigate(value, analysis_id=job_id))
 
         verdict = result.get('verdict', 'UNKNOWN')
         score = result.get('threat_score', 0)

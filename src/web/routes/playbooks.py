@@ -53,7 +53,7 @@ async def run_playbook(request: Request, playbook_id: str, body: PlaybookRunRequ
     if engine is None:
         raise HTTPException(503, "Playbook engine not initialized")
     try:
-        session_id = await engine.execute(playbook_id, body.params, body.case_id)
+        session_id = await engine.start(playbook_id, body.params, body.case_id)
         return {"session_id": session_id, "status": "running"}
     except ValueError as e:
         raise HTTPException(404, str(e))

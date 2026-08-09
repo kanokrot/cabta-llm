@@ -180,3 +180,21 @@ async def cancel_session(request: Request, session_id: str):
     agent_loop = _require_agent_loop(request)
     await agent_loop.cancel_session(session_id)
     return {"status": "cancelled"}
+
+@router.delete('/sessions/{session_id}')
+async def delete_session(request: Request, session_id: str):
+    """Delete an investigation session and its steps."""
+    store = _require_agent_store(request)
+    session = store.get_session(session_id)
+    if not session:
+        raise HTTPException(404, "Session not found")
+
+    # กันลบ session ที่ agent loop ยังทำงานอยู่ (แค่มีอยู่ใน _active_sessions ก็ถือว่า active)
+    agent_loop = request.app.state.agent_loop
+    if agent_loop and agent_loop.get_state(session_id) is not None:
+        raise HTTPException(409, "Cannot delete an active investigation session; cancel it first")
+
+    deleted = store.delete_session(session_id)
+    if not deleted:
+        raise HTTPException(500, "Failed to delete session")
+    return {"status": "deleted", "session_id": session_id}

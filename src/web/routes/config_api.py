@@ -13,6 +13,7 @@ from fastapi import APIRouter, Query, Request
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+_START_TIME = datetime.now(timezone.utc)
 
 
 @router.get('/health')
@@ -204,11 +205,11 @@ async def ollama_health(
         if config_file.is_file():
             with open(config_file, 'r', encoding='utf-8') as f:
                 cfg = yaml.safe_load(f) or {}
-            result['configured_model'] = cfg.get('llm', {}).get('ollama_model', 'llama3.1:8b')
+            result['configured_model'] = cfg.get('llm', {}).get('model', 'llama3.2:3b')
         else:
-            result['configured_model'] = 'llama3.1:8b'
+            result['configured_model'] = 'llama3.2'
     except Exception:
-        result['configured_model'] = 'llama3.1:8b'
+        result['configured_model'] = 'llama3.2'
 
     # Check Ollama connectivity
     try:
@@ -236,3 +237,25 @@ async def ollama_health(
         result['error'] = f'Cannot connect to Ollama: {exc}'
 
     return result
+
+
+@router.get('/system-status')
+async def system_status():
+    """Aggregate system status for the dashboard health widget."""
+    uptime_seconds = (datetime.now(timezone.utc) - _START_TIME).total_seconds()
+
+    tools_resp = await tool_status()
+    tools = tools_resp['tools']
+    tools_available = sum(1 for t in tools.values() if t.get('available'))
+
+    ollama_resp = await ollama_health()
+
+    return {
+        'status': 'healthy',
+        'version': '2.0.0',
+        'uptime_seconds': uptime_seconds,
+        'tools_available': tools_available,
+        'tools_total': len(tools),
+        'ollama_running': ollama_resp.get('ollama_running', False),
+        'ollama_model': ollama_resp.get('configured_model', ''),
+    }
