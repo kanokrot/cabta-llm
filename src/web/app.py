@@ -18,7 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
 
-from .routes import analysis, dashboard, reports, config_api, cases
+from .routes import analysis, dashboard, reports, config_api, cases, tickets
 from .routes import agent as agent_routes
 from .routes import chat as chat_routes
 from .routes import playbooks as playbook_routes
@@ -26,6 +26,7 @@ from .routes import mcp_management as mcp_routes
 from . import websocket
 from .analysis_manager import AnalysisManager
 from .case_store import CaseStore
+from src.integrations.ticketing import initialize_database as initialize_ticketing_db
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +57,8 @@ def _load_config() -> dict:
         'agent': {'max_steps': 50},
         'api_keys': {},
     }
+
+
 TEMPLATES_DIR = PROJECT_ROOT / 'templates'
 STATIC_DIR = PROJECT_ROOT / 'static'
 
@@ -82,8 +85,9 @@ async def _lifespan(app: FastAPI):
     if mcp_client:
         try:
             await mcp_client.disconnect_all()
-        except Exception:
-            pass
+            logger.info("[WEB] Disconnected all MCP servers during shutdown")
+        except Exception as exc:
+            logger.warning("[WEB] Error disconnecting MCP servers on shutdown: %s", exc)
 
 
 def create_app() -> FastAPI:
@@ -129,6 +133,12 @@ def create_app() -> FastAPI:
     # Load configuration
     config = _load_config()
     app.state.config = config
+
+    # Initialize Ticketing Database
+    try:
+        initialize_ticketing_db()
+    except Exception as e:
+        logger.critical(f"[WEB] Failed to initialize ticketing database: {e}")
 
     try:
         from src.agent.agent_store import AgentStore
@@ -225,6 +235,7 @@ def create_app() -> FastAPI:
     except Exception as exc:
         logger.warning(f"[WEB] SandboxOrchestrator not available: {exc}")
 
+    # MCP Client Manager
     try:
         from src.agent.mcp_client import MCPClientManager
         app.state.mcp_client = MCPClientManager(agent_store=app.state.agent_store)
@@ -232,8 +243,8 @@ def create_app() -> FastAPI:
     except Exception as exc:
         logger.warning(f"[WEB] MCPClientManager not available: {exc}")
 
-        # --- เพิ่มการสร้าง LLMAnalyzer ---
-        app.state.llm_analyzer = None
+    # LLM Analyzer
+    app.state.llm_analyzer = None
     try:
         from src.integrations.llm_analyzer import LLMAnalyzer
         app.state.llm_analyzer = LLMAnalyzer(config)
@@ -241,6 +252,7 @@ def create_app() -> FastAPI:
     except Exception as exc:
         logger.warning(f"[WEB] LLMAnalyzer not available: {exc}")
 
+    # Agent Loop
     try:
         from src.agent.agent_loop import AgentLoop
         app.state.agent_loop = AgentLoop(
@@ -248,13 +260,13 @@ def create_app() -> FastAPI:
             tool_registry=app.state.tool_registry or ToolRegistry(),
             agent_store=app.state.agent_store,
             mcp_client=app.state.mcp_client,
-            # --- ส่ง llm_analyzer เข้า AgentLoop ---
             llm_analyzer=app.state.llm_analyzer,
         )
         logger.info("[WEB] AgentLoop initialized")
     except Exception as exc:
         logger.warning(f"[WEB] AgentLoop not available: {exc}")
 
+    # Playbook Engine
     try:
         from src.agent.playbook_engine import PlaybookEngine
         app.state.playbook_engine = PlaybookEngine(
@@ -278,6 +290,7 @@ def create_app() -> FastAPI:
     app.include_router(chat_routes.router, prefix='/api/chat', tags=['Chat'])
     app.include_router(playbook_routes.router, prefix='/api/playbooks', tags=['Playbooks'])
     app.include_router(mcp_routes.router, prefix='/api/mcp', tags=['MCP'])
+    app.include_router(tickets.router, prefix='/api', tags=['Tickets'])
     app.include_router(websocket.router)
 
     # Page routes (HTML templates)
@@ -288,39 +301,75 @@ def create_app() -> FastAPI:
 
 
 async def _auto_connect_mcp_servers(app: FastAPI) -> None:
-    """Connect to MCP servers that have auto_connect: true in config."""
-    mcp_client = app.state.mcp_client
+    """Connect to MCP servers from config.yaml and AgentStore on startup."""
+    mcp_client = getattr(app.state, 'mcp_client', None)
     if not mcp_client:
         return
+
+    tool_registry = getattr(app.state, 'tool_registry', None)
     config = getattr(app.state, 'config', None) or {}
     mcp_servers = config.get('mcp_servers', []) if isinstance(config, dict) else []
-    auto_servers = [s for s in mcp_servers if s.get('auto_connect')]
-    if not auto_servers:
+
+    servers_to_connect = []
+    seen_names = set()
+
+    # 1. Collect from config.yaml (auto_connect: true or all config servers)
+    for srv in mcp_servers:
+        if isinstance(srv, dict) and srv.get('name'):
+            if srv.get('auto_connect', True):
+                servers_to_connect.append(srv)
+                seen_names.add(srv['name'])
+
+    # 2. Collect saved servers from AgentStore Database
+    agent_store = getattr(app.state, 'agent_store', None)
+    if agent_store and hasattr(agent_store, 'list_mcp_connections'):
+        try:
+            db_servers = agent_store.list_mcp_connections()
+            for db_srv in db_servers:
+                name = db_srv.get('name')
+                if name and name not in seen_names:
+                    cfg_dict = db_srv.get('config_json') or db_srv
+                    if isinstance(cfg_dict, dict) and 'name' in cfg_dict:
+                        servers_to_connect.append(cfg_dict)
+                        seen_names.add(name)
+        except Exception as db_exc:
+            logger.warning("[WEB] Failed to fetch MCP connections from store: %s", db_exc)
+
+    if not servers_to_connect:
+        logger.info("[WEB] No MCP servers found to auto-connect")
         return
-    logger.info("[WEB] Auto-connecting to %d MCP servers...", len(auto_servers))
-    tool_registry = getattr(app.state, 'tool_registry', None)
-    for srv_cfg in auto_servers:
+
+    logger.info("[WEB] Auto-connecting to %d MCP server(s)...", len(servers_to_connect))
+
+    for srv_cfg in servers_to_connect:
         try:
             from src.agent.mcp_client import MCPServerConfig
             mcp_cfg = MCPServerConfig.from_dict(srv_cfg)
             success = await mcp_client.connect(mcp_cfg)
             if success:
-                logger.info("[WEB] Connected to MCP server: %s", srv_cfg['name'])
+                logger.info("[WEB] Connected to MCP server: %s", mcp_cfg.name)
                 # Register MCP tools into the ToolRegistry so the LLM can see them
                 if tool_registry:
                     try:
-                        tools = await mcp_client.list_tools(srv_cfg['name'])
+                        tools = await mcp_client.list_tools(mcp_cfg.name)
                         if tools:
-                            tool_registry.register_mcp_tools(srv_cfg['name'], tools)
-                            logger.info("[WEB] Registered %d MCP tools from %s into ToolRegistry",
-                                        len(tools), srv_cfg['name'])
+                            tool_registry.register_mcp_tools(mcp_cfg.name, tools)
+                            logger.info(
+                                "[WEB] Registered %d MCP tools from %s into ToolRegistry",
+                                len(tools), mcp_cfg.name
+                            )
                     except Exception as te:
-                        logger.warning("[WEB] Failed to register MCP tools for %s: %s",
-                                       srv_cfg['name'], te)
+                        logger.warning(
+                            "[WEB] Failed to register MCP tools for %s: %s",
+                            mcp_cfg.name, te
+                        )
             else:
-                logger.warning("[WEB] Failed to connect to MCP server: %s", srv_cfg['name'])
+                logger.warning("[WEB] Failed to connect to MCP server: %s", mcp_cfg.name)
         except Exception as exc:
-            logger.warning("[WEB] MCP auto-connect error for %s: %s", srv_cfg.get('name', '?'), exc)
+            logger.warning(
+                "[WEB] MCP auto-connect error for %s: %s",
+                srv_cfg.get('name', '?'), exc
+            )
 
 
 def _register_page_routes(app: FastAPI) -> None:
@@ -332,27 +381,27 @@ def _register_page_routes(app: FastAPI) -> None:
 
     @app.get('/', response_class=HTMLResponse, include_in_schema=False)
     async def index(request: Request):
-        return templates.TemplateResponse('agent_chat.html', {'request': request})
+        return templates.TemplateResponse(request, 'agent_chat.html', {})
 
     @app.get('/dashboard', response_class=HTMLResponse, include_in_schema=False)
     async def dashboard_page(request: Request):
         stats = app.state.analysis_manager.get_stats()
         recent = app.state.analysis_manager.list_jobs(limit=10)
-        return templates.TemplateResponse('dashboard.html', {
-            'request': request, 'stats': stats, 'recent_jobs': recent,
+        return templates.TemplateResponse(request, 'dashboard.html', {
+            'stats': stats, 'recent_jobs': recent,
         })
 
     @app.get('/analysis/ioc', response_class=HTMLResponse, include_in_schema=False)
     async def ioc_page(request: Request):
-        return templates.TemplateResponse('analysis_ioc.html', {'request': request})
+        return templates.TemplateResponse(request, 'analysis_ioc.html', {})
 
     @app.get('/analysis/file', response_class=HTMLResponse, include_in_schema=False)
     async def file_page(request: Request):
-        return templates.TemplateResponse('analysis_file.html', {'request': request})
+        return templates.TemplateResponse(request, 'analysis_file.html', {})
 
     @app.get('/analysis/email', response_class=HTMLResponse, include_in_schema=False)
     async def email_page(request: Request):
-        return templates.TemplateResponse('analysis_email.html', {'request': request})
+        return templates.TemplateResponse(request, 'analysis_email.html', {})
 
     @app.get('/history', response_class=HTMLResponse, include_in_schema=False)
     async def history_page(request: Request):
@@ -370,15 +419,15 @@ def _register_page_routes(app: FastAPI) -> None:
             j['type'] = j.get('analysis_type', '')
             j['target'] = params.get('value', params.get('filename', j.get('id', '')))
             jobs.append(j)
-        return templates.TemplateResponse('history.html', {
-            'request': request, 'jobs': jobs,
+        return templates.TemplateResponse(request, 'history.html', {
+            'jobs': jobs,
         })
 
     @app.get('/cases', response_class=HTMLResponse, include_in_schema=False)
     async def cases_page(request: Request):
         case_list = app.state.case_store.list_cases(limit=100)
-        return templates.TemplateResponse('cases.html', {
-            'request': request, 'cases': case_list,
+        return templates.TemplateResponse(request, 'cases.html', {
+            'cases': case_list,
         })
 
     @app.get('/cases/{case_id}', response_class=HTMLResponse, include_in_schema=False)
@@ -386,24 +435,46 @@ def _register_page_routes(app: FastAPI) -> None:
         case = app.state.case_store.get_case(case_id)
         if not case:
             return HTMLResponse('<h3>Case not found</h3>', status_code=404)
-        return templates.TemplateResponse('case_detail.html', {
-            'request': request, 'case': case,
+        return templates.TemplateResponse(request, 'case_detail.html', {
+            'case': case,
         })
 
+    @app.get('/tickets', response_class=HTMLResponse, include_in_schema=False)
+    async def tickets_page(request: Request):
+        from src.integrations.ticketing import get_all_tickets
+        import json as _json
+        try:
+            raw_tickets = get_all_tickets()
+        except Exception as e:
+            logger.warning(f"[WEB] Failed to load tickets: {e}")
+            raw_tickets = []
+        tickets = []
+        for t in raw_tickets:
+            t = dict(t)
+            recs = t.get('recommendations')
+            if isinstance(recs, str):
+                try:
+                    t['recommendations'] = _json.loads(recs)
+                except Exception:
+                    t['recommendations'] = []
+            tickets.append(t)
+        return templates.TemplateResponse(request, 'tickets.html', {
+            'tickets': tickets,
+        })
     @app.get('/report/{job_id}', response_class=HTMLResponse, include_in_schema=False)
     async def report_page(request: Request, job_id: str):
         job = app.state.analysis_manager.get_job(job_id)
         if not job:
             return HTMLResponse('<h3>Report not found</h3>', status_code=404)
-        return templates.TemplateResponse('report_view.html', {
-            'request': request, 'job': job,
+        return templates.TemplateResponse(request, 'report_view.html', {
+            'job': job,
         })
 
     # ----- Agent pages -----
 
     @app.get('/agent/chat', response_class=HTMLResponse, include_in_schema=False)
     async def agent_chat_page(request: Request):
-        return templates.TemplateResponse('agent_chat.html', {'request': request})
+        return templates.TemplateResponse(request, 'agent_chat.html', {})
 
     @app.get('/agent/investigations', response_class=HTMLResponse, include_in_schema=False)
     async def agent_investigations_page(request: Request):
@@ -412,8 +483,8 @@ def _register_page_routes(app: FastAPI) -> None:
         if app.state.agent_store:
             sessions = app.state.agent_store.list_sessions(limit=100)
             stats = app.state.agent_store.get_agent_stats()
-        return templates.TemplateResponse('agent_investigations.html', {
-            'request': request, 'sessions': sessions, 'stats': stats,
+        return templates.TemplateResponse(request, 'agent_investigations.html', {
+            'sessions': sessions, 'stats': stats,
         })
 
     @app.get('/agent/playbooks', response_class=HTMLResponse, include_in_schema=False)
@@ -423,8 +494,8 @@ def _register_page_routes(app: FastAPI) -> None:
             playbooks = app.state.playbook_engine.list_playbooks()
         elif app.state.agent_store:
             playbooks = app.state.agent_store.list_playbooks()
-        return templates.TemplateResponse('playbooks.html', {
-            'request': request, 'playbooks': playbooks,
+        return templates.TemplateResponse(request, 'playbooks.html', {
+            'playbooks': playbooks,
         })
 
     @app.get('/mcp/servers', response_class=HTMLResponse, include_in_schema=False)
@@ -433,7 +504,7 @@ def _register_page_routes(app: FastAPI) -> None:
         if app.state.agent_store:
             db_servers = app.state.agent_store.list_mcp_connections()
 
-        # Merge config.yaml servers with DB servers (same logic as API)
+        # Merge config.yaml servers with DB servers
         db_lookup = {s['name']: s for s in db_servers}
         config_obj = getattr(app.state, 'config', None) or {}
         config_servers = config_obj.get('mcp_servers', []) if isinstance(config_obj, dict) else []
@@ -481,8 +552,7 @@ def _register_page_routes(app: FastAPI) -> None:
                 meta = categories.get(cat, {'label': cat.replace('_', ' ').title(), 'icon': 'bi-server'})
                 active_categories.append({'key': cat, **meta})
 
-        return templates.TemplateResponse('mcp_servers.html', {
-            'request': request,
+        return templates.TemplateResponse(request, 'mcp_servers.html', {
             'servers': merged,
             'categories': categories,
             'active_categories': active_categories,
@@ -490,4 +560,4 @@ def _register_page_routes(app: FastAPI) -> None:
 
     @app.get('/settings', response_class=HTMLResponse, include_in_schema=False)
     async def settings_page(request: Request):
-        return templates.TemplateResponse('settings.html', {'request': request})
+        return templates.TemplateResponse(request, 'settings.html', {})
