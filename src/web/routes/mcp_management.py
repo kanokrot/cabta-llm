@@ -15,72 +15,72 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-# ── Category metadata (Turkish + English labels) ─────────────────────────
+# ── Category metadata ──────────────────────────────────────────────────────
 CATEGORY_META: Dict[str, Dict[str, str]] = {
     'analysis': {
-        'label': 'Analiz / Analysis',
+        'label': 'Analysis',
         'icon': 'bi-search',
-        'description_tr': 'Zararli yazilim ve dosya analiz araclari',
+        'description': 'Malware and file analysis tools',
     },
     'reverse_engineering': {
-        'label': 'Tersine Muhendislik / Reverse Engineering',
+        'label': 'Reverse Engineering',
         'icon': 'bi-cpu',
-        'description_tr': 'Ikili dosya analizi ve tersine muhendislik',
+        'description': 'Binary file analysis and reverse engineering',
     },
     'sandbox': {
         'label': 'Sandbox',
         'icon': 'bi-box-seam',
-        'description_tr': 'Izole ortamda zararli yazilim calistirma',
+        'description': 'Running malware in an isolated environment',
     },
     'threat_intel': {
-        'label': 'Tehdit Istihbarati / Threat Intelligence',
+        'label': 'Threat Intelligence',
         'icon': 'bi-globe2',
-        'description_tr': 'IOC sorgulama ve tehdit istihbarati kaynaklari',
+        'description': 'IOC querying and threat intelligence resources',
     },
     'detection': {
-        'label': 'Tespit Muhendisligi / Detection Engineering',
+        'label': 'Detection Engineering',
         'icon': 'bi-shield-exclamation',
-        'description_tr': 'Tespit kurali olusturma ve yonetimi',
+        'description': 'Detection rule creation and management',
     },
     'siem': {
         'label': 'SIEM',
         'icon': 'bi-bar-chart-line',
-        'description_tr': 'Guvenlik bilgi ve olay yonetimi',
+        'description': 'Security information and event management',
     },
     'edr': {
         'label': 'EDR / XDR',
         'icon': 'bi-pc-display',
-        'description_tr': 'Uc nokta tespit ve mudahale',
+        'description': 'Endpoint detection and response',
     },
     'forensics': {
-        'label': 'Adli Bilisim / Forensics',
+        'label': 'Forensics',
         'icon': 'bi-fingerprint',
-        'description_tr': 'Dijital adli bilisim ve olay mudahale',
+        'description': 'Digital forensics and incident response',
     },
     'network': {
-        'label': 'Ag Guvenligi / Network Security',
+        'label': 'Network Security',
         'icon': 'bi-diagram-3',
-        'description_tr': 'Ag trafigi analizi ve IDS/IPS',
+        'description': 'Network traffic analysis and IDS/IPS',
     },
     'vulnerability': {
-        'label': 'Zafiyet Tarama / Vulnerability',
+        'label': 'Vulnerability',
         'icon': 'bi-bug',
-        'description_tr': 'Zafiyet tarama ve degerlendirme',
+        'description': 'Vulnerability scanning and assessment',
     },
     'osint': {
         'label': 'OSINT',
         'icon': 'bi-binoculars',
-        'description_tr': 'Acik kaynak istihbarat toplama',
+        'description': 'Open-source intelligence gathering',
     },
     'cloud': {
-        'label': 'Bulut Guvenligi / Cloud Security',
+        'label': 'Cloud Security',
         'icon': 'bi-cloud-check',
-        'description_tr': 'Bulut ortami guvenlik denetimi',
+        'description': 'Cloud environment security auditing',
     },
     'utility': {
-        'label': 'Yardimci Araclar / Utility',
+        'label': 'Utility',
         'icon': 'bi-wrench-adjustable',
-        'description_tr': 'Genel amacli MCP yardimci sunuculari',
+        'description': 'General-purpose MCP utility servers',
     },
 }
 
@@ -306,7 +306,7 @@ async def _check_stdio_server(cfg: dict) -> dict:
     if not command:
         return {
             "available": False,
-            "message": "Komut tanimlanmamis / No command defined",
+            "message": "No command defined",
             "detail": "stdio server has no 'command' field",
         }
 
@@ -317,15 +317,15 @@ async def _check_stdio_server(cfg: dict) -> dict:
     if found_path:
         return {
             "available": True,
-            "message": f"Komut bulundu / Command found: {base_cmd}",
+            "message": f"Command found: {base_cmd}",
             "detail": f"Resolved to: {found_path}",
         }
     else:
         install_cmd = cfg.get('install_command', '')
-        install_hint = f" -- Kurulum / Install: {install_cmd}" if install_cmd else ""
+        install_hint = f" -- Install: {install_cmd}" if install_cmd else ""
         return {
             "available": False,
-            "message": f"Komut bulunamadi / Command not found: {base_cmd}{install_hint}",
+            "message": f"Command not found: {base_cmd}{install_hint}",
             "detail": f"'{base_cmd}' is not on PATH",
         }
 
@@ -339,7 +339,7 @@ async def _check_http_server(cfg: dict) -> dict:
     if not url:
         return {
             "available": False,
-            "message": "URL tanimlanmamis / No URL defined",
+            "message": "No URL defined",
             "detail": "http/sse server has no 'url' field",
         }
 
@@ -361,14 +361,14 @@ async def _check_http_server(cfg: dict) -> dict:
         status_code = await loop.run_in_executor(None, _probe)
         return {
             "available": True,
-            "message": f"Sunucu erisilebilir / Server reachable (HTTP {status_code})",
+            "message": f"Server reachable (HTTP {status_code})",
             "detail": f"URL: {url} responded with status {status_code}",
         }
     except Exception as e:
         install_cmd = cfg.get('install_command', '')
-        install_hint = f" -- Kurulum / Install: {install_cmd}" if install_cmd else ""
+        install_hint = f" -- Install: {install_cmd}" if install_cmd else ""
         return {
             "available": False,
-            "message": f"Sunucu erisilemedi / Server unreachable{install_hint}",
+            "message": f"Server unreachable{install_hint}",
             "detail": f"URL: {url} -- Error: {str(e)}",
         }

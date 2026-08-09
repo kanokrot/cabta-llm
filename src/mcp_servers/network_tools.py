@@ -103,10 +103,15 @@ def _ip_from_bytes(raw: bytes) -> str:
 
 
 def _classify_mitre(signature: str, category: str) -> str:
-    """Attempt MITRE ATT&CK classification from signature/category text."""
+    """Attempt MITRE ATT&CK classification from signature/category text.
+
+    Uses word-boundary matching so short/ambiguous keywords (e.g. "c2", "dns",
+    "scan") only match standalone tokens, not substrings buried inside an
+    unrelated signature name (e.g. "scan" inside "crypto-currency-scanner").
+    """
     text = f"{signature} {category}".lower()
     for keyword, tactic in MITRE_CATEGORY_MAP.items():
-        if keyword in text:
+        if re.search(r'\b' + re.escape(keyword) + r'\b', text):
             return tactic
     return "Unknown"
 

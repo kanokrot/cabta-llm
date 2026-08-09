@@ -20,11 +20,37 @@ from datetime import datetime
 
 from mcp.server.fastmcp import FastMCP
 
+from ..utils.config import load_config
+from ..utils.api_key_validator import get_valid_key
+
 logger = logging.getLogger(__name__)
 
 mcp = FastMCP("threat-intel")
 
-TIMEOUT = 15
+TIMEOUT = 8
+
+# ThreatFox works without a key, but abuse.ch rate-limits anonymous
+# requests harder and can return 401 for some queries. Read the same
+# 'threatfox' / 'abusech' key from config.yaml that
+# src/integrations/threat_intel.py's check_threatfox() uses, so both
+# code paths stay in sync. Non-fatal if config.yaml is missing/unreadable.
+try:
+    _API_KEYS = (load_config() or {}).get('api_keys', {})
+except Exception as _cfg_exc:
+    logger.warning("[MCP] Failed to load config.yaml for API keys: %s", _cfg_exc)
+    _API_KEYS = {}
+
+
+def _threatfox_headers() -> dict:
+    """Build ThreatFox request headers, adding Auth-Key if a valid key is configured."""
+    headers = {
+        "User-Agent": "BlueTeamAssistant/2.0",
+        "Content-Type": "application/json",
+    }
+    api_key = get_valid_key(_API_KEYS, 'threatfox') or get_valid_key(_API_KEYS, 'abusech')
+    if api_key:
+        headers['Auth-Key'] = api_key
+    return headers
 
 
 def _http_get(url: str, timeout: int = TIMEOUT) -> str:
@@ -139,10 +165,7 @@ def threatfox_ioc_lookup(indicator: str) -> str:
         req = urllib.request.Request(
             "https://threatfox-api.abuse.ch/api/v1/",
             data=payload,
-            headers={
-                "User-Agent": "BlueTeamAssistant/2.0",
-                "Content-Type": "application/json",
-            },
+            headers=_threatfox_headers(),
             method="POST",
         )
         with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
@@ -237,7 +260,7 @@ def blocklist_check(ip: str) -> str:
 
     for name, url in blocklists.items():
         try:
-            data = _http_get(url, timeout=10)
+            data = _http_get(url, timeout=6)
             results["lists_checked"] += 1
             if ip in data:
                 results["lists_found"] += 1
@@ -306,10 +329,7 @@ def threatfox_recent_iocs(days: int = 1, limit: int = 50) -> str:
         req = urllib.request.Request(
             "https://threatfox-api.abuse.ch/api/v1/",
             data=payload,
-            headers={
-                "User-Agent": "BlueTeamAssistant/2.0",
-                "Content-Type": "application/json",
-            },
+            headers=_threatfox_headers(),
             method="POST",
         )
         with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:

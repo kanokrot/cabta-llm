@@ -12,10 +12,16 @@ import json
 import logging
 import os
 import sys
+from pathlib import Path
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
+
+# Project root -- used as the cwd for stdio MCP server subprocesses so that
+# `-m src.mcp_servers.xxx` style commands resolve regardless of the caller's
+# working directory.
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
 # ---------------------------------------------------------------------------
@@ -251,6 +257,11 @@ class MCPClientManager:
         if not cfg.command:
             raise ValueError(f"stdio transport requires 'command' for server {cfg.name}")
 
+        # 🔹 Resolve 'python' or 'python3' to current virtual environment executable
+        command = cfg.command
+        if command in ("python", "python3"):
+            command = sys.executable
+
         # Build environment
         env = os.environ.copy()
         if cfg.env:
@@ -264,9 +275,10 @@ class MCPClientManager:
             from mcp.client.stdio import StdioServerParameters, stdio_client
 
             params = StdioServerParameters(
-                command=cfg.command,
+                command=command,  # <-- ใช้ command ที่ผ่านการ resolve แล้ว
                 args=cmd_args,
                 env=cfg.env,
+                cwd=str(PROJECT_ROOT),
             )
 
             # Use SDK's stdio_client context manager
@@ -289,11 +301,12 @@ class MCPClientManager:
                 cfg.name,
             )
             proc = await asyncio.create_subprocess_exec(
-                cfg.command, *cmd_args,
+                command, *cmd_args,  # <-- ใช้ command ที่ผ่านการ resolve แล้ว
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 env=env,
+                cwd=str(PROJECT_ROOT),
             )
             connection.process = proc
             connection.client = _RawJsonRpcClient(proc)
@@ -302,7 +315,7 @@ class MCPClientManager:
 
         except FileNotFoundError:
             raise ConnectionError(
-                f"Command not found: {cfg.command}. "
+                f"Command not found: {command}. "
                 f"Make sure the MCP server is installed."
             )
         except Exception as exc:
