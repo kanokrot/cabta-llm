@@ -3,7 +3,7 @@ Blue Team Assistant - IOC Investigation Tool
 
 Multi-source threat intelligence lookup for IPs, domains, URLs, and hashes.
 
-Author: Ugur Ates
+ioc_investigator.py
 """
 
 import asyncio
@@ -11,6 +11,7 @@ from typing import Dict
 import logging
 from ..integrations.threat_intel import ThreatIntelligence
 from ..integrations.llm_analyzer import LLMAnalyzer
+from ..integrations.ticketing import create_incident_ticket
 from ..utils.ioc_extractor import IOCExtractor
 from ..utils.helpers import determine_verdict, extract_domain_from_url
 from ..utils.domain_age_checker import check_domain_age
@@ -18,6 +19,7 @@ from ..utils.dga_detector import detect_dga
 from ..scoring.intelligent_scoring import IntelligentScoring
 from ..detection.rule_generator import RuleGenerator
 from ..reporting.html_report_generator import HTMLReportGenerator
+from ..rag.rag_knowledge_base import RAGKnowledgeBase, load_playbooks_from_yaml
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +54,15 @@ class IOCInvestigator:
         self.config = config
         self.threat_intel = ThreatIntelligence(config)
         self.llm_analyzer = LLMAnalyzer(config)
+
+        self.rag_kb = None
+        if config.get('analysis', {}).get('enable_rag', True):
+            try:
+                self.rag_kb = RAGKnowledgeBase()
+                self.rag_kb.seed(load_playbooks_from_yaml())
+            except Exception as exc:
+                logger.warning(f"[IOC] RAG knowledge base unavailable (non-fatal): {exc}")
+                self.rag_kb = None
     
     def _is_trusted_infrastructure(self, ioc: str, ioc_type: str) -> bool:
         """Check if IOC belongs to trusted infrastructure."""
@@ -68,7 +79,7 @@ class IOCInvestigator:
         
         return False
     
-    def _enrich_domain(self, domain: str) -> Dict:
+    async def _enrich_domain(self, domain: str) -> Dict:
         """
         Enrich domain IOC with age and DGA analysis.
 
@@ -82,7 +93,7 @@ class IOCInvestigator:
 
         # Domain age check
         try:
-            age_result = check_domain_age(domain)
+            age_result = await asyncio.to_thread(check_domain_age, domain)
             enrichment['domain_age'] = age_result
         except Exception as exc:
             logger.warning(f"[IOC] Domain age check failed (non-fatal): {exc}")
@@ -128,7 +139,7 @@ class IOCInvestigator:
 
         return bonus
 
-    async def investigate(self, ioc: str) -> Dict:
+    async def investigate(self, ioc: str, analysis_id: str = None) -> Dict:
         """
         Investigate IOC.
 
@@ -172,7 +183,7 @@ class IOCInvestigator:
         if ioc_type in ('domain', 'url'):
             target_domain = ioc if ioc_type == 'domain' else extract_domain_from_url(ioc)
             if target_domain:
-                domain_enrichment = self._enrich_domain(target_domain)
+                domain_enrichment = await self._enrich_domain(target_domain)
                 # Apply domain-based score bonus
                 domain_bonus = self._calculate_domain_score_bonus(domain_enrichment)
                 if domain_bonus > 0:
@@ -184,11 +195,30 @@ class IOCInvestigator:
 
         verdict = determine_verdict(threat_score)
 
+        # Retrieve relevant knowledge base entries (non-fatal, never affects verdict)
+        rag_hits = []
+        if self.rag_kb:
+            try:
+                rag_query_parts = [ioc_type, verdict, f"threat score {threat_score}"]
+                dga = domain_enrichment.get('dga_analysis', {}) if domain_enrichment else {}
+                domain_age = domain_enrichment.get('domain_age', {}) if domain_enrichment else {}
+                if dga.get('is_dga'):
+                    rag_query_parts.append('dga')
+                if domain_age.get('is_newly_registered'):
+                    rag_query_parts.append('newly_registered')
+                rag_query = ' '.join(rag_query_parts)
+                rag_hits = self.rag_kb.query(rag_query)
+            except Exception as exc:
+                logger.warning(f"[IOC] RAG query failed (non-fatal): {exc}")
+                rag_hits = []
+
         # Get LLM analysis if enabled (non-blocking: failure is OK)
         llm_analysis = {}
         if self.config.get('analysis', {}).get('enable_llm', True):
             try:
-                llm_analysis = await self.llm_analyzer.analyze_ioc_results(ioc, ioc_type, intel_results)
+                llm_analysis = await self.llm_analyzer.analyze_ioc_results(
+                    ioc, ioc_type, intel_results, rag_context=rag_hits
+                )
                 if llm_analysis is None:
                     llm_analysis = {'note': 'LLM unavailable - results based on threat intelligence only'}
             except Exception as llm_err:
@@ -199,7 +229,14 @@ class IOCInvestigator:
         detection_rules = RuleGenerator.generate_ioc_rules(ioc, ioc_type, {'verdict': verdict})
 
         # Generate recommendations
-        recommendations = self._generate_recommendations(verdict, intel_results)
+        # Prioritize LLM-generated recommendations if they exist and are valid
+        if llm_analysis and isinstance(llm_analysis.get('recommendations'), list) and llm_analysis['recommendations']:
+            recommendations = llm_analysis['recommendations']
+            logger.info("[IOC] Using dynamic LLM-generated recommendations.")
+        else:
+            # Fallback to the static, verdict-based list if LLM fails
+            recommendations = self._generate_recommendations(verdict, intel_results)
+            logger.info("[IOC] LLM recommendations unavailable, using static fallback list.")
 
         # Add domain-specific recommendations
         if domain_enrichment:
@@ -231,10 +268,19 @@ class IOCInvestigator:
             'domain_enrichment': domain_enrichment if domain_enrichment else None,
             'llm_analysis': llm_analysis,
             'detection_rules': detection_rules,
-            'recommendations': recommendations
+            'recommendations': recommendations,
+            'rag_references': rag_hits
         }
 
         logger.info(f"[IOC] Investigation complete: {ioc} → {verdict} ({threat_score}/100)")
+
+        # Create an incident ticket if the verdict is malicious or suspicious
+        ticket_verdicts = self.config.get("ticketing", {}).get("create_on_verdict", ["MALICIOUS", "SUSPICIOUS"])
+        if verdict in ticket_verdicts and analysis_id:
+            try:
+                create_incident_ticket(result, analysis_id)
+            except Exception as e:
+                logger.error(f"[IOC] Failed to create incident ticket: {e}")
 
         return result
     
@@ -255,15 +301,15 @@ class IOCInvestigator:
                 '📊 Correlate with other suspicious activity',
                 '👀 Monitor for additional indicators'
             ]
-        elif verdict == 'LOW_RISK':
+        elif verdict == 'CLEAN':
             return [
                 '📝 Document finding',
                 '👁️ Passive monitoring recommended',
                 '✅ No immediate action required'
             ]
-        else:
+        else:  # UNKNOWN
             return [
-                '✅ No threats detected',
+                '❓ Insufficient data to determine risk',
                 '📋 Document for reference'
             ]
     
