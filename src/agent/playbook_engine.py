@@ -674,6 +674,7 @@ class PlaybookEngine:
         session_id = self.store.create_session(
             goal=goal, case_id=case_id, playbook_id=playbook_id,
         )
+
         return await self._execute_session(
             session_id, playbook_id, pb, steps, input_data, case_id,
         )
@@ -687,7 +688,8 @@ class PlaybookEngine:
         input_data: Dict,
         case_id: Optional[str],
     ) -> str:
-        """Run all steps of an already-resolved playbook for an existing session."""
+        """Run all steps of an already-resolved playbook for an existing
+        session (fresh start, always begins at steps[0])."""
 
         # Execution context (variables available to steps)
         context: Dict[str, Any] = {
@@ -708,9 +710,141 @@ class PlaybookEngine:
             playbook_id, session_id, len(steps),
         )
 
-        current_step: Optional[PlaybookStep] = steps[0]
-        step_number = 0
+        return await self._run_step_loop(
+            session_id, playbook_id, pb, steps, step_map, context,
+            steps[0], 0, case_id,
+        )
 
+    async def execute_from_step(self, session_id: str, approved: bool) -> str:
+        """Resume a playbook session paused at an approval checkpoint.
+
+        Loads the context + pending step persisted (via
+        ``AgentStore.update_session_metadata``) right before the pause in
+        ``_run_step_loop``, executes (if approved) or skips (if rejected)
+        the pending step, then continues the normal loop from there.
+        """
+        session = self.store.get_session(session_id)
+        if session is None:
+            raise ValueError(f"Session '{session_id}' not found")
+
+        playbook_id = session.get("playbook_id")
+        pb = self._cache.get(playbook_id)
+        if pb is None:
+            raise ValueError(f"Playbook '{playbook_id}' not found in cache")
+
+        steps: List[PlaybookStep] = pb.get("_parsed_steps", [])
+        step_map: Dict[str, PlaybookStep] = {s.name: s for s in steps}
+
+        metadata = session.get("metadata") or {}
+        if not isinstance(metadata, dict) or "pending_step_name" not in metadata:
+            raise ValueError(
+                f"Session '{session_id}' has no pending approval checkpoint to resume"
+            )
+
+        context: Dict[str, Any] = metadata.get("context", {})
+        step_number: int = metadata.get("step_number", 0)
+        pending_step_name: str = metadata["pending_step_name"]
+        pending_step = step_map.get(pending_step_name)
+        if pending_step is None:
+            raise ValueError(
+                f"Pending step '{pending_step_name}' no longer exists in "
+                f"playbook '{playbook_id}'"
+            )
+
+        case_id = metadata.get("case_id")
+
+        if approved:
+            params = self._interpolate_params(pending_step.params, context)
+            self.agent_loop._notify(session_id, {
+                "type": "tool_call", "step": step_number,
+                "tool": pending_step.tool, "args": params,
+            })
+            start = time.time()
+            result = await self._run_tool(
+                pending_step.tool, params, pending_step.timeout,
+            )
+            duration_ms = int((time.time() - start) * 1000)
+            self.agent_loop._notify(session_id, {
+                "type": "tool_result", "step": step_number,
+                "tool": pending_step.tool,
+                "result_preview": str(result)[:500],
+                "duration": duration_ms,
+            })
+
+            self.store.add_step(
+                session_id=session_id,
+                step_number=step_number,
+                step_type="tool_call",
+                content=pending_step.description or pending_step.name,
+                tool_name=pending_step.tool,
+                tool_params=json.dumps(params, default=str),
+                tool_result=json.dumps(result, default=str)[:10000],
+                duration_ms=duration_ms,
+            )
+            self.store.add_audit_entry(
+                session_id=session_id,
+                action=pending_step.tool,
+                action_type="approval_granted",
+                actor="human",
+                requires_approval=True,
+                before_state=params,
+                after_state=result,
+                approved_by=metadata.get("approver"),
+                status="error" if isinstance(result, dict) and "error" in result else "success",
+            )
+
+            context[pending_step.name] = result
+            context["last_result"] = result
+            if isinstance(result, dict):
+                for key, val in result.items():
+                    context[f"{pending_step.name}_{key}"] = val
+
+            success = not (isinstance(result, dict) and "error" in result)
+            next_step_name = pending_step.on_success if success else pending_step.on_failure
+        else:
+            self.store.add_step(
+                session_id=session_id,
+                step_number=step_number,
+                step_type="approval_rejected",
+                content=f"Approval rejected: {pending_step.description or pending_step.name}",
+                tool_name=pending_step.tool,
+            )
+            self.store.add_audit_entry(
+                session_id=session_id,
+                action=pending_step.tool,
+                action_type="approval_rejected",
+                actor="human",
+                requires_approval=True,
+                before_state=self._interpolate_params(pending_step.params, context),
+                approved_by=metadata.get("approver"),
+                status="rejected",
+            )
+            next_step_name = pending_step.on_failure
+
+        next_step = self._resolve_next(next_step_name, step_map, steps, step_number)
+
+        self.store.update_session_status(session_id, "active")
+
+        return await self._run_step_loop(
+            session_id, playbook_id, pb, steps, step_map, context,
+            next_step, step_number, case_id,
+        )
+
+    async def _run_step_loop(
+        self,
+        session_id: str,
+        playbook_id: str,
+        pb: Dict,
+        steps: List["PlaybookStep"],
+        step_map: Dict[str, "PlaybookStep"],
+        context: Dict[str, Any],
+        current_step: Optional["PlaybookStep"],
+        step_number: int,
+        case_id: Optional[str],
+    ) -> str:
+        """Run the step loop starting at *current_step* / *step_number* with
+        the given *context*. Shared by a fresh ``_execute_session`` start
+        (step 0) and ``execute_from_step`` resuming after an approval gate."""
         try:
             while current_step is not None:
                 step_number += 1
@@ -736,7 +870,7 @@ class PlaybookEngine:
                         )
                         continue
 
-                # Human approval checkpoint
+                    # Human approval checkpoint
                 if current_step.requires_approval:
                     logger.info(
                         "[PLAYBOOK] Step '%s' requires human approval -- pausing",
@@ -753,6 +887,23 @@ class PlaybookEngine:
                             default=str,
                         ),
                     )
+                    self.store.add_audit_entry(
+                        session_id=session_id,
+                        action=current_step.tool,
+                        action_type="approval_required",
+                        actor="system",
+                        requires_approval=True,
+                        before_state=self._interpolate_params(current_step.params, context),
+                        status="pending",
+                    )
+                    # Persist context + pending step so execute_from_step can
+                    # resume exactly where this run paused.
+                    self.store.update_session_metadata(session_id, {
+                        "context": context,
+                        "pending_step_name": current_step.name,
+                        "step_number": step_number,
+                        "case_id": case_id,
+                    })
                     self.store.update_session_status(session_id, "waiting_approval")
                     self.agent_loop._notify(session_id, {
                         "type": "approval_required",
@@ -760,9 +911,9 @@ class PlaybookEngine:
                         "description": current_step.description or current_step.name,
                     })
 
-                    # In a real system this would block until approval arrives.
-                    # For now we log and return -- the UI / API layer handles
-                    # the approval flow and re-calls execute_from_step.
+                    # Execution pauses here. Call execute_from_step(session_id,
+                    # approved) to resume -- it reloads the persisted
+                    # context/pending step and continues the loop.
                     return session_id
 
                 # Handle action-only steps (no tool call needed)
