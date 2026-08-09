@@ -926,6 +926,7 @@
                             if (analysisType === 'ioc') {
                                 /* Pass raw result data so the template's renderStructuredResult handles it */
                                 var rawRes = fullResult.result ? (typeof fullResult.result === 'string' ? JSON.parse(fullResult.result) : fullResult.result) : fullResult;
+                                if (rawRes && typeof rawRes === 'object') rawRes.analysis_id = analysisId;
                                 callbacks.onComplete(rawRes);
                             } else {
                                 var rendered;

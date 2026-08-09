@@ -1,0 +1,411 @@
+/* ── Base card styles ── */
+.playbook-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 1.25rem;
+    transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    overflow: hidden;
+}
+.playbook-card:hover {
+    border-color: var(--color-accent);
+    box-shadow: var(--shadow-sm);
+    transform: translateY(-3px) scale(1.01);
+}
+.playbook-card .pb-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 0.5rem;
+    display: flex;
+    align-items: center;
+}
+.playbook-card .pb-desc {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    flex: 1;
+    margin-bottom: 0.75rem;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+.playbook-card .pb-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.75rem;
+}
+.playbook-card .pb-footer-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.75rem;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+.playbook-card .pb-footer-meta i {
+    font-size: 0.7rem;
+    opacity: 0.7;
+}
+
+/* ── Trigger badges ── */
+.trigger-badge {
+    font-size: 0.7rem;
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.trigger-manual { background: rgba(88,166,255,0.15); color: var(--color-accent); }
+.trigger-alert { background: rgba(239,68,68,0.15); color: var(--color-danger); }
+.trigger-auto { background: rgba(239,68,68,0.15); color: var(--color-danger); }
+.trigger-scheduled { background: rgba(245,158,11,0.15); color: var(--color-warning); }
+.trigger-webhook { background: rgba(34,197,94,0.15); color: var(--color-success); }
+
+/* ── Category badges ── */
+.category-badge {
+    font-size: 0.65rem;
+    padding: 0.15rem 0.45rem;
+    border-radius: 4px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.cat-threat-intel { background: rgba(139,92,246,0.15); color: #a78bfa; }
+.cat-incident-response { background: rgba(239,68,68,0.15); color: #f87171; }
+.cat-malware-analysis { background: rgba(245,158,11,0.15); color: #fbbf24; }
+.cat-phishing { background: rgba(6,182,212,0.15); color: #22d3ee; }
+.cat-forensics { background: rgba(34,197,94,0.15); color: #4ade80; }
+.cat-general { background: rgba(148,163,184,0.15); color: #94a3b8; }
+
+/* ── Stats bar ── */
+.playbook-stats-bar {
+    display: flex;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+    padding: 0.75rem 1rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    margin-bottom: 1rem;
+}
+.stat-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+.stat-item .stat-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.85rem;
+}
+.stat-item .stat-icon.si-playbooks { background: rgba(88,166,255,0.15); color: var(--color-accent); }
+.stat-item .stat-icon.si-steps { background: rgba(139,92,246,0.15); color: #a78bfa; }
+.stat-item .stat-icon.si-tools { background: rgba(245,158,11,0.15); color: #fbbf24; }
+.stat-item .stat-icon.si-categories { background: rgba(34,197,94,0.15); color: #4ade80; }
+.stat-item .stat-value {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1;
+}
+.stat-item .stat-label {
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    line-height: 1;
+}
+
+/* ── Search and filter bar ── */
+.playbook-toolbar {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+.playbook-search-wrap {
+    position: relative;
+    flex: 1;
+    min-width: 220px;
+    max-width: 360px;
+}
+.playbook-search-wrap i {
+    position: absolute;
+    left: 0.75rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+}
+.playbook-search-wrap input {
+    padding-left: 2.25rem;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    border-radius: 6px;
+    font-size: 0.85rem;
+    height: 36px;
+}
+.playbook-search-wrap input::placeholder { color: var(--text-secondary); opacity: 0.7; }
+.playbook-search-wrap input:focus {
+    border-color: var(--color-accent);
+    box-shadow: 0 0 0 2px rgba(88,166,255,0.15);
+    outline: none;
+}
+.filter-btn-group {
+    display: flex;
+    gap: 0.25rem;
+    flex-wrap: wrap;
+}
+.filter-btn {
+    font-size: 0.72rem;
+    padding: 0.3rem 0.6rem;
+    border-radius: 5px;
+    border: 1px solid var(--border-color);
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+}
+.filter-btn:hover {
+    border-color: var(--color-accent);
+    color: var(--text-primary);
+}
+.filter-btn.active {
+    background: rgba(88,166,255,0.15);
+    border-color: var(--color-accent);
+    color: var(--color-accent);
+    font-weight: 600;
+}
+
+/* ── Flowchart-like step display ── */
+.playbook-steps {
+    position: relative;
+    padding-left: 2rem;
+}
+.playbook-steps::before {
+    content: '';
+    position: absolute;
+    left: 0.75rem;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: linear-gradient(180deg, var(--color-accent), var(--border-color));
+}
+.playbook-step {
+    position: relative;
+    padding: 0.75rem 1rem;
+    margin-bottom: 0.5rem;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    transition: border-color 0.15s;
+}
+.playbook-step:hover {
+    border-color: var(--color-accent);
+}
+.playbook-step::before {
+    content: '';
+    position: absolute;
+    left: -1.65rem;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--color-accent);
+    border: 2px solid var(--bg-secondary);
+}
+.playbook-step.step-condition::before {
+    background: #fbbf24;
+    border-radius: 2px;
+    transform: translateY(-50%) rotate(45deg);
+}
+.playbook-step.step-loop::before {
+    background: #a78bfa;
+    border-radius: 2px;
+}
+.playbook-step.step-condition {
+    border-left: 3px solid #fbbf24;
+}
+.playbook-step.step-loop {
+    border-left: 3px solid #a78bfa;
+}
+.playbook-step .step-num {
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: var(--color-accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.playbook-step .step-name {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+.playbook-step .step-tool {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+.step-indicator-badge {
+    font-size: 0.6rem;
+    padding: 0.1rem 0.35rem;
+    border-radius: 3px;
+    font-weight: 600;
+    text-transform: uppercase;
+    margin-left: 0.4rem;
+}
+.step-indicator-condition {
+    background: rgba(251,191,36,0.15);
+    color: #fbbf24;
+}
+.step-indicator-loop {
+    background: rgba(167,139,250,0.15);
+    color: #a78bfa;
+}
+
+/* ── View modal enhancements ── */
+#viewPlaybookModal .modal-body {
+    max-height: 70vh;
+    overflow-y: auto !important;
+}
+.view-modal-banner {
+    padding: 1rem 1.25rem;
+    border-radius: 6px;
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+.view-modal-banner .banner-icon {
+    width: 42px;
+    height: 42px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.25rem;
+    background: rgba(255,255,255,0.12);
+}
+.view-modal-banner.banner-threat-intel { background: rgba(139,92,246,0.12); }
+.view-modal-banner.banner-incident-response { background: rgba(239,68,68,0.12); }
+.view-modal-banner.banner-malware-analysis { background: rgba(245,158,11,0.12); }
+.view-modal-banner.banner-phishing { background: rgba(6,182,212,0.12); }
+.view-modal-banner.banner-forensics { background: rgba(34,197,94,0.12); }
+.view-modal-banner.banner-general { background: rgba(148,163,184,0.12); }
+
+.input-params-section {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 0.75rem 1rem;
+    margin-bottom: 1rem;
+}
+.input-params-section .param-item {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    padding: 0.35rem 0;
+    border-bottom: 1px solid var(--border-color);
+}
+.input-params-section .param-item:last-child { border-bottom: none; }
+.param-name {
+    font-family: monospace;
+    font-size: 0.82rem;
+    color: var(--color-accent);
+    font-weight: 600;
+    white-space: nowrap;
+}
+.param-desc {
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+}
+.param-required {
+    font-size: 0.6rem;
+    padding: 0.1rem 0.3rem;
+    border-radius: 3px;
+    background: rgba(239,68,68,0.15);
+    color: #f87171;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.tool-coverage-section {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 0.75rem 1rem;
+    margin-top: 1rem;
+}
+.tool-coverage-section .tool-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.75rem;
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    background: rgba(88,166,255,0.1);
+    color: var(--color-accent);
+    margin: 0.15rem;
+    border: 1px solid rgba(88,166,255,0.2);
+}
+
+/* ── Run modal param fields ── */
+.run-param-field {
+    margin-bottom: 0.75rem;
+}
+.run-param-field label {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 0.2rem;
+}
+.run-param-field .form-text {
+    font-size: 0.72rem;
+}
+.run-param-field input,
+.run-param-field textarea {
+    background: var(--bg-tertiary);
+    border-color: var(--border-color);
+    color: var(--text-primary);
+    font-size: 0.85rem;
+}
+.run-param-field input:focus,
+.run-param-field textarea:focus {
+    border-color: var(--color-accent);
+    box-shadow: 0 0 0 2px rgba(88,166,255,0.15);
+}
+.run-param-field .is-invalid {
+    border-color: var(--color-danger) !important;
+}
+
+/* ── Duration estimate ── */
+.duration-estimate {
+    font-size: 0.72rem;
+    color: var(--text-secondary);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+/* ── Last run info ── */
+.last-run-info {
+    font-size: 0.68rem;
+    color: var(--text-secondary);
+    opacity: 0.8;
+}
