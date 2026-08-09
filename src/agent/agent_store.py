@@ -340,6 +340,73 @@ class AgentStore:
         return [self._row_to_dict(desc, r) for r in rows]
 
     # ================================================================== #
+    #  Audit Log
+    # ================================================================== #
+
+    def add_audit_entry(
+        self,
+        session_id: str,
+        action: str,
+        action_type: str = 'tool_call',
+        actor: str = 'system',
+        requires_approval: bool = False,
+        verdict: Optional[str] = None,
+        before_state: Optional[Dict] = None,
+        after_state: Optional[Dict] = None,
+        approved_by: Optional[str] = None,
+        status: str = 'success',
+    ) -> str:
+        """Record an audit trail entry. Returns the entry ID.
+
+        Call this at every point that executes a tool, grants/rejects a
+        human approval, or performs a containment action -- this is a
+        permanent audit trail separate from ``agent_steps`` (which is
+        debug/progress logging).
+        """
+        entry_id = uuid.uuid4().hex[:12]
+        now = datetime.now(timezone.utc).isoformat()
+        before_json = json.dumps(before_state, default=str) if before_state is not None else None
+        after_json = json.dumps(after_state, default=str) if after_state is not None else None
+
+        with self._lock:
+            conn = self._connect()
+            conn.execute(
+                """INSERT INTO audit_log
+                   (id, session_id, actor, action, action_type, requires_approval,
+                    verdict, before_state, after_state, approved_by, status, timestamp)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (entry_id, session_id, actor, action, action_type,
+                 1 if requires_approval else 0, verdict, before_json, after_json,
+                 approved_by, status, now),
+            )
+            conn.commit()
+            conn.close()
+
+        logger.info(f"[AUDIT] {session_id}: {action_type}/{action} by {actor} -> {status}")
+        return entry_id
+
+    def get_audit_log(
+        self, session_id: Optional[str] = None, limit: int = 100,
+    ) -> List[Dict]:
+        """Return audit log entries, newest first. Optionally filter by session."""
+        conn = self._connect()
+        if session_id:
+            cur = conn.execute(
+                """SELECT * FROM audit_log WHERE session_id = ?
+                   ORDER BY timestamp DESC LIMIT ?""",
+                (session_id, limit),
+            )
+        else:
+            cur = conn.execute(
+                "SELECT * FROM audit_log ORDER BY timestamp DESC LIMIT ?",
+                (limit,),
+            )
+        rows = cur.fetchall()
+        desc = cur.description
+        conn.close()
+        return [self._row_to_dict(desc, r) for r in rows]
+
+    # ================================================================== #
     #  Statistics
     # ================================================================== #
 
@@ -438,6 +505,24 @@ class AgentStore:
             )
         """)
 
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS audit_log (
+                id                 TEXT PRIMARY KEY,
+                session_id         TEXT NOT NULL,
+                actor              TEXT NOT NULL DEFAULT 'system',
+                action             TEXT NOT NULL,
+                action_type        TEXT NOT NULL DEFAULT 'tool_call',
+                requires_approval  INTEGER NOT NULL DEFAULT 0,
+                verdict            TEXT,
+                before_state       TEXT,
+                after_state        TEXT,
+                approved_by        TEXT,
+                status             TEXT NOT NULL DEFAULT 'success',
+                timestamp          TEXT NOT NULL,
+                FOREIGN KEY (session_id) REFERENCES agent_sessions(id)
+            )
+        """)
+
         # Indexes
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_sessions_status ON agent_sessions(status)"
@@ -447,6 +532,12 @@ class AgentStore:
         )
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_steps_session ON agent_steps(session_id)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_audit_session ON audit_log(session_id)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_log(timestamp)"
         )
 
         conn.commit()
@@ -460,7 +551,7 @@ class AgentStore:
         cols = [d[0] for d in description]
         d = dict(zip(cols, row))
         # Parse known JSON columns
-        for key in ('findings', 'metadata', 'config_json', 'tools_json', 'steps_json'):
+        for key in ('findings', 'metadata', 'config_json', 'tools_json', 'steps_json','before_state', 'after_state'):
             if d.get(key) and isinstance(d[key], str):
                 try:
                     d[key] = json.loads(d[key])
