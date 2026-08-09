@@ -200,36 +200,6 @@ class ThreatIntelExtended:
             logger.error(f"[Pulsedive] Error: {e}")
             return {'source': 'Pulsedive', 'status': 'Error', 'found': False}
     
-    async def check_threatcrowd(self, ioc: str, ioc_type: str) -> Dict:
-        """ThreatCrowd - DNS/WHOIS threat intelligence."""
-        try:
-            if ioc_type == 'ipv4':
-                url = f'https://www.threatcrowd.org/searchApi/v2/ip/report/?ip={ioc}'
-            elif ioc_type == 'domain':
-                url = f'https://www.threatcrowd.org/searchApi/v2/domain/report/?domain={ioc}'
-            else:
-                return {'source': 'ThreatCrowd', 'status': 'Unsupported type', 'found': False}
-            
-            # Disable SSL verification due to hostname mismatch
-            connector = aiohttp.TCPConnector(ssl=False)
-            async with aiohttp.ClientSession(timeout=self.timeout, connector=connector) as session:
-                async with session.get(url) as response:
-                    if response.status == 200:
-                        data = await response.json()
-                        votes = data.get('votes', 0)
-                        return {
-                            'source': 'ThreatCrowd',
-                            'found': votes != 0,
-                            'votes': votes,
-                            'hashes': len(data.get('hashes', [])),
-                            'references': len(data.get('references', [])),
-                            'status': '✓' if votes < 0 else '✗'
-                        }
-            return {'source': 'ThreatCrowd', 'status': 'Not found', 'found': False}
-        except Exception as e:
-            logger.error(f"[ThreatCrowd] Error: {e}")
-            return {'source': 'ThreatCrowd', 'status': 'Error', 'found': False}
-    
     async def check_criminalip(self, ip: str) -> Dict:
         """Criminal IP - Threat scoring."""
         api_key = self.api_keys.get('criminalip', '')

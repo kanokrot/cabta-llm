@@ -1,79 +1,95 @@
-"""
-Author: Ugur AtesLLM-powered intelligent analysis using Local (Ollama) or Cloud () models."""
-
 import aiohttp
 import json
 from typing import Dict, Optional
+from src.integrations.verdict_validator import validate_llm_analysis
 import logging
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# [GUARDRAIL ADDITION] รายชื่อ Threat Intel source ทั้งหมดที่ CABTA เช็ค
+# ใช้สำหรับตรวจจับว่า LLM พูดถึง source ที่ไม่ได้อยู่ใน verified findings หรือไม่
+# (ป้องกัน hallucination ที่หลุดผ่าน prompt-level guardrail)
+# ---------------------------------------------------------------------------
+ALL_TI_SOURCES = [
+    'virustotal', 'abuseipdb', 'shodan', 'alienvault', 'urlhaus',
+    'feodotracker', 'threatfox', 'malwarebazaar', 'c2_trackers',
+    'tor_exit_nodes', 'ssl_blacklist', 'usom', 'greynoise', 'censys',
+    'talos', 'pulsedive', 'threatcrowd', 'criminalip', 'ipqualityscore',
+    'spamhaus', 'phishtank', 'circl', 'ip2proxy', 'triage', 'threatzone',
+]
+
+
 class LLMAnalyzer:
     """
     LLM-powered threat analysis using LOCAL (Ollama) or CLOUD (Anthropic) models.
-    
+
     **LOCAL-FIRST APPROACH** (Recommended for Critical Infrastructure):
     - Uses Ollama for local, private analysis
     - No data leaves your infrastructure
     - Free, unlimited usage
     - Supports: Llama 3.1, Mistral, Qwen, DeepSeek, etc.
-    
+
     **CLOUD OPTION** (Optional):
     - Uses Anthropic Claude API
     - Requires API key and costs money
     - Only use for non-sensitive data
-    
+
     Provides:
     - Intelligent threat scoring
     - Context-aware analysis
     - Natural language summaries
     - Actionable recommendations
     """
-    
+
     def __init__(self, config: Dict):
         """
         Initialize LLM analyzer.
-        
+
         Args:
             config: Configuration dict
         """
         self.config = config
-        
+
         # Determine LLM provider (local/cloud)
         llm_config = config.get('llm', {})
         self.provider = llm_config.get('provider', 'ollama')  # Default: local
-        
+
         # Ollama settings
         self.ollama_endpoint = llm_config.get('ollama_endpoint', 'http://localhost:11434')
-        self.ollama_model = llm_config.get('ollama_model', 'llama3.1:8b')
-        
+        self.ollama_model = llm_config.get('model', llm_config.get('ollama_model', 'llama3.2:3b'))
+
         # Anthropic settings (fallback)
         self.anthropic_key = config.get('api_keys', {}).get('anthropic', '')
         self.anthropic_model = 'claude-sonnet-4-20250514'
-        
+
         self.timeout = aiohttp.ClientTimeout(total=120)  # Longer timeout for local LLM
-        
+
         logger.info(f"[LLM] Provider: {self.provider} | Model: {self.ollama_model if self.provider == 'ollama' else self.anthropic_model}")
-    
-    async def analyze_ioc_results(self, ioc: str, ioc_type: str, results: Dict) -> Dict:
+
+    async def analyze_ioc_results(
+        self, ioc: str, ioc_type: str, results: Dict, rag_context: Optional[list] = None
+    ) -> Dict:
         """
         Analyze IOC investigation results using LLM.
-        
+
         Args:
             ioc: The IOC investigated
             ioc_type: IOC type
             results: Investigation results from all sources
-        
+            rag_context: Optional list of retrieved knowledge base entries
+
         Returns:
             LLM analysis with verdict and recommendations
         """
         try:
             # Prepare context for LLM
             context = self._prepare_ioc_context(ioc, ioc_type, results)
-            
+
             # Build prompt
             sources_checked = results.get('sources_checked', 0)
             sources_flagged = results.get('sources_flagged', 0)
-            
+
             # Build explicit findings summary
             if sources_flagged == 0:
                 findings_summary = f"✅ **CLEAN**: This IOC was NOT flagged by any of the {sources_checked} sources checked. No malicious activity detected."
@@ -81,7 +97,7 @@ class LLMAnalyzer:
                 findings_summary = f"⚠️ **SUSPICIOUS**: 1 out of {sources_checked} sources flagged this IOC."
             else:
                 findings_summary = f"🚨 **MALICIOUS**: {sources_flagged} out of {sources_checked} sources flagged this IOC."
-            
+
             prompt = f"""You are a senior SOC analyst specializing in critical infrastructure cybersecurity. 
 
 Analyze this IOC investigation and provide a professional, actionable analysis:
@@ -97,7 +113,7 @@ Sources Flagged: {sources_flagged}
 
 **Key Findings:**
 {json.dumps(context.get('key_findings', []), indent=2)}
-
+{self._format_rag_section(rag_context)}
 **IMPORTANT RULES:**
 1. Your verdict MUST match the investigation findings
 2. If sources_flagged = 0, verdict MUST be "CLEAN"
@@ -105,6 +121,7 @@ Sources Flagged: {sources_flagged}
 4. If sources_flagged >= 3, verdict can be "MALICIOUS"
 5. Do NOT hallucinate findings that don't exist
 6. Base your analysis ONLY on the data provided above
+7. ONLY reference source names that appear in the "Key Findings" list above. Do NOT mention any other source by name.
 
 Provide your analysis in a clear, professional format. Include:
 
@@ -125,29 +142,98 @@ Respond in JSON format:
 }}
 
 Keep it concise and factual."""
-            
+
             # Call appropriate LLM provider
             if self.provider == 'ollama':
                 response_data = await self._call_ollama_api(prompt)
             else:
                 response_data = await self._call_anthropic_api(prompt)
-            
+
             if response_data:
+                # [GUARDRAIL ADDITION] Post-processing validation layer
+                response_data = validate_llm_analysis(
+                    response_data,
+                    context,
+                    threat_score=results.get('threat_score', 0),
+                    all_known_sources=ALL_TI_SOURCES,)
                 return response_data
             else:
                 return {'error': 'Failed to get LLM response', 'provider': self.provider}
-        
+
         except Exception as e:
             logger.error(f"[LLM] Analysis failed: {e}")
             return {'error': str(e)}
-    
+
+    def _format_rag_section(self, rag_context: Optional[list]) -> str:
+        """Format retrieved RAG knowledge base entries for prompt injection."""
+        if not rag_context:
+            return ""
+
+        lines = ["\n**Relevant Knowledge Base Entries:**"]
+        for i, doc in enumerate(rag_context, start=1):
+            category = doc['metadata'].get('category', 'unknown')
+            lines.append(f"[{i}] (source: {category}) {doc['text']}")
+        lines.append("Reference the relevant entry above (by its [N]) where it supports your analysis.\n")
+        return "\n".join(lines)
+
+    # ------------------------------------------------------------------ #
+    # [GUARDRAIL ADDITION] Post-processing hallucination check
+    # ------------------------------------------------------------------ #
+    def _validate_llm_analysis(self, llm_result: Dict, context: Dict) -> Dict:
+        """
+        Validate LLM output against verified findings to catch hallucinated
+        source names that slipped past the prompt-level guardrail.
+
+        This is a defense-in-depth layer: the prompt already instructs the
+        LLM to only use provided data, but small local models (e.g. 3B
+        parameter models) can still fabricate source names. This check
+        flags such cases for analyst review instead of silently trusting
+        the LLM output.
+
+        Args:
+            llm_result: Parsed JSON response from the LLM
+            context: The context dict that was sent to the LLM
+                     (contains 'key_findings' = list of verified sources)
+
+        Returns:
+            llm_result, with an added 'hallucination_warning' key if
+            unverified source names are detected in the analysis text.
+        """
+        if not llm_result or 'analysis' not in llm_result:
+            return llm_result
+
+        # Source names that were actually confirmed (status == '✓')
+        # and therefore legitimately sent to the LLM as key_findings
+        valid_sources = {f['source'] for f in context.get('key_findings', [])}
+
+        analysis_text = llm_result.get('analysis', '').lower()
+
+        suspicious_mentions = [
+            source_name for source_name in ALL_TI_SOURCES
+            if source_name in analysis_text and source_name not in valid_sources
+        ]
+
+        if suspicious_mentions:
+            logger.warning(
+                f"[LLM Guardrail] Possible hallucination detected: LLM analysis "
+                f"mentioned {suspicious_mentions} which were NOT in verified "
+                f"findings {valid_sources or '(none)'}"
+            )
+            llm_result['hallucination_warning'] = (
+                f"⚠️ Analyst Note: This AI-generated analysis references source(s) "
+                f"{suspicious_mentions} that were not part of the verified findings. "
+                f"Please cross-check manually before acting on this summary."
+            )
+
+        return llm_result
+
     async def analyze_email(self, email_data: Dict) -> Dict:
         """
         Analyze email using LLM.
-        
+
         Args:
             email_data: Parsed email data
-        
+
         Returns:
             LLM analysis of email
         """
@@ -182,7 +268,7 @@ Keep it concise and factual."""
                 'base_score': email_data.get('base_score', 0),
                 'composite_score': email_data.get('composite_score', 0)
             }
-            
+
             prompt = f"""You are a SOC analyst at specializing in email security and phishing detection.
 
 Analyze this email investigation:
@@ -231,25 +317,25 @@ Based on the above tool analysis, provide your professional assessment in JSON f
 }}
 
 Be specific and reference the tool findings in your analysis."""
-            
+
             if self.provider == 'ollama':
                 response_data = await self._call_ollama_api(prompt)
             else:
                 response_data = await self._call_anthropic_api(prompt)
-            
+
             return response_data if response_data else {'error': 'Failed to analyze'}
-        
+
         except Exception as e:
             logger.error(f"[LLM] Email analysis failed: {e}")
             return {'error': str(e)}
-    
+
     async def analyze_file(self, file_data: Dict) -> Dict:
         """
         Analyze file using LLM.
-        
+
         Args:
             file_data: File analysis data
-        
+
         Returns:
             LLM analysis of file
         """
@@ -294,7 +380,7 @@ Be specific and reference the tool findings in your analysis."""
                 'malicious_domains': [d.get('ioc') for d in (file_data.get('malicious_domains') or [])[:3] if isinstance(d, dict)],
                 'composite_score': file_data.get('composite_score', 0)
             }
-            
+
             # Check if this is a text file with C2/IOC data
             is_text_file = file_data.get('file_type') == 'text'
 
@@ -448,27 +534,27 @@ Based on the above tool analysis, provide your professional assessment in JSON f
 }}
 
 Be specific and reference the tool findings in your analysis."""
-    
+
     async def _call_ollama_api(self, prompt: str) -> Optional[Dict]:
         """
         Call Ollama local LLM API.
-        
+
         Args:
             prompt: Analysis prompt
-        
+
         Returns:
             Parsed JSON response or None
         """
         try:
             logger.info(f"[LLM] Calling Ollama ({self.ollama_model})...")
-            
+
             payload = {
                 'model': self.ollama_model,
                 'prompt': prompt,
                 'stream': False,
                 'format': 'json'  # Request JSON output
             }
-            
+
             async with aiohttp.ClientSession(timeout=self.timeout) as session:
                 async with session.post(
                     f'{self.ollama_endpoint}/api/generate',
@@ -477,7 +563,7 @@ Be specific and reference the tool findings in your analysis."""
                     if response.status == 200:
                         data = await response.json()
                         response_text = data.get('response', '')
-                        
+
                         # Parse JSON from response
                         try:
                             return json.loads(response_text)
@@ -487,13 +573,13 @@ Be specific and reference the tool findings in your analysis."""
                             json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', response_text, re.DOTALL)
                             if json_match:
                                 return json.loads(json_match.group(1))
-                            
+
                             # Try to find JSON object in text
                             start = response_text.find('{')
                             end = response_text.rfind('}') + 1
                             if start >= 0 and end > start:
                                 return json.loads(response_text[start:end])
-                            
+
                             logger.warning(f"[LLM] Could not parse JSON from Ollama response")
                             return {'raw_response': response_text}
                     else:
@@ -510,30 +596,30 @@ Be specific and reference the tool findings in your analysis."""
         except Exception as e:
             logger.error(f"[LLM] Ollama API call failed: {e}")
             return None
-    
+
     async def _call_anthropic_api(self, prompt: str) -> Optional[Dict]:
         """
         Call Anthropic Claude API.
-        
+
         Args:
             prompt: Analysis prompt
-        
+
         Returns:
             Parsed JSON response or None
         """
         if not self.anthropic_key:
             logger.warning("[LLM] No Anthropic API key configured")
             return {'error': 'No Anthropic API key configured'}
-        
+
         try:
             logger.info(f"[LLM] Calling Anthropic ({self.anthropic_model})...")
-            
+
             headers = {
                 'anthropic-version': '2023-06-01',
                 'content-type': 'application/json',
                 'x-api-key': self.anthropic_key
             }
-            
+
             payload = {
                 'model': self.anthropic_model,
                 'max_tokens': 2000,
@@ -541,7 +627,7 @@ Be specific and reference the tool findings in your analysis."""
                     {'role': 'user', 'content': prompt}
                 ]
             }
-            
+
             async with aiohttp.ClientSession(timeout=self.timeout) as session:
                 async with session.post(
                     'https://api.anthropic.com/v1/messages',
@@ -551,10 +637,10 @@ Be specific and reference the tool findings in your analysis."""
                     if response.status == 200:
                         data = await response.json()
                         content = data.get('content', [])
-                        
+
                         if content and content[0].get('type') == 'text':
                             text = content[0].get('text', '')
-                            
+
                             # Extract JSON from response
                             try:
                                 # Try to find JSON in response
@@ -565,23 +651,23 @@ Be specific and reference the tool findings in your analysis."""
                                     return json.loads(json_str)
                             except:
                                 pass
-                            
+
                             return {'raw_response': text}
                     else:
                         logger.error(f"[LLM] Anthropic API error: {response.status}")
                         return None
-        
+
         except Exception as e:
             logger.error(f"[LLM] Anthropic API call failed: {e}")
             return None
-    
+
     def _ensure_list(self, value) -> list:
         """
         Ensure value is a list.
-        
+
         Args:
             value: Can be list, int, or anything
-        
+
         Returns:
             List representation
         """
@@ -593,14 +679,14 @@ Be specific and reference the tool findings in your analysis."""
             return []
         else:
             return [value]
-    
+
     def _process_string_categories(self, string_categories) -> Dict:
         """
         Process string_categories - handle both dict and list formats.
-        
+
         Args:
             string_categories: Can be dict or list
-        
+
         Returns:
             Dict with category counts
         """
@@ -620,7 +706,7 @@ Be specific and reference the tool findings in your analysis."""
             return dict(category_counts)
         else:
             return {}
-    
+
     def _prepare_ioc_context(self, ioc: str, ioc_type: str, results: Dict) -> Dict:
         """Prepare investigation results for LLM context."""
         # Extract key findings
@@ -631,13 +717,13 @@ Be specific and reference the tool findings in your analysis."""
             'sources_flagged': results.get('sources_flagged', 0),
             'key_findings': []
         }
-        
+
         # Extract important findings from each source
         sources = results.get('sources', {})
         for source_name, source_data in sources.items():
             if source_data.get('status') == '✓':
                 finding = {'source': source_name}
-                
+
                 # Add relevant data
                 if 'botnet' in source_data:
                     finding['botnet'] = source_data['botnet']
@@ -647,19 +733,19 @@ Be specific and reference the tool findings in your analysis."""
                     finding['threat'] = source_data['threat']
                 if 'detections' in source_data:
                     finding['detections'] = source_data['detections']
-                
+
                 context['key_findings'].append(finding)
-        
+
         return context
-    
+
     async def generate_detection_rules(self, analysis_result: Dict, rule_type: str = 'all') -> Dict:
         """
         Generate detection rules using LLM based on analysis results.
-        
+
         Args:
             analysis_result: File or IOC analysis results
             rule_type: 'kql', 'sigma', 'yara', 'spl', or 'all'
-        
+
         Returns:
             Dict with generated rules for each platform
         """
@@ -669,13 +755,13 @@ Be specific and reference the tool findings in your analysis."""
             ioc_type = analysis_result.get('ioc_type', '')
             filename = analysis_result.get('filename', '')
             sha256 = analysis_result.get('sha256', '')
-            
+
             # Build context
             malware_families = analysis_result.get('malware_families', [])
             threat_score = analysis_result.get('threat_score', 0)
             suspicious_strings = analysis_result.get('suspicious_strings', [])
             registry_keys = analysis_result.get('registry_keys', [])
-            
+
             # Construct prompt
             prompt = f"""You are a detection engineer at  Technologies. Generate detection rules based on this analysis.
 
@@ -706,22 +792,22 @@ Make rules specific to the threat indicators found. Include:
                 response_data = await self._call_ollama_api(prompt)
             else:
                 response_data = await self._call_anthropic_api(prompt)
-            
+
             if response_data:
                 return response_data
             else:
                 # Fallback to basic rules
                 return self._generate_basic_rules(analysis_result)
-        
+
         except Exception as e:
             logger.error(f"[LLM] Rule generation failed: {e}")
             return self._generate_basic_rules(analysis_result)
-    
+
     def _generate_basic_rules(self, analysis_result: Dict) -> Dict:
         """Generate basic rules as fallback."""
         ioc = analysis_result.get('ioc', '')
         ioc_type = analysis_result.get('ioc_type', 'unknown')
-        
+
         rules = {
             'kql': f'DeviceNetworkEvents | where RemoteIP == "{ioc}" or RemoteUrl has "{ioc}"',
             'sigma': f"""title: IOC Detection - {ioc}
@@ -737,5 +823,5 @@ detection:
 }}''',
             'spl': f'index=* ("{ioc}")'
         }
-        
+
         return rules

@@ -19,7 +19,7 @@ class ThreatIntelligence:
     - URLhaus, FeodoTracker, ThreatFox, MalwareBazaar
     - USOM, C2 Trackers, Tor Exit Nodes, SSL Blacklist
     - GreyNoise, Censys, Talos Intelligence, IBM X-Force
-    - Pulsedive, Threatcrowd, Criminal IP, IPQualityScore
+    - Pulsedive, Criminal IP, IPQualityScore
     - Spamhaus, CIRCL, PhishTank, Google Safe Browsing
     """
     
@@ -552,6 +552,48 @@ class ThreatIntelligence:
         except Exception as e:
             logger.error(f"[Tor] Error: {e}")
             return {'status': '⚠', 'error': str(e)}
+
+    async def get_raw_virustotal_report(self, ioc: str, ioc_type: str) -> Dict:
+        """
+        Get the full, raw VirusTotal API v3 report for an IOC, including
+        relationships like communicating files and DNS resolutions.
+
+        Args:
+            ioc: Indicator to check
+            ioc_type: Type (ipv4, domain, url, hash)
+
+        Returns:
+            Raw VirusTotal API JSON response or an error dictionary.
+        """
+        api_key = get_valid_key(self.api_keys, 'virustotal')
+        if not api_key:
+            return {'error': 'No valid VirusTotal API key configured'}
+
+        endpoint_map = {
+            'hash': f'files/{ioc}',
+            'ipv4': f'ip_addresses/{ioc}',
+            'domain': f'domains/{ioc}',
+        }
+        if ioc_type not in endpoint_map:
+            return {'error': f'Unsupported IOC type for raw report: {ioc_type}'}
+
+        # For IPs, we need relationships to get files and domains
+        relationships = "?relationships=communicating_files,downloaded_files,resolutions"
+        url = f"https://www.virustotal.com/api/v3/{endpoint_map[ioc_type]}{relationships if ioc_type == 'ipv4' else ''}"
+
+        try:
+            headers = {'x-apikey': api_key, 'Accept': 'application/json'}
+            async with aiohttp.ClientSession(timeout=self.timeout) as session:
+                async with session.get(url, headers=headers) as response:
+                    if response.status == 200:
+                        return await response.json()
+                    else:
+                        return {'error': f'VirusTotal API returned HTTP {response.status}'}
+        except asyncio.TimeoutError:
+            return {'error': 'Request to VirusTotal API timed out'}
+        except Exception as e:
+            logger.error(f"[VT Raw] Error fetching report for {ioc}: {e}")
+            return {'error': f'An exception occurred: {e}'}
     
     async def check_c2_trackers(self, ioc: str) -> Dict:
         """
@@ -751,7 +793,6 @@ class ThreatIntelligence:
             'censys': {'status': '➖', 'message': 'IP only'},
             'talos': {'status': '➖', 'message': 'IP only'},
             'pulsedive': {'status': '➖', 'message': 'URL/Domain'},
-            'threatcrowd': {'status': '➖', 'message': 'Domain/IP'},
             'criminalip': {'status': '➖', 'message': 'IP only'},
             'ipqualityscore': {'status': '➖', 'message': 'IP only'},
             'spamhaus': {'status': '➖', 'message': 'IP only'},
@@ -796,9 +837,7 @@ class ThreatIntelligence:
             # USOM threat feed (supports IP)
             tasks.append(('usom', self.threat_feeds.check_usom(ioc)))
 
-            # ThreatCrowd (supports IP)
-            tasks.append(('threatcrowd', self.extended.check_threatcrowd(ioc, ioc_type)))
-
+    
             # Also check AlienVault for IPs
             tasks.append(('alienvault', self.check_alienvault(ioc, ioc_type)))
         
@@ -809,7 +848,6 @@ class ThreatIntelligence:
             
             # Extended domain sources
             tasks.append(('pulsedive', self.extended.check_pulsedive(ioc)))
-            tasks.append(('threatcrowd', self.extended.check_threatcrowd(ioc, ioc_type)))
             tasks.append(('circl', self.extended.check_circl(ioc)))
         
         # URL sources
@@ -821,7 +859,6 @@ class ThreatIntelligence:
             # Extended URL sources
             tasks.append(('phishtank', self.extended.check_phishtank(ioc)))
             tasks.append(('pulsedive', self.extended.check_pulsedive(ioc)))
-            tasks.append(('threatcrowd', self.extended.check_threatcrowd(ioc, 'domain')))
         
         # Hash sources
         if ioc_type in ['md5', 'sha1', 'sha256', 'hash']:
