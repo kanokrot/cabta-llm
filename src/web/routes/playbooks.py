@@ -59,3 +59,23 @@ async def run_playbook(request: Request, playbook_id: str, body: PlaybookRunRequ
         raise HTTPException(404, str(e))
     except Exception as e:
         raise HTTPException(500, f"Playbook execution failed: {str(e)}")
+
+class PlaybookApprovalRequest(BaseModel):
+    approved: bool
+    comment: str = ""
+    approved_by: str = "unknown"
+
+
+@router.post('/sessions/{session_id}/approve')
+async def approve_playbook_step(request: Request, session_id: str, body: PlaybookApprovalRequest):
+    """Approve or reject a pending playbook approval checkpoint."""
+    engine = request.app.state.playbook_engine
+    if engine is None:
+        raise HTTPException(503, "Playbook engine not initialized")
+    try:
+        result_session_id = await engine.execute_from_step(session_id, body.approved, body.approved_by)
+        return {"success": True, "session_id": result_session_id}
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+    except Exception as e:
+        raise HTTPException(500, f"Playbook resume failed: {str(e)}")

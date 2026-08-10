@@ -359,6 +359,8 @@ class CorrelationEngine:
         """Extract IOCs from each finding independently."""
         result: List[Dict[str, Set[str]]] = []
         for finding in findings:
+            if isinstance(finding, str):
+                finding = {"text": finding}
             text = self._finding_to_text(finding)
             iocs = self._extract_iocs_from_text(text)
             if isinstance(finding.get("result"), dict):
