@@ -26,6 +26,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 # Import threat intel for enrichment
 from ..integrations.threat_intel import ThreatIntelligence
+from ..integrations.ticketing import create_incident_ticket
 
 
 logger = logging.getLogger(__name__)
@@ -271,6 +272,71 @@ def safe_evaluate_condition(condition: str, context: Dict) -> bool:
 
 
 _VERDICT_SEVERITY = {"MALICIOUS": 4, "PHISHING": 3, "SUSPICIOUS": 2, "SPAM": 1, "CLEAN": 0}
+
+
+def _is_malicious_result(item) -> bool:
+    """Check whether a single for_each iteration result indicates malicious.
+    Tolerates MCP-wrapped results ({"result": {...}}), plain dicts, and
+    error dicts (treated as not malicious). Recognizes two shapes: a
+    top-level "malicious" boolean (blocklist_check, feodo_tracker_check),
+    and MalwareBazaar's raw abuse.ch passthrough shape (query_status ==
+    "ok" with "data" means a known-malware match). Read-only, never raises."""
+    if not isinstance(item, dict):
+        return False
+    if "error" in item:
+        return False
+    inner = item.get("result", item)
+    if not isinstance(inner, dict):
+        return False
+    if inner.get("malicious") is True:
+        return True
+    # MalwareBazaar raw-passthrough shape: no "malicious" key,
+    # instead query_status == "ok" means a known-malware match.
+    if inner.get("query_status") == "ok" and inner.get("data"):
+        return True
+    return False
+
+
+def _aggregate_malicious_flag(results_list) -> bool:
+    """Scan a for_each step's iteration_results for any item whose
+    unwrapped tool result indicates malicious (see ``_is_malicious_result``
+    for the recognized shapes). Read-only, never raises."""
+    if not isinstance(results_list, list):
+        return False
+    return any(_is_malicious_result(item) for item in results_list)
+
+
+def _collect_malicious_iocs(context: Dict) -> List[str]:
+    """Scan context for for_each steps whose ``{step}_any_malicious`` flag
+    is True, and return the flat list of IOC values (from the matching
+    ``{step}_items`` list) whose corresponding entry in ``{step}_results``
+    individually tests positive for malicious (see ``_is_malicious_result``).
+    Matches each iteration result to its source item by index (zipping to
+    the shorter of the two lists on length mismatch). Deduplicates the
+    returned list, preserving order of first occurrence. Read-only, never
+    raises, returns [] on any mismatch or missing data."""
+    matched: List[str] = []
+    seen = set()
+    try:
+        for key, val in context.items():
+            if not key.endswith("_any_malicious") or val is not True:
+                continue
+            step_name = key[: -len("_any_malicious")]
+            results = context.get(f"{step_name}_results")
+            items = context.get(f"{step_name}_items")
+            if not isinstance(results, list) or not isinstance(items, list):
+                continue
+            for result, item in zip(results, items):
+                if not _is_malicious_result(result):
+                    continue
+                if item in seen:
+                    continue
+                seen.add(item)
+                matched.append(item)
+    except Exception as exc:
+        logger.debug("[PLAYBOOK] _collect_malicious_iocs failed: %s", exc)
+        return []
+    return matched
 
 
 def _find_highest_verdict(context: Dict) -> Optional[str]:
@@ -1146,6 +1212,8 @@ class PlaybookEngine:
 
                     context[f"{current_step.name}_results"] = iteration_results
                     context["last_result"] = iteration_results
+                    context[f"{current_step.name}_any_malicious"] = _aggregate_malicious_flag(iteration_results)
+                    context[f"{current_step.name}_items"] = items
 
                     # Determine success
                     has_error = any("error" in r for r in iteration_results if isinstance(r, dict))
@@ -1211,6 +1279,27 @@ class PlaybookEngine:
             )
             if highest_verdict:
                 summary += f" — highest verdict: {highest_verdict}"
+
+            ticket_verdicts = self.agent_loop.config.get("ticketing", {}).get(
+                "create_on_verdict", ["MALICIOUS", "SUSPICIOUS"],
+            )
+            if highest_verdict in ticket_verdicts and session_id:
+                malicious_iocs = _collect_malicious_iocs(context)
+                for ioc in malicious_iocs:
+                    try:
+                        ticket_job_result = {
+                            "ioc": ioc,
+                            "verdict": highest_verdict,
+                            "summary": summary,
+                            "recommendations": "",
+                        }
+                        create_incident_ticket(ticket_job_result, session_id)
+                    except Exception as e:
+                        logger.error(
+                            "[PLAYBOOK] Failed to create incident ticket for %s: %s",
+                            ioc, e,
+                        )
+
             self.store.update_session_status(session_id, "completed", summary=summary)
             self.agent_loop._notify(session_id, {"type": "completed", "summary": summary})
             logger.info(
