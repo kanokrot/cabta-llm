@@ -210,7 +210,7 @@ steps:
   - name: block_malicious_indicators
     tool: block_ip
     params:
-      indicators: "{{threatfox_check.malicious_iocs}}"
+      indicators: "{{collected_malicious_iocs}}"
     description: >
       Block confirmed malicious IPs, domains, and hashes at the perimeter.
       Update firewall, proxy, and EDR rules.
@@ -227,7 +227,11 @@ steps:
     tool: correlate_findings
     params:
       ioc_results: "{{extract_incident_iocs}}"
-      threat_intel: "{{threatfox_check}}"
+      threat_intel:
+        ipv4: "{{threatfox_check_ipv4_results}}"
+        domains: "{{threatfox_check_domains_results}}"
+        urls: "{{threatfox_check_urls_results}}"
+        sha256: "{{threatfox_check_sha256_results}}"
       network_analysis:
         zeek: "{{zeek_log_analysis}}"
         suricata: "{{suricata_alert_analysis}}"
@@ -269,7 +273,11 @@ steps:
   - name: generate_detection_rules
     tool: generate_rules
     params:
-      analysis_result: "{{threatfox_check}}"
+      analysis_result:
+        ipv4: "{{threatfox_check_ipv4_results}}"
+        domains: "{{threatfox_check_domains_results}}"
+        urls: "{{threatfox_check_urls_results}}"
+        sha256: "{{threatfox_check_sha256_results}}"
       iocs: "{{extract_incident_iocs}}"
       rule_types:
         - sigma

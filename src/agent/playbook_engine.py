@@ -785,7 +785,9 @@ class PlaybookEngine:
             steps[0], 0, case_id,
         )
 
-    async def execute_from_step(self, session_id: str, approved: bool) -> str:
+    async def execute_from_step(
+        self, session_id: str, approved: bool, approved_by: str = "unknown",
+    ) -> str:
         """Resume a playbook session paused at an approval checkpoint.
 
         Loads the context + pending step persisted (via
@@ -860,7 +862,7 @@ class PlaybookEngine:
                 requires_approval=True,
                 before_state=params,
                 after_state=result,
-                approved_by=metadata.get("approver"),
+                approved_by=approved_by,
                 status=action_status,
             )
             if self.notification_manager:
@@ -898,7 +900,7 @@ class PlaybookEngine:
                 actor="human",
                 requires_approval=True,
                 before_state=self._interpolate_params(pending_step.params, context),
-                approved_by=metadata.get("approver"),
+                approved_by=approved_by,
                 status="rejected",
             )
             next_step_name = pending_step.on_failure
@@ -1265,6 +1267,8 @@ class PlaybookEngine:
                     next_step_name = (
                         current_step.on_success if success else current_step.on_failure
                     )
+
+                context["collected_malicious_iocs"] = _collect_malicious_iocs(context)
 
                 # Resolve the next step
                 current_step = self._resolve_next(
