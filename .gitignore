@@ -94,6 +94,7 @@ temp_*.py
 scripts/adhoc/
 data/simulated_actions/
 output.html
-
+fix_incident_response_playbook.py
 
 data/tickets/*.db
+
