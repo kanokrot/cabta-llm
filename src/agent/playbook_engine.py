@@ -874,7 +874,40 @@ class PlaybookEngine:
                     )
                     return session_id
 
-                # Evaluate condition
+                # Pure decision/branch step: มี condition แต่ไม่มี tool/action/for_each เลย
+                # แปลว่าเป็น branch node ล้วน ๆ (if/then/else) ไม่ใช่ tool ที่มี precondition
+                # ต้อง resolve ทันทีจากผลของ condition โดยไม่ตกไป execute เป็น tool call
+                if (current_step.condition and not current_step.tool
+                        and not current_step.action and not current_step.for_each):
+                    decision_result = self.evaluate_condition(current_step.condition, context)
+                    next_step_name = (
+                        current_step.on_success if decision_result else current_step.on_failure
+                    )
+                    logger.info(
+                        "[PLAYBOOK] Decision step '%s': condition=%s -> next='%s'",
+                        current_step.name, decision_result, next_step_name,
+                    )
+                    self.store.add_step(
+                        session_id=session_id,
+                        step_number=step_number,
+                        step_type="decision",
+                        content=(
+                            f"{current_step.description or current_step.name}: "
+                            f"condition evaluated to {decision_result}"
+                        ),
+                        tool_name="",
+                        tool_params="",
+                        tool_result=json.dumps({"decision": decision_result}, default=str),
+                        duration_ms=0,
+                    )
+                    context[current_step.name] = {"decision": decision_result}
+                    context["last_result"] = context[current_step.name]
+                    current_step = self._resolve_next(
+                        next_step_name, step_map, steps, step_number,
+                    )
+                    continue
+
+                # Evaluate condition (gate สำหรับ step ที่มี tool ควบคู่กับ condition -- ของเดิม)
                 if current_step.condition:
                     if not self.evaluate_condition(current_step.condition, context):
                         logger.debug(

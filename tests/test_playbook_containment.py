@@ -7,9 +7,12 @@ Covers P0.2: playbook_engine -> agent_loop.run_tool() -> tool_registry.execute_l
 """
 
 import asyncio
+import os
+import tempfile
 import unittest
 from unittest.mock import MagicMock
 
+from src.agent.agent_store import AgentStore
 from src.agent.tool_registry import ToolRegistry
 from src.agent.agent_loop import AgentLoop
 from src.agent.playbook_engine import PlaybookEngine, PlaybookStep
@@ -99,6 +102,110 @@ class TestPlaybookContainmentChain(unittest.TestCase):
             )
         )
         self.assertIsInstance(result, dict)
+
+
+class TestPlaybookPureDecisionStepRouting(unittest.TestCase):
+    """Regression coverage for a pure decision/branch step (condition with
+    if/then/else but no tool/action/for_each) being routed correctly by
+    ``_run_step_loop``, instead of falling through to a tool-call attempt or
+    inverting on_success/on_failure."""
+
+    def setUp(self):
+        """Real ToolRegistry + real AgentLoop + real AgentStore (temp SQLite
+        file), so step routing is asserted against actual persisted DB rows."""
+        fd, self.db_path = tempfile.mkstemp(suffix=".db")
+        os.close(fd)
+        self.agent_store = AgentStore(db_path=self.db_path)
+
+        self.tool_registry = ToolRegistry()
+        self.tool_registry.register_default_tools({})
+
+        self.agent_loop = AgentLoop(
+            config={},
+            tool_registry=self.tool_registry,
+            agent_store=self.agent_store,
+            llm_analyzer=None,
+            mcp_client=None,
+        )
+
+        self.engine = PlaybookEngine(self.agent_loop, self.agent_store)
+
+        steps = [
+            {
+                "name": "evaluate_severity",
+                "condition": {
+                    "if": "score > 50",
+                    "then": "high_severity_path",
+                    "else": "low_severity_path",
+                },
+                "description": "Branch on severity score",
+            },
+            {
+                "name": "high_severity_path",
+                "action": "final_answer",
+                "description": "Handled as high severity",
+                "on_success": "__end__",
+            },
+            {
+                "name": "low_severity_path",
+                "action": "final_answer",
+                "description": "Handled as low severity",
+                "on_success": "__end__",
+            },
+        ]
+        self.engine._cache["test_decision_routing"] = {
+            "id": "test_decision_routing",
+            "name": "Test Decision Routing",
+            "steps": steps,
+            "_parsed_steps": [PlaybookStep.from_dict(s) for s in steps],
+            "source": "test",
+        }
+
+    def tearDown(self):
+        try:
+            os.remove(self.db_path)
+        except OSError:
+            pass
+
+    def test_pure_decision_step_true_routes_to_on_success(self):
+        session_id = asyncio.run(
+            self.engine.execute("test_decision_routing", {"score": 80})
+        )
+
+        recorded_steps = self.agent_store.get_steps(session_id)
+        step_contents = [s.get("content", "") for s in recorded_steps]
+
+        self.assertTrue(
+            any("Handled as high severity" in c for c in step_contents),
+            f"Expected the high-severity (on_success) step to execute, got steps: {step_contents}",
+        )
+        self.assertFalse(
+            any("Handled as low severity" in c for c in step_contents),
+            f"Should not have taken the low-severity (on_failure) branch, got steps: {step_contents}",
+        )
+
+        decision_steps = [s for s in recorded_steps if s.get("step_type") == "decision"]
+        self.assertEqual(len(decision_steps), 1)
+
+    def test_pure_decision_step_false_routes_to_on_failure(self):
+        session_id = asyncio.run(
+            self.engine.execute("test_decision_routing", {"score": 10})
+        )
+
+        recorded_steps = self.agent_store.get_steps(session_id)
+        step_contents = [s.get("content", "") for s in recorded_steps]
+
+        self.assertTrue(
+            any("Handled as low severity" in c for c in step_contents),
+            f"Expected the low-severity (on_failure) step to execute, got steps: {step_contents}",
+        )
+        self.assertFalse(
+            any("Handled as high severity" in c for c in step_contents),
+            f"Should not have taken the high-severity (on_success) branch, got steps: {step_contents}",
+        )
+
+        decision_steps = [s for s in recorded_steps if s.get("step_type") == "decision"]
+        self.assertEqual(len(decision_steps), 1)
 
 
 if __name__ == "__main__":
