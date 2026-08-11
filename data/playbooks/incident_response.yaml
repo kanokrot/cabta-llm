@@ -39,7 +39,7 @@ steps:
 
   - name: hash_threat_check
     tool: mcp:threat_intel_tools/malwarebazaar_hash_lookup
-    for_each: "extract_incident_iocs.iocs.sha256"
+    for_each: "extract_incident_iocs.iocs.hashes.sha256"
     params:
       hash_value: "{{item}}"
     description: Check hashes in MalwareBazaar - is it known malware?
@@ -116,7 +116,7 @@ steps:
 
   - name: threatfox_check_sha256
     tool: mcp:threat_intel_tools/threatfox_ioc_lookup
-    for_each: "extract_incident_iocs.iocs.sha256"
+    for_each: "extract_incident_iocs.iocs.hashes.sha256"
     params:
       indicator: "{{item}}"
     description: Check SHA256 hash IOCs in ThreatFox
@@ -151,7 +151,7 @@ steps:
 
   - name: malwoverview_triage
     tool: mcp:malwoverview/malwoverview_hash_lookup
-    for_each: "extract_incident_iocs.iocs.sha256"
+    for_each: "extract_incident_iocs.iocs.hashes.sha256"
     params:
       hash_value: "{{item}}"
     description: In-depth hash intelligence with Malwoverview
@@ -166,7 +166,7 @@ steps:
 
   - name: ioc_circl_misp
     tool: mcp:free-osint/circl_misp_feed_check
-    for_each: "extract_incident_iocs.iocs.sha256"
+    for_each: "extract_incident_iocs.iocs.hashes.sha256"
     params:
       ioc: "{{item}}"
     description: CIRCL MISP hashlookup check - is it a known file?
