@@ -7,6 +7,7 @@ api_keys:
   hybrid_analysis: ""     # https://www.hybrid-analysis.com/my-account?tab=api-key
   greynoise: ""           # https://viz.greynoise.io/account/api-key
   urlscan: ""             # https://urlscan.io/user/profile/
+  threatfox: ""           # https://auth.abuse.ch/
 
 # LLM Configuration (Optional - for AI-powered analysis)
 llm:

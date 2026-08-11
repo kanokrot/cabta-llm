@@ -21,12 +21,25 @@ from datetime import datetime, timezone
 
 from mcp.server.fastmcp import FastMCP
 
+from ..utils.config import load_config
+from ..utils.api_key_validator import get_valid_key
+
 logger = logging.getLogger(__name__)
 
 mcp = FastMCP("malwoverview")
 
 TIMEOUT = 20
 USER_AGENT = "BlueTeamAssistant-Malwoverview/1.0"
+
+# ThreatFox now requires an Auth-Key header on every request. Read the
+# same 'threatfox' / 'abusech' key from config.yaml that
+# threat_intel_tools.py and src/integrations/threat_intel.py use, so all
+# code paths stay in sync. Non-fatal if config.yaml is missing/unreadable.
+try:
+    _API_KEYS = (load_config() or {}).get('api_keys', {})
+except Exception as _cfg_exc:
+    logger.warning("[MCP] Failed to load config.yaml for API keys: %s", _cfg_exc)
+    _API_KEYS = {}
 
 # ---------------------------------------------------------------------------
 # HTTP helpers
@@ -45,17 +58,20 @@ def _http_get(url: str, timeout: int = TIMEOUT) -> str:
         return json.dumps({"error": str(e)})
 
 
-def _http_post_json(url: str, data: dict, timeout: int = TIMEOUT) -> str:
+def _http_post_json(url: str, data: dict, timeout: int = TIMEOUT, extra_headers: dict = None) -> str:
     """Safe HTTP POST with JSON body."""
     try:
         body = json.dumps(data).encode("utf-8")
+        headers = {
+            "User-Agent": USER_AGENT,
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        }
+        if extra_headers:
+            headers.update(extra_headers)
         req = urllib.request.Request(
             url, data=body,
-            headers={
-                "User-Agent": USER_AGENT,
-                "Content-Type": "application/json",
-                "Accept": "application/json",
-            },
+            headers=headers,
             method="POST",
         )
         with urllib.request.urlopen(req, timeout=timeout) as resp:
@@ -154,10 +170,12 @@ def _query_urlhaus_host(host: str) -> dict:
 
 def _query_threatfox_ioc(ioc: str) -> dict:
     """Query ThreatFox for an IOC."""
+    api_key = get_valid_key(_API_KEYS, 'threatfox') or get_valid_key(_API_KEYS, 'abusech')
+    auth_headers = {"Auth-Key": api_key} if api_key else None
     raw = _http_post_json(THREATFOX_API, {
         "query": "search_ioc",
         "search_term": ioc,
-    })
+    }, extra_headers=auth_headers)
     try:
         return json.loads(raw)
     except json.JSONDecodeError:

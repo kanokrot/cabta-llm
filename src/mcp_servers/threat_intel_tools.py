@@ -30,9 +30,9 @@ mcp = FastMCP("threat-intel")
 
 TIMEOUT = 8
 
-# ThreatFox works without a key, but abuse.ch rate-limits anonymous
-# requests harder and can return 401 for some queries. Read the same
-# 'threatfox' / 'abusech' key from config.yaml that
+# ThreatFox now requires an Auth-Key header on every request (abuse.ch
+# returns 401 Unauthorized without one). Read the same 'threatfox' /
+# 'abusech' key from config.yaml that
 # src/integrations/threat_intel.py's check_threatfox() uses, so both
 # code paths stay in sync. Non-fatal if config.yaml is missing/unreadable.
 try:
