@@ -2,15 +2,13 @@
 threat_intel_tools.py
 Threat Intelligence MCP Server - Free threat intel feeds via MCP.
 
-Uses ONLY free, no-API-key-required services:
-  - abuse.ch (URLhaus, MalwareBazaar, ThreatFox, Feodo Tracker)
+Uses free threat intel services:
+  - abuse.ch (URLhaus, MalwareBazaar, Feodo Tracker — no API key;
+    ThreatFox — free but requires an Auth-Key, see config.yaml api_keys.threatfox)
   - AlienVault OTX (public pulse data)
   - VirusTotal (public hash lookups - limited)
   - Tor exit node list
   - Known malicious IP/domain blocklists
-
-Usage:
-    python -m src.mcp_servers.threat_intel_tools
 """
 
 import json
@@ -151,11 +149,9 @@ def malwarebazaar_hash_lookup(hash_value: str) -> str:
 @mcp.tool()
 def threatfox_ioc_lookup(indicator: str) -> str:
     """Search ThreatFox (abuse.ch) for IOC information.
-    Free, no API key. Supports IPs, domains, URLs, hashes.
-
-    Args:
-        indicator: IOC to search for (IP, domain, URL, or hash)
-    """
+    Free service; requires an Auth-Key header (configured via config.yaml
+    under api_keys.threatfox or api_keys.abusech). Supports IPs, domains, URLs, hashes.
+"""
     indicator = indicator.strip()
 
     try:
@@ -315,8 +311,8 @@ def recent_malware_samples(limit: int = 20) -> str:
 @mcp.tool()
 def threatfox_recent_iocs(days: int = 1, limit: int = 50) -> str:
     """Get recent IOCs from ThreatFox.
-    Free, no API key. Returns latest reported IOCs.
-
+    Free service; requires an Auth-Key header (configured via config.yaml
+    under api_keys.threatfox or api_keys.abusech). Returns latest reported IOCs.
     Args:
         days: Number of days to look back (1-7)
         limit: Maximum number of IOCs to return
