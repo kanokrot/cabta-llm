@@ -221,6 +221,8 @@ class CorrelationEngine:
         """
         new_iocs = 0
         for idx, finding in enumerate(findings):
+            if isinstance(finding, str):
+                finding = {"text": finding}
             enriched = {
                 "session_id": session_id,
                 "finding_index": idx,
@@ -286,6 +288,8 @@ class CorrelationEngine:
         """Find other sessions sharing IOCs with the given one."""
         my_iocs: Set[str] = set()
         for finding in self._session_findings.get(session_id, []):
+            if isinstance(finding, str):
+                finding = {"text": finding}
             explicit = finding.get("iocs", [])
             if isinstance(explicit, dict):
                 for vals in explicit.values():

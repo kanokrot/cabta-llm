@@ -585,6 +585,51 @@ class TestCorrelationEngine:
         stats = correlation_engine.get_stats()
         assert stats["total_sessions_indexed"] == 0
 
+    def test_add_findings_handles_string_finding(self, correlation_engine):
+        """Ensure add_findings normalizes string findings to dicts without crashing."""
+        findings = [
+            {"tool": "vt", "ips": ["8.8.8.8"], "description": "VirusTotal result for an IP."},
+            "A raw string finding about a suspicious IP 1.2.3.4 observed in logs.",
+            {"tool": "suricata", "domains": ["test.com"]},
+        ]
+        try:
+            new_count = correlation_engine.add_findings("session_with_str", findings)
+            # Should index IOCs from both dict and string findings
+            assert new_count > 1
+        except Exception as e:
+            pytest.fail(f"add_findings crashed with a string in the findings list: {e}")
+
+        # Verify the IOC from the raw string was indexed correctly
+        info = correlation_engine.correlate_ioc("1.2.3.4")
+        assert info["seen_count"] >= 1
+        assert "session_with_str" in info["sessions"]
+
+    def test_find_related_sessions_handles_string_finding(self, correlation_engine):
+        """Ensure find_related_sessions works when some findings are strings."""
+        # This session has a raw string finding. The bug was that iterating over this
+        # session's findings inside find_related_sessions would crash.
+        findings1 = [
+            {"tool": "tool_a", "iocs": ["1.1.1.1", "shared-domain.com"]},
+            "A raw string that contains no iocs, just text",
+        ]
+        # This session shares an IOC and is what we expect to find.
+        findings2 = [
+            {"tool": "tool_b", "iocs": ["shared-domain.com", "2.2.2.2"]},
+        ]
+        correlation_engine.add_findings("sess_one_with_str", findings1)
+        correlation_engine.add_findings("sess_two_normal", findings2)
+
+        # This call is the one that would crash. We are looking for sessions related
+        # to the one that contains a raw string finding.
+        try:
+            related_sessions = correlation_engine.find_related_sessions("sess_one_with_str")
+        except Exception as e:
+            pytest.fail(f"find_related_sessions crashed with a string in the findings list: {e}")
+
+        assert len(related_sessions) == 1
+        assert related_sessions[0]["session_id"] == "sess_two_normal"
+        assert "shared-domain.com" in related_sessions[0]["shared_iocs"]
+
 
 # ====================================================================== #
 #  5. InvestigationMemory

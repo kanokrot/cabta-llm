@@ -1287,13 +1287,15 @@ class PlaybookEngine:
             ticket_verdicts = self.agent_loop.config.get("ticketing", {}).get(
                 "create_on_verdict", ["MALICIOUS", "SUSPICIOUS"],
             )
-            if highest_verdict in ticket_verdicts and session_id:
-                malicious_iocs = _collect_malicious_iocs(context)
+            malicious_iocs = context.get("collected_malicious_iocs") or _collect_malicious_iocs(context)
+            should_ticket = (highest_verdict in ticket_verdicts) or bool(malicious_iocs)
+            if should_ticket and session_id:
+                ticket_verdict = highest_verdict or "MALICIOUS"
                 for ioc in malicious_iocs:
                     try:
                         ticket_job_result = {
                             "ioc": ioc,
-                            "verdict": highest_verdict,
+                            "verdict": ticket_verdict,
                             "summary": summary,
                             "recommendations": "",
                         }

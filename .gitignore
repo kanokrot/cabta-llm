@@ -98,3 +98,5 @@ fix_incident_response_playbook.py
 
 data/tickets/*.db
 
+*.snapshot.json
+poll_snapshot*.json

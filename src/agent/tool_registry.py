@@ -703,12 +703,31 @@ class ToolRegistry:
         # -------------------------------------------------------------- #
         # 9. correlate_findings - Cross-correlate analysis findings
         # -------------------------------------------------------------- #
-        async def _correlate_findings(findings_text: str, **_kw) -> Dict:
+        async def _correlate_findings(
+            ioc_results: str = None,
+            threat_intel: str = None,
+            network_analysis: str = None,
+            log_search: str = None,
+            timeline: str = None,
+            **_kw,
+        ) -> Dict:
             """Correlate findings to identify related IOCs and MITRE ATT&CK TTPs."""
             try:
                 from ..agent.correlation import CorrelationEngine
+
+                findings = []
+                for label, raw in [
+                    ("ioc_results", ioc_results),
+                    ("threat_intel", threat_intel),
+                    ("network_analysis", network_analysis),
+                    ("log_search", log_search),
+                    ("timeline", timeline),
+                ]:
+                    if raw:
+                        findings.append({"tool": label, "text": str(raw)})
+
                 engine = CorrelationEngine()
-                result = engine.correlate(findings_text)
+                result = engine.correlate(findings)
                 return result
             except Exception as e:
                 return {"error": f"Correlation failed: {e}"}
@@ -716,18 +735,35 @@ class ToolRegistry:
         self.register_local_tool(
             name="correlate_findings",
             description=(
-                "Cross-correlate analysis findings to identify related IOCs, "
-                "MITRE ATT&CK TTP patterns, and severity assessments."
+                "Cross-correlate analysis findings from multiple sources (IOC lookups, "
+                "threat intel, network analysis, logs, and timelines) to identify "
+                "related IOCs, MITRE ATT&CK TTPs, and compute an overall severity assessment."
             ),
             parameters={
                 "type": "object",
                 "properties": {
-                    "findings_text": {
+                    "ioc_results": {
                         "type": "string",
-                        "description": "Text containing analysis findings to correlate.",
+                        "description": "Stringified list/dict of IOC investigation results.",
+                    },
+                    "threat_intel": {
+                        "type": "string",
+                        "description": "Stringified list/dict of threat intelligence lookup results.",
+                    },
+                    "network_analysis": {
+                        "type": "string",
+                        "description": "Stringified list/dict of network analysis results (PCAPs, flows).",
+                    },
+                    "log_search": {
+                        "type": "string",
+                        "description": "Stringified list/dict of log search results (SIEM, EDR).",
+                    },
+                    "timeline": {
+                        "type": "string",
+                        "description": "Stringified list/dict of host or event timeline results.",
                     },
                 },
-                "required": ["findings_text"],
+                "required": [],
             },
             category="analysis",
             executor=_correlate_findings,
