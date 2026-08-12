@@ -1288,7 +1288,7 @@ class PlaybookEngine:
                 "create_on_verdict", ["MALICIOUS", "SUSPICIOUS"],
             )
             malicious_iocs = context.get("collected_malicious_iocs") or _collect_malicious_iocs(context)
-            should_ticket = (highest_verdict in ticket_verdicts) or bool(malicious_iocs)
+            should_ticket = highest_verdict in ticket_verdicts
             if should_ticket and session_id:
                 ticket_verdict = highest_verdict or "MALICIOUS"
                 for ioc in malicious_iocs:
