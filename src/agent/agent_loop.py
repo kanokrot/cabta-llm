@@ -214,7 +214,7 @@ class AgentLoop:
         logger.info(f"[AGENT] Investigation started: {session_id} - {goal[:80]}")
         return session_id
 
-    async def approve_action(self, session_id: str) -> bool:
+    async def approve_action(self, session_id: str, approved_by: str = "unknown") -> bool:
         """Approve the pending action so the loop can resume."""
         state = self._active_sessions.get(session_id)
         if state is None or state.pending_approval is None:
@@ -223,10 +223,11 @@ class AgentLoop:
         evt = self._approval_events.get(session_id)
         if evt:
             state.pending_approval["approved"] = True
+            state.pending_approval["approved_by"] = approved_by
             evt.set()
         return True
 
-    async def reject_action(self, session_id: str) -> bool:
+    async def reject_action(self, session_id: str, approved_by: str = "unknown") -> bool:
         """Reject the pending action; the loop will skip it and re-think."""
         state = self._active_sessions.get(session_id)
         if state is None or state.pending_approval is None:
@@ -234,6 +235,7 @@ class AgentLoop:
         evt = self._approval_events.get(session_id)
         if evt:
             state.pending_approval["approved"] = False
+            state.pending_approval["approved_by"] = approved_by
             evt.set()
         return True
 
@@ -532,7 +534,7 @@ class AgentLoop:
                     })
 
                     # Wait until approve/reject/cancel
-                    approved = await self._wait_for_approval(session_id, state)
+                    approved, approved_by = await self._wait_for_approval(session_id, state)
                     if state.is_terminal():
                         break
 
@@ -544,6 +546,7 @@ class AgentLoop:
                         actor='human',
                         requires_approval=True,
                         before_state=decision.get('params', {}),
+                        approved_by=approved_by,
                         status='approved' if approved else 'rejected',
                     )
 
@@ -908,14 +911,14 @@ class AgentLoop:
 
     async def _wait_for_approval(
         self, session_id: str, state: AgentState,
-    ) -> bool:
+    ) -> tuple:
         """Block until the analyst approves/rejects or the session is cancelled.
 
-        Returns True if approved, False if rejected or cancelled.
+        Returns (approved: bool, approved_by: str).
         """
         evt = self._approval_events.get(session_id)
         if evt is None:
-            return False
+            return False, "unknown"
 
         evt.clear()
         # Wait up to 30 minutes for human response
@@ -924,12 +927,12 @@ class AgentLoop:
         except asyncio.TimeoutError:
             state.errors.append("Approval timed out (30 min)")
             state.phase = AgentPhase.FAILED
-            return False
+            return False, "unknown"
 
         approval = state.clear_approval()
         if approval is None:
-            return False
-        return approval.get("approved", False)
+            return False, "unknown"
+        return approval.get("approved", False), approval.get("approved_by", "unknown")
 
     # ================================================================== #
     #  Summary generation

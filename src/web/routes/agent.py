@@ -23,6 +23,7 @@ class InvestigateRequest(BaseModel):
 class ApprovalRequest(BaseModel):
     approved: bool
     comment: str = ""
+    approved_by: str = "unknown" 
 
 
 def _require_agent_loop(request: Request):
@@ -168,9 +169,9 @@ async def approve_action(request: Request, session_id: str, body: ApprovalReques
     """Approve or reject a pending action."""
     agent_loop = _require_agent_loop(request)
     if body.approved:
-        success = await agent_loop.approve_action(session_id)
+        success = await agent_loop.approve_action(session_id, approved_by=body.approved_by)
     else:
-        success = await agent_loop.reject_action(session_id)
+        success = await agent_loop.reject_action(session_id, approved_by=body.approved_by)
     return {"success": success}
 
 
