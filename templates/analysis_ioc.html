@@ -1229,16 +1229,16 @@
         if (!data) return c2;
         /* Check top-level */
         if (data.is_c2) c2.is_c2 = true;
-        if (data.c2_frameworks && Array.isArray(data.c2_frameworks)) { c2.frameworks = c2.frameworks.concat(data.c2_frameworks); c2.is_c2 = true; }
-        if (data.c2_indicators && Array.isArray(data.c2_indicators)) { c2.indicators = c2.indicators.concat(data.c2_indicators); c2.is_c2 = true; }
+        if (data.c2_frameworks && Array.isArray(data.c2_frameworks) && data.c2_frameworks.length > 0) { c2.frameworks = c2.frameworks.concat(data.c2_frameworks); c2.is_c2 = true; }
+        if (data.c2_indicators && Array.isArray(data.c2_indicators) && data.c2_indicators.length > 0) { c2.indicators = c2.indicators.concat(data.c2_indicators); c2.is_c2 = true; }
         /* Check in sources */
         if (data.sources && typeof data.sources === 'object') {
             Object.keys(data.sources).forEach(function(sn) {
                 var sd = data.sources[sn];
                 if (!sd) return;
                 if (sd.is_c2) c2.is_c2 = true;
-                if (sd.c2_frameworks && Array.isArray(sd.c2_frameworks)) { c2.frameworks = c2.frameworks.concat(sd.c2_frameworks); c2.is_c2 = true; }
-                if (sd.c2_indicators && Array.isArray(sd.c2_indicators)) { c2.indicators = c2.indicators.concat(sd.c2_indicators); c2.is_c2 = true; }
+                if (sd.c2_frameworks && Array.isArray(sd.c2_frameworks) && sd.c2_frameworks.length > 0) { c2.frameworks = c2.frameworks.concat(sd.c2_frameworks); c2.is_c2 = true; }
+                if (sd.c2_indicators && Array.isArray(sd.c2_indicators) && sd.c2_indicators.length > 0) { c2.indicators = c2.indicators.concat(sd.c2_indicators); c2.is_c2 = true; }
             });
         }
         /* Deduplicate */
