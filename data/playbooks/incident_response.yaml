@@ -31,7 +31,7 @@ steps:
     description: Extract all IOCs from the incident description (IP, domain, hash, URL, email)
 
   - name: timeline_analysis
-    tool: mcp:forensics-tools/timeline_csv_parse
+    tool: mcp:forensics_tools/timeline_csv_parse
     params:
       source: "{{incident_targets}}"
       timerange: 72h
@@ -52,35 +52,35 @@ steps:
     description: Check IPs in blocklists
 
   - name: ip_geoip
-    tool: mcp:osint-tools/geoip_lookup
+    tool: mcp:osint_tools/geoip_lookup
     for_each: "extract_incident_iocs.iocs.ipv4"
     params:
       ip: "{{item}}"
     description: Geographic location information of IPs
 
   - name: domain_whois
-    tool: mcp:osint-tools/whois_lookup
+    tool: mcp:osint_tools/whois_lookup
     for_each: "extract_incident_iocs.iocs.domains"
     params:
       target: "{{item}}"
     description: Domain WHOIS information - registration date and ownership
 
   - name: domain_dns
-    tool: mcp:osint-tools/dns_resolve
+    tool: mcp:osint_tools/dns_resolve
     for_each: "extract_incident_iocs.iocs.domains"
     params:
       domain: "{{item}}"
     description: Domain DNS resolution
 
   - name: incident_dns_lookup
-    tool: mcp:network-analysis/dns_lookup
+    tool: mcp:network_tools/dns_lookup
     for_each: "extract_incident_iocs.iocs.domains"
     params:
       domain: "{{item}}"
     description: Query DNS records for domains associated with the incident - A, MX, TXT, NS records
 
   - name: suspicious_port_check
-    tool: mcp:network-analysis/port_check
+    tool: mcp:network_tools/port_check
     for_each: "extract_incident_iocs.iocs.ipv4"
     params:
       ip: "{{item}}"
@@ -136,21 +136,21 @@ steps:
     description: Check whether IPs are Tor exit nodes
 
   - name: zeek_log_analysis
-    tool: mcp:network-analysis/analyze_zeek_logs
+    tool: mcp:network_tools/analyze_zeek_logs
     params:
       target: "{{incident_targets}}"
       iocs: "{{extract_incident_iocs.iocs}}"
     description: Analyze Zeek (Bro) IDS logs - detection of network connections, DNS queries, and file transfers
 
   - name: suricata_alert_analysis
-    tool: mcp:network-analysis/analyze_suricata_alerts
+    tool: mcp:network_tools/analyze_suricata_alerts
     params:
       target: "{{incident_targets}}"
       iocs: "{{extract_incident_iocs.iocs}}"
     description: Analyze Suricata IDS/IPS alerts - signature-based threat detection
 
   - name: malwoverview_triage
-    tool: mcp:malwoverview/malwoverview_hash_lookup
+    tool: mcp:malwoverview_tools/malwoverview_hash_lookup
     for_each: "extract_incident_iocs.iocs.hashes.sha256"
     params:
       hash_value: "{{item}}"
@@ -158,27 +158,27 @@ steps:
 
   # ===== Phase 1b: Free OSINT Enrichment =====
   - name: ip_shodan_internetdb
-    tool: mcp:free-osint/shodan_internetdb_lookup
+    tool: mcp:free_osint_tools/shodan_internetdb_lookup
     for_each: "extract_incident_iocs.iocs.ipv4"
     params:
       ip: "{{item}}"
     description: Check open ports, CVEs, and services for IPs via Shodan InternetDB (FREE)
 
   - name: ioc_circl_misp
-    tool: mcp:free-osint/circl_misp_feed_check
+    tool: mcp:free_osint_tools/circl_misp_feed_check
     for_each: "extract_incident_iocs.iocs.hashes.sha256"
     params:
       ioc: "{{item}}"
     description: CIRCL MISP hashlookup check - is it a known file?
 
   - name: ransomware_activity_check
-    tool: mcp:free-osint/ransomwatch_check
+    tool: mcp:free_osint_tools/ransomwatch_check
     params:
       query: "{{incident_description}}"
     description: Check ransomware group activity with Ransomwatch - is the incident related to ransomware?
 
   - name: domain_hudsonrock_check
-    tool: mcp:free-osint/hudsonrock_check
+    tool: mcp:free_osint_tools/hudsonrock_check
     for_each: "extract_incident_iocs.iocs.domains"
     params:
       domain: "{{item}}"
@@ -202,7 +202,7 @@ steps:
     requires_approval: true
 
   - name: lnk_file_analysis
-    tool: mcp:forensics-tools/parse_lnk_file
+    tool: mcp:forensics_tools/parse_lnk_file
     params:
       target: "{{incident_targets}}"
     description: Analyze Windows LNK files - evidence of lateral movement and user activity
@@ -242,14 +242,14 @@ steps:
 
   # ===== Phase 3: Eradication =====
   - name: forensic_file_analysis
-    tool: mcp:forensics-tools/file_metadata
+    tool: mcp:forensics_tools/file_metadata
     for_each: "extract_incident_iocs.file_paths"
     params:
       file_path: "{{item}}"
     description: Forensic metadata analysis of malicious files
 
   - name: prefetch_analysis
-    tool: mcp:forensics-tools/parse_windows_prefetch
+    tool: mcp:forensics_tools/parse_windows_prefetch
     for_each: "extract_incident_iocs.executables"
     params:
       prefetch_path: "{{item}}"
@@ -258,14 +258,14 @@ steps:
     description: Windows Prefetch analysis - program execution history
 
   - name: event_log_analysis
-    tool: mcp:forensics-tools/analyze_event_log
+    tool: mcp:forensics_tools/analyze_event_log
     params:
       log_source: "{{incident_targets}}"
       event_ids: [4624, 4625, 4648, 4672, 4688, 4697, 4698, 4720, 7045]
     description: Windows Event Log analysis - logins, new services, scheduled tasks
 
   - name: yara_scan
-    tool: mcp:remnux/yara_scan
+    tool: mcp:remnux_tools/yara_scan
     params:
       target_path: "{{incident_targets.suspicious_dir}}"
     description: YARA scan on affected system
@@ -288,7 +288,7 @@ steps:
   - name: quarantine_artifacts
     tool: quarantine_file
     params:
-      targets: "{{forensic_file_analysis.malicious_artifacts}}"
+      file_path: "{{forensic_file_analysis.malicious_artifacts}}"
     description: Quarantine malicious files and artifacts
     requires_approval: true
 
