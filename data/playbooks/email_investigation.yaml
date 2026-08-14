@@ -32,37 +32,37 @@ steps:
 
   # ===== Phase 2: Sender Verification =====
   - name: sender_whois
-    tool: mcp:osint-tools/whois_lookup
+    tool: mcp:osint_tools/whois_lookup
     params:
       target: "{{parse_email.sender_domain}}"
     description: Sender domain WHOIS - registration date, ownership (new domain = suspicious)
 
   - name: sender_email_security
-    tool: mcp:osint-tools/email_security_check
+    tool: mcp:osint_tools/email_security_check
     params:
       domain: "{{parse_email.sender_domain}}"
     description: SPF, DKIM, DMARC check - email spoofing detection
 
   - name: sender_dns
-    tool: mcp:osint-tools/dns_resolve
+    tool: mcp:osint_tools/dns_resolve
     params:
       domain: "{{parse_email.sender_domain}}"
     description: Sender domain DNS records - MX, A, TXT
 
   - name: sender_ssl
-    tool: mcp:osint-tools/ssl_certificate_info
+    tool: mcp:osint_tools/ssl_certificate_info
     params:
       host: "{{parse_email.sender_domain}}"
     description: Sender domain SSL certificate information
 
   - name: sender_subdomains
-    tool: mcp:osint-tools/subdomain_enumerate
+    tool: mcp:osint_tools/subdomain_enumerate
     params:
       domain: "{{parse_email.sender_domain}}"
     description: Sender domain subdomain enumeration - related domains
 
   - name: sender_ip_check
-    tool: mcp:threat-intel-free/blocklist_check
+    tool: mcp:threat_intel_tools/blocklist_check
     params:
       ip: "{{parse_email.sender_ip}}"
     condition:
@@ -70,7 +70,7 @@ steps:
     description: Sender IP blocklist check
 
   - name: sender_ip_geo
-    tool: mcp:osint-tools/geoip_lookup
+    tool: mcp:osint_tools/geoip_lookup
     params:
       ip: "{{parse_email.sender_ip}}"
     condition:
@@ -78,7 +78,7 @@ steps:
     description: Sender IP GeoIP information
 
   - name: sender_feodo
-    tool: mcp:threat-intel-free/feodo_tracker_check
+    tool: mcp:threat_intel_tools/feodo_tracker_check
     params:
       ip: "{{parse_email.sender_ip}}"
     condition:
@@ -86,7 +86,7 @@ steps:
     description: Sender IP Feodo Tracker C2 check
 
   - name: sender_tor
-    tool: mcp:threat-intel-free/tor_exit_node_check
+    tool: mcp:threat_intel_tools/tor_exit_node_check
     params:
       ip: "{{parse_email.sender_ip}}"
     condition:
@@ -95,62 +95,62 @@ steps:
 
   # ===== Phase 2b: Free OSINT Enrichment =====
   - name: sender_hudsonrock
-    tool: mcp:free-osint/hudsonrock_check
+    tool: mcp:free_osint_tools/hudsonrock_check
     params:
       domain: "{{parse_email.sender_domain}}"
     description: HudsonRock info-stealer victim check - have sender domain employees been compromised?
 
   - name: sender_typosquat
-    tool: mcp:free-osint/typosquat_detect
+    tool: mcp:free_osint_tools/typosquat_detect
     params:
       domain: "{{parse_email.sender_domain}}"
     description: Typosquat detection - is the sender domain a fake copy of a legitimate domain?
 
   # ===== Phase 3: URL Analysis =====
   - name: url_openphish
-    tool: mcp:free-osint/openphish_lookup
+    tool: mcp:free_osint_tools/openphish_lookup
     for_each: "extract_email_iocs.urls"
     params:
       url: "{{item}}"
     description: OpenPhish phishing URL feed check
 
   - name: url_urlhaus
-    tool: mcp:threat-intel-free/urlhaus_lookup
+    tool: mcp:threat_intel_tools/urlhaus_lookup
     for_each: "extract_email_iocs.urls"
     params:
       indicator: "{{item}}"
     description: Check URLs in URLhaus
 
   - name: url_malwoverview
-    tool: mcp:malwoverview/malwoverview_url_check
+    tool: mcp:malwoverview_tools/malwoverview_url_check
     for_each: "extract_email_iocs.urls"
     params:
       url: "{{item}}"
     description: URL threat check with Malwoverview
 
   - name: url_headers
-    tool: mcp:osint-tools/http_headers
+    tool: mcp:osint_tools/http_headers
     for_each: "extract_email_iocs.urls"
     params:
       url: "{{item}}"
     description: URL HTTP header analysis - redirect, server information
 
   - name: url_domain_ssl
-    tool: mcp:osint-tools/ssl_certificate_info
+    tool: mcp:osint_tools/ssl_certificate_info
     for_each: "extract_email_iocs.domains"
     params:
       host: "{{item}}"
     description: URL domain SSL certificate check
 
   - name: url_domain_whois
-    tool: mcp:osint-tools/whois_lookup
+    tool: mcp:osint_tools/whois_lookup
     for_each: "extract_email_iocs.domains"
     params:
       target: "{{item}}"
     description: URL domain WHOIS - newly registered domain check
 
   - name: url_domain_dns
-    tool: mcp:osint-tools/dns_resolve
+    tool: mcp:osint_tools/dns_resolve
     for_each: "extract_email_iocs.domains"
     params:
       domain: "{{item}}"
@@ -158,7 +158,7 @@ steps:
 
   # ===== Phase 4: IP Analysis =====
   - name: ip_reputation
-    tool: mcp:threat-intel-free/blocklist_check
+    tool: mcp:threat_intel_tools/blocklist_check
     for_each: "extract_email_iocs.ips"
     params:
       ip: "{{item}}"
@@ -167,7 +167,7 @@ steps:
     description: Blocklist check for IPs in the body
 
   - name: ip_threatfox
-    tool: mcp:threat-intel-free/threatfox_ioc_lookup
+    tool: mcp:threat_intel_tools/threatfox_ioc_lookup
     for_each: "extract_email_iocs.ips"
     params:
       indicator: "{{item}}"
@@ -176,7 +176,7 @@ steps:
     description: ThreatFox check for IPs in the body
 
   - name: ip_geoip
-    tool: mcp:osint-tools/geoip_lookup
+    tool: mcp:osint_tools/geoip_lookup
     for_each: "extract_email_iocs.ips"
     params:
       ip: "{{item}}"
@@ -186,28 +186,28 @@ steps:
 
   # ===== Phase 5: Attachment Analysis =====
   - name: attachment_metadata
-    tool: mcp:forensics-tools/file_metadata
+    tool: mcp:forensics_tools/file_metadata
     for_each: "parse_email.attachments"
     params:
       file_path: "{{item.path}}"
     description: Attachment metadata and hash analysis
 
   - name: attachment_hash_check
-    tool: mcp:threat-intel-free/malwarebazaar_hash_lookup
+    tool: mcp:threat_intel_tools/malwarebazaar_hash_lookup
     for_each: "parse_email.attachments"
     params:
       hash_value: "{{item.sha256}}"
     description: Check attachment hashes in MalwareBazaar
 
   - name: attachment_malwoverview
-    tool: mcp:malwoverview/malwoverview_triage
+    tool: mcp:malwoverview_tools/malwoverview_triage
     for_each: "parse_email.attachments"
     params:
       file_path: "{{item.path}}"
     description: Attachment triage with Malwoverview
 
   - name: attachment_macro_check
-    tool: mcp:remnux/olevba_analyze
+    tool: mcp:remnux_tools/olevba_analyze
     for_each: "parse_email.attachments"
     params:
       file_path: "{{item.path}}"
@@ -216,7 +216,7 @@ steps:
     description: Macro/VBA analysis in Office documents
 
   - name: attachment_ole_objects
-    tool: mcp:remnux/oleobj_extract
+    tool: mcp:remnux_tools/oleobj_extract
     for_each: "parse_email.attachments"
     params:
       file_path: "{{item.path}}"
@@ -225,7 +225,7 @@ steps:
     description: OLE object extraction - embedded files
 
   - name: attachment_pe_check
-    tool: mcp:remnux/pe_analyze
+    tool: mcp:remnux_tools/pe_analyze
     for_each: "parse_email.attachments"
     params:
       file_path: "{{item.path}}"
@@ -234,14 +234,14 @@ steps:
     description: PE file structural analysis
 
   - name: attachment_entropy
-    tool: mcp:remnux/file_entropy
+    tool: mcp:remnux_tools/file_entropy
     for_each: "parse_email.attachments"
     params:
       file_path: "{{item.path}}"
     description: Attachment entropy analysis - packing/encryption detection
 
   - name: attachment_strings
-    tool: mcp:forensics-tools/string_analysis
+    tool: mcp:forensics_tools/string_analysis
     for_each: "parse_email.attachments"
     params:
       file_path: "{{item.path}}"
@@ -249,7 +249,7 @@ steps:
 
   # ===== Phase 6: Comprehensive Threat Intel =====
   - name: threatfox_all
-    tool: mcp:threat-intel-free/threatfox_ioc_lookup
+    tool: mcp:threat_intel_tools/threatfox_ioc_lookup
     for_each: "extract_email_iocs.all_iocs"
     params:
       indicator: "{{item}}"
