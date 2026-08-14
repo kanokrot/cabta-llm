@@ -26,49 +26,49 @@ steps:
 
   # ===== Phase 2: Threat Intel Enrichment =====
   - name: hash_malwarebazaar
-    tool: mcp:threat-intel-free/malwarebazaar_hash_lookup
+    tool: mcp:threat_intel_tools/malwarebazaar_hash_lookup
     for_each: "extract_alert_iocs.hashes"
     params:
       hash_value: "{{item}}"
     description: Check hashes in MalwareBazaar
 
   - name: hash_malwoverview
-    tool: mcp:malwoverview/malwoverview_hash_lookup
+    tool: mcp:malwoverview_tools/malwoverview_hash_lookup
     for_each: "extract_alert_iocs.hashes"
     params:
       hash_value: "{{item}}"
     description: Comprehensive hash intelligence with Malwoverview
 
   - name: url_urlhaus
-    tool: mcp:threat-intel-free/urlhaus_lookup
+    tool: mcp:threat_intel_tools/urlhaus_lookup
     for_each: "extract_alert_iocs.urls"
     params:
       indicator: "{{item}}"
     description: Check URLs in URLhaus
 
   - name: ip_blocklist
-    tool: mcp:threat-intel-free/blocklist_check
+    tool: mcp:threat_intel_tools/blocklist_check
     for_each: "extract_alert_iocs.ips"
     params:
       ip: "{{item}}"
     description: Check IPs in blocklists
 
   - name: ip_feodo
-    tool: mcp:threat-intel-free/feodo_tracker_check
+    tool: mcp:threat_intel_tools/feodo_tracker_check
     for_each: "extract_alert_iocs.ips"
     params:
       ip: "{{item}}"
     description: Check IPs in the Feodo Tracker C2 list
 
   - name: ip_tor
-    tool: mcp:threat-intel-free/tor_exit_node_check
+    tool: mcp:threat_intel_tools/tor_exit_node_check
     for_each: "extract_alert_iocs.ips"
     params:
       ip: "{{item}}"
     description: Tor exit node check
 
   - name: threatfox_all
-    tool: mcp:threat-intel-free/threatfox_ioc_lookup
+    tool: mcp:threat_intel_tools/threatfox_ioc_lookup
     for_each: "extract_alert_iocs.all_iocs"
     params:
       indicator: "{{item}}"
@@ -76,56 +76,56 @@ steps:
 
   # ===== Phase 2b: Free OSINT Enrichment =====
   - name: ip_shodan_internetdb
-    tool: mcp:free-osint/shodan_internetdb_lookup
+    tool: mcp:free_osint_tools/shodan_internetdb_lookup
     for_each: "extract_alert_iocs.ips"
     params:
       ip: "{{item}}"
     description: Check open ports, CVEs, and services for IPs via Shodan InternetDB (FREE, no API key required)
 
   - name: url_openphish
-    tool: mcp:free-osint/openphish_lookup
+    tool: mcp:free_osint_tools/openphish_lookup
     for_each: "extract_alert_iocs.urls"
     params:
       url: "{{item}}"
     description: OpenPhish phishing URL feed check
 
   - name: ioc_circl_misp
-    tool: mcp:free-osint/circl_misp_feed_check
+    tool: mcp:free_osint_tools/circl_misp_feed_check
     for_each: "extract_alert_iocs.all_iocs"
     params:
       ioc: "{{item}}"
     description: CIRCL MISP European CERT threat intel feed check (hashlookup + BGP ranking)
 
   - name: ransomware_check
-    tool: mcp:free-osint/ransomwatch_check
+    tool: mcp:free_osint_tools/ransomwatch_check
     params:
       query: "{{alert_text}}"
     description: Check ransomware group activity and victims via Ransomwatch
 
   # ===== Phase 3: OSINT Enrichment =====
   - name: ip_geoip
-    tool: mcp:osint-tools/geoip_lookup
+    tool: mcp:osint_tools/geoip_lookup
     for_each: "extract_alert_iocs.ips"
     params:
       ip: "{{item}}"
     description: IP GeoIP information - country/city/ISP
 
   - name: domain_whois
-    tool: mcp:osint-tools/whois_lookup
+    tool: mcp:osint_tools/whois_lookup
     for_each: "extract_alert_iocs.domains"
     params:
       target: "{{item}}"
     description: Domain WHOIS information
 
   - name: domain_dns
-    tool: mcp:osint-tools/dns_resolve
+    tool: mcp:osint_tools/dns_resolve
     for_each: "extract_alert_iocs.domains"
     params:
       domain: "{{item}}"
     description: Domain DNS resolution
 
   - name: email_security
-    tool: mcp:osint-tools/email_security_check
+    tool: mcp:osint_tools/email_security_check
     for_each: "extract_alert_iocs.sender_domains"
     params:
       domain: "{{item}}"
