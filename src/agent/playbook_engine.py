@@ -347,6 +347,8 @@ def _find_highest_verdict(context: Dict) -> Optional[str]:
         if key == "verdict" or key.endswith("_verdict"):
             if isinstance(val, str) and val.upper() in _VERDICT_SEVERITY:
                 found.append(val.upper())
+        elif key.endswith("_any_malicious") and val is True:
+            found.append("MALICIOUS")
     if not found:
         return None
     return max(found, key=lambda v: _VERDICT_SEVERITY[v])
