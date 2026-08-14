@@ -20,7 +20,7 @@ steps:
 
   # ===== IP Analysis =====
   - name: geoip
-    tool: mcp:osint-tools/geoip_lookup
+    tool: mcp:osint_tools/geoip_lookup
     params:
       ip: "{{ioc}}"
     condition:
@@ -28,7 +28,7 @@ steps:
     description: GeoIP location and ASN information
 
   - name: reverse_dns
-    tool: mcp:osint-tools/reverse_dns
+    tool: mcp:osint_tools/reverse_dns
     params:
       ip: "{{ioc}}"
     condition:
@@ -36,7 +36,7 @@ steps:
     description: Reverse DNS resolution
 
   - name: feodo_check
-    tool: mcp:threat-intel-free/feodo_tracker_check
+    tool: mcp:threat_intel_tools/feodo_tracker_check
     params:
       ip: "{{ioc}}"
     condition:
@@ -44,7 +44,7 @@ steps:
     description: Feodo Tracker botnet C2 check
 
   - name: tor_check
-    tool: mcp:threat-intel-free/tor_exit_node_check
+    tool: mcp:threat_intel_tools/tor_exit_node_check
     params:
       ip: "{{ioc}}"
     condition:
@@ -52,7 +52,7 @@ steps:
     description: Tor exit node check
 
   - name: blocklist_check
-    tool: mcp:threat-intel-free/blocklist_check
+    tool: mcp:threat_intel_tools/blocklist_check
     params:
       ip: "{{ioc}}"
     condition:
@@ -61,7 +61,7 @@ steps:
 
   # ===== Domain Analysis =====
   - name: whois
-    tool: mcp:osint-tools/whois_lookup
+    tool: mcp:osint_tools/whois_lookup
     params:
       target: "{{ioc}}"
     condition:
@@ -69,7 +69,7 @@ steps:
     description: WHOIS record information
 
   - name: dns_resolve
-    tool: mcp:osint-tools/dns_resolve
+    tool: mcp:osint_tools/dns_resolve
     params:
       domain: "{{ioc}}"
     condition:
@@ -77,7 +77,7 @@ steps:
     description: DNS records
 
   - name: ssl_check
-    tool: mcp:osint-tools/ssl_certificate_info
+    tool: mcp:osint_tools/ssl_certificate_info
     params:
       host: "{{ioc}}"
     condition:
@@ -85,7 +85,7 @@ steps:
     description: SSL certificate information
 
   - name: subdomains
-    tool: mcp:osint-tools/subdomain_enumerate
+    tool: mcp:osint_tools/subdomain_enumerate
     params:
       domain: "{{ioc}}"
     condition:
@@ -94,7 +94,7 @@ steps:
 
   # ===== Free OSINT Enrichment =====
   - name: shodan_ip_check
-    tool: mcp:free-osint/shodan_internetdb_lookup
+    tool: mcp:free_osint_tools/shodan_internetdb_lookup
     params:
       ip: "{{ioc}}"
     condition:
@@ -102,13 +102,13 @@ steps:
     description: Check open ports, CVEs, and services for IP via Shodan InternetDB (FREE)
 
   - name: circl_misp_check
-    tool: mcp:free-osint/circl_misp_feed_check
+    tool: mcp:free_osint_tools/circl_misp_feed_check
     params:
       ioc: "{{ioc}}"
     description: CIRCL MISP European CERT threat intel check
 
   - name: crtsh_check
-    tool: mcp:free-osint/crtsh_subdomain_search
+    tool: mcp:free_osint_tools/crtsh_subdomain_search
     params:
       domain: "{{ioc}}"
     condition:
@@ -117,7 +117,7 @@ steps:
 
   # ===== URL Analysis =====
   - name: openphish_check
-    tool: mcp:free-osint/openphish_lookup
+    tool: mcp:free_osint_tools/openphish_lookup
     params:
       url: "{{ioc}}"
     condition:
@@ -125,14 +125,14 @@ steps:
     description: OpenPhish phishing URL feed check
 
   - name: urlhaus_check
-    tool: mcp:threat-intel-free/urlhaus_lookup
+    tool: mcp:threat_intel_tools/urlhaus_lookup
     params:
       indicator: "{{ioc}}"
     description: Check in URLhaus
 
   # ===== Hash Analysis =====
   - name: malwarebazaar_check
-    tool: mcp:threat-intel-free/malwarebazaar_hash_lookup
+    tool: mcp:threat_intel_tools/malwarebazaar_hash_lookup
     params:
       hash_value: "{{ioc}}"
     condition:
@@ -141,7 +141,7 @@ steps:
 
   # ===== General =====
   - name: threatfox_check
-    tool: mcp:threat-intel-free/threatfox_ioc_lookup
+    tool: mcp:threat_intel_tools/threatfox_ioc_lookup
     params:
       indicator: "{{ioc}}"
     description: Check IOC in ThreatFox

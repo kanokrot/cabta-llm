@@ -19,32 +19,32 @@ input_params:
 steps:
   # ===== Collection =====
   - name: collect_system_info
-    tool: mcp:forensics-tools/system_info
+    tool: mcp:forensics_tools/system_info
     params:
       host: "{{host_identifier}}"
     description: Collect basic host info (hostname, OS, current time, logged-in users)
 
   - name: collect_running_processes
-    tool: mcp:forensics-tools/process_list
+    tool: mcp:forensics_tools/process_list
     params:
       host: "{{host_identifier}}"
     description: Snapshot of currently running processes (volatile data)
 
   - name: collect_network_connections
-    tool: mcp:forensics-tools/netstat_capture
+    tool: mcp:forensics_tools/netstat_capture
     params:
       host: "{{host_identifier}}"
     description: Snapshot of active network connections (volatile data)
 
   - name: collect_event_logs
-    tool: mcp:forensics-tools/event_log_collect
+    tool: mcp:forensics_tools/event_log_collect
     params:
       host: "{{host_identifier}}"
       time_range: "last_24h"
     description: Collect relevant event/syslog entries around the incident window
 
   - name: collect_suspicious_file
-    tool: mcp:forensics-tools/file_metadata
+    tool: mcp:forensics_tools/file_metadata
     params:
       file_path: "{{suspicious_file_path}}"
     condition:
@@ -53,13 +53,13 @@ steps:
 
   # ===== Examination =====
   - name: persistence_check
-    tool: mcp:forensics-tools/autoruns_check
+    tool: mcp:forensics_tools/autoruns_check
     params:
       host: "{{host_identifier}}"
     description: Check startup items, scheduled tasks, and registry run keys for persistence mechanisms
 
   - name: hash_reputation_check
-    tool: mcp:threat-intel-free/malwarebazaar_hash_lookup
+    tool: mcp:threat_intel_tools/malwarebazaar_hash_lookup
     params:
       hash_value: "{{collect_suspicious_file.sha256}}"
     condition:
@@ -67,14 +67,14 @@ steps:
     description: Check the collected file hash against MalwareBazaar
 
   - name: process_ip_reputation
-    tool: mcp:threat-intel-free/blocklist_check
+    tool: mcp:threat_intel_tools/blocklist_check
     for_each: "collect_network_connections.remote_ips"
     params:
       ip: "{{item}}"
     description: Check remote IPs from active connections against blocklists
 
   - name: process_ip_geo
-    tool: mcp:osint-tools/geoip_lookup
+    tool: mcp:osint_tools/geoip_lookup
     for_each: "collect_network_connections.remote_ips"
     params:
       ip: "{{item}}"
@@ -88,14 +88,14 @@ steps:
     description: Extract IOCs (IP, domain, hash) from collected logs and process data
 
   - name: threatfox_check
-    tool: mcp:threat-intel-free/threatfox_ioc_lookup
+    tool: mcp:threat_intel_tools/threatfox_ioc_lookup
     for_each: "extract_iocs.all_iocs"
     params:
       indicator: "{{item}}"
     description: Check all extracted IOCs against ThreatFox
 
   - name: map_attack_technique
-    tool: mcp:forensics-tools/mitre_attack_mapper
+    tool: mcp:forensics_tools/mitre_attack_mapper
     params:
       findings:
         persistence: "{{persistence_check}}"

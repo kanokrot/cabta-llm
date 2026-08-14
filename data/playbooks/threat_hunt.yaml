@@ -49,17 +49,17 @@ steps:
     description: Search threat intelligence across 20+ sources - comprehensive IOC and TTP enrichment
 
   - name: gather_threat_intel
-    tool: mcp:threat-intel-free/threatfox_recent_iocs
+    tool: mcp:threat_intel_tools/threatfox_recent_iocs
     params: {}
     description: Gather recent ThreatFox IOCs - threats related to the hypothesis
 
   - name: gather_recent_malware
-    tool: mcp:threat-intel-free/recent_malware_samples
+    tool: mcp:threat_intel_tools/recent_malware_samples
     params: {}
     description: Gather recent malware samples - validate hypothesis with current threat samples
 
   - name: check_known_hashes
-    tool: mcp:threat-intel-free/malwarebazaar_hash_lookup
+    tool: mcp:threat_intel_tools/malwarebazaar_hash_lookup
     for_each: "known_indicators.hashes"
     params:
       hash_value: "{{item}}"
@@ -68,7 +68,7 @@ steps:
     description: Check known hashes on MalwareBazaar
 
   - name: check_known_ips
-    tool: mcp:threat-intel-free/blocklist_check
+    tool: mcp:threat_intel_tools/blocklist_check
     for_each: "known_indicators.ips"
     params:
       ip: "{{item}}"
@@ -77,7 +77,7 @@ steps:
     description: Check known IPs on blocklists
 
   - name: check_known_domains
-    tool: mcp:osint-tools/whois_lookup
+    tool: mcp:osint_tools/whois_lookup
     for_each: "known_indicators.domains"
     params:
       target: "{{item}}"
@@ -86,7 +86,7 @@ steps:
     description: WHOIS information for known domains
 
   - name: domain_ssl_check
-    tool: mcp:osint-tools/ssl_certificate_info
+    tool: mcp:osint_tools/ssl_certificate_info
     for_each: "known_indicators.domains"
     params:
       host: "{{item}}"
@@ -95,7 +95,7 @@ steps:
     description: Domain SSL certificate check - fake certificate detection
 
   - name: ip_geoip
-    tool: mcp:osint-tools/geoip_lookup
+    tool: mcp:osint_tools/geoip_lookup
     for_each: "known_indicators.ips"
     params:
       ip: "{{item}}"
@@ -104,7 +104,7 @@ steps:
     description: IP geolocation information
 
   - name: feodo_check
-    tool: mcp:threat-intel-free/feodo_tracker_check
+    tool: mcp:threat_intel_tools/feodo_tracker_check
     for_each: "known_indicators.ips"
     params:
       ip: "{{item}}"
@@ -113,7 +113,7 @@ steps:
     description: Feodo Tracker C2 botnet check
 
   - name: malwoverview_enrichment
-    tool: mcp:malwoverview/malwoverview_hash_lookup
+    tool: mcp:malwoverview_tools/malwoverview_hash_lookup
     for_each: "known_indicators.hashes"
     params:
       hash_value: "{{item}}"
@@ -123,7 +123,7 @@ steps:
 
   # ===== Phase 1b: Free OSINT Enrichment =====
   - name: shodan_ip_recon
-    tool: mcp:free-osint/shodan_internetdb_lookup
+    tool: mcp:free_osint_tools/shodan_internetdb_lookup
     for_each: "known_indicators.ips"
     params:
       ip: "{{item}}"
@@ -132,31 +132,31 @@ steps:
     description: IP open port, CVE, and service check via Shodan InternetDB (FREE)
 
   - name: malpedia_search
-    tool: mcp:free-osint/malpedia_malware_search
+    tool: mcp:free_osint_tools/malpedia_malware_search
     params:
       query: "{{hunt_hypothesis}}"
     description: Malpedia malware family search - search for the malware family in the hypothesis on Malpedia
 
   - name: ransomwatch_activity
-    tool: mcp:free-osint/ransomwatch_check
+    tool: mcp:free_osint_tools/ransomwatch_check
     params:
       query: "{{hunt_hypothesis}}"
     description: Ransomware group activity and victim check via Ransomwatch
 
   - name: darksearch_intel
-    tool: mcp:free-osint/darksearch_query
+    tool: mcp:free_osint_tools/darksearch_query
     params:
       query: "{{hunt_hypothesis}}"
     description: Dark web search (Ahmia.fi) - threat actor activity and data leak detection
 
   - name: epss_top_threats
-    tool: mcp:free-osint/epss_top_exploited
+    tool: mcp:free_osint_tools/epss_top_exploited
     params:
       top_n: 20
     description: EPSS top exploited CVEs - hypothesis validation against current exploit trends
 
   - name: paste_leak_search
-    tool: mcp:free-osint/paste_site_search
+    tool: mcp:free_osint_tools/paste_site_search
     params:
       query: "{{hunt_hypothesis}}"
     description: Paste site search - credential leak and data breach detection
@@ -186,7 +186,7 @@ steps:
     description: Execute hunting queries across existing log sources
 
   - name: network_ioc_analysis
-    tool: mcp:network-analysis/analyze_network_iocs
+    tool: mcp:network_tools/analyze_network_iocs
     params:
       iocs: "{{known_indicators}}"
     condition:
@@ -194,21 +194,21 @@ steps:
     description: Analyze network IOCs - DNS, connection, traffic
 
   - name: zeek_log_analysis
-    tool: mcp:network-analysis/analyze_zeek_logs
+    tool: mcp:network_tools/analyze_zeek_logs
     params:
       timerange: "{{hunt_timerange}}"
       indicators: "{{known_indicators}}"
     description: Zeek log analysis - search for suspicious activity in network connection logs
 
   - name: suricata_alert_analysis
-    tool: mcp:network-analysis/analyze_suricata_alerts
+    tool: mcp:network_tools/analyze_suricata_alerts
     params:
       timerange: "{{hunt_timerange}}"
       indicators: "{{known_indicators}}"
     description: Suricata alert analysis - threat matching against IDS/IPS alerts
 
   - name: suspicious_port_scan
-    tool: mcp:network-analysis/port_check
+    tool: mcp:network_tools/port_check
     for_each: "known_indicators.ips"
     params:
       ip: "{{item}}"
@@ -217,7 +217,7 @@ steps:
     description: Port scan on suspicious IPs - open service and backdoor detection
 
   - name: dns_lookup_indicators
-    tool: mcp:network-analysis/dns_lookup
+    tool: mcp:network_tools/dns_lookup
     for_each: "known_indicators.domains"
     params:
       domain: "{{item}}"
@@ -233,7 +233,7 @@ steps:
       else: document_negative
 
   - name: triage_findings
-    tool: mcp:threat-intel-free/threatfox_ioc_lookup
+    tool: mcp:threat_intel_tools/threatfox_ioc_lookup
     for_each: "execute_hunt.suspicious_indicators"
     params:
       indicator: "{{item}}"
@@ -251,7 +251,7 @@ steps:
     description: Cross-correlate all finding sources - false positive reduction and threat validation
 
   - name: suspicious_file_forensics
-    tool: mcp:forensics-tools/file_metadata
+    tool: mcp:forensics_tools/file_metadata
     for_each: "execute_hunt.suspicious_files"
     params:
       file_path: "{{item}}"
@@ -260,7 +260,7 @@ steps:
     description: Forensic analysis of suspicious files
 
   - name: pe_analysis
-    tool: mcp:remnux/pe_analyze
+    tool: mcp:remnux_tools/pe_analyze
     for_each: "execute_hunt.suspicious_executables"
     params:
       file_path: "{{item}}"
@@ -278,7 +278,7 @@ steps:
     description: Capability analysis via CAPA - malware behaviors
 
   - name: yara_scan
-    tool: mcp:remnux/yara_scan
+    tool: mcp:remnux_tools/yara_scan
     params:
       target_path: "{{target_systems.suspicious_dirs}}"
     condition:

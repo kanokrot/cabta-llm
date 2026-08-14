@@ -27,66 +27,66 @@ steps:
 
   # ===== Sender Verification =====
   - name: sender_domain_check
-    tool: mcp:osint-tools/whois_lookup
+    tool: mcp:osint_tools/whois_lookup
     params:
       target: "{{parse_email.sender_domain}}"
     description: Sender domain WHOIS information - when was it registered?
 
   - name: sender_email_security
-    tool: mcp:osint-tools/email_security_check
+    tool: mcp:osint_tools/email_security_check
     params:
       domain: "{{parse_email.sender_domain}}"
     description: SPF, DKIM, DMARC check - email spoofing detection
 
   - name: sender_dns
-    tool: mcp:osint-tools/dns_resolve
+    tool: mcp:osint_tools/dns_resolve
     params:
       domain: "{{parse_email.sender_domain}}"
     description: Sender domain DNS records
 
   # ===== Free OSINT Enrichment =====
   - name: sender_typosquat
-    tool: mcp:free-osint/typosquat_detect
+    tool: mcp:free_osint_tools/typosquat_detect
     params:
       domain: "{{parse_email.sender_domain}}"
     description: Typosquat detection - is the sender domain a fake copy of a legitimate domain?
 
   - name: sender_hudsonrock
-    tool: mcp:free-osint/hudsonrock_check
+    tool: mcp:free_osint_tools/hudsonrock_check
     params:
       domain: "{{parse_email.sender_domain}}"
     description: HudsonRock info-stealer victim check - have employees of the sender domain been compromised?
 
   - name: paste_leak_check
-    tool: mcp:free-osint/paste_site_search
+    tool: mcp:free_osint_tools/paste_site_search
     params:
       query: "{{parse_email.sender_domain}}"
     description: Paste site search - credential leak check associated with the sender domain
 
   # ===== URL Analysis =====
   - name: url_openphish
-    tool: mcp:free-osint/openphish_lookup
+    tool: mcp:free_osint_tools/openphish_lookup
     for_each: "extract_iocs.urls"
     params:
       url: "{{item}}"
     description: OpenPhish phishing URL feed check
 
   - name: url_check
-    tool: mcp:threat-intel-free/urlhaus_lookup
+    tool: mcp:threat_intel_tools/urlhaus_lookup
     for_each: "extract_iocs.urls"
     params:
       indicator: "{{item}}"
     description: Check URLs on URLhaus
 
   - name: url_headers
-    tool: mcp:osint-tools/http_headers
+    tool: mcp:osint_tools/http_headers
     for_each: "extract_iocs.urls"
     params:
       url: "{{item}}"
     description: Check HTTP headers of the URLs
 
   - name: url_ssl
-    tool: mcp:osint-tools/ssl_certificate_info
+    tool: mcp:osint_tools/ssl_certificate_info
     for_each: "extract_iocs.domains"
     params:
       host: "{{item}}"
@@ -94,21 +94,21 @@ steps:
 
   # ===== Attachment Analysis =====
   - name: attachment_triage
-    tool: mcp:forensics-tools/file_metadata
+    tool: mcp:forensics_tools/file_metadata
     for_each: "parse_email.attachments"
     params:
       file_path: "{{item.path}}"
     description: Attachment metadata and hash analysis
 
   - name: attachment_hash_check
-    tool: mcp:threat-intel-free/malwarebazaar_hash_lookup
+    tool: mcp:threat_intel_tools/malwarebazaar_hash_lookup
     for_each: "parse_email.attachments"
     params:
       hash_value: "{{item.sha256}}"
     description: Check attachment hashes on MalwareBazaar
 
   - name: attachment_macro_check
-    tool: mcp:remnux/olevba_analyze
+    tool: mcp:remnux_tools/olevba_analyze
     for_each: "parse_email.attachments"
     params:
       file_path: "{{item.path}}"
@@ -118,7 +118,7 @@ steps:
 
   # ===== IP Reputation =====
   - name: sender_ip_check
-    tool: mcp:threat-intel-free/blocklist_check
+    tool: mcp:threat_intel_tools/blocklist_check
     params:
       ip: "{{parse_email.sender_ip}}"
     condition:
@@ -126,7 +126,7 @@ steps:
     description: Sender IP blocklist check
 
   - name: sender_ip_geo
-    tool: mcp:osint-tools/geoip_lookup
+    tool: mcp:osint_tools/geoip_lookup
     params:
       ip: "{{parse_email.sender_ip}}"
     condition:
@@ -135,7 +135,7 @@ steps:
 
   # ===== Threat Intel =====
   - name: threatfox_check
-    tool: mcp:threat-intel-free/threatfox_ioc_lookup
+    tool: mcp:threat_intel_tools/threatfox_ioc_lookup
     for_each: "extract_iocs.all_iocs"
     params:
       indicator: "{{item}}"
