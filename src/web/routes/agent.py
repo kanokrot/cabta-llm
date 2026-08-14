@@ -7,6 +7,7 @@ import logging
 from typing import Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
@@ -167,12 +168,30 @@ async def get_session(request: Request, session_id: str):
 @router.post('/sessions/{session_id}/approve')
 async def approve_action(request: Request, session_id: str, body: ApprovalRequest):
     """Approve or reject a pending action."""
-    agent_loop = _require_agent_loop(request)
-    if body.approved:
-        success = await agent_loop.approve_action(session_id, approved_by=body.approved_by)
+    store = _require_agent_store(request)
+    session = store.get_session(session_id)
+    if not session:
+        raise HTTPException(404, "Session not found")
+
+    metadata = session.get('metadata', {})
+    if isinstance(metadata, dict) and 'pending_step_name' in metadata:
+        # Flow C: Playbook session
+        playbook_engine = getattr(request.app.state, 'playbook_engine', None)
+        if playbook_engine is None:
+            return {"success": False, "error": "playbook_engine not available"}
+        try:
+            await playbook_engine.execute_from_step(session_id, approved=body.approved, approved_by=body.approved_by)
+            return {"success": True}
+        except Exception as exc:
+            return {"success": False, "error": str(exc)}
     else:
-        success = await agent_loop.reject_action(session_id, approved_by=body.approved_by)
-    return {"success": success}
+        # Flow A: Agent Loop session
+        agent_loop = _require_agent_loop(request)
+        if body.approved:
+            success = await agent_loop.approve_action(session_id, approved_by=body.approved_by)
+        else:
+            success = await agent_loop.reject_action(session_id, approved_by=body.approved_by)
+        return {"success": success}
 
 
 @router.post('/sessions/{session_id}/cancel')
@@ -199,3 +218,41 @@ async def delete_session(request: Request, session_id: str):
     if not deleted:
         raise HTTPException(500, "Failed to delete session")
     return {"status": "deleted", "session_id": session_id}
+@router.get('/sessions/{session_id}/audit')
+async def get_session_audit_trail(session_id: str, request: Request):
+    """Return the full audit trail for one session, newest first.
+
+    Each entry includes actor ('human' / 'agent' / 'system'), action,
+    action_type ('approval_granted' / 'approval_rejected' / 'tool_call'),
+    approved_by, status, and timestamp -- this is the evidence that a
+    named human approved a specific action, not just a bare true/false.
+    """
+    agent_store = getattr(request.app.state, 'agent_store', None)
+    if agent_store is None:
+        return JSONResponse(
+            {"error": "AgentStore not available"}, status_code=503,
+        )
+
+    session = agent_store.get_session(session_id)
+    if session is None:
+        return JSONResponse(
+            {"error": f"Session not found: {session_id}"}, status_code=404,
+        )
+
+    entries = agent_store.get_audit_log(session_id=session_id, limit=200)
+
+    # Convenience: pull out just the human-approval-related entries,
+    # since that's the part relevant to the HITL demo/slide.
+    approval_entries = [
+        e for e in entries
+        if e.get('action_type') in ('approval_granted', 'approval_rejected')
+    ]
+
+    return {
+        "session_id": session_id,
+        "goal": session.get('goal'),
+        "status": session.get('status'),
+        "total_entries": len(entries),
+        "approval_entries": approval_entries,
+        "all_entries": entries,
+    }
