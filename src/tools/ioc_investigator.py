@@ -195,6 +195,9 @@ class IOCInvestigator:
 
         verdict = determine_verdict(threat_score)
 
+        # Sync updated threat_score to intel_results before LLM analysis
+        intel_results["threat_score"] = threat_score
+
         # Retrieve relevant knowledge base entries (non-fatal, never affects verdict)
         rag_hits = []
         if self.rag_kb:
