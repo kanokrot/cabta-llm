@@ -114,11 +114,68 @@ def check_source_hallucination(
     return llm_result
 
 
+def check_rag_relevance(
+    llm_result: Dict,
+    ioc_type: str,
+    rag_context: Optional[list] = None,
+) -> Dict:
+    """
+    เช็คว่า LLM อ้างอิงเนื้อหาที่เกี่ยวกับ domain-specific analysis
+    (domain registration age, DGA pattern) ทั้งที่ ioc_type ปัจจุบัน
+    ไม่ใช่ domain/url หรือไม่ — ป้องกัน RAG entry ที่ดึงมาแบบไม่ตรง
+    บริบทถูกนำไปอ้างอิงแบบ hallucinate
+
+    Args:
+        llm_result: JSON response จาก LLM (มี key 'analysis')
+        ioc_type: ประเภท IOC ปัจจุบัน (ipv4, domain, url, hash)
+        rag_context: RAG entries ที่ถูกดึงมาใช้ในรอบนี้ (ถ้ามี)
+
+    Returns:
+        llm_result พร้อม 'rag_relevance_warning' ถ้าเจอการอ้างอิงที่
+        ไม่ตรงบริบท
+    """
+    if not llm_result or "analysis" not in llm_result:
+        return llm_result
+
+    if ioc_type in ("domain", "url"):
+        # domain-specific content ใช้ได้ปกติกับ ioc_type เหล่านี้
+        return llm_result
+
+    domain_specific_terms = [
+        "domain registration", "newly registered domain",
+        "dga", "domain generation algorithm", "domain age",
+    ]
+
+    analysis_text = llm_result.get("analysis", "").lower()
+
+    matched_terms = [
+        term for term in domain_specific_terms
+        if term in analysis_text
+    ]
+
+    if matched_terms:
+        logger.warning(
+            f"[RAG Guardrail] Possible RAG mismatch detected: LLM analysis "
+            f"mentioned domain-specific terms {matched_terms} for "
+            f"ioc_type='{ioc_type}' (not domain/url)"
+        )
+        llm_result["rag_relevance_warning"] = (
+            f"⚠️ Analyst Note: This AI-generated analysis references "
+            f"domain-specific concepts ({', '.join(matched_terms)}) that "
+            f"may not be relevant to this {ioc_type.upper()} indicator. "
+            f"Please verify manually before relying on this analysis."
+        )
+
+    return llm_result
+
+
 def validate_llm_analysis(
     llm_result: Dict,
     context: Dict,
     threat_score: Optional[int] = None,
     all_known_sources: Optional[list] = None,
+    ioc_type: Optional[str] = None,
+    rag_context: Optional[list] = None,
 ) -> Dict:
     """
     Entry point เดียวที่ llm_analyzer.py เรียกใช้
@@ -129,6 +186,8 @@ def validate_llm_analysis(
         context: context dict ที่ส่งเข้า LLM (มี 'key_findings')
         threat_score: คะแนนจาก scoring engine (ถ้ามี จะเช็ค verdict consistency ด้วย)
         all_known_sources: list ของ source names ทั้งหมด (ถ้าไม่ส่งมา จะข้ามการเช็ค hallucination)
+        ioc_type: ประเภท IOC ปัจจุบัน
+        rag_context: RAG entries ที่ถูกดึงมาใช้ในรอบนี้
 
     Returns:
         llm_result ที่ผ่านการ validate ครบทุกชั้นแล้ว
@@ -145,5 +204,9 @@ def validate_llm_analysis(
     if all_known_sources:
         valid_sources = {f["source"] for f in context.get("key_findings", [])}
         llm_result = check_source_hallucination(llm_result, valid_sources, all_known_sources)
+
+    # ชั้น 3: เช็ค RAG relevance กับ ioc_type
+    if ioc_type is not None:
+        llm_result = check_rag_relevance(llm_result, ioc_type, rag_context)
 
     return llm_result

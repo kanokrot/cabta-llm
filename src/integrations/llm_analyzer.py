@@ -155,7 +155,9 @@ Keep it concise and factual."""
                     response_data,
                     context,
                     threat_score=results.get('threat_score', 0),
-                    all_known_sources=ALL_TI_SOURCES,)
+                    all_known_sources=ALL_TI_SOURCES,
+                    ioc_type=ioc_type,
+                    rag_context=rag_context,)
                 return response_data
             else:
                 return {'error': 'Failed to get LLM response', 'provider': self.provider}
@@ -173,7 +175,7 @@ Keep it concise and factual."""
         for i, doc in enumerate(rag_context, start=1):
             category = doc['metadata'].get('category', 'unknown')
             lines.append(f"[{i}] (source: {category}) {doc['text']}")
-        lines.append("Reference the relevant entry above (by its [N]) where it supports your analysis.\n")
+        lines.append("Reference the relevant entry above (by its [N]) ONLY if it is directly relevant to this specific IOC type and findings. Do NOT reference entries about domain registration, DGA, or other domain-specific concepts unless this IOC is actually a domain or URL.\n")
         return "\n".join(lines)
 
     # ------------------------------------------------------------------ #
