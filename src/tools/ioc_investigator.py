@@ -139,6 +139,54 @@ class IOCInvestigator:
 
         return bonus
 
+    def _aggregate_seen_dates(self, sources: Dict) -> tuple:
+        """Aggregate first_seen/last_seen across sources that report them.
+        VirusTotal's last_analysis reflects VT's scan cadence, not confirmed
+        IOC activity, so it's only used as a last-resort fallback for
+        last_seen when no other source has activity data.
+        Falls back to the first non-empty value found if date parsing fails.
+        """
+        from datetime import datetime
+        import re
+
+        FIRST_SEEN_SOURCES = ('feodotracker', 'threatfox', 'c2_trackers')
+        LAST_SEEN_SOURCES = ('feodotracker', 'c2_trackers', 'greynoise')
+
+        def _try_parse(s):
+            if not s or not isinstance(s, str):
+                return None
+            s_clean = re.sub(r'\s*UTC\s*$', '', s.strip())
+            for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+                try:
+                    return datetime.strptime(s_clean, fmt)
+                except ValueError:
+                    continue
+            return None
+
+        def _pick(source_names, field):
+            candidates = []
+            for name in source_names:
+                val = sources.get(name, {}).get(field)
+                if val and val not in ('N/A', ''):
+                    candidates.append(val)
+            if not candidates:
+                return None
+            parsed = [(v, _try_parse(v)) for v in candidates]
+            parsed_ok = [p for p in parsed if p[1] is not None]
+            if not parsed_ok:
+                return candidates[0]
+            return (min if field == 'first_seen' else max)(parsed_ok, key=lambda p: p[1])[0]
+
+        first_seen = _pick(FIRST_SEEN_SOURCES, 'first_seen')
+        last_seen = _pick(LAST_SEEN_SOURCES, 'last_seen')
+
+        if last_seen is None:
+            vt_date = sources.get('virustotal', {}).get('last_analysis')
+            if vt_date and vt_date not in ('N/A', ''):
+                last_seen = vt_date
+
+        return first_seen, last_seen
+
     async def investigate(self, ioc: str, analysis_id: str = None) -> Dict:
         """
         Investigate IOC.
@@ -197,6 +245,7 @@ class IOCInvestigator:
 
         # Sync updated threat_score to intel_results before LLM analysis
         intel_results["threat_score"] = threat_score
+        first_seen, last_seen = self._aggregate_seen_dates(intel_results.get('sources', {}))
 
         # Retrieve relevant knowledge base entries (non-fatal, never affects verdict)
         rag_hits = []
@@ -260,6 +309,8 @@ class IOCInvestigator:
             'sources': intel_results.get('sources', {}),  # Direct 'sources' key for consistency
             'sources_checked': intel_results.get('sources_checked', 0),
             'sources_flagged': intel_results.get('sources_flagged', 0),
+            'first_seen': first_seen,
+            'last_seen': last_seen,
             # Legacy compatibility aliases
             'threat_intel_results': intel_results.get('sources', {}),  # Backward compat
             'threat_intelligence': {
