@@ -808,6 +808,7 @@ class PlaybookEngine:
 
         steps: List[PlaybookStep] = pb.get("_parsed_steps", [])
         step_map: Dict[str, PlaybookStep] = {s.name: s for s in steps}
+        step_index_map: Dict[int, int] = {id(s): i for i, s in enumerate(steps)}
 
         metadata = session.get("metadata") or {}
         if not isinstance(metadata, dict) or "pending_step_name" not in metadata:
@@ -907,7 +908,7 @@ class PlaybookEngine:
             )
             next_step_name = pending_step.on_failure
 
-        next_step = self._resolve_next(next_step_name, step_map, steps, step_number)
+        next_step = self._resolve_next(next_step_name, step_map, steps, pending_step, step_index_map)
 
         self.store.update_session_status(session_id, "active")
 
@@ -931,6 +932,7 @@ class PlaybookEngine:
         """Run the step loop starting at *current_step* / *step_number* with
         the given *context*. Shared by a fresh ``_execute_session`` start
         (step 0) and ``execute_from_step`` resuming after an approval gate."""
+        step_index_map: Dict[int, int] = {id(s): i for i, s in enumerate(steps)}
         try:
             while current_step is not None:
                 step_number += 1
@@ -973,7 +975,7 @@ class PlaybookEngine:
                     context[current_step.name] = {"decision": decision_result}
                     context["last_result"] = context[current_step.name]
                     current_step = self._resolve_next(
-                        next_step_name, step_map, steps, step_number,
+                        next_step_name, step_map, steps, current_step, step_index_map,
                     )
                     continue
 
@@ -985,7 +987,7 @@ class PlaybookEngine:
                             current_step.name,
                         )
                         current_step = self._resolve_next(
-                            current_step.on_success, step_map, steps, step_number,
+                            current_step.on_success, step_map, steps, current_step, step_index_map,
                         )
                         continue
 
@@ -1073,7 +1075,7 @@ class PlaybookEngine:
                         context["last_result"] = context[current_step.name]
                         # final_answer is terminal — go to next sequential or end
                         current_step = self._resolve_next(
-                            current_step.on_success, step_map, steps, step_number,
+                            current_step.on_success, step_map, steps, current_step, step_index_map,
                         )
                         continue
 
@@ -1116,7 +1118,7 @@ class PlaybookEngine:
                             }
                         context["last_result"] = context[current_step.name]
                         current_step = self._resolve_next(
-                            current_step.on_success, step_map, steps, step_number,
+                            current_step.on_success, step_map, steps, current_step, step_index_map,
                         )
                         continue
 
@@ -1142,7 +1144,7 @@ class PlaybookEngine:
                         }
                         context["last_result"] = context[current_step.name]
                         current_step = self._resolve_next(
-                            current_step.on_success, step_map, steps, step_number,
+                            current_step.on_success, step_map, steps, current_step, step_index_map,
                         )
                         continue
 
@@ -1165,7 +1167,7 @@ class PlaybookEngine:
                         context[current_step.name] = {"action": action}
                         context["last_result"] = context[current_step.name]
                         current_step = self._resolve_next(
-                            current_step.on_success, step_map, steps, step_number,
+                            current_step.on_success, step_map, steps, current_step, step_index_map,
                         )
                         continue
 
@@ -1274,7 +1276,7 @@ class PlaybookEngine:
 
                 # Resolve the next step
                 current_step = self._resolve_next(
-                    next_step_name, step_map, steps, step_number,
+                    next_step_name, step_map, steps, current_step, step_index_map,
                 )
 
             # All steps completed
@@ -1499,13 +1501,17 @@ class PlaybookEngine:
         next_name: Optional[str],
         step_map: Dict[str, PlaybookStep],
         steps: List[PlaybookStep],
-        current_index: int,
+        current_step: Optional[PlaybookStep],
+        step_index_map: Dict[int, int],
     ) -> Optional[PlaybookStep]:
         """
         Resolve the next step to execute.
 
         If ``next_name`` is given, look it up in ``step_map``.
-        Otherwise fall through to the next sequential step.
+        Otherwise fall through to the next step in ``steps`` (by actual list
+        position via ``step_index_map``, keyed on object identity — NOT the
+        step-execution counter, which does not track list position when steps
+        are skipped or jumped to out of order).
         ``None`` means the playbook is done.
         """
         if next_name == "__end__" or next_name == "end":
@@ -1514,9 +1520,15 @@ class PlaybookEngine:
         if next_name:
             return step_map.get(next_name)
 
-        # Default: next sequential step
-        if current_index < len(steps):
-            return steps[current_index]
+        # Default: next step by actual list position (identity-based lookup)
+        if current_step is None:
+            return None
+        current_idx = step_index_map.get(id(current_step))
+        if current_idx is None:
+            return None
+        next_idx = current_idx + 1
+        if next_idx < len(steps):
+            return steps[next_idx]
 
         return None
 
