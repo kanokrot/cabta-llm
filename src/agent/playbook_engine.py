@@ -341,17 +341,28 @@ def _collect_malicious_iocs(context: Dict) -> List[str]:
 
 def _find_highest_verdict(context: Dict) -> Optional[str]:
     """สแกน context หา verdict ทุกตัวที่เกิดจาก tool results ระหว่าง playbook
-    แล้วคืนตัวที่รุนแรงที่สุด (read-only, ไม่แก้ context)"""
-    found = []
+    แล้วคืนตัวที่รุนแรงที่สุด (read-only, ไม่แก้ context)
+
+    Precedence: explicit "verdict"/"*_verdict" keys always win over derived
+    "*_any_malicious" signals when both are present in context. This
+    prevents a stale/derived malicious flag from overriding an explicit
+    verdict that was set directly (e.g. verdict="CLEAN" from an upstream
+    step or caller-supplied input_data). Only falls back to derived
+    "*_any_malicious" signals when no explicit verdict key exists at all.
+    """
+    explicit = []
+    derived = []
     for key, val in context.items():
         if key == "verdict" or key.endswith("_verdict"):
             if isinstance(val, str) and val.upper() in _VERDICT_SEVERITY:
-                found.append(val.upper())
+                explicit.append(val.upper())
         elif key.endswith("_any_malicious") and val is True:
-            found.append("MALICIOUS")
-    if not found:
-        return None
-    return max(found, key=lambda v: _VERDICT_SEVERITY[v])
+            derived.append("MALICIOUS")
+    if explicit:
+        return max(explicit, key=lambda v: _VERDICT_SEVERITY[v])
+    if derived:
+        return max(derived, key=lambda v: _VERDICT_SEVERITY[v])
+    return None
 
 
 # ---------------------------------------------------------------------------
