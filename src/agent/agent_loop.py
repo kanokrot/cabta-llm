@@ -162,6 +162,9 @@ class AgentLoop:
             anthropic_key=self.anthropic_key,
             anthropic_model=self.anthropic_model,
             timeout=self.timeout,
+            vllm_base_url=llm_cfg.get('vllm_base_url'),
+            vllm_api_key=llm_cfg.get('vllm_api_key'),
+            vllm_model=llm_cfg.get('vllm_model'),
         )
 
         # Active sessions & pub-sub
