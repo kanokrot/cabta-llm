@@ -3,6 +3,7 @@ LLM backend adapters for the agent loop: Ollama and Anthropic chat/generate
 calls, with native tool-calling support where available.
 """
 
+import json
 import logging
 from typing import Any, Dict, List, Optional
 
@@ -23,6 +24,9 @@ class LLMBackend:
         anthropic_key,
         anthropic_model,
         timeout,
+        vllm_base_url=None,     
+        vllm_api_key=None,       
+        vllm_model=None,         
     ):
         self.provider = provider
         self.tools = tools
@@ -31,6 +35,9 @@ class LLMBackend:
         self.anthropic_key = anthropic_key
         self.anthropic_model = anthropic_model
         self.timeout = timeout
+        self.vllm_base_url = vllm_base_url
+        self.vllm_token = vllm_api_key
+        self.vllm_model = vllm_model
 
     async def chat_with_tools(
         self, messages: List[Dict],
@@ -44,6 +51,8 @@ class LLMBackend:
 
         if self.provider == 'ollama':
             return await self.ollama_chat(messages, tools_json)
+        elif self.provider == 'vllm':
+            return await self.vllm_chat(messages, tools_json)
         else:
             return await self.anthropic_chat(messages, tools_json)
 
@@ -51,6 +60,8 @@ class LLMBackend:
         """Simple single-prompt call returning plain text (for summaries)."""
         if self.provider == 'ollama':
             return await self.ollama_generate(prompt)
+        elif self.provider == 'vllm':
+            return await self.vllm_generate(prompt)
         else:
             return await self.anthropic_generate(prompt)
 
@@ -151,6 +162,111 @@ class LLMBackend:
             return None
         except Exception as exc:
             logger.error(f"[AGENT] Ollama generate failed: {exc}")
+            return None
+
+    # ---- vLLM (OpenAI-compatible) ---- #
+
+    async def vllm_chat(
+        self, messages: List[Dict], tools: List[Dict],
+    ) -> Optional[Any]:
+        """vLLM /v1/chat/completions with OpenAI-compatible tool_use support."""
+        if not self.vllm_base_url:
+            logger.warning("[AGENT] No vLLM base URL configured")
+            return None
+
+        try:
+            headers = {
+                "content-type": "application/json",
+            }
+            if self.vllm_token:
+                headers["Authorization"] = f"Bearer {self.vllm_token}"
+
+            payload: Dict[str, Any] = {
+                "model": self.vllm_model,
+                "messages": messages,
+            }
+            if tools:
+                payload["tools"] = tools
+
+            async with aiohttp.ClientSession(timeout=self.timeout) as session:
+                async with session.post(
+                    f"{self.vllm_base_url}/v1/chat/completions",
+                    headers=headers,
+                    json=payload,
+                ) as resp:
+                    if resp.status != 200:
+                        body = await resp.text()
+                        logger.error(f"[AGENT] vLLM chat error {resp.status}: {body[:300]}")
+                        return None
+
+                    data = await resp.json()
+                    choices = data.get("choices", [])
+                    if not choices:
+                        return None
+
+                    message = choices[0].get("message", {})
+
+                    # Check for tool_calls in response
+                    if message.get("tool_calls"):
+                        tool_calls = []
+                        for tc in message["tool_calls"]:
+                            func = tc.get("function", {})
+                            args_str = func.get("arguments", "{}")
+
+                            # Parse JSON string arguments
+                            try:
+                                args_dict = json.loads(args_str) if args_str else {}
+                            except json.JSONDecodeError:
+                                logger.warning(f"[AGENT] vLLM returned invalid JSON arguments: {args_str}")
+                                args_dict = {}
+
+                            tool_calls.append({
+                                "function": {
+                                    "name": func.get("name", ""),
+                                    "arguments": args_dict,
+                                },
+                            })
+                        return {"tool_calls": tool_calls}
+
+                    # Plain content
+                    return message.get("content", "")
+
+        except Exception as exc:
+            logger.error(f"[AGENT] vLLM chat failed: {exc}", exc_info=True)
+            return None
+
+    async def vllm_generate(self, prompt: str) -> Optional[str]:
+        """vLLM /v1/chat/completions for plain text responses."""
+        if not self.vllm_base_url:
+            return None
+
+        try:
+            headers = {
+                "content-type": "application/json",
+            }
+            if self.vllm_token:
+                headers["Authorization"] = f"Bearer {self.vllm_token}"
+
+            payload = {
+                "model": self.vllm_model,
+                "messages": [{"role": "user", "content": prompt}],
+            }
+
+            async with aiohttp.ClientSession(timeout=self.timeout) as session:
+                async with session.post(
+                    f"{self.vllm_base_url}/v1/chat/completions",
+                    headers=headers,
+                    json=payload,
+                ) as resp:
+                    if resp.status != 200:
+                        return None
+                    data = await resp.json()
+                    choices = data.get("choices", [])
+                    if choices:
+                        return choices[0].get("message", {}).get("content", "")
+                    return None
+        except Exception as exc:
+            logger.error(f"[AGENT] vLLM generate failed: {exc}")
             return None
 
     # ---- Anthropic ---- #
