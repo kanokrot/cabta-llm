@@ -28,6 +28,7 @@ from .analysis_manager import AnalysisManager
 from .case_store import CaseStore
 from src.integrations.ticketing import initialize_database as initialize_ticketing_db
 
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).parent.parent.parent
