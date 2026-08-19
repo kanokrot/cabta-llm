@@ -3,8 +3,10 @@ threat_intel_tools.py
 Threat Intelligence MCP Server - Free threat intel feeds via MCP.
 
 Uses free threat intel services:
-  - abuse.ch (URLhaus, MalwareBazaar, Feodo Tracker — no API key;
-    ThreatFox — free but requires an Auth-Key, see config.yaml api_keys.threatfox)
+  - abuse.ch (URLhaus, MalwareBazaar, ThreatFox, Feodo Tracker) — all now
+    require an Auth-Key header on MalwareBazaar/ThreatFox (abuse.ch issues
+    one Auth-Key per account that works across all of its services; see
+    config.yaml api_keys.threatfox)
   - AlienVault OTX (public pulse data)
   - VirusTotal (public hash lookups - limited)
   - Tor exit node list
@@ -28,11 +30,12 @@ mcp = FastMCP("threat-intel")
 
 TIMEOUT = 8
 
-# ThreatFox now requires an Auth-Key header on every request (abuse.ch
-# returns 401 Unauthorized without one). Read the same 'threatfox' /
-# 'abusech' key from config.yaml that
-# src/integrations/threat_intel.py's check_threatfox() uses, so both
-# code paths stay in sync. Non-fatal if config.yaml is missing/unreadable.
+# ThreatFox and MalwareBazaar now require an Auth-Key header on every
+# request (abuse.ch returns 401 Unauthorized without one). abuse.ch issues
+# one Auth-Key per account that works across MalwareBazaar, ThreatFox, and
+# URLhaus — read the same 'threatfox' / 'abusech' key from config.yaml that
+# src/integrations/threat_intel.py's check_threatfox() uses, so all code
+# paths stay in sync. Non-fatal if config.yaml is missing/unreadable.
 try:
     _API_KEYS = (load_config() or {}).get('api_keys', {})
 except Exception as _cfg_exc:
@@ -47,6 +50,22 @@ def _threatfox_headers() -> dict:
         "Content-Type": "application/json",
     }
     api_key = get_valid_key(_API_KEYS, 'threatfox') or get_valid_key(_API_KEYS, 'abusech')
+    if api_key:
+        headers['Auth-Key'] = api_key
+    return headers
+
+
+def _malwarebazaar_headers() -> dict:
+    """Build MalwareBazaar request headers, adding Auth-Key if a valid key is configured.
+    abuse.ch issues one Auth-Key per account that works across MalwareBazaar,
+    ThreatFox, and URLhaus — reuse the same 'threatfox' key from config.yaml
+    since they're the same abuse.ch account. Falls back to a
+    MalwareBazaar-specific key if one is ever configured separately.
+    """
+    headers = {
+        "User-Agent": "BlueTeamAssistant/2.0",
+    }
+    api_key = get_valid_key(_API_KEYS, 'malwarebazaar') or get_valid_key(_API_KEYS, 'threatfox')
     if api_key:
         headers['Auth-Key'] = api_key
     return headers
@@ -123,7 +142,9 @@ def urlhaus_lookup(indicator: str) -> str:
 @mcp.tool()
 def malwarebazaar_hash_lookup(hash_value: str) -> str:
     """Look up a file hash in MalwareBazaar (abuse.ch).
-    Free, no API key. Supports MD5, SHA1, SHA256.
+    Requires an Auth-Key header (configured via config.yaml under
+    api_keys.malwarebazaar or api_keys.threatfox — same abuse.ch account).
+    Supports MD5, SHA1, SHA256.
 
     Args:
         hash_value: MD5, SHA1, or SHA256 hash to look up
@@ -135,7 +156,7 @@ def malwarebazaar_hash_lookup(hash_value: str) -> str:
         req = urllib.request.Request(
             "https://mb-api.abuse.ch/api/v1/",
             data=body,
-            headers={"User-Agent": "BlueTeamAssistant/2.0"},
+            headers=_malwarebazaar_headers(),
             method="POST",
         )
         with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
@@ -282,7 +303,9 @@ def blocklist_check(ip: str) -> str:
 @mcp.tool()
 def recent_malware_samples(limit: int = 20) -> str:
     """Get recent malware samples from MalwareBazaar.
-    Free, no API key. Returns latest submitted samples.
+    Requires an Auth-Key header (configured via config.yaml under
+    api_keys.malwarebazaar or api_keys.threatfox — same abuse.ch account).
+    Returns latest submitted samples.
 
     Args:
         limit: Number of recent samples to retrieve (max 50)
@@ -293,7 +316,7 @@ def recent_malware_samples(limit: int = 20) -> str:
         req = urllib.request.Request(
             "https://mb-api.abuse.ch/api/v1/",
             data=body,
-            headers={"User-Agent": "BlueTeamAssistant/2.0"},
+            headers=_malwarebazaar_headers(),
             method="POST",
         )
         with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
