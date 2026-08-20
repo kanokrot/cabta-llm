@@ -226,9 +226,11 @@ class LLMBackend:
                                     "arguments": args_dict,
                                 },
                             })
+                        logger.info(f"[AGENT] vLLM SUCCESS tool_calls model={self.vllm_model}")
                         return {"tool_calls": tool_calls}
 
                     # Plain content
+                    logger.info(f"[AGENT] vLLM SUCCESS plain content model={self.vllm_model}")
                     return message.get("content", "")
 
         except Exception as exc:
