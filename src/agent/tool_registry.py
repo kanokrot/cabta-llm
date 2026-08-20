@@ -416,8 +416,8 @@ class ToolRegistry:
         # 1. investigate_ioc
         # -------------------------------------------------------------- #
         if ioc_investigator is not None:
-            async def _investigate_ioc(ioc: str, **_kw) -> Dict:
-                return await ioc_investigator.investigate(ioc)
+            async def _investigate_ioc(ioc: str, analysis_id: str = None, **_kw) -> Dict:
+                return await ioc_investigator.investigate(ioc, analysis_id=analysis_id)
 
             self.register_local_tool(
                 name="investigate_ioc",

@@ -867,7 +867,10 @@ class AgentLoop:
             if tool_def is None:
                 result = {"error": f"Tool not found: {tool_name}"}
             elif tool_def.source == 'local':
-                result = await self.tools.execute_local_tool(tool_name, **params)
+                call_params = dict(params)
+                if tool_name == 'investigate_ioc' and 'analysis_id' not in call_params:
+                    call_params['analysis_id'] = state.session_id
+                result = await self.tools.execute_local_tool(tool_name, **call_params)
             elif self.mcp_client is not None:
                 # MCP remote tool call
                 result = await self.mcp_client.call_tool(
