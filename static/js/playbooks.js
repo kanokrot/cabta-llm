@@ -32,9 +32,14 @@ var Playbooks = (function () {
     };
 
     function getPlaybookCategory(pb) {
-        // 1. Prefer explicit category from data if valid
-        if (pb && pb.category && CATEGORIES[pb.category]) {
-            return pb.category;
+        // 1. Prefer explicit category from data if valid (case-insensitive match against
+        // CATEGORIES keys — YAML files may use Title Case, e.g. "Forensics", while
+        // CATEGORIES keys are lowercase-hyphenated, e.g. "forensics").
+        if (pb && pb.category) {
+            var normalizedCat = String(pb.category).toLowerCase().replace(/\s+/g, '-');
+            if (CATEGORIES[normalizedCat]) {
+                return normalizedCat;
+            }
         }
         // 2. Fallback to keyword-based detection
         var text = ((pb.name || '') + ' ' + (pb.description || '')).toLowerCase();
@@ -871,14 +876,18 @@ var Playbooks = (function () {
         });
     }
 
-    // Auto-load from API if server-rendered list is empty, otherwise enhance existing
-    var grid = document.getElementById('playbookGrid');
-    if (grid && grid.querySelectorAll('.playbook-card').length === 0) {
-        loadPlaybooks();
-    } else {
-        enhanceServerRenderedCards();
-        refreshStatsOnly();
-    }
+    // Auto-load from API if server-rendered list is empty, otherwise enhance existing.
+    // Wrapped in DOMContentLoaded so #playbookGrid and stat elements are guaranteed to
+    // exist before this logic runs (previously ran synchronously at script-parse time).
+    document.addEventListener('DOMContentLoaded', function () {
+        var grid = document.getElementById('playbookGrid');
+        if (grid && grid.querySelectorAll('.playbook-card').length === 0) {
+            loadPlaybooks();
+        } else {
+            enhanceServerRenderedCards();
+            refreshStatsOnly();
+        }
+    });
 
     return {
         loadPlaybooks: loadPlaybooks
