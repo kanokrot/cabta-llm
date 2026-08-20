@@ -1,4 +1,5 @@
 name: Phishing Investigation
+category: Phishing
 description: >
   Email phishing investigation - header analysis, URL check,
   attachment analysis, sender verification, verdict determination.

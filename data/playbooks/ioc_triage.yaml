@@ -1,4 +1,5 @@
 name: IOC Triage
+category: Threat Intel
 description: >
   Automated triage for suspicious IOCs (IP, domain, hash, URL).
   Enrichment using multiple free threat intelligence sources.

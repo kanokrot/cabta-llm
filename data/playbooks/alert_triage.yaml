@@ -1,4 +1,5 @@
 name: Alert Triage
+category: Incident Response
 description: >
   Security alert triage playbook - fast classification of incoming alerts,
   IOC extraction, threat intelligence enrichment, prioritization, and action determination.

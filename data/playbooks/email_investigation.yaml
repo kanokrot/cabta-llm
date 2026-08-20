@@ -1,4 +1,5 @@
 name: Email Investigation
+category: Phishing
 description: >
   In-depth email investigation - header analysis, sender verification,
   URL and attachment analysis, threat intelligence check, verdict determination.

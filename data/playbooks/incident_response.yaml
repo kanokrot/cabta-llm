@@ -1,4 +1,5 @@
 name: Incident Response
+category: Incident Response
 description: >
   Comprehensive incident response playbook based on the NIST CSF 2.0 functions (Detect, Respond, Recover).
   Compliant with NIST SP 800-61 Rev. 3 and SANS IR steps. Automated IOC enrichment,

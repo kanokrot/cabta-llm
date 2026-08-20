@@ -1,4 +1,5 @@
 name: Threat Hunt
+category: Threat Intel
 description: >
   Proactive threat hunting playbook - hypothesis-based hidden threat search.
   MITRE ATT&CK framework mapping, automated IOC enrichment with MCP tools,
