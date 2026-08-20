@@ -521,6 +521,7 @@ class PlaybookEngine:
                 "category": pb.get("category", "General"),
                 "description": pb.get("description", ""),
                 "step_count": len(pb.get("_parsed_steps", pb.get("steps", []))),
+                "steps": [s.to_dict() for s in pb.get("_parsed_steps", [])],
                 "source": pb.get("source", "unknown"),
                 "trigger_type": pb.get("trigger_type", "manual"),
             })
