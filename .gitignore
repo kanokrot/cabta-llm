@@ -100,3 +100,8 @@ data/tickets/*.db
 
 *.snapshot.json
 poll_snapshot*.json
+
+*.db
+data/tickets/tickets.db
+agent_store.db
+data/agent_store.db
