@@ -849,6 +849,7 @@ class PlaybookEngine:
             start = time.time()
             result = await self._run_tool(
                 pending_step.tool, params, pending_step.timeout,
+                session_id=session_id,
             )
             duration_ms = int((time.time() - start) * 1000)
             self.agent_loop._notify(session_id, {
@@ -1206,6 +1207,7 @@ class PlaybookEngine:
                         start = time.time()
                         result = await self._run_tool(
                             current_step.tool, params, current_step.timeout,
+                            session_id=session_id,
                         )
                         duration_ms = int((time.time() - start) * 1000)
                         self.agent_loop._notify(session_id, {
@@ -1248,6 +1250,7 @@ class PlaybookEngine:
                     start = time.time()
                     result = await self._run_tool(
                         current_step.tool, params, current_step.timeout,
+                        session_id=session_id,
                     )
                     duration_ms = int((time.time() - start) * 1000)
                     self.agent_loop._notify(session_id, {
@@ -1449,7 +1452,7 @@ class PlaybookEngine:
     #  Helpers
     # ------------------------------------------------------------------ #
 
-    async def _run_tool(self, tool_name: str, params: Dict, timeout: int) -> Dict:
+    async def _run_tool(self, tool_name: str, params: Dict, timeout: int, session_id: str = None) -> Dict:
         """
         Run a tool via the agent loop with a timeout.
 
@@ -1458,8 +1461,11 @@ class PlaybookEngine:
         try:
             if hasattr(self.agent_loop, "run_tool"):
                 import asyncio
+                call_params = dict(params)
+                if tool_name == "investigate_ioc" and "analysis_id" not in call_params:
+                    call_params["analysis_id"] = session_id
                 result = await asyncio.wait_for(
-                    self.agent_loop.run_tool(tool_name, params),
+                    self.agent_loop.run_tool(tool_name, call_params),
                     timeout=timeout,
                 )
                 return result if isinstance(result, dict) else {"result": result}
