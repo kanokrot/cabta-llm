@@ -704,11 +704,11 @@ class ToolRegistry:
         # 9. correlate_findings - Cross-correlate analysis findings
         # -------------------------------------------------------------- #
         async def _correlate_findings(
-            ioc_results: str = None,
-            threat_intel: str = None,
-            network_analysis: str = None,
-            log_search: str = None,
-            timeline: str = None,
+            ioc_results: Any = None,
+            threat_intel: Any = None,
+            network_analysis: Any = None,
+            log_search: Any = None,
+            timeline: Any = None,
             **_kw,
         ) -> Dict:
             """Correlate findings to identify related IOCs and MITRE ATT&CK TTPs."""
@@ -724,7 +724,7 @@ class ToolRegistry:
                     ("timeline", timeline),
                 ]:
                     if raw:
-                        findings.append({"tool": label, "text": str(raw)})
+                        findings.append({"tool": label, "text": raw})
 
                 engine = CorrelationEngine()
                 result = engine.correlate(findings)
