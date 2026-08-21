@@ -632,6 +632,14 @@ var Playbooks = (function () {
         return bestCat;
     }
 
+    /* ── Prefer server-provided pb.category, fall back to keyword detection ── */
+    function resolveCategory(pb) {
+        var raw = (pb && pb.category) ? String(pb.category) : '';
+        var normalized = raw.toLowerCase().trim().replace(/[\s_]+/g, '-');
+        if (normalized && CATEGORIES[normalized]) return normalized;
+        return detectCategory(pb && pb.name, pb && pb.description);
+    }
+
     function getCategoryInfo(cat) {
         if (CATEGORIES[cat]) return CATEGORIES[cat];
         return { label: 'General', icon: 'bi-journal-code' };
@@ -715,7 +723,7 @@ var Playbooks = (function () {
                 var t = s.tool || s.type;
                 if (t) allTools[t] = true;
             });
-            var cat = detectCategory(pb.name, pb.description);
+            var cat = resolveCategory(pb);
             cats[cat] = true;
         });
         document.getElementById('statTotalPlaybooks').textContent = playbooks.length;
@@ -767,7 +775,7 @@ var Playbooks = (function () {
         var steps = pb.steps || [];
         var stepCount = steps.length || pb.step_count || 0;
         var tt = (pb.trigger_type || pb.trigger || 'manual').toLowerCase();
-        var cat = detectCategory(pbName, pbDesc);
+        var cat = resolveCategory(pb);
         var catInfo = getCategoryInfo(cat);
         var tools = collectTools(steps);
         var lastRun = formatLastRun(getLastRun(pbId));
@@ -1070,7 +1078,7 @@ var Playbooks = (function () {
 
             var pbName = data.name || playbookId;
             var pbDesc = data.description || 'No description.';
-            var cat = detectCategory(pbName, pbDesc);
+            var cat = resolveCategory(data);
             var catInfo = getCategoryInfo(cat);
 
             // Update modal title
@@ -1382,7 +1390,8 @@ var Playbooks = (function () {
         cols.forEach(function(col) {
             var name = col.getAttribute('data-pb-name') || '';
             var desc = col.getAttribute('data-pb-desc') || '';
-            var cat = detectCategory(name, desc);
+            var existingCat = (col.getAttribute('data-pb-category') || '').toLowerCase().trim().replace(/[\s_]+/g, '-');
+            var cat = (existingCat && CATEGORIES[existingCat]) ? existingCat : detectCategory(name, desc);
             col.setAttribute('data-pb-category', cat);
 
             // Add category badge and extra meta to existing cards
@@ -1421,12 +1430,25 @@ var Playbooks = (function () {
         });
     }
 
+    /* ── Fetch playbooks via API to populate stats bar only (server-rendered cards stay untouched) ── */
+    function refreshStatsOnly() {
+        fetch('/api/playbooks')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            var playbooks = data.playbooks || data || [];
+            allPlaybooksData = playbooks;
+            updateStats(playbooks);
+        })
+        .catch(function() { /* ignore: stats bar just stays at server-rendered defaults */ });
+    }
+
     // Auto-load from API if server-rendered list is empty, otherwise enhance existing
     var grid = document.getElementById('playbookGrid');
     if (grid && grid.querySelectorAll('.playbook-card').length === 0) {
         loadPlaybooks();
     } else {
         enhanceServerRenderedCards();
+        refreshStatsOnly();
     }
 
     return {
