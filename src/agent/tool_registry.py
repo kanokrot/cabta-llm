@@ -726,6 +726,10 @@ class ToolRegistry:
                     if raw:
                         findings.append({"tool": label, "text": raw})
 
+                for label, raw in _kw.items():
+                    if raw:
+                        findings.append({"tool": label, "text": raw})
+
                 engine = CorrelationEngine()
                 result = engine.correlate(findings)
                 return result
