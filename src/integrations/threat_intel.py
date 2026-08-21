@@ -3,6 +3,7 @@ Author: Ugur AtesThreat intelligence API integrations (20+ sources)."""
 
 import aiohttp
 import asyncio
+import re
 from typing import Dict, Optional, List
 from datetime import datetime
 import logging
@@ -183,7 +184,7 @@ class ThreatIntelligence:
             ],
             'metasploit': [
                 'metsrv', 'METERPRETER', 'meterpreter',
-                'Metasploit', 'msf', 'reverse_tcp',
+                'Metasploit', 'reverse_tcp',
                 'ext_server', 'stdapi',
             ],
             'empire': [
@@ -193,15 +194,15 @@ class ThreatIntelligence:
             ],
             'covenant': [
                 'Covenant', 'GruntHTTP', 'GruntSMB',
-                'YOURDOMAINBACK', 'Elite', 'grunt',
+                'YOURDOMAINBACK',
             ],
             'poshc2': [
-                'PoshC2', 'poshc2', '/images/',
-                'dropper_cs', 'Implant',
+                'PoshC2', 'poshc2',
+                'dropper_cs',
             ],
             'sliver': [
                 'sliver', 'SLIVER', 'bishopfox',
-                'sliverpb', 'implant',
+                'sliverpb',
             ],
             'havoc': [
                 'havoc', 'Havoc', 'demon', 'Demon',
@@ -219,7 +220,27 @@ class ThreatIntelligence:
                 'nighthawk', 'Nighthawk', 'MDSec',
             ],
         }
-        
+
+        # Compile each signature once per call as a word-boundary regex instead of
+        # matching it as a raw substring, so generic fragments can't match inside
+        # unrelated words (the root cause of the 8.8.8.8 false positive). \b is only
+        # applied on a side of the signature whose edge character is alphanumeric/
+        # underscore -- for signatures like paths ('/admin/get.php') or shellcode
+        # markers ('%c%c%c%c%c%c%c%c%cMSSE') that start/end in punctuation, \b next
+        # to a non-word character doesn't reliably match a real boundary, so that
+        # side falls back to a plain (still re.escape'd) literal edge.
+        c2_patterns = {
+            framework: [
+                (sig, re.compile(
+                    (r'\b' if sig[0].isalnum() or sig[0] == '_' else '')
+                    + re.escape(sig.lower())
+                    + (r'\b' if sig[-1].isalnum() or sig[-1] == '_' else '')
+                ))
+                for sig in signatures
+            ]
+            for framework, signatures in C2_SIGNATURES.items()
+        }
+
         try:
             async with aiohttp.ClientSession(timeout=self.timeout) as session:
                 async with session.get(f'https://api.shodan.io/shodan/host/{ip}?key={api_key}') as response:
@@ -238,9 +259,9 @@ class ThreatIntelligence:
                         detected_c2 = []
                         c2_indicators = []
                         
-                        for framework, signatures in C2_SIGNATURES.items():
-                            for sig in signatures:
-                                if sig.lower() in raw_data:
+                        for framework, patterns in c2_patterns.items():
+                            for sig, pattern in patterns:
+                                if pattern.search(raw_data):
                                     if framework not in detected_c2:
                                         detected_c2.append(framework)
                                         c2_indicators.append(f"{framework}: '{sig}' found")
@@ -252,9 +273,9 @@ class ThreatIntelligence:
                             html = http.get('html', '') or ''
                             
                             content = f"{banner} {html}".lower()
-                            for framework, signatures in C2_SIGNATURES.items():
-                                for sig in signatures:
-                                    if sig.lower() in content and framework not in detected_c2:
+                            for framework, patterns in c2_patterns.items():
+                                for sig, pattern in patterns:
+                                    if pattern.search(content) and framework not in detected_c2:
                                         detected_c2.append(framework)
                                         c2_indicators.append(f"{framework}: banner match '{sig[:20]}'")
                         
