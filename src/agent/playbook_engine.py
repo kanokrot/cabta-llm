@@ -138,6 +138,9 @@ _IN_COND = re.compile(
 _VAR_IN_TUPLE = re.compile(
     r"""^\s*(\w[\w.]*)\s+in\s+\((.+?)\)\s*$"""
 )
+# Matches a string that is ENTIRELY a single {{...}} placeholder (no
+# surrounding text), so the resolved value's original type can be preserved.
+_WHOLE_VAR = re.compile(r"^\{\{(.+?)\}\}$")
 
 
 def _parse_literal(text: str) -> Any:
@@ -1489,7 +1492,12 @@ class PlaybookEngine:
         result = {}
         for key, value in params.items():
             if isinstance(value, str):
-                result[key] = self._interpolate_string(value, context)
+                whole_match = _WHOLE_VAR.match(value.strip())
+                if whole_match:
+                    resolved = _resolve_var(whole_match.group(1).strip(), context)
+                    result[key] = resolved if resolved is not None else value
+                else:
+                    result[key] = self._interpolate_string(value, context)
             elif isinstance(value, dict):
                 result[key] = self._interpolate_params(value, context)
             elif isinstance(value, list):
