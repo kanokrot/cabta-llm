@@ -90,13 +90,6 @@ steps:
       url: "{{item}}"
     description: OpenPhish phishing URL feed check
 
-  - name: ioc_circl_misp
-    tool: mcp:free_osint_tools/circl_misp_feed_check
-    for_each: "extract_alert_iocs.all_iocs"
-    params:
-      ioc: "{{item}}"
-    description: CIRCL MISP European CERT threat intel feed check (hashlookup + BGP ranking)
-
   - name: ransomware_check
     tool: mcp:free_osint_tools/ransomwatch_check
     params:

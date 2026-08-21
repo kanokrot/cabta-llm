@@ -165,13 +165,6 @@ steps:
       ip: "{{item}}"
     description: Check open ports, CVEs, and services for IPs via Shodan InternetDB (FREE)
 
-  - name: ioc_circl_misp
-    tool: mcp:free_osint_tools/circl_misp_feed_check
-    for_each: "extract_incident_iocs.iocs.hashes.sha256"
-    params:
-      ioc: "{{item}}"
-    description: CIRCL MISP hashlookup check - is it a known file?
-
   - name: ransomware_activity_check
     tool: mcp:free_osint_tools/ransomwatch_check
     params:

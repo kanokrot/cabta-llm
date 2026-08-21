@@ -102,12 +102,6 @@ steps:
       if: "{{ioc_type}} == 'ip' or {{identify_ioc_type.ips}}"
     description: Check open ports, CVEs, and services for IP via Shodan InternetDB (FREE)
 
-  - name: circl_misp_check
-    tool: mcp:free_osint_tools/circl_misp_feed_check
-    params:
-      ioc: "{{ioc}}"
-    description: CIRCL MISP European CERT threat intel check
-
   - name: crtsh_check
     tool: mcp:free_osint_tools/crtsh_subdomain_search
     params:
