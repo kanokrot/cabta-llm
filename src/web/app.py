@@ -403,6 +403,10 @@ def _register_page_routes(app: FastAPI) -> None:
             'stats': stats, 'recent_jobs': recent,
         })
 
+    @app.get('/soc-operations', response_class=HTMLResponse, include_in_schema=False)
+    async def soc_operations_page(request: Request):
+        return templates.TemplateResponse(request, 'soc_operations.html', {})
+
     @app.get('/analysis/ioc', response_class=HTMLResponse, include_in_schema=False)
     async def ioc_page(request: Request):
         return templates.TemplateResponse(request, 'analysis_ioc.html', {})
