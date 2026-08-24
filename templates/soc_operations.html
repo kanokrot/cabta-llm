@@ -2,36 +2,88 @@
 
 {% block title %}SOC Operations - CABTA{% endblock %}
 {% block page_title %}CABTA SOC Operations Room{% endblock %}
-{% block page_subtitle %}<span class="page-subtitle">Live Monitoring and Triage</span>{% endblock %}
+{% block page_subtitle %}<span class="page-subtitle">Pixel Office Demo</span>{% endblock %}
 
 {% block extra_head %}
 <link rel="stylesheet" href="/static/css/soc_operations.css">
+<link rel="stylesheet" href="/static/css/soc_operations_advanced.css">
 {% endblock %}
 
 {% block content %}
 <div class="container-fluid py-4">
-    <div id="soc-room-shell" class="soc-scene">
-        <div class="soc-wall">
-            <div class="soc-big-screen">
-                <span class="soc-screen-text">STATUS: IDLE</span>
+    <section class="soc-office-panel" aria-labelledby="soc-office-title">
+        <header class="soc-office-header">
+            <div>
+                <div class="soc-office-kicker">CABTA VISUALIZATION</div>
+                <h2 id="soc-office-title" class="soc-office-title">SOC Analyst Pixel Office</h2>
+                <p class="soc-office-subtitle">Hermes-style Canvas renderer · Frontend-only Demo Mode</p>
             </div>
-            <img class="soc-server-rack-img" src="/static/img/soc/server_rack.png" alt="Server Rack">
+
+            <div class="soc-office-actions" aria-label="SOC demo controls">
+                <span class="soc-mode-pill">DEMO MODE</span>
+                <button id="soc-start" class="soc-control soc-control-primary" type="button">Start Demo</button>
+                <button id="soc-pause" class="soc-control" type="button" disabled>Pause</button>
+                <button id="soc-reset" class="soc-control" type="button">Reset</button>
+                <button id="soc-fullscreen" class="soc-control" type="button">Fullscreen</button>
+            </div>
+        </header>
+
+        <div class="soc-office-grid">
+            <div id="soc-room-shell" class="soc-room-shell">
+                <canvas
+                    id="soc-office-canvas"
+                    width="832"
+                    height="512"
+                    data-asset-base="/static/img/soc/pixel-office"
+                    role="img"
+                    aria-label="Animated pixel office showing CABTA analysts processing an IOC"
+                >Your browser does not support HTML Canvas.</canvas>
+                <div class="soc-crt-lines" aria-hidden="true"></div>
+
+                <div id="soc-status-badge" class="soc-status-badge" data-state="idle" aria-live="polite">
+                    <span class="soc-status-dot"></span>
+                    <span id="soc-status-label">STATUS: IDLE</span>
+                </div>
+
+                <div class="soc-live-pill" title="Live Mode will be connected to CABTA events in a later phase">
+                    LIVE: COMING LATER
+                </div>
+
+                <div class="soc-monitor-card" aria-live="polite">
+                    <span>CABTA MONITOR</span>
+                    <strong id="soc-monitor-stage">AWAITING IOC</strong>
+                    <small id="soc-monitor-case">CASE: DEMO-0001</small>
+                </div>
+            </div>
+
+            <aside class="soc-activity-panel" aria-label="Demo activity">
+                <div class="soc-activity-heading">
+                    <span class="soc-activity-dot"></span>
+                    ACTIVITY FEED
+                </div>
+                <div class="soc-case-card">
+                    <span>DEMO CASE</span>
+                    <strong>CASE-1024</strong>
+                    <code>IOC: 44.238.29.244</code>
+                </div>
+                <ol id="soc-event-log" class="soc-event-log"></ol>
+            </aside>
         </div>
-        <div class="soc-floor">
-            <div class="soc-station desk-1">
-                <img class="soc-desk-img" src="/static/img/soc/desk.png" alt="Desk">
-                <img class="soc-computer-img" src="/static/img/soc/computer.png" alt="Computer">
-                <img class="soc-chair-img" src="/static/img/soc/chair.png" alt="Chair">
+
+        <footer class="soc-stage-footer">
+            <div class="soc-current-activity">
+                <span>Current activity</span>
+                <strong id="soc-activity">Waiting for demo</strong>
             </div>
-            <div class="soc-station desk-2">
-                <img class="soc-desk-img" src="/static/img/soc/desk.png" alt="Desk">
-                <img class="soc-computer-img" src="/static/img/soc/computer.png" alt="Computer">
-                <img class="soc-chair-img" src="/static/img/soc/chair.png" alt="Chair">
-            </div>
-        </div>
-    </div>
-    <p class="text-secondary mt-3">Static mockup — Phase 3 will add Demo Mode animation, Phase 4 will add Live Mode data.</p>
+            <div id="soc-stage-track" class="soc-stage-track" aria-label="Demo progress"></div>
+        </footer>
+
+        <p class="soc-demo-note">Demo Mode only — no Case, IOC, database, or analysis data is modified.</p>
+    </section>
 </div>
 {% endblock %}
 
-{% block scripts %}{% endblock %}
+{% block scripts %}
+<script src="/static/js/soc_operations.js" defer></script>
+<script src="/static/js/soc_operations_advanced.js" defer></script>
+{% endblock %}
