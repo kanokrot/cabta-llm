@@ -194,6 +194,7 @@ class AgentLoop:
         state = AgentState(
             session_id=session_id,
             goal=goal,
+            case_id=case_id,
             max_steps=effective_max_steps,
         )
         self._active_sessions[session_id] = state
@@ -460,7 +461,7 @@ class AgentLoop:
                         })
                         try:
                             pb_session = await self._playbook_engine.execute(
-                                pb_id, pb_params, case_id=state.goal,
+                                pb_id, pb_params, case_id=state.case_id,
                             )
                             state.add_finding({
                                 "type": "playbook_completed",

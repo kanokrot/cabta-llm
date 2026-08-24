@@ -44,6 +44,7 @@ class AgentState:
     session_id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
     phase: AgentPhase = AgentPhase.IDLE
     goal: str = ""
+    case_id: Optional[str] = None
     current_tool: Optional[str] = None
     step_count: int = 0
     max_steps: int = 50
