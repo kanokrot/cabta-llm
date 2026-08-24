@@ -61,6 +61,7 @@ class CaseStatus(str, Enum):
 class IOCRequest(BaseModel):
     value: str = Field(..., min_length=1, description="IOC value (IP, domain, hash, etc.)")
     ioc_type: Optional[IOCType] = Field(None, description="IOC type (auto-detected if omitted)")
+    case_id: Optional[str] = Field(None, description="Case ID to auto-link this analysis to")
 
 
 class FileUploadResponse(BaseModel):

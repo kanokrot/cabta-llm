@@ -99,7 +99,7 @@ def _run_file_analysis_bg(mgr, job_id: str, file_path: str) -> None:
         mgr.fail_job(job_id, str(e))
 
 
-def _run_ioc_analysis_bg(mgr, job_id: str, value: str, ioc_type: str) -> None:
+def _run_ioc_analysis_bg(mgr, job_id: str, value: str, ioc_type: str, case_store=None, case_id: str = None) -> None:
     """Run IOC investigation in a background thread."""
     try:
         mgr.update_progress(job_id, 5, 'Loading IOC investigator...')
@@ -130,6 +130,12 @@ def _run_ioc_analysis_bg(mgr, job_id: str, value: str, ioc_type: str) -> None:
         mgr.update_progress(job_id, 95, 'Saving results...')
         mgr.complete_job(job_id, result, verdict=verdict, score=score)
 
+        if case_id and case_store:
+            try:
+                case_store.link_analysis(case_id, job_id)
+            except Exception as link_exc:
+                logger.warning(f"[IOC-BG] Failed to auto-link analysis {job_id} to case {case_id}: {link_exc}")
+
     except Exception as e:
         logger.error(f"[IOC-BG] Analysis failed for {job_id}: {e}")
         mgr.fail_job(job_id, str(e))
@@ -139,6 +145,7 @@ def _run_ioc_analysis_bg(mgr, job_id: str, value: str, ioc_type: str) -> None:
 async def analyze_ioc(request: Request, payload: IOCRequest):
     """Start IOC investigation."""
     mgr = request.app.state.analysis_manager
+    case_store = request.app.state.case_store
     ioc_type = payload.ioc_type.value if payload.ioc_type else 'auto'
     job_id = mgr.create_job('ioc', {
         'value': payload.value,
@@ -148,7 +155,7 @@ async def analyze_ioc(request: Request, payload: IOCRequest):
     # Launch background analysis
     t = threading.Thread(
         target=_run_ioc_analysis_bg,
-        args=(mgr, job_id, payload.value, ioc_type),
+        args=(mgr, job_id, payload.value, ioc_type, case_store, payload.case_id),
         daemon=True,
     )
     t.start()
