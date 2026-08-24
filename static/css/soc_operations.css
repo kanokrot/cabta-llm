@@ -1,1 +1,107 @@
 /* CABTA SOC Operations Room — styles added in Phase 2 */
+
+.soc-scene {
+    width: 100%;
+    max-width: 1100px;
+    height: 500px;
+    background-color: var(--bg-primary);
+    border: 2px solid var(--border-color);
+    position: relative;
+    margin: 0 auto;
+    overflow: hidden;
+    font-family: monospace;
+}
+
+.soc-wall {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 60%;
+    background-color: var(--bg-secondary);
+    border-bottom: 2px solid var(--border-strong);
+}
+
+.soc-floor {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 40%;
+    background-color: var(--bg-primary);
+}
+
+.soc-big-screen {
+    position: absolute;
+    top: 40px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 400px;
+    height: 180px;
+    background-color: var(--bg-card);
+    border: 2px solid var(--color-primary);
+    box-shadow: var(--glow-accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.soc-screen-text {
+    color: var(--color-primary);
+    font-size: 24px;
+    font-weight: bold;
+    letter-spacing: 2px;
+}
+
+/* Pixel art rendering for all SOC images */
+.soc-server-rack-img,
+.soc-desk-img,
+.soc-computer-img,
+.soc-chair-img {
+    image-rendering: pixelated;
+    image-rendering: -moz-crisp-edges;
+}
+
+.soc-server-rack-img {
+    position: absolute;
+    bottom: 0;
+    right: 40px;
+    width: 92px; /* Scale ~4x from 23px */
+}
+
+.soc-station {
+    position: absolute;
+    width: 172px; /* Width of scaled desk */
+    height: 120px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.desk-1 {
+    top: 30px;
+    left: 25%;
+}
+
+.desk-2 {
+    top: 30px;
+    right: 25%;
+}
+
+.soc-computer-img {
+    position: absolute;
+    top: -30px;
+    width: 120px; /* Scale 4x from 30px */
+}
+
+.soc-desk-img {
+    position: absolute;
+    bottom: 40px;
+    width: 172px; /* Scale 4x from 43px */
+}
+
+.soc-chair-img {
+    position: absolute;
+    bottom: -10px;
+    width: 60px; /* Scale 4x from 15px */
+}

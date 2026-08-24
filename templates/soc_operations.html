@@ -10,8 +10,27 @@
 
 {% block content %}
 <div class="container-fluid py-4">
-    <p class="text-secondary">Live Mode and Demo Mode coming in a later phase.</p>
-    <div id="soc-room-shell"></div>
+    <div id="soc-room-shell" class="soc-scene">
+        <div class="soc-wall">
+            <div class="soc-big-screen">
+                <span class="soc-screen-text">STATUS: IDLE</span>
+            </div>
+            <img class="soc-server-rack-img" src="/static/img/soc/server_rack.png" alt="Server Rack">
+        </div>
+        <div class="soc-floor">
+            <div class="soc-station desk-1">
+                <img class="soc-desk-img" src="/static/img/soc/desk.png" alt="Desk">
+                <img class="soc-computer-img" src="/static/img/soc/computer.png" alt="Computer">
+                <img class="soc-chair-img" src="/static/img/soc/chair.png" alt="Chair">
+            </div>
+            <div class="soc-station desk-2">
+                <img class="soc-desk-img" src="/static/img/soc/desk.png" alt="Desk">
+                <img class="soc-computer-img" src="/static/img/soc/computer.png" alt="Computer">
+                <img class="soc-chair-img" src="/static/img/soc/chair.png" alt="Chair">
+            </div>
+        </div>
+    </div>
+    <p class="text-secondary mt-3">Static mockup — Phase 3 will add Demo Mode animation, Phase 4 will add Live Mode data.</p>
 </div>
 {% endblock %}
 
