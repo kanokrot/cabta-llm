@@ -183,7 +183,7 @@ steps:
     condition:
       if: "hash_threat_check_any_malicious == true or ip_reputation_any_malicious == true or feodo_check_any_malicious == true"
       then: immediate_containment
-      else: monitor_and_assess
+      else: cross_correlate_findings
 
   - name: immediate_containment
     tool: isolate_device
@@ -210,13 +210,6 @@ steps:
       Update firewall, proxy, and EDR rules.
     requires_approval: true
 
-  - name: monitor_and_assess
-    tool: search_logs
-    params:
-      query: "{{extract_incident_iocs.iocs}}"
-      timerange: 72h
-    description: Search logs for additional evidence and assess the scope/spread
-
   - name: cross_correlate_findings
     tool: correlate_findings
     params:
@@ -230,7 +223,6 @@ steps:
         zeek: "{{zeek_log_analysis}}"
         suricata: "{{suricata_alert_analysis}}"
         port_check: "{{suspicious_port_check}}"
-      log_search: "{{monitor_and_assess}}"
       timeline: "{{timeline_analysis}}"
     description: Cross-correlate all findings - determine common attack patterns and TTPs
 
@@ -287,13 +279,6 @@ steps:
     requires_approval: true
 
   # ===== Phase 4: Recovery =====
-  - name: verify_clean
-    tool: search_logs
-    params:
-      query: "{{extract_incident_iocs.iocs}}"
-      timerange: 24h
-    description: Post-cleanup verification - ensures no remaining malicious activity
-
   - name: cve_check
     tool: mcp:vulnerability-tools/cve_search
     params:
