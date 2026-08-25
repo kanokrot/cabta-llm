@@ -158,12 +158,7 @@ steps:
   # ===== Phase 5: Prioritization =====
   - name: priority_evaluation
     condition:
-      if: >
-        {{hash_malwarebazaar.malicious}} or
-        {{ip_blocklist.blocklisted}} or
-        {{ip_feodo.found}} or
-        {{threatfox_all.found}} or
-        {{cve_kev.in_kev}}
+      if: "hash_malwarebazaar_any_malicious == true or ip_blocklist_any_malicious == true or ip_feodo_any_malicious == true or threatfox_all_any_malicious == true or cve_kev_any_malicious == true"
       then: high_priority_response
       else: low_priority_document
 
