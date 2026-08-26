@@ -11,7 +11,7 @@
     --adv-origin-y: 50%;
     transform: scale(var(--adv-scale));
     transform-origin: var(--adv-origin-x) var(--adv-origin-y);
-    transition: transform 1.1s cubic-bezier(.2, .8, .2, 1), transform-origin 1.1s ease, filter .2s ease;
+    transition: transform 1.1s cubic-bezier(.2, .8, .2, 1), transform-origin 1.1s cubic-bezier(.2, .8, .2, 1), filter .2s ease;
     will-change: transform, filter;
 }
 
@@ -317,7 +317,8 @@
     font: 700 10px/1.25 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     opacity: 0;
     transform: translate(-50%, 7px) scale(.92);
-    transition: opacity .2s ease, transform .25s ease, left .9s ease, top .9s ease;
+    transition: opacity .2s ease, transform .25s ease,
+    left 1.1s cubic-bezier(.2, .8, .2, 1), top 1.1s cubic-bezier(.2, .8, .2, 1);
 }
 
 .soc-room-shell .soc-speech-bubble {

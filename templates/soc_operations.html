@@ -20,12 +20,17 @@
             </div>
 
             <div class="soc-office-actions" aria-label="SOC demo controls">
-                <span class="soc-mode-pill">DEMO MODE</span>
-                <button id="soc-start" class="soc-control soc-control-primary" type="button">Start Demo</button>
-                <button id="soc-pause" class="soc-control" type="button" disabled>Pause</button>
-                <button id="soc-reset" class="soc-control" type="button">Reset</button>
-                <button id="soc-fullscreen" class="soc-control" type="button">Fullscreen</button>
-            </div>
+            <span class="soc-mode-pill">DEMO MODE</span>
+            <select id="soc-scenario" class="soc-control" aria-label="Demo scenario">
+            <option value="malicious">Malicious C2 IP</option>
+            <option value="suspicious">Suspicious Domain</option>
+            <option value="clean">Clean IP</option>
+            </select>
+             <button id="soc-start" class="soc-control soc-control-primary" type="button">Start Demo</button>
+             <button id="soc-pause" class="soc-control" type="button" disabled>Pause</button>
+             <button id="soc-reset" class="soc-control" type="button">Reset</button>
+             <button id="soc-fullscreen" class="soc-control" type="button">Fullscreen</button>
+             </div>
         </header>
 
         <div class="soc-office-grid">
@@ -63,8 +68,8 @@
                 </div>
                 <div class="soc-case-card">
                     <span>DEMO CASE</span>
-                    <strong>CASE-1024</strong>
-                    <code>IOC: 44.238.29.244</code>
+                    <strong id="soc-case-id">CASE-1024</strong>
+                    <code id="soc-case-ioc">IOC: 44.238.29.244</code>
                 </div>
                 <ol id="soc-event-log" class="soc-event-log"></ol>
             </aside>

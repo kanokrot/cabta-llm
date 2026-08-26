@@ -21,6 +21,7 @@
         pause: document.getElementById("soc-pause"),
         reset: document.getElementById("soc-reset"),
         fullscreen: document.getElementById("soc-fullscreen"),
+        scenario: document.getElementById("soc-scenario"),
         statusBadge: document.getElementById("soc-status-badge"),
         statusLabel: document.getElementById("soc-status-label"),
         monitorStage: document.getElementById("soc-monitor-stage"),
@@ -28,18 +29,64 @@
         activity: document.getElementById("soc-activity"),
         eventLog: document.getElementById("soc-event-log"),
         stageTrack: document.getElementById("soc-stage-track"),
+        caseId: document.getElementById("soc-case-id"),
+        caseIoc: document.getElementById("soc-case-ioc"),
     };
 
-    const STAGES = [
-        { id: "idle", label: "Idle", duration: Infinity, activity: "Waiting for demo", monitor: "AWAITING IOC", event: "SOC room ready" },
-        { id: "queued", label: "Queued", duration: 2.8, activity: "Dispatching IOC to SOC analysts", monitor: "IOC QUEUED", event: "analysis.queued" },
-        { id: "enrichment", label: "Enrich", duration: 4.4, activity: "Querying threat-intelligence sources", monitor: "ENRICHMENT", event: "enrichment.started" },
-        { id: "correlation", label: "Correlate", duration: 4.2, activity: "Correlating IOC with CABTA evidence", monitor: "CORRELATING", event: "correlation.started" },
-        { id: "scoring", label: "Score", duration: 3.8, activity: "Calculating risk and confidence scores", monitor: "RISK SCORE: 87", event: "scoring.started" },
-        { id: "classification", label: "Classify", duration: 4.0, activity: "Threat detected — classifying severity", monitor: "HIGH THREAT", event: "threat.detected" },
-        { id: "reporting", label: "Report", duration: 4.2, activity: "Generating Threat Intelligence Report", monitor: "BUILDING REPORT", event: "report.generated" },
-        { id: "completed", label: "Complete", duration: Infinity, activity: "Analysis complete — report is ready", monitor: "ANALYSIS COMPLETE", event: "analysis.completed" },
-    ];
+    // Scenario data — single source of truth, shared with soc_operations_advanced.js
+    const SCENARIOS = {
+        malicious: {
+            id: "malicious",
+            ioc: "44.238.29.244",
+            caseId: "CASE-1024",
+            verdict: "MALICIOUS",
+            severity: "HIGH",
+            score: 87,
+            glitch: true,
+        },
+        suspicious: {
+            id: "suspicious",
+            ioc: "secure-update-login.net",
+            caseId: "CASE-1042",
+            verdict: "SUSPICIOUS",
+            severity: "MEDIUM",
+            score: 54,
+            glitch: false,
+        },
+        clean: {
+            id: "clean",
+            ioc: "1.1.1.1",
+            caseId: "CASE-1031",
+            verdict: "CLEAN",
+            severity: "LOW",
+            score: 6,
+            glitch: false,
+        },
+    };
+
+    function getActiveScenario() {
+        const key = ui.scenario?.value;
+        return SCENARIOS[key] || SCENARIOS.malicious;
+    }
+
+    // Exposed for soc_operations_advanced.js
+    window.SOC_SCENARIOS = SCENARIOS;
+    window.SOC_GET_ACTIVE_SCENARIO = getActiveScenario;
+
+    function buildStages(scenario) {
+        return [
+            { id: "idle", label: "Idle", duration: Infinity, activity: "Waiting for demo", monitor: "AWAITING IOC", event: "SOC room ready" },
+            { id: "queued", label: "Queued", duration: 2.8, activity: `Dispatching IOC ${scenario.ioc} to SOC analysts`, monitor: "IOC QUEUED", event: "analysis.queued" },
+            { id: "enrichment", label: "Enrich", duration: 4.4, activity: "Querying threat-intelligence sources", monitor: "ENRICHMENT", event: "enrichment.started" },
+            { id: "correlation", label: "Correlate", duration: 4.2, activity: "Correlating IOC with CABTA evidence", monitor: "CORRELATING", event: "correlation.started" },
+            { id: "scoring", label: "Score", duration: 3.8, activity: "Calculating risk score", monitor: `RISK SCORE: ${scenario.score}`, event: "scoring.started" },
+            { id: "classification", label: "Classify", duration: 4.0, activity: `Verdict reached — ${scenario.verdict} (${scenario.severity})`, monitor: scenario.verdict, event: "threat.detected" },
+            { id: "reporting", label: "Report", duration: 4.2, activity: "Generating Threat Intelligence Report", monitor: "BUILDING REPORT", event: "report.generated" },
+            { id: "completed", label: "Complete", duration: Infinity, activity: "Analysis complete — report is ready", monitor: "ANALYSIS COMPLETE", event: "analysis.completed" },
+        ];
+    }
+
+    let STAGES = buildStages(getActiveScenario());
 
     const FURNITURE_PATHS = {
         BIN: "furniture/BIN/BIN.png",
@@ -85,11 +132,14 @@
         lastFrame: performance.now(),
         eventStages: new Set(),
         particles: [],
+        scenario: getActiveScenario(),
     };
 
     const agents = [
         createAgent(0, "NOVA", 0, 13, 8),
         createAgent(1, "BYTE", 1, 21, 12),
+        createAgent(2, "ECHO", 2, 17, 6),
+        createAgent(3, "LINK", 3, 10, 10),
     ];
 
     function createAgent(id, name, palette, col, row) {
@@ -126,7 +176,7 @@
         for (let i = 0; i < 9; i += 1) {
             tasks.push(loadImage(`floor_${i}`, `${assetBase}/floors/floor_${i}.png`));
         }
-        for (let i = 0; i < 2; i += 1) {
+        for (let i = 0; i < agents.length; i += 1) {
             tasks.push(loadImage(`char_${i}`, `${assetBase}/characters/char_${i}.png`));
         }
         for (const [type, path] of Object.entries(FURNITURE_PATHS)) {
@@ -177,10 +227,24 @@
         if (agent.route.length) agent.mode = "walk";
     }
 
+    const WANDER_POINTS = [[13, 6], [10, 4], [6, 4], [3, 2], [18, 12], [15, 12], [14, 8], [14, 4], [8, 4]];
+
+    function wanderAgent(agent, dt) {
+        if (agent.route.length) return;
+        const next = WANDER_POINTS[Math.floor(Math.random() * WANDER_POINTS.length)];
+        setRoute(agent, [next], "idle");
+    }
+
+    function applyScenarioToCaseCard(scenario) {
+        if (ui.caseId) ui.caseId.textContent = scenario.caseId;
+        if (ui.caseIoc) ui.caseIoc.textContent = `IOC: ${scenario.ioc}`;
+    }
+
     function enterStage(index) {
         runtime.stageIndex = index;
         runtime.stageElapsed = 0;
         const stage = STAGES[index];
+        const scenario = runtime.scenario;
 
         agents.forEach((agent) => {
             agent.bubble = null;
@@ -214,8 +278,8 @@
             case "classification":
                 setAt(agents[0], 3, 2, "read", "up");
                 setAt(agents[1], 17, 4, "read", "right");
-                agents[0].bubble = "!";
-                agents[1].bubble = "!";
+                agents[0].bubble = scenario.glitch ? "!" : "✓";
+                agents[1].bubble = scenario.glitch ? "!" : "✓";
                 break;
             case "reporting":
                 setAt(agents[0], 3, 2, "type", "up");
@@ -228,6 +292,7 @@
                 agents[1].bubble = "✓";
                 runtime.running = false;
                 runtime.paused = false;
+                if (ui.scenario) ui.scenario.disabled = false;
                 break;
         }
 
@@ -330,7 +395,7 @@
         if (ui.statusBadge) ui.statusBadge.dataset.state = stage.id;
         if (ui.statusLabel) ui.statusLabel.textContent = `STATUS: ${stage.id.toUpperCase()}`;
         if (ui.monitorStage) ui.monitorStage.textContent = stage.monitor;
-        if (ui.monitorCase) ui.monitorCase.textContent = runtime.stageIndex === 0 ? "CASE: DEMO-0001" : "CASE: CASE-1024 · IOC 44.238.29.244";
+        if (ui.monitorCase) ui.monitorCase.textContent = runtime.stageIndex === 0 ? "CASE: DEMO-0001" : `CASE: ${runtime.scenario.caseId} · IOC ${runtime.scenario.ioc}`;
         if (ui.activity) ui.activity.textContent = stage.activity;
         if (ui.pause) {
             ui.pause.disabled = !runtime.running && !runtime.paused;
@@ -352,15 +417,23 @@
         runtime.clock = 0;
         runtime.eventStages.clear();
         runtime.particles = [];
+        runtime.scenario = getActiveScenario();
+        STAGES = buildStages(runtime.scenario);
+        applyScenarioToCaseCard(runtime.scenario);
+        if (ui.scenario) ui.scenario.disabled = false;
         if (ui.eventLog) ui.eventLog.replaceChildren();
         enterStage(0);
     }
 
     function startDemo() {
+        runtime.scenario = getActiveScenario();
+        STAGES = buildStages(runtime.scenario);
+        applyScenarioToCaseCard(runtime.scenario);
         runtime.running = true;
         runtime.paused = false;
         runtime.eventStages.clear();
         runtime.particles = [];
+        if (ui.scenario) ui.scenario.disabled = true;
         if (ui.eventLog) ui.eventLog.replaceChildren();
         enterStage(1);
     }
@@ -381,6 +454,7 @@
     function update(dt) {
         runtime.clock += dt;
         agents.forEach((agent) => updateAgent(agent, dt));
+        [agents[2], agents[3]].forEach((agent) => wanderAgent(agent, dt));
 
         if (runtime.running) {
             runtime.stageElapsed += dt;
@@ -638,6 +712,7 @@
 
     function drawThreatAlert() {
         if (STAGES[runtime.stageIndex].id !== "classification") return;
+        if (!runtime.scenario.glitch) return;
         const alpha = 0.05 + (Math.sin(runtime.clock * 7) + 1) * 0.035;
         ctx.fillStyle = `rgba(239,68,68,${alpha})`;
         ctx.fillRect(0, 0, LOGICAL_W, LOGICAL_H);
@@ -677,6 +752,10 @@
     ui.pause?.addEventListener("click", togglePause);
     ui.reset?.addEventListener("click", resetDemo);
     ui.fullscreen?.addEventListener("click", toggleFullscreen);
+    ui.scenario?.addEventListener("change", () => {
+        if (runtime.running) return;
+        resetDemo();
+    });
     document.addEventListener("fullscreenchange", () => {
         if (ui.fullscreen) ui.fullscreen.textContent = document.fullscreenElement ? "Exit Fullscreen" : "Fullscreen";
     });
