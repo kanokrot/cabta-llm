@@ -1,4 +1,5 @@
 import aiohttp
+import re
 import json
 from typing import Dict, Optional
 from src.integrations.verdict_validator import validate_llm_analysis
@@ -62,6 +63,11 @@ class LLMAnalyzer:
         # Anthropic settings (fallback)
         self.anthropic_key = config.get('api_keys', {}).get('anthropic', '')
         self.anthropic_model = 'claude-sonnet-4-20250514'
+
+        # vLLM settings (OpenAI-compatible self-hosted)
+        self.vllm_base_url = llm_config.get('vllm_base_url')
+        self.vllm_api_key = llm_config.get('vllm_api_key')
+        self.vllm_model = llm_config.get('vllm_model')
 
         self.timeout = aiohttp.ClientTimeout(total=120)  # Longer timeout for local LLM
 
@@ -146,6 +152,8 @@ Keep it concise and factual."""
             # Call appropriate LLM provider
             if self.provider == 'ollama':
                 response_data = await self._call_ollama_api(prompt)
+            elif self.provider == 'vllm':
+                response_data = await self._call_vllm_api(prompt)
             else:
                 response_data = await self._call_anthropic_api(prompt)
 
@@ -322,6 +330,8 @@ Be specific and reference the tool findings in your analysis."""
 
             if self.provider == 'ollama':
                 response_data = await self._call_ollama_api(prompt)
+            elif self.provider == 'vllm':
+                response_data = await self._call_vllm_api(prompt)
             else:
                 response_data = await self._call_anthropic_api(prompt)
 
@@ -393,6 +403,8 @@ Be specific and reference the tool findings in your analysis."""
 
             if self.provider == 'ollama':
                 response_data = await self._call_ollama_api(prompt)
+            elif self.provider == 'vllm':
+                response_data = await self._call_vllm_api(prompt)
             else:
                 response_data = await self._call_anthropic_api(prompt)
 
@@ -599,6 +611,78 @@ Be specific and reference the tool findings in your analysis."""
             logger.error(f"[LLM] Ollama API call failed: {e}")
             return None
 
+    async def _call_vllm_api(self, prompt: str) -> Optional[Dict]:
+        """
+        Call vLLM OpenAI-compatible API.
+
+        Args:
+            prompt: Analysis prompt
+
+        Returns:
+            Parsed JSON response or None
+        """
+        if not self.vllm_base_url:
+            logger.warning("[LLM] No vLLM base URL configured")
+            return None
+
+        try:
+            logger.info(f"[LLM] Calling vLLM ({self.vllm_model})...")
+
+            headers = {
+                'content-type': 'application/json',
+            }
+            if self.vllm_api_key:
+                headers['Authorization'] = f'Bearer {self.vllm_api_key}'
+
+            payload = {
+                'model': self.vllm_model,
+                'messages': [
+                    {'role': 'user', 'content': prompt}
+                ]
+            }
+
+            async with aiohttp.ClientSession(timeout=self.timeout) as session:
+                async with session.post(
+                    f'{self.vllm_base_url}/v1/chat/completions',
+                    headers=headers,
+                    json=payload
+                ) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        text = data['choices'][0]['message']['content']
+
+                        # Parse JSON from response
+                        try:
+                            return json.loads(text)
+                        except json.JSONDecodeError:
+                            # Try to extract JSON from markdown code blocks
+                            json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', text, re.DOTALL)
+                            if json_match:
+                                return json.loads(json_match.group(1))
+
+                            # Try to find JSON object in text
+                            start = text.find('{')
+                            end = text.rfind('}') + 1
+                            if start >= 0 and end > start:
+                                return json.loads(text[start:end])
+
+                            logger.warning(f"[LLM] Could not parse JSON from vLLM response")
+                            return {'raw_response': text}
+                    else:
+                        body = await response.text()
+                        logger.error(f"[LLM] vLLM API error {response.status}: {body[:200]}")
+                        return None
+
+        except aiohttp.ClientConnectorError:
+            logger.error(
+                f"[LLM] Cannot connect to vLLM at {self.vllm_base_url}. "
+                "Is the vLLM server running?"
+            )
+            return None
+        except Exception as e:
+            logger.error(f"[LLM] vLLM API call failed: {e}")
+            return None
+
     async def _call_anthropic_api(self, prompt: str) -> Optional[Dict]:
         """
         Call Anthropic Claude API.
@@ -792,6 +876,8 @@ Make rules specific to the threat indicators found. Include:
             # Call LLM
             if self.provider == 'ollama':
                 response_data = await self._call_ollama_api(prompt)
+            elif self.provider == 'vllm':
+                response_data = await self._call_vllm_api(prompt)
             else:
                 response_data = await self._call_anthropic_api(prompt)
 
