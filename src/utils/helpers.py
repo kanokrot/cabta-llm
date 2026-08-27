@@ -72,7 +72,7 @@ def determine_verdict(score: int) -> str:
         return 'MALICIOUS'
     elif score >= 40:
         return 'SUSPICIOUS'
-    elif score >= 1:
+    elif score >= 0:
         return 'CLEAN'
     else:
         return 'UNKNOWN'
