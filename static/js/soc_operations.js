@@ -55,7 +55,7 @@
         },
         clean: {
             id: "clean",
-            ioc: "1.1.1.1",
+            ioc: "8.8.8.8",
             caseId: "CASE-1031",
             verdict: "CLEAN",
             severity: "LOW",
