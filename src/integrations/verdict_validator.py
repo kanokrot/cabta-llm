@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 SCORE_THRESHOLDS = [
     (70, "MALICIOUS"),
     (40, "SUSPICIOUS"),
-    (1, "CLEAN"),
+    (0, "CLEAN"),
 ]
 
 
@@ -28,6 +28,8 @@ def compute_authoritative_verdict(threat_score: int) -> str:
     Returns:
         "MALICIOUS" | "SUSPICIOUS" | "CLEAN" | "UNKNOWN"
     """
+    if threat_score < 0:
+        return "UNKNOWN"
     for min_score, verdict in SCORE_THRESHOLDS:
         if threat_score >= min_score:
             return verdict
