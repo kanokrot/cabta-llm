@@ -4,9 +4,19 @@ Tests for ThreatIntelligence.check_shodan() C2 signature matching.
 Covers the fix for a false-positive C2 detection: querying a known-clean IP
 (8.8.8.8) triggered a flagged source because C2_SIGNATURES were matched via
 raw substring search. The fix (a) removes signatures that are too generic to
-ever be safe ('msf', 'Elite', 'grunt', '/images/', 'implant'/'Implant') and
-(b) switches matching from substring search to word-boundary regex
+ever be safe ('msf', 'Elite', 'grunt', '/images/', 'implant'/'Implant', 'beacon')
+and (b) switches matching from substring search to word-boundary regex
 (re.escape + \\b where the signature's edge characters are alphanumeric).
+
+'beacon' was added to the generic/unsafe list after a second live false
+positive: querying 1.1.1.1 (Cloudflare's public DNS resolver) flagged
+cobalt_strike because the response body contained Cloudflare's own
+analytics script tag:
+    <script defer src="https://performance.radar.cloudflare.com/beacon.js">
+Like 'msf'/'Elite'/'grunt'/'implant', a whole-word match on 'beacon' alone
+is indistinguishable from this kind of benign occurrence, so it must
+require additional corroborating context (e.g. another C2 signature in the
+same response) rather than firing on its own.
 """
 
 import unittest
@@ -93,6 +103,8 @@ class TestCheckShodanC2Signatures(unittest.IsolatedAsyncioTestCase):
         self.assertIn("empire", result["c2_frameworks"])
 
     async def test_special_character_signature_shellcode_marker(self):
+        # Detection here must come from the MSSE marker, not from 'beacon'
+        # alone (which is now treated as too generic to trust on its own).
         result = await self._check(banner="beacon stage: %c%c%c%c%c%c%c%c%cMSSE detected")
         self.assertTrue(result["is_c2"])
         self.assertIn("cobalt_strike", result["c2_frameworks"])
@@ -107,10 +119,21 @@ class TestCheckShodanC2Signatures(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(result["is_c2"])
         self.assertEqual(result["c2_frameworks"], [])
 
-    # 1. Requested scenario: 'implant' as a genuine whole word in benign content.
+    # 1. Requested scenario: 'implant' as a genuine whole word in benign context.
     async def test_implant_whole_word_in_benign_context_not_flagged(self):
         result = await self._check(banner="dental implant services available now")
         self.assertFalse(result["is_c2"])
+        self.assertEqual(result["c2_frameworks"], [])
+
+    # 5. New evidence (2026-08-27, live query against 1.1.1.1): bare 'beacon'
+    # in a benign URL path must not trigger cobalt_strike on its own, same
+    # category as msf/Elite/grunt/implant above.
+    async def test_bare_beacon_in_benign_url_not_flagged(self):
+        result = await self._check(
+            html='<script defer src="https://performance.radar.cloudflare.com/'
+            'beacon.js"></script>'
+        )
+        self.assertFalse(result["is_c2"], "bare 'beacon' in a URL path should not trigger C2 flag")
         self.assertEqual(result["c2_frameworks"], [])
 
 

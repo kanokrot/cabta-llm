@@ -176,11 +176,22 @@ class ThreatIntelligence:
             return {'status': '⚠', 'error': 'No valid API key configured'}
         
         # Known C2 framework signatures in Shodan data
+        #
+        # NOTE: 'beacon' was removed from cobalt_strike below (2026-08-27).
+        # It is a common English word ("Cloudflare Radar performance beacon",
+        # WiFi beacon frames, IoT beacon devices, etc.) and produced a live
+        # false positive on 1.1.1.1 (Cloudflare's public DNS resolver): the
+        # Shodan HTTP banner for an unrelated vhost contained
+        #   <script defer src="https://performance.radar.cloudflare.com/beacon.js">
+        # which alone was enough to flag the IP as cobalt_strike/SUSPICIOUS.
+        # Genuine Cobalt Strike beacon traffic is still caught by the other,
+        # more specific signatures below (e.g. 'MSSE-', '%c%c%c%c%c%c%c%c%cMSSE',
+        # 'StartBrowser', 'runasadmin', 'postex', 'sleeptime').
         C2_SIGNATURES = {
             'cobalt_strike': [
                 'MSSE-', '%c%c%c%c%c%c%c%c%cMSSE', 
                 'StartBrowser', 'runasadmin', 'postex',
-                'beacon', 'X-Malware-Hash', 'sleeptime',
+                'X-Malware-Hash', 'sleeptime',
             ],
             'metasploit': [
                 'metsrv', 'METERPRETER', 'meterpreter',
