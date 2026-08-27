@@ -295,7 +295,7 @@ class ThreatIntelligence:
                         
                         # Suspicious port combinations (common for C2)
                         c2_ports = {443, 8443, 8080, 8888, 4444, 5555, 9999, 1337, 31337, 50050}
-                        if set(ports) & c2_ports and len(ports) < 5:
+                        if score > 0 and set(ports) & c2_ports and len(ports) < 5:
                             score += 10
                         
                         return {
