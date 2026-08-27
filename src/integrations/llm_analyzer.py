@@ -71,7 +71,8 @@ class LLMAnalyzer:
 
         self.timeout = aiohttp.ClientTimeout(total=120)  # Longer timeout for local LLM
 
-        logger.info(f"[LLM] Provider: {self.provider} | Model: {self.ollama_model if self.provider == 'ollama' else self.anthropic_model}")
+        _model_map = {'ollama': self.ollama_model, 'vllm': self.vllm_model, 'anthropic': self.anthropic_model}
+        logger.info(f"[LLM] Provider: {self.provider} | Model: {_model_map.get(self.provider, self.anthropic_model)}")
 
     async def analyze_ioc_results(
         self, ioc: str, ioc_type: str, results: Dict, rag_context: Optional[list] = None
