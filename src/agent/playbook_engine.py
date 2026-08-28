@@ -27,6 +27,7 @@ from typing import Any, Dict, List, Optional, Tuple
 # Import threat intel for enrichment
 from ..integrations.threat_intel import ThreatIntelligence
 from ..integrations.ticketing import create_incident_ticket
+from ..reporting.html_report_generator import HTMLReportGenerator
 
 
 logger = logging.getLogger(__name__)
@@ -365,6 +366,18 @@ def _find_highest_verdict(context: Dict) -> Optional[str]:
         return max(explicit, key=lambda v: _VERDICT_SEVERITY[v])
     if derived:
         return max(derived, key=lambda v: _VERDICT_SEVERITY[v])
+    return None
+
+
+def _find_ioc_investigation_result(context: Dict) -> Optional[Dict]:
+    """Scan context for a step result dict matching the IOC
+    investigation shape (verdict/threat_score/sources/ioc_type all
+    present). Returns the first match, or None. Read-only, never
+    raises."""
+    required_keys = {'verdict', 'threat_score', 'sources', 'ioc_type'}
+    for key, val in context.items():
+        if isinstance(val, dict) and required_keys.issubset(val.keys()):
+            return val
     return None
 
 
@@ -1327,6 +1340,19 @@ class PlaybookEngine:
                             "[PLAYBOOK] Failed to create incident ticket for %s: %s",
                             ioc, e,
                         )
+
+            output_config = self.agent_loop.config.get("output", {})
+            if output_config.get("save_reports", True):
+                investigation_result = _find_ioc_investigation_result(context)
+                if investigation_result is not None:
+                    ioc = context.get('ioc') or investigation_result.get('ioc') or 'unknown_ioc'
+                    report_dir = output_config.get("report_dir", "./reports")
+                    Path(report_dir).mkdir(parents=True, exist_ok=True)
+                    output_path = str(Path(report_dir) / f"ioc_report_{session_id}_{step_number}.html")
+                    generator = HTMLReportGenerator()
+                    report_path = generator.generate_ioc_report(investigation_result, ioc, output_path)
+                    if report_path:
+                        summary += f" — report: {output_path}"
 
             self.store.update_session_status(session_id, "completed", summary=summary)
             self.agent_loop._notify(session_id, {"type": "completed", "summary": summary})
