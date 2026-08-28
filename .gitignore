@@ -109,3 +109,4 @@ data/agent_store.db
 pixel-office.zip
 
 hermes-plugins-reference/
+data/benchmark/benchmark_iocs.json
