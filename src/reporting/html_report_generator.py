@@ -32,20 +32,22 @@ class HTMLReportGenerator:
         """Return comprehensive CSS styles."""
         return """
 :root {
-    --bg-primary: #ffffff;
-    --bg-secondary: #f8f9fa;
-    --bg-tertiary: #e9ecef;
-    --text-primary: #212529;
-    --text-secondary: #6c757d;
-    --border-color: #dee2e6;
+    --bg-primary: #f8fafc;
+    --bg-secondary: #ffffff;
+    --bg-tertiary: #f1f5f9;
+    --text-primary: #0f172a;
+    --text-secondary: #475569;
+    --border-color: #e2e8f0;
+    --color-accent: #0e7490;
 }
 [data-theme="dark"] {
-    --bg-primary: #1a1d23;
-    --bg-secondary: #242831;
-    --bg-tertiary: #2d323e;
-    --text-primary: #e9ecef;
-    --text-secondary: #adb5bd;
-    --border-color: #495057;
+    --bg-primary: #0a0e1a;
+    --bg-secondary: #111827;
+    --bg-tertiary: #1a1f35;
+    --text-primary: #f1f5f9;
+    --text-secondary: #94a3b8;
+    --border-color: #1e293b;
+    --color-accent: #06b6d4;
 }
 * { transition: background-color 0.3s, color 0.3s; }
 body {
@@ -243,12 +245,12 @@ function toggleTheme() {{
     const theme = body.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
     body.setAttribute('data-theme', theme);
     document.querySelector('.theme-toggle').textContent = theme === 'dark' ? '☀️' : '🌙';
-    localStorage.setItem('theme', theme);
+    localStorage.setItem('mcp-soc-theme', theme);
 }}
 
-// Load saved theme
+// Load saved theme (synced with main app's localStorage key)
 document.addEventListener('DOMContentLoaded', function() {{
-    const saved = localStorage.getItem('theme') || 'light';
+    const saved = localStorage.getItem('mcp-soc-theme') || 'dark';
     document.body.setAttribute('data-theme', saved);
     const toggle = document.querySelector('.theme-toggle');
     if (toggle) toggle.textContent = saved === 'dark' ? '☀️' : '🌙';
