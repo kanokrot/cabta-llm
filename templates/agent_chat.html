@@ -13,6 +13,9 @@
 <button class="btn btn-sm btn-outline-secondary" id="exportBtn" onclick="AgentChat.exportSession()" style="display:none;" title="Export investigation">
     <i class="bi bi-download me-1"></i>Export
 </button>
+<button class="btn btn-sm btn-outline-accent" id="viewReportBtn" onclick="AgentChat.viewReport()" style="display:none;" title="View HTML report">
+    <i class="bi bi-file-earmark-text me-1"></i>Report
+</button>
 <select id="sessionSelect" class="form-select form-select-sm" style="width:auto;min-width:180px;" onchange="AgentChat.switchSession(this.value)">
     <option value="">-- New Session --</option>
 </select>
@@ -758,6 +761,7 @@ var AgentChat = (function() {
     var sessionId = null;
     var ws = null;
     var pendingApprovalId = null;
+    var reportPath = null;
     var maxSteps = 0;
     var currentStep = 0;
     var startTime = null;
@@ -1294,6 +1298,8 @@ var AgentChat = (function() {
         currentPhase = 'think';
         document.getElementById('sessionSelect').value = '';
         document.getElementById('exportBtn').style.display = 'none';
+        document.getElementById('viewReportBtn').style.display = 'none';
+        reportPath = null;
         document.getElementById('elapsedTime').textContent = '';
         var msgs = document.getElementById('chatMessages');
         while (msgs.firstChild) msgs.removeChild(msgs.firstChild);
@@ -1331,6 +1337,14 @@ var AgentChat = (function() {
                 }
                 if (data.status === 'completed') {
                     document.getElementById('exportBtn').style.display = 'inline-flex';
+                }
+                var histReportPath = data.metadata && data.metadata.report_path;
+                if (histReportPath) {
+                    reportPath = histReportPath;
+                    document.getElementById('viewReportBtn').style.display = 'inline-flex';
+                } else {
+                    reportPath = null;
+                    document.getElementById('viewReportBtn').style.display = 'none';
                 }
             })
             .catch(function() {});
@@ -1455,6 +1469,16 @@ var AgentChat = (function() {
                 updateProgress(maxSteps, maxSteps);
                 document.getElementById('exportBtn').style.display = 'inline-flex';
                 loadSessions();
+                fetch('/api/agent/sessions/' + encodeURIComponent(sessionId))
+                    .then(function(r) { return r.json(); })
+                    .then(function(data) {
+                        var rp = data.metadata && data.metadata.report_path;
+                        if (rp) {
+                            reportPath = rp;
+                            document.getElementById('viewReportBtn').style.display = 'inline-flex';
+                        }
+                    })
+                    .catch(function() {});
                 break;
             case 'failed':
                 stopTimer();
@@ -1807,6 +1831,12 @@ var AgentChat = (function() {
         copyToClipboard(text);
     }
 
+    function viewReport() {
+        if (reportPath && sessionId) {
+            window.open('/api/playbooks/sessions/' + encodeURIComponent(sessionId) + '/report', '_blank');
+        }
+    }
+
     // ===== MCP System Status =====
     function refreshMCPStatus() {
         fetch('/api/mcp/servers')
@@ -1890,7 +1920,8 @@ var AgentChat = (function() {
         quickAction: quickAction,
         exportSession: exportSession,
         copyIOC: copyIOC,
-        refreshMCPStatus: refreshMCPStatus
+        refreshMCPStatus: refreshMCPStatus,
+        viewReport: viewReport
     };
 })();
 </script>
