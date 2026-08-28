@@ -1353,6 +1353,13 @@ class PlaybookEngine:
                     report_path = generator.generate_ioc_report(investigation_result, ioc, output_path)
                     if report_path:
                         summary += f" — report: {output_path}"
+                    else:
+                        logger.warning(
+                            "[PLAYBOOK] HTML report generation failed for IOC '%s' "
+                            "(session %s) — see prior [REPORT] error log for details",
+                            ioc, session_id,
+                        )
+                        summary += " — report generation FAILED (see logs)"
 
             self.store.update_session_status(session_id, "completed", summary=summary)
             self.agent_loop._notify(session_id, {"type": "completed", "summary": summary})
