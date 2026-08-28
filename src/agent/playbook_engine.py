@@ -1353,6 +1353,18 @@ class PlaybookEngine:
                     report_path = generator.generate_ioc_report(investigation_result, ioc, output_path)
                     if report_path:
                         summary += f" — report: {output_path}"
+                        try:
+                            existing = self.store.get_session(session_id) or {}
+                            existing_metadata = existing.get('metadata') or {}
+                            if not isinstance(existing_metadata, dict):
+                                existing_metadata = {}
+                            existing_metadata['report_path'] = output_path
+                            self.store.update_session_metadata(session_id, existing_metadata)
+                        except Exception as meta_exc:
+                            logger.warning(
+                                "[PLAYBOOK] Failed to persist report_path to session "
+                                "metadata for %s: %s", session_id, meta_exc,
+                            )
                     else:
                         logger.warning(
                             "[PLAYBOOK] HTML report generation failed for IOC '%s' "
