@@ -11,6 +11,7 @@ Usage:
 """
 
 import json
+import subprocess
 import logging
 import re
 import socket
@@ -347,83 +348,86 @@ def subdomain_enumerate(domain: str) -> str:
         return json.dumps({"error": f"Subdomain enumeration failed: {e}", "domain": domain})
 
 
+def _dns_query_txt(name: str, timeout: int = 10) -> tuple[list[str], bool]:
+    """Query TXT records via nslookup.
+    Returns (stdout_lines, query_succeeded). query_succeeded=False means
+    the query failed or timed out -- caller must not treat this as
+    a confirmed absence of the record.
+    """
+    try:
+        r = subprocess.run(
+            ["nslookup", "-type=TXT", name],
+            capture_output=True, text=True, timeout=timeout
+        )
+        stdout_lower = r.stdout.lower()
+        failure_markers = ("timed out", "timed-out", "server failed", "can" + chr(39) + "t find")
+        if r.returncode != 0 or any(marker in stdout_lower for marker in failure_markers):
+            return [], False
+        return r.stdout.split(chr(10)), True
+    except Exception:
+        return [], False
+
+
 @mcp.tool()
 def email_security_check(domain: str) -> str:
     """Check email security configuration for a domain.
     Checks SPF, DKIM, DMARC records.
-
     Args:
         domain: Domain to check email security for
     """
-    import subprocess
     domain = domain.strip().lower()
     result = {"domain": domain, "checks": {}}
 
-    # SPF check
-    try:
-        r = subprocess.run(
-            ["nslookup", "-type=TXT", domain],
-            capture_output=True, text=True, timeout=10
-        )
-        spf_records = [
-            line.strip().strip('"')
-            for line in r.stdout.split("\n")
-            if "v=spf1" in line.lower()
-        ]
-        result["checks"]["SPF"] = {
-            "found": bool(spf_records),
-            "records": spf_records,
-        }
-    except Exception as e:
-        result["checks"]["SPF"] = {"error": str(e)}
+    lines, ok = _dns_query_txt(domain)
+    if not ok:
+        result["checks"]["SPF"] = {"found": None, "records": [], "error": "DNS query failed or timed out"}
+    else:
+        spf_records = [line.strip().strip(chr(34)) for line in lines if "v=spf1" in line.lower()]
+        result["checks"]["SPF"] = {"found": bool(spf_records), "records": spf_records}
 
-    # DMARC check
-    try:
-        r = subprocess.run(
-            ["nslookup", "-type=TXT", f"_dmarc.{domain}"],
-            capture_output=True, text=True, timeout=10
-        )
-        dmarc_records = [
-            line.strip().strip('"')
-            for line in r.stdout.split("\n")
-            if "v=dmarc1" in line.lower()
-        ]
-        result["checks"]["DMARC"] = {
-            "found": bool(dmarc_records),
-            "records": dmarc_records,
-        }
-    except Exception as e:
-        result["checks"]["DMARC"] = {"error": str(e)}
+    lines, ok = _dns_query_txt(f"_dmarc.{domain}")
+    if not ok:
+        result["checks"]["DMARC"] = {"found": None, "records": [], "error": "DNS query failed or timed out"}
+    else:
+        dmarc_records = [line.strip().strip(chr(34)) for line in lines if "v=dmarc1" in line.lower()]
+        result["checks"]["DMARC"] = {"found": bool(dmarc_records), "records": dmarc_records}
 
-    # DKIM (check common selectors)
     dkim_selectors = ["default", "google", "selector1", "selector2", "k1", "mail", "dkim"]
     dkim_found = []
+    dkim_query_failures = 0
     for selector in dkim_selectors:
-        try:
-            r = subprocess.run(
-                ["nslookup", "-type=TXT", f"{selector}._domainkey.{domain}"],
-                capture_output=True, text=True, timeout=5
-            )
-            if "v=dkim1" in r.stdout.lower() or "p=" in r.stdout:
-                dkim_found.append(selector)
-        except Exception:
-            pass
-    result["checks"]["DKIM"] = {
-        "found": bool(dkim_found),
-        "selectors_found": dkim_found,
-    }
+        lines, ok = _dns_query_txt(f"{selector}._domainkey.{domain}", timeout=5)
+        if not ok:
+            dkim_query_failures += 1
+            continue
+        stdout_joined = chr(10).join(lines)
+        if "v=dkim1" in stdout_joined.lower() or "p=" in stdout_joined:
+            dkim_found.append(selector)
+    if dkim_query_failures == len(dkim_selectors):
+        result["checks"]["DKIM"] = {"found": None, "selectors_found": [], "error": "All DKIM selector queries failed or timed out"}
+    else:
+        result["checks"]["DKIM"] = {"found": bool(dkim_found), "selectors_found": dkim_found}
 
-    # Assessment
     issues = []
-    if not result["checks"].get("SPF", {}).get("found"):
+    if result["checks"]["SPF"].get("found") is False:
         issues.append("No SPF record found - email spoofing possible")
-    if not result["checks"].get("DMARC", {}).get("found"):
+    elif result["checks"]["SPF"].get("found") is None:
+        issues.append("SPF check inconclusive - DNS query failed")
+    if result["checks"]["DMARC"].get("found") is False:
         issues.append("No DMARC record found - no email authentication policy")
-    if not result["checks"].get("DKIM", {}).get("found"):
+    elif result["checks"]["DMARC"].get("found") is None:
+        issues.append("DMARC check inconclusive - DNS query failed")
+    if result["checks"]["DKIM"].get("found") is False:
         issues.append("No DKIM record found (checked common selectors)")
+    elif result["checks"]["DKIM"].get("found") is None:
+        issues.append("DKIM check inconclusive - DNS query failed")
 
     result["security_issues"] = issues
-    result["score"] = f"{sum(1 for c in result['checks'].values() if c.get('found'))}/3"
+    checks_confirmed_found = sum(1 for c in result["checks"].values() if c.get("found") is True)
+    checks_inconclusive = sum(1 for c in result["checks"].values() if c.get("found") is None)
+    result["score"] = f"{checks_confirmed_found}/3"
+    if checks_inconclusive:
+        result["score_note"] = f"{checks_inconclusive}/3 checks inconclusive due to DNS query failures"
 
     return json.dumps(result, indent=2)
 
