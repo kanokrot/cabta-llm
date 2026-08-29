@@ -3,10 +3,6 @@ Regression tests for HTML report generation wiring in playbook_engine.py
 (Flow C). Locks in behavior verified manually in adhoc script
 scripts/adhoc/verify_report_wiring.py — see CABTA session notes.
 """
-import tempfile
-import os
-from pathlib import Path
-
 import pytest
 
 from src.agent.playbook_engine import PlaybookEngine
@@ -71,8 +67,9 @@ async def _run_playbook(mock_result, report_dir, tmp_path, label):
     )
     row = cur.fetchone()
     conn.close()
+    session = store.get_session(session_id)
 
-    return session_id, row
+    return session_id, row, session
 
 
 @pytest.mark.asyncio
@@ -82,18 +79,18 @@ async def test_malicious_ioc_generates_report(tmp_path, report_dir):
         "threat_score": 85, "verdict": "MALICIOUS",
         "sources": {"virustotal": {"detections": "12/70"}},
     }
-    session_id, row = await _run_playbook(mock_result, report_dir, tmp_path, "malicious")
+    _, row, session = await _run_playbook(
+        mock_result, report_dir, tmp_path, "malicious"
+    )
 
     assert row is not None
     status, summary = row
     assert status == "completed"
-    assert "report:" in summary
+    assert "report data available" in summary
 
-    html_files = list(Path(report_dir).glob(f"ioc_report_{session_id}_*.html"))
-    assert len(html_files) == 1
-    content = html_files[0].read_text(encoding="utf-8")
-    assert "MALICIOUS" in content
-    assert "50.16.16.211" in content
+    metadata = session["metadata"]
+    assert metadata["ioc_investigation_result"]["verdict"] == "MALICIOUS"
+    assert metadata["ioc_investigation_result"]["ioc"] == "50.16.16.211"
 
 
 @pytest.mark.asyncio
@@ -103,39 +100,67 @@ async def test_clean_ioc_generates_report(tmp_path, report_dir):
         "threat_score": 0, "verdict": "CLEAN",
         "sources": {},
     }
-    session_id, row = await _run_playbook(mock_result, report_dir, tmp_path, "clean")
+    _, row, session = await _run_playbook(
+        mock_result, report_dir, tmp_path, "clean"
+    )
 
     assert row is not None
     status, summary = row
     assert status == "completed"
+    assert "report data available" in summary
 
-    html_files = list(Path(report_dir).glob(f"ioc_report_{session_id}_*.html"))
-    assert len(html_files) == 1
-    assert "CLEAN" in html_files[0].read_text(encoding="utf-8")
+    metadata = session["metadata"]
+    assert metadata["ioc_investigation_result"]["verdict"] == "CLEAN"
 
 
 @pytest.mark.asyncio
 async def test_report_failure_does_not_fail_session(tmp_path, report_dir):
-    """generate_ioc_report() catches its own exceptions internally and
-    returns None on failure — the playbook must log this clearly but
-    stay 'completed', since verdict + ticketing already succeeded by
-    this point in the flow (see playbook_engine.py commit history)."""
+    """Malformed report data is persisted without generating HTML during
+    playbook completion. Any generation failure now occurs only when the
+    report endpoint is requested."""
     mock_result = {
         "ioc": "evil.example", "ioc_type": "domain",
         "threat_score": 90, "verdict": "MALICIOUS",
         "sources": "THIS_SHOULD_BE_A_DICT_NOT_A_STRING",  # forces internal AttributeError
     }
-    session_id, row = await _run_playbook(
+    _, row, session = await _run_playbook(
         mock_result, report_dir, tmp_path, "malformed_sources"
     )
 
     assert row is not None
     status, summary = row
     assert status == "completed", (
-        "report-generation failure must not fail the whole playbook session"
+        "malformed report data must not fail the whole playbook session"
     )
-    assert "report generation FAILED" in summary
+    assert "report data available" in summary
     assert "highest verdict: MALICIOUS" in summary  # verdict/ticketing unaffected
+    assert session["metadata"]["ioc_investigation_result"] == mock_result
 
-    html_files = list(Path(report_dir).glob(f"ioc_report_{session_id}_*.html"))
-    assert len(html_files) == 0
+
+def test_report_endpoint_returns_500_on_generation_failure(tmp_path):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from src.web.routes import playbooks as playbook_routes
+
+    store = AgentStore(db_path=str(tmp_path / "report_endpoint.db"))
+    session_id = store.create_session(goal="Malformed report endpoint test")
+    store.update_session_metadata(session_id, {
+        "ioc_investigation_result": {
+            "ioc": "evil.example",
+            "ioc_type": "domain",
+            "threat_score": 90,
+            "verdict": "MALICIOUS",
+            "sources": "THIS_SHOULD_BE_A_DICT_NOT_A_STRING",
+        },
+        "ioc": "evil.example",
+    })
+
+    app = FastAPI()
+    app.state.agent_store = store
+    app.include_router(playbook_routes.router, prefix="/api/playbooks")
+    client = TestClient(app, raise_server_exceptions=False)
+
+    response = client.get(f"/api/playbooks/sessions/{session_id}/report")
+
+    assert response.status_code == 500

@@ -1338,7 +1338,7 @@ var AgentChat = (function() {
                 if (data.status === 'completed') {
                     document.getElementById('exportBtn').style.display = 'inline-flex';
                 }
-                var histReportPath = data.metadata && data.metadata.report_path;
+                var histReportPath = data.metadata && data.metadata.ioc_investigation_result;
                 if (histReportPath) {
                     reportPath = histReportPath;
                     document.getElementById('viewReportBtn').style.display = 'inline-flex';
@@ -1472,7 +1472,7 @@ var AgentChat = (function() {
                 fetch('/api/agent/sessions/' + encodeURIComponent(sessionId))
                     .then(function(r) { return r.json(); })
                     .then(function(data) {
-                        var rp = data.metadata && data.metadata.report_path;
+                        var rp = data.metadata && data.metadata.ioc_investigation_result;
                         if (rp) {
                             reportPath = rp;
                             document.getElementById('viewReportBtn').style.display = 'inline-flex';

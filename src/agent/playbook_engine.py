@@ -27,7 +27,6 @@ from typing import Any, Dict, List, Optional, Tuple
 # Import threat intel for enrichment
 from ..integrations.threat_intel import ThreatIntelligence
 from ..integrations.ticketing import create_incident_ticket
-from ..reporting.html_report_generator import HTMLReportGenerator
 
 
 logger = logging.getLogger(__name__)
@@ -1341,37 +1340,23 @@ class PlaybookEngine:
                             ioc, e,
                         )
 
-            output_config = self.agent_loop.config.get("output", {})
-            if output_config.get("save_reports", True):
-                investigation_result = _find_ioc_investigation_result(context)
-                if investigation_result is not None:
-                    ioc = context.get('ioc') or investigation_result.get('ioc') or 'unknown_ioc'
-                    report_dir = output_config.get("report_dir", "./reports")
-                    Path(report_dir).mkdir(parents=True, exist_ok=True)
-                    output_path = str(Path(report_dir) / f"ioc_report_{session_id}_{step_number}.html")
-                    generator = HTMLReportGenerator()
-                    report_path = generator.generate_ioc_report(investigation_result, ioc, output_path)
-                    if report_path:
-                        summary += f" — report: {output_path}"
-                        try:
-                            existing = self.store.get_session(session_id) or {}
-                            existing_metadata = existing.get('metadata') or {}
-                            if not isinstance(existing_metadata, dict):
-                                existing_metadata = {}
-                            existing_metadata['report_path'] = output_path
-                            self.store.update_session_metadata(session_id, existing_metadata)
-                        except Exception as meta_exc:
-                            logger.warning(
-                                "[PLAYBOOK] Failed to persist report_path to session "
-                                "metadata for %s: %s", session_id, meta_exc,
-                            )
-                    else:
-                        logger.warning(
-                            "[PLAYBOOK] HTML report generation failed for IOC '%s' "
-                            "(session %s) — see prior [REPORT] error log for details",
-                            ioc, session_id,
-                        )
-                        summary += " — report generation FAILED (see logs)"
+            investigation_result = _find_ioc_investigation_result(context)
+            if investigation_result is not None:
+                ioc = context.get('ioc') or investigation_result.get('ioc') or 'unknown_ioc'
+                try:
+                    existing = self.store.get_session(session_id) or {}
+                    existing_metadata = existing.get('metadata') or {}
+                    if not isinstance(existing_metadata, dict):
+                        existing_metadata = {}
+                    existing_metadata['ioc_investigation_result'] = investigation_result
+                    existing_metadata['ioc'] = ioc
+                    self.store.update_session_metadata(session_id, existing_metadata)
+                    summary += " — report data available"
+                except Exception as meta_exc:
+                    logger.warning(
+                        "[PLAYBOOK] Failed to persist report data to session "
+                        "metadata for %s: %s", session_id, meta_exc,
+                    )
 
             self.store.update_session_status(session_id, "completed", summary=summary)
             self.agent_loop._notify(session_id, {"type": "completed", "summary": summary})

@@ -4,12 +4,15 @@ Playbook API routes.
 """
 
 import logging
-from pathlib import Path
+import os
+import tempfile
 from typing import Dict, Optional
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
+
+from ...reporting.html_report_generator import HTMLReportGenerator
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -85,7 +88,7 @@ async def approve_playbook_step(request: Request, session_id: str, body: Playboo
 
 @router.get('/sessions/{session_id}/report')
 async def get_playbook_report(request: Request, session_id: str):
-    """Serve the generated HTML report for a completed playbook session, if one exists."""
+    """Generate and serve an HTML report for a completed playbook session."""
     store = request.app.state.agent_store
     if store is None:
         raise HTTPException(503, "Agent store not initialized")
@@ -95,10 +98,29 @@ async def get_playbook_report(request: Request, session_id: str):
     metadata = session.get('metadata') or {}
     if not isinstance(metadata, dict):
         metadata = {}
-    report_path = metadata.get('report_path')
-    if not report_path:
-        raise HTTPException(404, "No report available for this session")
-    path_obj = Path(report_path)
-    if not path_obj.is_file():
-        raise HTTPException(404, "Report file no longer exists on disk")
-    return FileResponse(path_obj, media_type='text/html')
+    investigation_result = metadata.get('ioc_investigation_result')
+    ioc = metadata.get('ioc')
+    if not investigation_result:
+        raise HTTPException(404, "No report data available for this session")
+
+    with tempfile.NamedTemporaryFile(suffix='.html', delete=False) as temp_file:
+        temp_path = temp_file.name
+
+    try:
+        report_path = HTMLReportGenerator().generate_ioc_report(
+            investigation_result, ioc, temp_path,
+        )
+        if report_path is None:
+            raise HTTPException(500, "Failed to generate HTML report")
+        with open(temp_path, "r", encoding="utf-8") as report_file:
+            html_content = report_file.read()
+    finally:
+        try:
+            os.unlink(temp_path)
+        except OSError as cleanup_exc:
+            logger.warning(
+                "Failed to delete temporary report file %s: %s",
+                temp_path, cleanup_exc,
+            )
+
+    return HTMLResponse(content=html_content)
