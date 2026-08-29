@@ -397,11 +397,15 @@ class ThreatIntelligence:
         """
         try:
             data = {'url': url}
+            api_key = get_valid_key(self.api_keys, 'threatfox') or get_valid_key(self.api_keys, 'abusech')
+            headers = {}
+            if api_key:
+                headers['Auth-Key'] = api_key
             
             # Disable SSL verification due to cert issues
             connector = aiohttp.TCPConnector(ssl=False)
             async with aiohttp.ClientSession(timeout=self.timeout, connector=connector) as session:
-                async with session.post('https://urlhaus-api.abuse.ch/v1/url/', data=data) as response:
+                async with session.post('https://urlhaus-api.abuse.ch/v1/url/', data=data, headers=headers) as response:
                     if response.status == 200:
                         result = await response.json()
                         
@@ -531,9 +535,13 @@ class ThreatIntelligence:
         """
         try:
             data = {'query': 'get_info', 'hash': hash_value}
+            api_key = get_valid_key(self.api_keys, 'threatfox') or get_valid_key(self.api_keys, 'abusech')
+            headers = {}
+            if api_key:
+                headers['Auth-Key'] = api_key
             
             async with aiohttp.ClientSession(timeout=self.timeout) as session:
-                async with session.post('https://mb-api.abuse.ch/api/v1/', data=data) as response:
+                async with session.post('https://mb-api.abuse.ch/api/v1/', data=data, headers=headers) as response:
                     if response.status == 200:
                         result = await response.json()
                         
