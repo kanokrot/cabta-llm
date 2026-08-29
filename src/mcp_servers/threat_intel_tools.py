@@ -208,26 +208,45 @@ def feodo_tracker_check(ip: str) -> str:
         # Download current botnet C2 list
         data = _http_get("https://feodotracker.abuse.ch/downloads/ipblocklist_recommended.json")
         blocklist = json.loads(data)
+        if not isinstance(blocklist, list):
+            return json.dumps({
+                "error": f"Unexpected response format from Feodo Tracker (expected list, got {type(blocklist).__name__})",
+                "ip": ip,
+            })
 
         found = []
+        skipped_malformed = 0
         for entry in blocklist:
+            if not isinstance(entry, dict):
+                skipped_malformed += 1
+                continue
             if entry.get("ip_address") == ip:
                 found.append(entry)
 
         if found:
-            return json.dumps({
+            result_payload = {
                 "ip": ip,
                 "malicious": True,
                 "matches": found,
                 "source": "Feodo Tracker (abuse.ch)",
-            }, indent=2, default=str)
+            }
         else:
-            return json.dumps({
+            result_payload = {
                 "ip": ip,
                 "malicious": False,
                 "message": "IP not found in Feodo Tracker botnet C2 list",
                 "source": "Feodo Tracker (abuse.ch)",
-            }, indent=2)
+            }
+        if skipped_malformed:
+            result_payload["warning"] = (
+                f"Skipped {skipped_malformed} malformed entries from Feodo Tracker response"
+            )
+        return json.dumps(result_payload, indent=2, default=str)
+    except json.JSONDecodeError as e:
+        return json.dumps({
+            "error": f"Feodo Tracker returned a non-JSON response, likely a service outage: {e}",
+            "ip": ip,
+        })
     except Exception as e:
         return json.dumps({"error": f"Feodo Tracker check failed: {e}", "ip": ip})
 
