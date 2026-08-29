@@ -106,7 +106,7 @@ def _http_post(url: str, data: dict, timeout: int = TIMEOUT) -> str:
 @mcp.tool()
 def urlhaus_lookup(indicator: str) -> str:
     """Look up a URL, domain, or IP in URLhaus (abuse.ch).
-    Free, no API key needed. Checks for known malicious URLs.
+    Requires an abuse.ch Auth-Key (shared with ThreatFox). Checks for known malicious URLs.
 
     Args:
         indicator: URL, domain, or IP to look up
@@ -128,7 +128,7 @@ def urlhaus_lookup(indicator: str) -> str:
         body = "&".join(f"{k}={v}" for k, v in payload.items()).encode("utf-8")
         req = urllib.request.Request(
             endpoint, data=body,
-            headers={"User-Agent": "BlueTeamAssistant/2.0"},
+            headers=_threatfox_headers(),
             method="POST",
         )
         with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
