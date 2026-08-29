@@ -94,8 +94,8 @@
                         <button type="button" class="toggle-option active" data-value="ollama" onclick="Settings.setProvider('ollama')">
                             <i class="bi bi-pc-display me-1"></i>Ollama
                         </button>
-                        <button type="button" class="toggle-option" data-value="anthropic" onclick="Settings.setProvider('anthropic')">
-                            <i class="bi bi-cloud me-1"></i>Anthropic
+                        <button type="button" class="toggle-option" data-value="vllm" onclick="Settings.setProvider('vllm')">
+                            <i class="bi bi-hdd-network me-1"></i>vLLM
                         </button>
                     </div>
                 </div>
@@ -122,22 +122,17 @@
                     </div>
                 </div>
 
-                <div id="anthropicFields" style="display:none;">
+                <div id="vllmFields" style="display:none;">
                     <div class="mb-3">
-                        <label class="form-label">Anthropic API Key</label>
-                        <div class="api-key-field">
-                            <input type="password" id="anthropicApiKey" class="form-control pe-5"
-                                placeholder="sk-ant-..."
-                                style="background:var(--bg-tertiary);border-color:var(--border-color);color:var(--text-primary);">
-                            <button type="button" class="toggle-visibility" onclick="Settings.toggleVisibility('anthropicApiKey', this)">
-                                <i class="bi bi-eye"></i>
-                            </button>
-                        </div>
+                        <label class="form-label">vLLM Base URL</label>
+                        <input type="url" id="vllmBaseUrl" class="form-control"
+                            placeholder="http://host:8080"
+                            style="background:var(--bg-tertiary);border-color:var(--border-color);color:var(--text-primary);">
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Model Name</label>
-                        <input type="text" id="anthropicModel" class="form-control" value="claude-sonnet-4-20250514"
-                            placeholder="e.g. claude-sonnet-4-20250514"
+                        <input type="text" id="vllmModel" class="form-control"
+                            placeholder="e.g. gemma4-26b-uncensored"
                             style="background:var(--bg-tertiary);border-color:var(--border-color);color:var(--text-primary);">
                     </div>
                 </div>
@@ -330,8 +325,11 @@ var Settings = (function() {
                 var savedModel = llm.ollama_model || llm.model || 'llama3.1:8b';
                 // Load models from Ollama and pre-select saved model
                 refreshOllamaModels(savedModel);
-                if (llm.anthropic_model) {
-                    document.getElementById('anthropicModel').value = llm.anthropic_model;
+                if (llm.vllm_base_url) {
+                    document.getElementById('vllmBaseUrl').value = llm.vllm_base_url;
+                }
+                if (llm.vllm_model) {
+                    document.getElementById('vllmModel').value = llm.vllm_model;
                 }
 
                 // Agent settings
@@ -382,7 +380,7 @@ var Settings = (function() {
             }
         });
         document.getElementById('ollamaFields').style.display = provider === 'ollama' ? '' : 'none';
-        document.getElementById('anthropicFields').style.display = provider === 'anthropic' ? '' : 'none';
+        document.getElementById('vllmFields').style.display = provider === 'vllm' ? '' : 'none';
     }
 
     function setStatusMsg(el, text, cls, icon) {
@@ -460,14 +458,10 @@ var Settings = (function() {
             llm.ollama_endpoint = document.getElementById('ollamaEndpoint').value.trim();
             llm.ollama_model = document.getElementById('ollamaModel').value;
         } else {
-            llm.anthropic_model = document.getElementById('anthropicModel').value.trim();
+            llm.vllm_base_url = document.getElementById('vllmBaseUrl').value.trim();
+            llm.vllm_model = document.getElementById('vllmModel').value.trim();
         }
         var payload = { llm: llm };
-        // If Anthropic key provided, send it via api_keys
-        if (currentProvider === 'anthropic') {
-            var key = document.getElementById('anthropicApiKey').value.trim();
-            if (key) payload.api_keys = { anthropic: key };
-        }
         saveConfig(payload, 'llmSaveIndicator');
     }
 
