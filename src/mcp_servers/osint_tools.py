@@ -320,7 +320,6 @@ def http_headers(url: str) -> str:
 def subdomain_enumerate(domain: str) -> str:
     """Enumerate subdomains using certificate transparency logs (crt.sh).
     Free service, no API key needed.
-
     Args:
         domain: Base domain to enumerate subdomains for
     """
@@ -328,22 +327,34 @@ def subdomain_enumerate(domain: str) -> str:
     try:
         data = _safe_request(f"https://crt.sh/?q=%.{domain}&output=json", timeout=20)
         entries = json.loads(data)
-
+        if not isinstance(entries, list):
+            return json.dumps({
+                "error": f"Unexpected response format from crt.sh (expected list, got {type(entries).__name__})",
+                "domain": domain,
+            })
         subdomains = set()
+        skipped_malformed = 0
         for entry in entries:
+            if not isinstance(entry, dict):
+                skipped_malformed += 1
+                continue
             name = entry.get("name_value", "")
-            for sub in name.split("\n"):
+            for sub in name.split(chr(10)):
                 sub = sub.strip().lower()
                 if sub and sub.endswith(domain) and "*" not in sub:
                     subdomains.add(sub)
-
         sorted_subs = sorted(subdomains)
-        return json.dumps({
+        result_payload = {
             "domain": domain,
             "subdomain_count": len(sorted_subs),
             "subdomains": sorted_subs[:500],
             "source": "crt.sh (Certificate Transparency)",
-        }, indent=2)
+        }
+        if skipped_malformed:
+            result_payload["warning"] = f"Skipped {skipped_malformed} malformed entries from crt.sh response"
+        return json.dumps(result_payload, indent=2)
+    except json.JSONDecodeError as e:
+        return json.dumps({"error": f"crt.sh returned a non-JSON response, likely a service outage: {e}", "domain": domain})
     except Exception as e:
         return json.dumps({"error": f"Subdomain enumeration failed: {e}", "domain": domain})
 
