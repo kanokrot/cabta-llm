@@ -10,12 +10,22 @@
 <button class="btn btn-sm btn-accent" onclick="AgentChat.newSession()">
     <i class="bi bi-plus-lg me-1"></i>New Chat
 </button>
-<button class="btn btn-sm btn-outline-secondary" id="exportBtn" onclick="AgentChat.exportSession()" style="display:none;" title="Export investigation">
-    <i class="bi bi-download me-1"></i>Export
-</button>
-<button class="btn btn-sm btn-outline-accent" id="viewReportBtn" onclick="AgentChat.viewReport()" style="display:none;" title="View HTML report">
-    <i class="bi bi-file-earmark-text me-1"></i>Report
-</button>
+<div class="dropdown" id="exportDropdownWrap" style="display:none;">
+    <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" id="exportDropdownBtn"
+        data-bs-toggle="dropdown" aria-expanded="false" title="Export investigation">
+        <i class="bi bi-download me-1"></i>Export
+    </button>
+    <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="exportDropdownBtn">
+        <li><a class="dropdown-item" href="#" onclick="AgentChat.exportSession(); return false;">
+            <i class="bi bi-filetype-json me-2"></i>Export as JSON</a></li>
+        <li><a class="dropdown-item disabled" href="#" id="exportHtmlItem" aria-disabled="true"
+            onclick="AgentChat.exportReportHTML(); return false;">
+            <i class="bi bi-filetype-html me-2"></i>Export as HTML Report</a></li>
+        <li><a class="dropdown-item disabled" href="#" aria-disabled="true" tabindex="-1">
+            <i class="bi bi-filetype-pdf me-2"></i>Export as PDF
+            <span class="badge bg-secondary ms-1" style="font-size:0.6rem;">Coming soon</span></a></li>
+    </ul>
+</div>
 <select id="sessionSelect" class="form-select form-select-sm" style="width:auto;min-width:180px;" onchange="AgentChat.switchSession(this.value)">
     <option value="">-- New Session --</option>
 </select>
@@ -1297,8 +1307,9 @@ var AgentChat = (function() {
         investigationData = { tools_used: [], iocs_found: [], steps: [], mcp_tools: [] };
         currentPhase = 'think';
         document.getElementById('sessionSelect').value = '';
-        document.getElementById('exportBtn').style.display = 'none';
-        document.getElementById('viewReportBtn').style.display = 'none';
+        document.getElementById('exportDropdownWrap').style.display = 'none';
+        document.getElementById('exportHtmlItem').classList.add('disabled');
+        document.getElementById('exportHtmlItem').setAttribute('aria-disabled', 'true');
         reportPath = null;
         document.getElementById('elapsedTime').textContent = '';
         var msgs = document.getElementById('chatMessages');
@@ -1318,7 +1329,7 @@ var AgentChat = (function() {
         sessionId = id;
         connectWebSocket(id);
         loadHistory(id);
-        document.getElementById('exportBtn').style.display = 'inline-flex';
+        document.getElementById('exportDropdownWrap').style.display = 'inline-flex';
     }
 
     function loadHistory(id) {
@@ -1336,15 +1347,18 @@ var AgentChat = (function() {
                     updateProgress(data.current_step || (data.steps.length || 0), data.max_steps || 50);
                 }
                 if (data.status === 'completed') {
-                    document.getElementById('exportBtn').style.display = 'inline-flex';
+                    document.getElementById('exportDropdownWrap').style.display = 'inline-flex';
                 }
                 var histReportPath = data.metadata && data.metadata.ioc_investigation_result;
+                var exportHtmlItemHist = document.getElementById('exportHtmlItem');
                 if (histReportPath) {
                     reportPath = histReportPath;
-                    document.getElementById('viewReportBtn').style.display = 'inline-flex';
+                    exportHtmlItemHist.classList.remove('disabled');
+                    exportHtmlItemHist.removeAttribute('aria-disabled');
                 } else {
                     reportPath = null;
-                    document.getElementById('viewReportBtn').style.display = 'none';
+                    exportHtmlItemHist.classList.add('disabled');
+                    exportHtmlItemHist.setAttribute('aria-disabled', 'true');
                 }
             })
             .catch(function() {});
@@ -1467,7 +1481,7 @@ var AgentChat = (function() {
                 addBubble(msg.summary || 'Investigation completed.', 'agent');
                 addInvestigationSummary(msg);
                 updateProgress(maxSteps, maxSteps);
-                document.getElementById('exportBtn').style.display = 'inline-flex';
+                document.getElementById('exportDropdownWrap').style.display = 'inline-flex';
                 loadSessions();
                 fetch('/api/agent/sessions/' + encodeURIComponent(sessionId))
                     .then(function(r) { return r.json(); })
@@ -1475,7 +1489,9 @@ var AgentChat = (function() {
                         var rp = data.metadata && data.metadata.ioc_investigation_result;
                         if (rp) {
                             reportPath = rp;
-                            document.getElementById('viewReportBtn').style.display = 'inline-flex';
+                            var exportHtmlItemLive = document.getElementById('exportHtmlItem');
+                            exportHtmlItemLive.classList.remove('disabled');
+                            exportHtmlItemLive.removeAttribute('aria-disabled');
                         }
                     })
                     .catch(function() {});
@@ -1831,10 +1847,22 @@ var AgentChat = (function() {
         copyToClipboard(text);
     }
 
-    function viewReport() {
-        if (reportPath && sessionId) {
-            window.open('/api/playbooks/sessions/' + encodeURIComponent(sessionId) + '/report', '_blank');
-        }
+    function exportReportHTML() {
+        if (!reportPath || !sessionId) return;
+        fetch('/api/playbooks/sessions/' + encodeURIComponent(sessionId) + '/report')
+            .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
+            .then(function(html) {
+                var blob = new Blob([html], { type: 'text/html' });
+                var url = URL.createObjectURL(blob);
+                var a = document.createElement('a');
+                a.href = url;
+                a.download = 'ioc_report_' + sessionId + '.html';
+                a.click();
+                URL.revokeObjectURL(url);
+            })
+            .catch(function(err) {
+                addBubble('Report export failed: ' + err.message, 'system');
+            });
     }
 
     // ===== MCP System Status =====
@@ -1921,7 +1949,7 @@ var AgentChat = (function() {
         exportSession: exportSession,
         copyIOC: copyIOC,
         refreshMCPStatus: refreshMCPStatus,
-        viewReport: viewReport
+        exportReportHTML: exportReportHTML
     };
 })();
 </script>
