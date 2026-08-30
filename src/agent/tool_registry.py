@@ -523,11 +523,24 @@ class ToolRegistry:
         # -------------------------------------------------------------- #
         # 5. generate_rules
         # -------------------------------------------------------------- #
-        async def _generate_rules(analysis_result: Dict = None, rule_type: str = 'all', **_kw) -> Dict:
+        async def _generate_rules(
+            analysis_result: Dict = None,
+            rule_type: str = 'all',
+            rule_types: List[str] = None,
+            **_kw,
+        ) -> Dict:
             from ..detection.rule_generator import RuleGenerator
 
             if not analysis_result:
                 return {"error": "analysis_result is required to generate detection rules."}
+
+            if not isinstance(analysis_result, dict):
+                return {
+                    "error": (
+                        "analysis_result must be an object/dict, got "
+                        f"{type(analysis_result).__name__}."
+                    )
+                }
 
             if 'ioc' in analysis_result and 'ioc_type' in analysis_result:
                 context = {
@@ -550,7 +563,58 @@ class ToolRegistry:
                         r.get('ioc') for r in ioc_results if r.get('verdict') == 'MALICIOUS'
                     ][:10]
                 rules = RuleGenerator.generate_email_rules(email_data)
-            elif 'hashes' in analysis_result or 'file_info' in analysis_result or 'sha256' in analysis_result or 'filename' in analysis_result:
+            elif any(
+                isinstance(analysis_result.get(key), list)
+                for key in ('ipv4', 'ip', 'domains', 'urls', 'sha256')
+            ):
+                aggregate_key_types = {
+                    'ipv4': 'ipv4',
+                    'ip': 'ipv4',
+                    'domains': 'domain',
+                    'urls': 'url',
+                    'sha256': 'sha256',
+                }
+                aggregate_iocs = [
+                    (ioc_value, ioc_type)
+                    for key, ioc_type in aggregate_key_types.items()
+                    if isinstance(analysis_result.get(key), list)
+                    for ioc_value in analysis_result[key]
+                    if ioc_value
+                ]
+                if not aggregate_iocs:
+                    return {
+                        "error": (
+                            "No IOCs found in aggregate analysis_result "
+                            "(ipv4/domains/urls/sha256 were all empty)."
+                        )
+                    }
+                if len(aggregate_iocs) > 25:
+                    logger.debug(
+                        "[TOOLS] Truncating aggregate analysis_result from %d to 25 IOCs",
+                        len(aggregate_iocs),
+                    )
+                    aggregate_iocs = aggregate_iocs[:25]
+
+                context = {
+                    'verdict': analysis_result.get('verdict', 'Unknown'),
+                    'malware_family': analysis_result.get('malware_family', 'Unknown'),
+                }
+                rules = {}
+                for ioc_value, ioc_type in aggregate_iocs:
+                    ioc_rules = RuleGenerator.generate_ioc_rules(
+                        ioc_value, ioc_type, context
+                    )
+                    for generated_type, generated_rule in ioc_rules.items():
+                        rules.setdefault(generated_type, []).append(generated_rule)
+            elif (
+                'hashes' in analysis_result
+                or 'file_info' in analysis_result
+                or (
+                    'sha256' in analysis_result
+                    and isinstance(analysis_result.get('sha256'), str)
+                )
+                or 'filename' in analysis_result
+            ):
                 file_data = dict(analysis_result)
                 if 'sha256' not in file_data and 'hashes' in analysis_result:
                     file_data['sha256'] = analysis_result['hashes'].get('sha256', '')
@@ -568,7 +632,22 @@ class ToolRegistry:
                     )
                 }
 
-            if rule_type != 'all':
+            if isinstance(rule_types, list) and rule_types:
+                available_types = list(rules.keys())
+                rules = {
+                    generated_type: generated_rule
+                    for generated_type, generated_rule in rules.items()
+                    if generated_type in rule_types
+                }
+                if not rules:
+                    return {
+                        "error": (
+                            f"None of the requested rule_types {rule_types} are "
+                            "available for this analysis_result type. Available: "
+                            f"{available_types}"
+                        )
+                    }
+            elif rule_type != 'all':
                 if rule_type in rules:
                     rules = {rule_type: rules[rule_type]}
                 else:
@@ -595,11 +674,22 @@ class ToolRegistry:
                     },
                     "rule_type": {
                         "type": "string",
-                        "enum": ["kql", "sigma", "yara", "spl", "all"],
+                        "enum": [
+                            "kql", "sigma", "yara", "spl", "xql", "fortimail",
+                            "proofpoint", "mimecast", "microsoft365", "all",
+                        ],
                         "description": "Type of rule to generate. Default 'all'.",
                     },
+                    "rule_types": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": (
+                            "List of rule types to generate (alternative to rule_type). "
+                            "Takes precedence over rule_type if both given."
+                        ),
+                    },
                 },
-                "required": [],
+                "required": ["analysis_result"],
             },
             category="detection",
             executor=_generate_rules,
