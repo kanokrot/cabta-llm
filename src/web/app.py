@@ -7,6 +7,7 @@ Usage::
     uvicorn src.web.app:create_app --factory --host 0.0.0.0 --port 8080
 """
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -80,6 +81,18 @@ class NoCacheStaticMiddleware(BaseHTTPMiddleware):
 async def _lifespan(app: FastAPI):
     """Application lifespan: auto-connect MCP servers on startup."""
     await _auto_connect_mcp_servers(app)
+
+    # Capture the loop MCP stdio connections actually live on so
+    # AgentLoop.run_tool() can bridge into it via run_coroutine_threadsafe
+    # when invoked from a background thread (investigate()/playbook runs).
+    # Without this, playbook-only runs that never call investigate() first
+    # leave AgentLoop._main_loop as None and every MCP call stalls until
+    # the internal 60s timeout in MCPClientManager.call_tool() fires.
+    agent_loop = getattr(app.state, 'agent_loop', None)
+    if agent_loop is not None:
+        agent_loop._main_loop = asyncio.get_running_loop()
+        logger.info("[WEB] Captured main event loop for AgentLoop MCP bridging")
+
     yield
     # Cleanup: disconnect MCP servers on shutdown
     mcp_client = getattr(app.state, 'mcp_client', None)

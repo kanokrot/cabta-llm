@@ -262,6 +262,37 @@ class AgentLoop:
         state = self._active_sessions.get(session_id)
         return state.to_dict() if state else None
 
+    async def _call_mcp_tool(self, server: str, tool: str, params: Dict) -> Dict:
+        """
+        Call an MCP tool, bridging to the main event loop if needed.
+
+        MCP stdio connections are established during app startup on the
+        main uvicorn event loop. investigate()/playbook runs execute in
+        a background thread with its own asyncio.run() loop. Awaiting
+        mcp_client.call_tool() directly from that loop leaves the MCP
+        client's background reader task orphaned on the original loop,
+        so the call silently stalls until MCPClientManager's internal
+        60s wait_for() timeout fires -- even when the underlying tool
+        call itself would have completed in under a second.
+
+        This routes the call through run_coroutine_threadsafe onto the
+        loop the connection actually lives on whenever we detect we're
+        not already running on it.
+        """
+        main_loop = self._main_loop
+        try:
+            current_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            current_loop = None
+
+        if main_loop is not None and main_loop.is_running() and current_loop is not main_loop:
+            future = asyncio.run_coroutine_threadsafe(
+                self.mcp_client.call_tool(server, tool, params), main_loop,
+            )
+            return await asyncio.wrap_future(future)
+
+        return await self.mcp_client.call_tool(server, tool, params)
+
     async def run_tool(self, tool_name: str, params: Dict) -> Dict:
         """Execute a single tool by name (used by PlaybookEngine).
 
@@ -294,7 +325,7 @@ class AgentLoop:
             # Tool not registered yet -- try calling MCP directly
             if self.mcp_client is not None:
                 try:
-                    result = await self.mcp_client.call_tool(
+                    result = await self._call_mcp_tool(
                         mcp_server, mcp_tool, params,
                     )
                     return result if isinstance(result, dict) else {"result": result}
@@ -308,7 +339,7 @@ class AgentLoop:
         if tool_def.source == 'local':
             return await self.tools.execute_local_tool(tool_name, **params)
         elif self.mcp_client is not None:
-            return await self.mcp_client.call_tool(
+            return await self._call_mcp_tool(
                 tool_def.source, tool_name.split(".", 1)[-1], params,
             )
         else:
