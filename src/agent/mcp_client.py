@@ -24,6 +24,79 @@ logger = logging.getLogger(__name__)
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
+class _StdioSessionOwner:
+    """Owns a stdio ClientSession's async context managers inside one
+    dedicated asyncio task (satisfying anyio's structured-concurrency
+    requirement), and exposes call_tool()/list_tools()/close() that are
+    safe to call from other tasks -- duck-type compatible with the SDK's
+    ClientSession so callers elsewhere in this file need no changes."""
+
+    def __init__(self, params):
+        self._params = params
+        self._request_q: "asyncio.Queue" = asyncio.Queue()
+        self._ready = asyncio.Event()
+        self._task = None
+        self._init_error = None
+
+    async def start(self):
+        self._task = asyncio.create_task(self._run())
+        await self._ready.wait()
+        if self._init_error is not None:
+            raise self._init_error
+
+    async def _run(self):
+        from mcp.client.session import ClientSession
+        from mcp.client.stdio import stdio_client
+        try:
+            async with stdio_client(self._params) as (read_s, write_s):
+                async with ClientSession(read_s, write_s) as session:
+                    await session.initialize()
+                    self._ready.set()
+                    while True:
+                        item = await self._request_q.get()
+                        if item is None:
+                            break
+                        method, args, kwargs, fut = item
+                        try:
+                            result = await getattr(session, method)(*args, **kwargs)
+                            if not fut.done():
+                                fut.set_result(result)
+                        except Exception as exc:
+                            if not fut.done():
+                                fut.set_exception(exc)
+        except Exception as exc:
+            self._init_error = exc
+            self._ready.set()
+        finally:
+            while not self._request_q.empty():
+                item = self._request_q.get_nowait()
+                if item is not None:
+                    *_, fut = item
+                    if not fut.done():
+                        fut.set_exception(ConnectionError("MCP stdio session closed"))
+
+    async def _call(self, method, *args, **kwargs):
+        loop = asyncio.get_event_loop()
+        fut = loop.create_future()
+        await self._request_q.put((method, args, kwargs, fut))
+        return await fut
+
+    async def call_tool(self, tool_name, arguments):
+        return await self._call("call_tool", tool_name, arguments)
+
+    async def list_tools(self):
+        return await self._call("list_tools")
+
+    async def close(self):
+        if self._task is None:
+            return
+        await self._request_q.put(None)
+        try:
+            await asyncio.wait_for(self._task, timeout=10)
+        except Exception:
+            self._task.cancel()
+
+
 # ---------------------------------------------------------------------------
 # Configuration & connection data classes
 # ---------------------------------------------------------------------------
@@ -271,8 +344,7 @@ class MCPClientManager:
 
         try:
             # Try the MCP SDK client path first
-            from mcp.client.session import ClientSession
-            from mcp.client.stdio import StdioServerParameters, stdio_client
+            from mcp.client.stdio import StdioServerParameters
 
             params = StdioServerParameters(
                 command=command,  # <-- ใช้ command ที่ผ่านการ resolve แล้ว
@@ -281,17 +353,10 @@ class MCPClientManager:
                 cwd=str(PROJECT_ROOT),
             )
 
-            # Use SDK's stdio_client context manager
-            transport = stdio_client(params)
-            read_s, write_s = await transport.__aenter__()
-            connection.session = transport
-
-            session = ClientSession(read_s, write_s)
-            await session.__aenter__()
-            connection.client = session
-
-            # Initialise the session
-            await session.initialize()
+            owner = _StdioSessionOwner(params)
+            await owner.start()
+            connection.client = owner
+            connection.session = None
             connection.connected = True
 
         except ImportError:
