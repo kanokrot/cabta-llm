@@ -128,7 +128,7 @@ def urlhaus_lookup(indicator: str) -> str:
         body = "&".join(f"{k}={v}" for k, v in payload.items()).encode("utf-8")
         req = urllib.request.Request(
             endpoint, data=body,
-            headers=_threatfox_headers(),
+            headers={**_threatfox_headers(), "Content-Type": "application/x-www-form-urlencoded"},
             method="POST",
         )
         with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
