@@ -134,9 +134,9 @@ _SIMPLE_COND = re.compile(
 _IN_COND = re.compile(
     r"""^\s*['"](.+?)['"]\s+in\s+(\w[\w.]*)\s*$"""
 )
-# Regex to parse 'variable in (val1, val2)' conditions
+# Regex to parse 'variable in (val1, val2)' or 'variable in [val1, val2]' conditions
 _VAR_IN_TUPLE = re.compile(
-    r"""^\s*(\w[\w.]*)\s+in\s+\((.+?)\)\s*$"""
+    r"""^\s*(\w[\w.]*)\s+in\s+[\(\[](.+?)[\)\]]\s*$"""
 )
 # Matches a string that is ENTIRELY a single {{...}} placeholder (no
 # surrounding text), so the resolved value's original type can be preserved.
@@ -197,6 +197,10 @@ def safe_evaluate_condition(condition: str, context: Dict) -> bool:
         return True
 
     condition = condition.strip()
+    # Real playbook YAML conditions use Jinja-style "{{var}} == 'x'" syntax,
+    # but the pattern matchers below expect bare variable names/paths
+    # ("var == 'x'"). Strip the braces so those matchers can resolve them.
+    condition = condition.replace("{{", "").replace("}}", "")
 
     try:
         # Handle 'and' by splitting

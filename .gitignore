@@ -57,6 +57,7 @@ nul
 
 # --- Test Artifacts ---
 .pytest_cache/
+.pytest_tmp/
 .coverage
 htmlcov/
 .tox/

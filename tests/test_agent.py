@@ -772,6 +772,21 @@ class TestPlaybookConditions:
         assert safe_evaluate_condition("score > 70 or verdict == 'MALICIOUS'", ctx)
         assert not safe_evaluate_condition("score > 70 or verdict == 'CLEAN'", ctx)
 
+    def test_jinja_braces_match_braceless_condition(self):
+        ctx = {"ioc_type": "ip", "identify_ioc_type": {"ips": []}}
+        braced = "{{ioc_type}} == 'ip' or {{identify_ioc_type.ips}}"
+        braceless = "ioc_type == 'ip' or identify_ioc_type.ips"
+        assert safe_evaluate_condition(braced, ctx) == safe_evaluate_condition(braceless, ctx)
+
+    def test_jinja_variable_in_bracket_list(self):
+        ctx = {"item": {"type": "docx"}}
+        assert safe_evaluate_condition("{{item.type}} in ['doc', 'docx']", ctx)
+
+    def test_jinja_braces_with_nested_and_or_recursion(self):
+        ctx = {"score": 80, "verdict": "MALICIOUS"}
+        condition = "{{score}} > 70 and {{verdict}} == 'MALICIOUS'"
+        assert safe_evaluate_condition(condition, ctx)
+
     def test_boolean_literal(self):
         assert safe_evaluate_condition("flag == true", {"flag": True})
         assert safe_evaluate_condition("flag == false", {"flag": False})
