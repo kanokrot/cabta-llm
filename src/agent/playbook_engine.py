@@ -1004,6 +1004,9 @@ class PlaybookEngine:
                         tool_result=json.dumps({"decision": decision_result}, default=str),
                         duration_ms=0,
                     )
+                    self.agent_loop._notify(session_id, {
+                        "type": "step", "step": step_number,
+                    })
                     context[current_step.name] = {"decision": decision_result}
                     context["last_result"] = context[current_step.name]
                     current_step = self._resolve_next(
@@ -1100,6 +1103,9 @@ class PlaybookEngine:
                             ),
                             duration_ms=0,
                         )
+                        self.agent_loop._notify(session_id, {
+                            "type": "step", "step": step_number,
+                        })
                         context[current_step.name] = {
                             "action": "final_answer",
                             "report": current_step.description,
@@ -1128,6 +1134,9 @@ class PlaybookEngine:
                             tool_result="",
                             duration_ms=0,
                         )
+                        self.agent_loop._notify(session_id, {
+                            "type": "step", "step": step_number,
+                        })
 
                         try:
                             sub_session = await self.execute(
