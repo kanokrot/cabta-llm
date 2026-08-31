@@ -70,25 +70,38 @@ async def isolate_device(device_id: str, isolation_type: str = "network", **_kw)
         return {"status": "error", "simulated": True, "error": str(exc)}
 
 
-async def block_ip(ip_address: str, reason: str = "", **_kw) -> Dict[str, Any]:
+async def block_ip(
+    ip_address: str = "",
+    reason: str = "",
+    indicators: Optional[List[str]] = None,
+    **_kw,
+) -> Dict[str, Any]:
     """SIMULATED ACTION — ไม่ใช่ EDR/firewall integration จริง เขียน record ลง local JSON เท่านั้น สำหรับ demo/proof-of-concept
 
     Simulate blocking an IP address at the perimeter. Appends a record to
     data/simulated_actions/blocklist.json.
     """
     try:
-        record = {
-            "ip_address": ip_address,
-            "reason": reason,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-        }
+        targets = indicators if indicators is not None else [ip_address]
+        targets = [target for target in targets if isinstance(target, str) and target]
+        if not targets:
+            return {"status": "error", "simulated": True, "error": "ip_address or indicators is required"}
+
         out_file = _SIMULATED_ACTIONS_DIR / "blocklist.json"
-        _append_json_record(out_file, record)
+        records = []
+        for target in targets:
+            record = {
+                "ip_address": target,
+                "reason": reason,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
+            _append_json_record(out_file, record)
+            records.append(record)
         return {
             "status": "success",
             "simulated": True,
-            "message": f"Simulated block of IP '{ip_address}' recorded.",
-            "record": record,
+            "message": f"Simulated block of {len(records)} indicator(s) recorded.",
+            "record": records[0] if len(records) == 1 else records,
             "record_file": str(out_file),
         }
     except Exception as exc:
@@ -965,8 +978,16 @@ class ToolRegistry:
                         "description": "Reason for blocking this IP.",
                         "default": "",
                     },
+                    "indicators": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "IP addresses or indicators to block in one approved batch.",
+                    },
                 },
-                "required": ["ip_address"],
+                "anyOf": [
+                    {"required": ["ip_address"]},
+                    {"required": ["indicators"]},
+                ],
             },
             category="edr",
             executor=block_ip,
