@@ -607,6 +607,20 @@ class ToolRegistry:
                     for generated_type, generated_rule in ioc_rules.items():
                         rules.setdefault(generated_type, []).append(generated_rule)
             elif (
+                isinstance(analysis_result.get('result'), dict)
+                and (
+                    'capabilities' in analysis_result['result']
+                    or 'mitre_attacks' in analysis_result['result']
+                )
+            ) or (
+                'capabilities' in analysis_result
+                or 'mitre_attacks' in analysis_result
+            ):
+                capa_summary = analysis_result.get('result', analysis_result)
+                rules = RuleGenerator.generate_capa_rules(capa_summary)
+                if 'error' in rules:
+                    return rules
+            elif (
                 'hashes' in analysis_result
                 or 'file_info' in analysis_result
                 or (
