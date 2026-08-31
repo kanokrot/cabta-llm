@@ -2,7 +2,9 @@
 Author: Ugur AtesDetection rule generator for multiple SIEM/EDR platforms."""
 
 from typing import Dict, List
+import hashlib
 import logging
+import re
 
 logger = logging.getLogger(__name__)
 class RuleGenerator:
@@ -58,6 +60,80 @@ class RuleGenerator:
         }
         
         return rules
+
+    @staticmethod
+    def generate_capa_rules(capa_summary: dict) -> dict:
+        """Generate reference YARA and Sigma rules from a capa summary."""
+        capabilities = capa_summary.get('capabilities', [])
+        mitre_attacks = capa_summary.get('mitre_attacks', [])
+
+        if not capabilities and not mitre_attacks:
+            return {
+                "error": (
+                    "No capa capabilities or MITRE techniques found in "
+                    "analysis_result."
+                )
+            }
+
+        source_file = str(capa_summary.get('file', ''))
+
+        def escape_quoted(value: object) -> str:
+            return str(value).replace('\\', '\\\\').replace('"', '\\"')
+
+        yara_rules = []
+        for index, capability in enumerate(capabilities, start=1):
+            name = str(capability.get('name', 'unknown capability'))
+            namespace = str(capability.get('namespace', ''))
+            scope = str(capability.get('scope', ''))
+            identifier = re.sub(r'[^A-Za-z0-9_]', '_', name).strip('_')
+            identifier = re.sub(r'_+', '_', identifier) or 'Unknown_Capability'
+            if identifier[0].isdigit():
+                identifier = f'Capability_{identifier}'
+
+            yara_rules.append(
+                f'''rule Capa_{identifier}_{index} {{
+    meta:
+        description = "Reference rule for capa capability: {escape_quoted(name)}"
+        capability = "{escape_quoted(name)}"
+        namespace = "{escape_quoted(namespace)}"
+        scope = "{escape_quoted(scope)}"
+        source_file = "{escape_quoted(source_file)}"
+    condition:
+        true
+}}'''
+            )
+
+        sigma_rules = []
+        for attack in mitre_attacks:
+            technique = str(attack.get('technique', 'Unknown Technique'))
+            attack_id = str(attack.get('id', ''))
+            tactic = str(attack.get('tactic', 'Unknown Tactic'))
+            stable_id = hashlib.sha256(
+                f'{attack_id}|{technique}|{tactic}|{source_file}'.encode('utf-8')
+            ).hexdigest()[:12]
+            tag = re.sub(r'[^a-z0-9._-]', '', attack_id.lower())
+            tags = f'\ntags:\n    - attack.{tag}' if tag else ''
+            source_name = source_file.replace('\\', '/').rsplit('/', 1)[-1]
+
+            sigma_rules.append(
+                f'''title: "capa - {escape_quoted(tactic)} - {escape_quoted(technique)}"
+id: capa-{stable_id}
+status: experimental
+description: "Reference detection for capa MITRE technique {escape_quoted(technique)} ({escape_quoted(attack_id)}) in tactic {escape_quoted(tactic)}."
+references:
+    - https://github.com/mandiant/capa{tags}
+logsource:
+    category: process_creation
+detection:
+    selection:
+        Image|endswith: "{escape_quoted(source_name)}"
+    condition: selection
+falsepositives:
+    - Legitimate software exhibiting the mapped capability
+level: medium'''
+            )
+
+        return {'yara': yara_rules, 'sigma': sigma_rules}
     
     @staticmethod
     def _generate_kql_ioc(ioc: str, ioc_type: str, context: Dict) -> str:
