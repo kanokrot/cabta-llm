@@ -261,8 +261,8 @@ steps:
     condition:
       if: >
         {{sender_email_security.score}} < '2/3' or
-        {{url_urlhaus.malicious}} or
-        {{attachment_hash_check.malicious}} or
+        url_urlhaus_any_malicious == true or
+        attachment_hash_check_any_malicious == true or
         {{attachment_macro_check.suspicious}} or
         {{sender_ip_check.blocklisted}} or
         {{sender_feodo.found}}

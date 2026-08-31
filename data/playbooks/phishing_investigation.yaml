@@ -145,7 +145,7 @@ steps:
   # ===== Verdict =====
   - name: evaluate_phishing
     condition:
-      if: "{{sender_email_security.score}} < '2/3' or {{url_check.malicious}} or {{attachment_hash_check.malicious}}"
+      if: "{{sender_email_security.score}} < '2/3' or url_check_any_malicious == true or attachment_hash_check_any_malicious == true"
       then: confirm_phishing
       else: document_benign
 

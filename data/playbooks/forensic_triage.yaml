@@ -106,7 +106,7 @@ steps:
   # ===== Verdict =====
   - name: evaluate_triage
     condition:
-      if: "{{hash_reputation_check.malicious}} or {{process_ip_reputation.malicious}} or {{persistence_check.suspicious}}"
+      if: "{{hash_reputation_check.malicious}} or process_ip_reputation_any_malicious == true or {{persistence_check.suspicious}}"
       then: confirm_incident
       else: document_benign
 
