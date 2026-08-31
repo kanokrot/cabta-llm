@@ -293,11 +293,12 @@ class ThreatIntelligence:
                         # Calculate score
                         score = 0
                         is_c2 = False
+                        has_malicious_tag = any(tag in ['malware', 'botnet', 'tor'] for tag in tags)
                         
                         if detected_c2:
                             score = 90
                             is_c2 = True
-                        elif any(tag in ['malware', 'botnet', 'tor'] for tag in tags):
+                        elif has_malicious_tag:
                             score = 60
                         elif len(vulns) > 10:
                             score = 40
@@ -310,7 +311,7 @@ class ThreatIntelligence:
                             score += 10
                         
                         return {
-                            'status': '✓' if score > 0 or detected_c2 else '✗',
+                            'status': '✓' if detected_c2 or has_malicious_tag else '✗',
                             'ports': ports[:10],
                             'vulns': len(vulns),
                             'tags': tags,
