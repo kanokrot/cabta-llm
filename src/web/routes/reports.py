@@ -41,6 +41,27 @@ async def get_report_html(request: Request, analysis_id: str):
     })
 
 
+@router.get('/{analysis_id}/html/download')
+async def download_report_html(request: Request, analysis_id: str):
+    """Download the HTML report."""
+    mgr = request.app.state.analysis_manager
+    job = mgr.get_job(analysis_id)
+    if job is None:
+        raise HTTPException(404, 'Analysis not found')
+
+    templates = request.app.state.templates
+    return templates.TemplateResponse(
+        request,
+        'report_view.html',
+        {'job': job},
+        headers={
+            'Content-Disposition': (
+                f'attachment; filename="report-{analysis_id}.html"'
+            ),
+        },
+    )
+
+
 @router.get('/{analysis_id}/mitre')
 async def get_mitre_layer(request: Request, analysis_id: str):
     """Get MITRE ATT&CK Navigator layer JSON."""
