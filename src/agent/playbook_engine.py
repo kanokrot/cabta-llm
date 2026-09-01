@@ -893,7 +893,11 @@ class PlaybookEngine:
 
         case_id = metadata.get("case_id")
 
-        if approved:
+        if approved and pending_step.for_each:
+            context, next_step_name = await self._execute_for_each(
+                session_id, pending_step, context, step_number,
+            )
+        elif approved:
             params = self._interpolate_params(pending_step.params, context)
             self.agent_loop._notify(session_id, {
                 "type": "tool_call", "step": step_number,
@@ -982,6 +986,69 @@ class PlaybookEngine:
             session_id, playbook_id, pb, steps, step_map, context,
             next_step, step_number, case_id,
         )
+
+    async def _execute_for_each(
+        self,
+        session_id: str,
+        current_step: "PlaybookStep",
+        context: Dict[str, Any],
+        step_number: int,
+    ) -> Tuple[Dict[str, Any], Optional[str]]:
+        """Run a for_each step's iteration and return (context, next step)."""
+        items = _resolve_var(current_step.for_each, context)
+        if not isinstance(items, list):
+            items = [items] if items else []
+
+        logger.debug(
+            "[PLAYBOOK] for_each '%s': %d items",
+            current_step.for_each, len(items),
+        )
+
+        iteration_results = []
+        for i, item in enumerate(items[:50]):  # Cap iterations
+            iter_context = {**context, "item": item, "item_index": i}
+            params = self._interpolate_params(current_step.params, iter_context)
+
+            self.agent_loop._notify(session_id, {
+                "type": "tool_call", "step": step_number,
+                "tool": current_step.tool, "args": params,
+            })
+            start = time.time()
+            result = await self._run_tool(
+                current_step.tool, params, current_step.timeout,
+                session_id=session_id,
+            )
+            duration_ms = int((time.time() - start) * 1000)
+            self.agent_loop._notify(session_id, {
+                "type": "tool_result", "step": step_number,
+                "tool": current_step.tool,
+                "result_preview": str(result)[:500],
+                "duration": duration_ms,
+            })
+
+            iteration_results.append(result)
+
+            self.store.add_step(
+                session_id=session_id,
+                step_number=step_number,
+                step_type="for_each_iteration",
+                content=f"{current_step.name} (item {i})",
+                tool_name=current_step.tool,
+                tool_params=json.dumps(params, default=str),
+                tool_result=json.dumps(result, default=str)[:10000],
+                duration_ms=duration_ms,
+            )
+
+        context[f"{current_step.name}_results"] = iteration_results
+        context["last_result"] = iteration_results
+        context[f"{current_step.name}_any_malicious"] = _aggregate_malicious_flag(iteration_results)
+        context[f"{current_step.name}_any_suspicious"] = _aggregate_suspicious_flag(iteration_results)
+        context[f"{current_step.name}_items"] = items
+
+        # Determine success
+        has_error = any("error" in r for r in iteration_results if isinstance(r, dict))
+        next_step_name = current_step.on_failure if has_error else current_step.on_success
+        return context, next_step_name
 
     async def _run_step_loop(
         self,
@@ -1248,59 +1315,9 @@ class PlaybookEngine:
 
                 # Handle for_each iteration
                 if current_step.for_each:
-                    items = _resolve_var(current_step.for_each, context)
-                    if not isinstance(items, list):
-                        items = [items] if items else []
-
-                    logger.debug(
-                        "[PLAYBOOK] for_each '%s': %d items",
-                        current_step.for_each, len(items),
+                    context, next_step_name = await self._execute_for_each(
+                        session_id, current_step, context, step_number,
                     )
-
-                    iteration_results = []
-                    for i, item in enumerate(items[:50]):  # Cap iterations
-                        iter_context = {**context, "item": item, "item_index": i}
-                        params = self._interpolate_params(current_step.params, iter_context)
-
-                        self.agent_loop._notify(session_id, {
-                            "type": "tool_call", "step": step_number,
-                            "tool": current_step.tool, "args": params,
-                        })
-                        start = time.time()
-                        result = await self._run_tool(
-                            current_step.tool, params, current_step.timeout,
-                            session_id=session_id,
-                        )
-                        duration_ms = int((time.time() - start) * 1000)
-                        self.agent_loop._notify(session_id, {
-                            "type": "tool_result", "step": step_number,
-                            "tool": current_step.tool,
-                            "result_preview": str(result)[:500],
-                            "duration": duration_ms,
-                        })
-
-                        iteration_results.append(result)
-
-                        self.store.add_step(
-                            session_id=session_id,
-                            step_number=step_number,
-                            step_type="for_each_iteration",
-                            content=f"{current_step.name} (item {i})",
-                            tool_name=current_step.tool,
-                            tool_params=json.dumps(params, default=str),
-                            tool_result=json.dumps(result, default=str)[:10000],
-                            duration_ms=duration_ms,
-                        )
-
-                    context[f"{current_step.name}_results"] = iteration_results
-                    context["last_result"] = iteration_results
-                    context[f"{current_step.name}_any_malicious"] = _aggregate_malicious_flag(iteration_results)
-                    context[f"{current_step.name}_any_suspicious"] = _aggregate_suspicious_flag(iteration_results)
-                    context[f"{current_step.name}_items"] = items
-
-                    # Determine success
-                    has_error = any("error" in r for r in iteration_results if isinstance(r, dict))
-                    next_step_name = current_step.on_failure if has_error else current_step.on_success
 
                 else:
                     # Single execution
