@@ -1572,7 +1572,9 @@ textarea.form-control {
    31. Print Styles
    ================================================================= */
 @media print {
-    .top-navbar,
+    .cabta-navbar,
+    .sub-header,
+    .cabta-offcanvas,
     .system-bar,
     .toast-container,
     .theme-toggle {
