@@ -36,8 +36,7 @@ async def get_report_html(request: Request, analysis_id: str):
         raise HTTPException(404, 'Analysis not found')
 
     templates = request.app.state.templates
-    return templates.TemplateResponse('report_view.html', {
-        'request': request,
+    return templates.TemplateResponse(request, 'report_view.html', {
         'job': job,
     })
 
