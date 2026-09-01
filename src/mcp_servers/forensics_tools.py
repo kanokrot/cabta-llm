@@ -21,6 +21,7 @@ import struct
 import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import Any, List, Optional
 
 from mcp.server.fastmcp import FastMCP
 
@@ -547,6 +548,156 @@ def string_analysis(file_path: str, min_length: int = 4, max_strings: int = 2000
         "categorized": categories,
         "sample_strings": all_strings[:100],
     }, indent=2)
+
+
+def _flatten_indicators(data: Any) -> List[str]:
+    """Flatten nested IOC dictionaries/lists into unique string indicators."""
+    flattened = []
+    seen = set()
+
+    def _walk(value: Any) -> None:
+        if isinstance(value, dict):
+            for nested_value in value.values():
+                _walk(nested_value)
+        elif isinstance(value, (list, tuple, set)):
+            for nested_value in value:
+                _walk(nested_value)
+        elif isinstance(value, str):
+            indicator = value.strip()
+            dedupe_key = indicator.casefold()
+            if indicator and dedupe_key not in seen:
+                seen.add(dedupe_key)
+                flattened.append(indicator)
+
+    _walk(data)
+    return flattened
+
+
+def _parse_leading_timestamp(line: str) -> Optional[datetime]:
+    """Best-effort parsing for common ISO-8601 timestamps at line start."""
+    match = re.match(
+        r"^\s*\[?(\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}"
+        r"(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?)",
+        line,
+    )
+    if not match:
+        return None
+    try:
+        value = match.group(1).replace("Z", "+00:00")
+        return datetime.fromisoformat(value)
+    except ValueError:
+        return None
+
+
+def _parse_time_bound(value: Any) -> Optional[datetime]:
+    """Parse an optional ISO-8601 time bound, returning None if invalid."""
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        return datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def _timestamp_in_range(
+    timestamp: datetime,
+    start: Optional[datetime],
+    end: Optional[datetime],
+) -> bool:
+    """Compare timestamps safely when timezone information is mixed."""
+    if timestamp.tzinfo is None:
+        timestamp = timestamp.replace(tzinfo=timezone.utc)
+    if start is not None and start.tzinfo is None:
+        start = start.replace(tzinfo=timezone.utc)
+    if end is not None and end.tzinfo is None:
+        end = end.replace(tzinfo=timezone.utc)
+    return not ((start is not None and timestamp < start) or
+                (end is not None and timestamp > end))
+
+
+@mcp.tool()
+def search_logs(
+    log_source: str,
+    indicators: Any,
+    time_range: Optional[dict] = None,
+    max_results: int = 200,
+) -> str:
+    """Search local log file(s) or a directory of log files for IOCs/keywords collected
+    during an investigation, used to verify no related activity remains after remediation.
+
+    Args:
+        log_source: Path to a single log file or a directory of log files to search
+        indicators: IOCs to search for. Accepts either a flat list of strings, or the
+            nested structure produced by extract_iocs (e.g. {"ipv4": [...], "domains": [...],
+            "urls": [...], "hashes": {"sha256": [...], ...}, ...}) — this function flattens
+            any nested dict/list structure into a single set of string indicators internally.
+        time_range: Optional {"start": ISO8601, "end": ISO8601} to best-effort filter by a
+            leading timestamp in each log line; lines with no parseable timestamp are still
+            searched.
+        max_results: Maximum total matches to return across all indicators (default 200)
+    """
+    try:
+        source = Path(log_source).resolve()
+        if source.is_file():
+            resolved = _validate_file(log_source)
+            files = [Path(resolved)] if resolved else []
+        elif source.is_dir():
+            files = sorted(path for path in source.iterdir() if path.is_file())
+        else:
+            return json.dumps({
+                "error": f"Log source not found: {log_source}",
+                "log_source": str(source),
+            }, indent=2, default=str)
+
+        flattened = _flatten_indicators(indicators)
+        if not flattened:
+            return json.dumps({
+                "error": "No valid indicators provided",
+                "log_source": str(source),
+            }, indent=2, default=str)
+
+        limit = max(0, int(max_results))
+        start = _parse_time_bound((time_range or {}).get("start"))
+        end = _parse_time_bound((time_range or {}).get("end"))
+        search_terms = [(indicator, indicator.casefold()) for indicator in flattened]
+
+        matches = []
+        total_matches_found = 0
+        for file_path in files:
+            with open(file_path, "r", encoding="utf-8", errors="replace") as log_file:
+                for line_number, line in enumerate(log_file, start=1):
+                    timestamp = _parse_leading_timestamp(line)
+                    if timestamp is not None and not _timestamp_in_range(timestamp, start, end):
+                        continue
+
+                    folded_line = line.casefold()
+                    for indicator, folded_indicator in search_terms:
+                        if folded_indicator not in folded_line:
+                            continue
+                        total_matches_found += 1
+                        if len(matches) < limit:
+                            matches.append({
+                                "file": str(file_path),
+                                "line_number": line_number,
+                                "indicator": indicator,
+                                "line": line.rstrip("\r\n")[:500],
+                            })
+
+        return json.dumps({
+            "log_source": str(source),
+            "files_searched": [str(path) for path in files],
+            "indicators": flattened,
+            "matches": matches,
+            "returned_matches": len(matches),
+            "total_matches_found": total_matches_found,
+            "truncated": total_matches_found > len(matches),
+            "time_range": time_range,
+        }, indent=2, default=str)
+    except Exception as e:
+        return json.dumps({
+            "error": f"Log search failed: {e}",
+            "log_source": log_source,
+        }, indent=2, default=str)
 
 
 def main():

@@ -15,6 +15,9 @@ input_params:
   - name: incident_severity
     description: Initial severity level (low/medium/high/critical)
     required: false
+  - name: evidence_log_path
+    description: Path to collected log file(s)/directory to verify against after remediation
+    required: false
 
 steps:
   # ===== Pre-Phase: Cache Check =====
@@ -279,6 +282,15 @@ steps:
     requires_approval: true
 
   # ===== Phase 4: Recovery =====
+  - name: verify_clean
+    tool: mcp:forensics_tools/search_logs
+    params:
+      log_source: "{{evidence_log_path}}"
+      indicators: "{{extract_incident_iocs.iocs}}"
+    condition:
+      if: "{{evidence_log_path}}"
+    description: Search collected logs for remaining IOC activity after remediation
+
   - name: cve_check
     tool: mcp:vulnerability-tools/cve_search
     params:
