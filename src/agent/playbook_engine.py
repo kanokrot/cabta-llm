@@ -313,6 +313,40 @@ def _aggregate_malicious_flag(results_list) -> bool:
     return any(_is_malicious_result(item) for item in results_list)
 
 
+def _is_suspicious_result(item) -> bool:
+    """Check whether a single for_each iteration result indicates a
+    suspicious (but not necessarily confirmed-malicious) finding.
+    Tolerates MCP-wrapped results ({"result": {...}}), plain dicts, and
+    error dicts (treated as not suspicious). Recognizes one shape so far:
+    a non-empty "suspicious_keywords" list, as returned by
+    remnux_tools.olevba_analyze (src/mcp_servers/remnux_tools.py:196-295)
+    for flagged VBA macro indicators. Deliberately separate from
+    ``_is_malicious_result`` -- "suspicious" and "malicious" are distinct
+    severities in this codebase and should not be folded together.
+    Read-only, never raises."""
+    if not isinstance(item, dict):
+        return False
+    if "error" in item:
+        return False
+    inner = item.get("result", item)
+    if not isinstance(inner, dict):
+        return False
+    suspicious_keywords = inner.get("suspicious_keywords")
+    if isinstance(suspicious_keywords, list) and len(suspicious_keywords) > 0:
+        return True
+    return False
+
+
+def _aggregate_suspicious_flag(results_list) -> bool:
+    """Scan a for_each step's iteration_results for any item whose
+    unwrapped tool result indicates a suspicious (non-malicious-confirmed)
+    finding (see ``_is_suspicious_result`` for the recognized shapes).
+    Read-only, never raises."""
+    if not isinstance(results_list, list):
+        return False
+    return any(_is_suspicious_result(item) for item in results_list)
+
+
 def _collect_malicious_iocs(context: Dict) -> List[str]:
     """Scan context for for_each steps whose ``{step}_any_malicious`` flag
     is True, and return the flat list of IOC values (from the matching
@@ -1261,6 +1295,7 @@ class PlaybookEngine:
                     context[f"{current_step.name}_results"] = iteration_results
                     context["last_result"] = iteration_results
                     context[f"{current_step.name}_any_malicious"] = _aggregate_malicious_flag(iteration_results)
+                    context[f"{current_step.name}_any_suspicious"] = _aggregate_suspicious_flag(iteration_results)
                     context[f"{current_step.name}_items"] = items
 
                     # Determine success
