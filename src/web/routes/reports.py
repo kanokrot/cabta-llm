@@ -1,5 +1,5 @@
 """
-Author: Ugur Ates
+Author: Ugur Ates with creamloso
 Report API endpoints.
 """
 
@@ -94,8 +94,15 @@ async def get_mitre_layer(request: Request, analysis_id: str):
 
 
 @router.get('/{analysis_id}/pdf')
-async def get_report_pdf(request: Request, analysis_id: str):
-    """Generate and download a PDF report for an IOC analysis."""
+async def get_report_pdf(request: Request, analysis_id: str, download: bool = False):
+    """Generate a PDF report for an IOC analysis.
+
+    By default the PDF is served inline (Content-Disposition: inline) so
+    that clicking "Print > PDF" opens the file in the browser's native PDF
+    viewer/print dialog instead of silently saving it to Downloads.
+    Pass ?download=1 to force a "Save As" download instead (used by the
+    Export dropdown).
+    """
     mgr = request.app.state.analysis_manager
     job = mgr.get_job(analysis_id)
     if job is None:
@@ -116,9 +123,12 @@ async def get_report_pdf(request: Request, analysis_id: str):
             pass
         raise HTTPException(500, 'Failed to generate PDF report')
 
+    disposition_type = 'attachment' if download else 'inline'
+
     return FileResponse(
         path=report_path,
         media_type='application/pdf',
         filename=f'ioc-report-{analysis_id}.pdf',
         background=BackgroundTask(os.unlink, report_path),
+        content_disposition_type=disposition_type,
     )

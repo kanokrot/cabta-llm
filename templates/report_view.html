@@ -179,7 +179,7 @@
                     </a>
                 </li>
                 <li>
-                    <a class="dropdown-item" href="/api/reports/{{ job.id | urlencode }}/pdf">
+                    <a class="dropdown-item" href="/api/reports/{{ job.id | urlencode }}/pdf?download=1">
                         <i class="bi bi-filetype-pdf me-2"></i>PDF
                     </a>
                 </li>
@@ -193,7 +193,7 @@
             <ul class="dropdown-menu" aria-labelledby="reportPrintDropdown">
                 <li>
                     <a class="dropdown-item" id="btnPrintReportPdf"
-                       href="/api/reports/{{ job.id | urlencode }}/pdf">
+                       href="/api/reports/{{ job.id | urlencode }}/pdf" target="_blank" rel="noopener">
                         <i class="bi bi-filetype-pdf me-2"></i>PDF
                     </a>
                 </li>
