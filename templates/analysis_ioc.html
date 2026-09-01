@@ -946,16 +946,30 @@
                 <i class="bi bi-clipboard-data me-2 text-accent"></i>
                 <h5 class="mb-0">Analysis Results</h5>
             </div>
-            <div>
-                <a class="btn btn-sm btn-outline-success me-1" id="btnViewFullReport" href="#" target="_blank" rel="noopener" title="View full report" style="display:none;">
-                    <i class="bi bi-file-earmark-text me-1"></i>View Full Report
-                </a>
-                <button class="btn btn-sm btn-outline-primary me-1" id="btnExportJson" title="Export as JSON">
-                    <i class="bi bi-filetype-json me-1"></i>JSON
+            <div class="dropdown">
+                <button class="btn btn-sm btn-outline-primary dropdown-toggle" type="button"
+                    id="iocExportDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                    <i class="bi bi-download me-1"></i>Export
                 </button>
-                <button class="btn btn-sm btn-outline-primary" id="btnPrintReport" title="Print report">
-                    <i class="bi bi-printer me-1"></i>Print
-                </button>
+                <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="iocExportDropdown">
+                    <li>
+                        <a class="dropdown-item disabled" id="btnViewFullReport" href="#" target="_blank"
+                            rel="noopener" aria-disabled="true">
+                            <i class="bi bi-file-earmark-text me-2"></i>View Full Report
+                        </a>
+                    </li>
+                    <li>
+                        <a class="dropdown-item disabled" id="btnPrintReport" href="#" target="_blank"
+                            rel="noopener" aria-disabled="true">
+                            <i class="bi bi-filetype-pdf me-2"></i>Download as PDF
+                        </a>
+                    </li>
+                    <li>
+                        <a class="dropdown-item" id="btnExportJson" href="#">
+                            <i class="bi bi-filetype-json me-2"></i>Download as JSON
+                        </a>
+                    </li>
+                </ul>
             </div>
         </div>
         <div class="card-body" id="iocResultsBody">
@@ -987,6 +1001,7 @@
     var btnViewFullReport = document.getElementById('btnViewFullReport');
 
     var lastResultData = null;
+    var analysisId = null;
     var currentMode = 'single'; /* 'single' or 'bulk' */
 
     /* ========================================================
@@ -1828,11 +1843,23 @@
     /* ========================================================
        VIEW FULL REPORT BUTTON
     ======================================================== */
-    function showViewFullReportButton(analysisId) {
-        if (!btnViewFullReport) return;
-        if (!analysisId) { btnViewFullReport.style.display = 'none'; return; }
-        btnViewFullReport.href = '/api/reports/' + encodeURIComponent(analysisId) + '/html';
-        btnViewFullReport.style.display = '';
+    function showViewFullReportButton(id) {
+        if (!btnViewFullReport || !btnPrintReport) return;
+        analysisId = id || null;
+        if (!analysisId) {
+            btnViewFullReport.classList.add('disabled');
+            btnViewFullReport.setAttribute('aria-disabled', 'true');
+            btnPrintReport.classList.add('disabled');
+            btnPrintReport.setAttribute('aria-disabled', 'true');
+            return;
+        }
+        var safeId = encodeURIComponent(analysisId);
+        btnViewFullReport.href = '/api/reports/' + safeId + '/html';
+        btnViewFullReport.classList.remove('disabled');
+        btnViewFullReport.removeAttribute('aria-disabled');
+        btnPrintReport.href = '/api/reports/' + safeId + '/pdf';
+        btnPrintReport.classList.remove('disabled');
+        btnPrintReport.removeAttribute('aria-disabled');
     }
 
     /* ========================================================
@@ -1926,7 +1953,7 @@
        AUTO-LOAD FROM URL ?id= PARAMETER
     ======================================================== */
     var params = new URLSearchParams(window.location.search);
-    var analysisId = params.get('id');
+    analysisId = params.get('id');
     if (analysisId) {
         progressArea.style.display = 'block';
         setProgress(5, 'Loading analysis...');
@@ -1969,7 +1996,8 @@
        EXPORT JSON
     ======================================================== */
     if (btnExportJson) {
-        btnExportJson.addEventListener('click', function () {
+        btnExportJson.addEventListener('click', function (event) {
+            event.preventDefault();
             if (!lastResultData) return;
             var blob = new Blob([JSON.stringify(lastResultData, null, 2)], { type: 'application/json' });
             var url = URL.createObjectURL(blob);
@@ -1984,11 +2012,14 @@
     }
 
     /* ========================================================
-       PRINT
+       PDF / PRINT
     ======================================================== */
     if (btnPrintReport) {
-        btnPrintReport.addEventListener('click', function () {
-            window.print();
+        btnPrintReport.addEventListener('click', function (event) {
+            event.preventDefault();
+            if (!analysisId) return;
+            // Auto-printing a PDF is unreliable across browsers; Chrome/Edge PDF viewers restrict JS control.
+            window.open('/api/reports/' + encodeURIComponent(analysisId) + '/pdf', '_blank');
         });
     }
 
