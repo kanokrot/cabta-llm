@@ -2459,10 +2459,30 @@ var Investigations = (function() {
                 // Footer buttons
                 while (detailFooter.firstChild) detailFooter.removeChild(detailFooter.firstChild);
 
-                var exportBtn = el('button', 'btn btn-sm btn-outline-secondary');
-                exportBtn.appendChild(icon('bi bi-download me-1'));
-                exportBtn.appendChild(document.createTextNode('Export as JSON'));
-                exportBtn.addEventListener('click', function() {
+                // ── Export dropdown (JSON / HTML Report / PDF placeholder) ──
+                // Mirrors the dropdown pattern used in agent_chat.html's header_actions block.
+                var detailReportPath = data.metadata && data.metadata.ioc_investigation_result;
+
+                var exportDropdown = el('div', 'dropdown');
+
+                var exportToggleBtn = el('button', 'btn btn-sm btn-outline-secondary dropdown-toggle');
+                exportToggleBtn.type = 'button';
+                exportToggleBtn.setAttribute('data-bs-toggle', 'dropdown');
+                exportToggleBtn.setAttribute('aria-expanded', 'false');
+                exportToggleBtn.appendChild(icon('bi bi-download me-1'));
+                exportToggleBtn.appendChild(document.createTextNode('Export'));
+                exportDropdown.appendChild(exportToggleBtn);
+
+                var exportMenu = el('ul', 'dropdown-menu dropdown-menu-end');
+
+                // -- Export as JSON --
+                var liJson = document.createElement('li');
+                var aJson = el('a', 'dropdown-item');
+                aJson.href = '#';
+                aJson.appendChild(icon('bi bi-filetype-json me-2'));
+                aJson.appendChild(document.createTextNode('Export as JSON'));
+                aJson.addEventListener('click', function(e) {
+                    e.preventDefault();
                     var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
                     var url = URL.createObjectURL(blob);
                     var a = document.createElement('a');
@@ -2473,7 +2493,53 @@ var Investigations = (function() {
                     document.body.removeChild(a);
                     URL.revokeObjectURL(url);
                 });
-                detailFooter.appendChild(exportBtn);
+                liJson.appendChild(aJson);
+                exportMenu.appendChild(liJson);
+
+                // -- Export as HTML Report (enabled only if ioc_investigation_result exists) --
+                var liHtml = document.createElement('li');
+                var aHtml = el('a', 'dropdown-item' + (detailReportPath ? '' : ' disabled'));
+                aHtml.href = '#';
+                if (!detailReportPath) aHtml.setAttribute('aria-disabled', 'true');
+                aHtml.appendChild(icon('bi bi-filetype-html me-2'));
+                aHtml.appendChild(document.createTextNode('Export as HTML Report'));
+                aHtml.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    if (!detailReportPath) return;
+                    fetch('/api/playbooks/sessions/' + encodeURIComponent(sid) + '/report')
+                        .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
+                        .then(function(html) {
+                            var blob = new Blob([html], { type: 'text/html' });
+                            var url = URL.createObjectURL(blob);
+                            var a = document.createElement('a');
+                            a.href = url;
+                            a.download = 'ioc_report_' + sid.substring(0, 12) + '.html';
+                            a.click();
+                            URL.revokeObjectURL(url);
+                        })
+                        .catch(function(err) {
+                            alert('Report export failed: ' + err.message);
+                        });
+                });
+                liHtml.appendChild(aHtml);
+                exportMenu.appendChild(liHtml);
+
+                // -- Export as PDF (placeholder: company template not received from professor yet) --
+                var liPdf = document.createElement('li');
+                var aPdf = el('a', 'dropdown-item disabled');
+                aPdf.href = '#';
+                aPdf.setAttribute('aria-disabled', 'true');
+                aPdf.tabIndex = -1;
+                aPdf.appendChild(icon('bi bi-filetype-pdf me-2'));
+                aPdf.appendChild(document.createTextNode('Export as PDF'));
+                var pdfBadge = el('span', 'badge bg-secondary ms-1', 'Coming soon');
+                pdfBadge.style.fontSize = '0.6rem';
+                aPdf.appendChild(pdfBadge);
+                liPdf.appendChild(aPdf);
+                exportMenu.appendChild(liPdf);
+
+                exportDropdown.appendChild(exportMenu);
+                detailFooter.appendChild(exportDropdown);
 
                 var continueBtn = document.createElement('a');
                 continueBtn.href = '/agent/chat?session=' + encodeURIComponent(sid);
