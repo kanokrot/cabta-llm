@@ -1408,8 +1408,16 @@ class TestNewAgentTools:
 class TestSettingsAPI:
     """Test GET/POST /api/config/settings."""
 
-    def test_get_settings(self):
+    def test_get_settings(self, tmp_path, monkeypatch):
         from starlette.testclient import TestClient
+
+        config_file = tmp_path / "config.yaml"
+        config_file.write_text(
+            "llm:\n  provider: ollama\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setenv("BTA_CONFIG", str(config_file))
+
         from src.web.app import create_app
 
         app = create_app()
@@ -1419,8 +1427,16 @@ class TestSettingsAPI:
         data = resp.json()
         assert "llm" in data
 
-    def test_post_settings(self, tmp_path):
+    def test_post_settings(self, tmp_path, monkeypatch):
         from starlette.testclient import TestClient
+
+        config_file = tmp_path / "config.yaml"
+        config_file.write_text(
+            "agent:\n  max_steps: 50\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setenv("BTA_CONFIG", str(config_file))
+
         from src.web.app import create_app
 
         app = create_app()
@@ -1432,8 +1448,16 @@ class TestSettingsAPI:
         data = resp.json()
         assert data.get("status") == "saved"
 
-    def test_get_settings_masks_api_keys(self):
+    def test_get_settings_masks_api_keys(self, tmp_path, monkeypatch):
         from starlette.testclient import TestClient
+
+        config_file = tmp_path / "config.yaml"
+        config_file.write_text(
+            "api_keys:\n  virustotal: test_api_key_1234567890\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setenv("BTA_CONFIG", str(config_file))
+
         from src.web.app import create_app
 
         app = create_app()

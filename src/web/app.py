@@ -9,6 +9,7 @@ Usage::
 
 import asyncio
 import logging
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -33,7 +34,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(level
 logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).parent.parent.parent
-CONFIG_FILE = PROJECT_ROOT / 'config.yaml'
+CONFIG_FILE = Path(os.environ.get('BTA_CONFIG') or PROJECT_ROOT / 'config.yaml')
 
 
 def _load_config() -> dict:

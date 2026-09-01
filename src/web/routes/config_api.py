@@ -4,9 +4,11 @@ Configuration and health check endpoints.
 """
 
 import logging
+import os
 import platform
 import sys
 from datetime import datetime, timezone
+from pathlib import Path
 
 import aiohttp
 from fastapi import APIRouter, Query, Request
@@ -14,6 +16,12 @@ from fastapi import APIRouter, Query, Request
 logger = logging.getLogger(__name__)
 router = APIRouter()
 _START_TIME = datetime.now(timezone.utc)
+
+
+def _resolve_config_path() -> Path:
+    """Return the configured YAML path, falling back to the project config."""
+    project_root = Path(__file__).parent.parent.parent.parent
+    return Path(os.environ.get('BTA_CONFIG') or project_root / 'config.yaml')
 
 
 @router.get('/health')
@@ -76,11 +84,9 @@ async def tool_status():
 @router.get('/settings')
 async def get_settings(request: Request):
     """Return current application settings."""
-    from pathlib import Path
     import json
 
-    project_root = Path(__file__).parent.parent.parent.parent
-    config_file = project_root / 'config.yaml'
+    config_file = _resolve_config_path()
 
     config = {}
     try:
@@ -110,10 +116,7 @@ async def get_settings(request: Request):
 @router.post('/settings')
 async def save_settings(request: Request):
     """Save application settings to config.yaml."""
-    from pathlib import Path
-
-    project_root = Path(__file__).parent.parent.parent.parent
-    config_file = project_root / 'config.yaml'
+    config_file = _resolve_config_path()
 
     body = await request.json()
 
@@ -198,10 +201,8 @@ async def ollama_health(
 
     # Read configured model from config
     try:
-        from pathlib import Path
         import yaml
-        project_root = Path(__file__).parent.parent.parent.parent
-        config_file = project_root / 'config.yaml'
+        config_file = _resolve_config_path()
         if config_file.is_file():
             with open(config_file, 'r', encoding='utf-8') as f:
                 cfg = yaml.safe_load(f) or {}
