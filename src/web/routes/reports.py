@@ -5,8 +5,13 @@ Report API endpoints.
 
 import json
 import logging
+import os
+import tempfile
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from starlette.background import BackgroundTask
+
+from ...reporting.ioc_pdf import generate_ioc_pdf
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -66,3 +71,34 @@ async def get_mitre_layer(request: Request, analysis_id: str):
         ],
     }
     return JSONResponse(content=layer)
+
+
+@router.get('/{analysis_id}/pdf')
+async def get_report_pdf(request: Request, analysis_id: str):
+    """Generate and download a PDF report for an IOC analysis."""
+    mgr = request.app.state.analysis_manager
+    job = mgr.get_job(analysis_id)
+    if job is None:
+        raise HTTPException(404, 'Analysis not found')
+
+    result = job.get('result') or {}
+    if not isinstance(result, dict):
+        raise HTTPException(500, 'Invalid analysis result')
+
+    with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as temp_file:
+        temp_path = temp_file.name
+
+    report_path = generate_ioc_pdf(result, temp_path)
+    if report_path is None:
+        try:
+            os.unlink(temp_path)
+        except OSError:
+            pass
+        raise HTTPException(500, 'Failed to generate PDF report')
+
+    return FileResponse(
+        path=report_path,
+        media_type='application/pdf',
+        filename=f'ioc-report-{analysis_id}.pdf',
+        background=BackgroundTask(os.unlink, report_path),
+    )
