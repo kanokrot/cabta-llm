@@ -83,10 +83,55 @@
             height: auto !important;
             visibility: visible !important;
         }
+        /* Theme variables may still contain dark-mode colours when the report
+           is printed. Keep the summary pills readable even when browsers
+           preserve background graphics. */
+        .score-pill {
+            background: #fff !important;
+            border-color: #6b7280 !important;
+            color: #111827 !important;
+        }
+        .score-pill span {
+            color: #111827 !important;
+        }
+        /* A scrollable code viewer is useful on screen but clips the report on
+           paper. Expand the raw payload and allow long values to wrap. */
+        #rawDataCollapse,
+        #rawDataCollapse .card-body,
+        #rawJsonPre {
+            display: block !important;
+            height: auto !important;
+            max-height: none !important;
+            overflow: visible !important;
+            visibility: visible !important;
+        }
+        #rawJsonPre {
+            background: #fff !important;
+            border-color: #9ca3af !important;
+            color: #111827 !important;
+            white-space: pre-wrap !important;
+            overflow-wrap: anywhere;
+        }
+        #rawJsonPre code {
+            color: #111827 !important;
+            white-space: inherit;
+        }
         .card {
             border: 1px solid var(--border-color);
             break-inside: avoid;
             page-break-inside: avoid;
+        }
+        /* FIX (whitespace bug): cards containing long/variable-length tables
+           (e.g. Threat Intelligence Sources) can be taller than a single
+           printed page. Combined with break-inside:avoid above, the browser
+           pushes the *entire* card to the next page first, leaving the
+           remainder of the previous page blank, and then still has to split
+           the card across pages anyway. Opt these specific cards out of the
+           avoid-break rule so their content flows naturally across pages
+           instead of leaving dead whitespace. */
+        .card.card-print-flow {
+            break-inside: auto;
+            page-break-inside: auto;
         }
         .score-gauge {
             width: 160px;
@@ -481,7 +526,7 @@
 
 <!-- ══ THREAT INTELLIGENCE SOURCES — sources is a DICT keyed by source name ══ -->
 {% if sources and sources | length > 0 %}
-<div class="card mb-4">
+<div class="card mb-4 card-print-flow">
     <div class="card-header card-header-collapsible d-flex justify-content-between align-items-center"
          data-bs-toggle="collapse" data-bs-target="#sourcesCollapse" aria-expanded="true">
         <h5 class="mb-0">
@@ -557,7 +602,7 @@
 
 <!-- ══ STATIC ANALYSIS (File) ════════════════════════════════════ -->
 {% if static_analysis and static_analysis | length > 0 %}
-<div class="card mb-4">
+<div class="card mb-4 card-print-flow">
     <div class="card-header card-header-collapsible d-flex justify-content-between align-items-center"
          data-bs-toggle="collapse" data-bs-target="#staticCollapse" aria-expanded="true">
         <h5 class="mb-0"><i class="bi bi-cpu me-2"></i>Static Analysis</h5>
@@ -913,7 +958,7 @@
 
 <!-- ══ CAPABILITIES ═════════════════════════════════════════════ -->
 {% if capabilities and capabilities | length > 0 %}
-<div class="card mb-4">
+<div class="card mb-4 card-print-flow">
     <div class="card-header card-header-collapsible d-flex justify-content-between align-items-center"
          data-bs-toggle="collapse" data-bs-target="#capabilitiesCollapse" aria-expanded="true">
         <h5 class="mb-0"><i class="bi bi-gear me-2"></i>Capabilities
@@ -1068,7 +1113,7 @@
 
 <!-- ══ EXTRACTED IOCs ═══════════════════════════════════════════ -->
 {% if extracted_iocs and extracted_iocs | length > 0 %}
-<div class="card mb-4">
+<div class="card mb-4 card-print-flow">
     <div class="card-header card-header-collapsible d-flex justify-content-between align-items-center"
          data-bs-toggle="collapse" data-bs-target="#iocsCollapse" aria-expanded="true">
         <h5 class="mb-0"><i class="bi bi-bullseye me-2"></i>Extracted IOCs</h5>
@@ -1127,7 +1172,7 @@
 
 <!-- ══ YARA ANALYSIS ═════════════════════════════════════════════ -->
 {% if yara_analysis and yara_analysis | length > 0 %}
-<div class="card mb-4">
+<div class="card mb-4 card-print-flow">
     <div class="card-header card-header-collapsible d-flex justify-content-between align-items-center"
          data-bs-toggle="collapse" data-bs-target="#yaraCollapse" aria-expanded="true">
         <h5 class="mb-0"><i class="bi bi-bug me-2"></i>YARA Analysis</h5>
@@ -1201,7 +1246,7 @@
 
 <!-- ══ ADVANCED EMAIL ANALYSIS ═══════════════════════════════════ -->
 {% if advanced_analysis and advanced_analysis | length > 0 %}
-<div class="card mb-4">
+<div class="card mb-4 card-print-flow">
     <div class="card-header card-header-collapsible d-flex justify-content-between align-items-center"
          data-bs-toggle="collapse" data-bs-target="#advancedCollapse" aria-expanded="true">
         <h5 class="mb-0"><i class="bi bi-search me-2"></i>Advanced Email Analysis</h5>
@@ -1235,7 +1280,7 @@
 
 <!-- ══ EMAIL FORENSICS ═══════════════════════════════════════════ -->
 {% if forensics and forensics | length > 0 %}
-<div class="card mb-4">
+<div class="card mb-4 card-print-flow">
     <div class="card-header card-header-collapsible d-flex justify-content-between align-items-center"
          data-bs-toggle="collapse" data-bs-target="#forensicsCollapse" aria-expanded="true">
         <h5 class="mb-0"><i class="bi bi-binoculars me-2"></i>Email Forensics</h5>
@@ -1426,7 +1471,7 @@
 
 <!-- ══ MITRE ATT&CK MAPPING ═══════════════════════════════════════ -->
 {% if mitre_mapping and mitre_mapping | length > 0 %}
-<div class="card mb-4">
+<div class="card mb-4 card-print-flow">
     <div class="card-header card-header-collapsible d-flex justify-content-between align-items-center"
          data-bs-toggle="collapse" data-bs-target="#mitreCollapse" aria-expanded="true">
         <h5 class="mb-0"><i class="bi bi-diagram-3 me-2"></i>MITRE ATT&amp;CK Mapping</h5>
@@ -1477,7 +1522,7 @@
 
 <!-- ══ STRING ANALYSIS (collapsible, closed by default) ══════════ -->
 {% if string_analysis and string_analysis | length > 0 %}
-<div class="card mb-4">
+<div class="card mb-4 card-print-flow">
     <div class="card-header card-header-collapsible d-flex justify-content-between align-items-center"
          data-bs-toggle="collapse" data-bs-target="#stringsCollapse" aria-expanded="false">
         <h5 class="mb-0"><i class="bi bi-fonts me-2"></i>String Analysis</h5>
@@ -1508,7 +1553,7 @@
 
 <!-- ══ RAW JSON VIEWER (collapsible, closed by default) ══════════ -->
 {% if result %}
-<div class="card mb-4">
+<div class="card mb-4 card-print-flow">
     <div class="card-header d-flex justify-content-between align-items-center">
         <h5 class="mb-0"><i class="bi bi-braces me-2"></i>Raw JSON Data</h5>
         <button class="btn btn-sm btn-outline-secondary no-print" type="button"
