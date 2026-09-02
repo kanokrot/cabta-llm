@@ -43,6 +43,11 @@ except ImportError:
 # Data classes
 # ---------------------------------------------------------------------------
 
+
+class PlaybookValidationError(ValueError):
+    """Raised when playbook input fails validation."""
+
+
 @dataclass
 class PlaybookStep:
     """One step in a playbook."""
@@ -713,6 +718,27 @@ class PlaybookEngine:
             raise ValueError(f"Playbook '{playbook_id}' has no steps")
 
         input_data = self._fill_required_input_params(pb, input_data)
+
+        required_params = [
+            p.get("name") for p in pb.get("input_params", [])
+            if isinstance(p, dict) and p.get("required") and p.get("name")
+        ]
+        missing_params = [
+            name for name in required_params
+            if (
+                name not in input_data
+                or not input_data[name]
+                or (
+                    isinstance(input_data[name], str)
+                    and not input_data[name].strip()
+                )
+            )
+        ]
+        if missing_params:
+            raise PlaybookValidationError(
+                f"Playbook '{playbook_id}' is missing required params: "
+                f"{', '.join(missing_params)}"
+            )
 
         return pb, playbook_id, steps, input_data
 

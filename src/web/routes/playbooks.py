@@ -12,6 +12,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
+from ...agent.playbook_engine import PlaybookValidationError
 from ...reporting.html_report_generator import HTMLReportGenerator
 
 logger = logging.getLogger(__name__)
@@ -60,6 +61,8 @@ async def run_playbook(request: Request, playbook_id: str, body: PlaybookRunRequ
     try:
         session_id = await engine.start(playbook_id, body.params, body.case_id)
         return {"session_id": session_id, "status": "running"}
+    except PlaybookValidationError as e:
+        raise HTTPException(400, str(e))
     except ValueError as e:
         raise HTTPException(404, str(e))
     except Exception as e:

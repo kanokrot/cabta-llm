@@ -9,6 +9,8 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from ...agent.playbook_engine import PlaybookValidationError
+
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
@@ -48,6 +50,8 @@ async def send_message(request: Request, body: ChatMessage):
                 "playbook_id": body.playbook_id,
                 "message": body.message,
             }
+        except PlaybookValidationError as e:
+            raise HTTPException(400, str(e))
         except ValueError as e:
             raise HTTPException(404, str(e))
         except Exception as e:
