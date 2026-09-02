@@ -1,650 +1,348 @@
-# CABTA - Cyan Agent Blue Team Assistant
+# CABTA — Cyan Agent Blue Team Assistant
 
-AI-Powered SOC Platform for Threat Analysis, IOC Investigation & Email Forensics
+AI-powered SOC platform for threat analysis, IOC investigation, email forensics, and playbook-driven response.
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/version-2.0.0-green.svg)](https://github.com/kanokrot/cabta-llm)
 
-CABTA is a comprehensive, local-first security analysis platform designed for SOC analysts, incident responders, and threat hunters. It features a modern web dashboard, 20+ threat intelligence sources, advanced malware analysis, email forensics, and AI-powered investigation with local LLM support via Ollama.
+## 1. Project overview and maturity
 
----
+CABTA is a local-first platform for SOC analysts, incident responders, and threat hunters. It combines a FastAPI web application, deterministic scoring, file and email analysis, threat-intelligence enrichment, an AI agent, MCP tool servers, and YAML playbooks.
 
-## Screenshots
+Version **2.0.0** is the product version exposed by FastAPI/OpenAPI and configuration-health endpoints. The project is under active development: core paths have broad automated coverage, while some integrations require external services, credentials, specialist tools, or further production hardening. Local-first does not mean offline-only; operators choose which external integrations to enable.
+
+## 2. Capabilities
+
+- Web-based IOC, file, and email investigations
+- Premium and free threat-intelligence enrichment
+- PE, ELF, Mach-O, APK, Office, PDF, script, text, archive, firmware, and memory analysis
+- Email authentication, phishing, BEC, relay-chain, attachment, and URL analysis
+- Deterministic scoring, verdict validation, reports, STIX export, cases, and SQLite ticketing
+- Detection-rule generation for KQL, Splunk SPL, Sigma, YARA, Snort, FortiMail, Proofpoint, and Mimecast workflows
+- Agent investigations, optional RAG, MCP orchestration, and YAML playbooks
+- Human approval gates and secure, read-only remote-host collection
+- SMTP email and LINE Messaging API notifications with configurable verdict triggers
+
+### Screenshots
 
 | Dashboard | Settings |
-|:---------:|:--------:|
+|:--:|:--:|
 | ![Dashboard](docs/screenshots/dashboard_full.png) | ![Settings](docs/screenshots/settings.png) |
 
 | File Analysis | Email Forensics |
-|:------------:|:---------------:|
+|:--:|:--:|
 | ![File](docs/screenshots/file_analysis.png) | ![Email](docs/screenshots/email_forensics.png) |
 
-| IOC Investigation | Email Analysis Result |
-|:-----------------:|:--------------------:|
-| ![IOC](docs/screenshots/ioc_investigation.png) | ![Email Result](docs/screenshots/email_result.png) |
+## 3. Architecture: Flow A, Flow B, and Flow C
 
----
-
-## Features
-
-### Core Platform
-
-| Feature | Description |
-|---------|-------------|
-| **Web Dashboard** | Modern dark-themed SOC dashboard with real-time stats, charts, and quick actions |
-| **Multi-Source Threat Intelligence** | 20+ integrated sources: VirusTotal, Shodan, AbuseIPDB, AlienVault OTX, GreyNoise, and 15 free OSINT feeds |
-| **Advanced Malware Analysis** | PE/ELF/Mach-O/APK/Office/PDF/Script/Archive analysis with deep inspection |
-| **Email Forensics** | SPF/DKIM/DMARC validation, BEC detection, phishing scoring, relay chain analysis |
-| **IOC Investigation** | IP, domain, URL, hash, email, CVE lookup across all TI sources with DGA and domain age detection |
-| **AI-Powered Analysis** | Local LLM via Ollama for threat summarization and context-aware verdicts |
-| **Detection Rule Generation** | Auto-generated KQL, Splunk SPL, Sigma, YARA, Snort, FortiMail, Proofpoint, Mimecast rules |
-| **Case Management** | Track investigations, link analyses, add notes |
-| **STIX 2.1 Export** | Export IOCs as STIX bundles with TLP marking |
-| **Incident Ticketing** | Auto-creates a SQLite-backed ticket when an analysis resolves to a configurable verdict (MALICIOUS/SUSPICIOUS by default) |
-| **RAG-Augmented Investigation** | Optional ChromaDB knowledge base (playbooks + MITRE mappings) retrieved into agent prompts for more grounded recommendations |
-
-### v2.0 New Capabilities
-
-| Feature | Description |
-|---------|-------------|
-| **Ransomware Detection** | Crypto constant scanning, ransom note detection, Bitcoin/Onion extraction, VSS deletion detection |
-| **PE Deep Inspection** | TLS callbacks, PDB path analysis, Rich header validation, resource analysis, entry point anomalies |
-| **Cobalt Strike Beacon Extraction** | XOR brute-force decryption, TLV config parsing, C2 server extraction |
-| **Memory Forensics** | Volatility 3 integration for process analysis, code injection, network connections |
-| **BEC Detection** | Business Email Compromise: urgency/financial/impersonation patterns, auth failure correlation |
-| **Email Threat Indicators** | Tracking pixels, HTML forms, URL shorteners, data URIs, callback phishing (BazarCall) |
-| **Text File Analysis** | C2 config detection, credential indicators, encoded content analysis |
-| **Threat Actor Profiling** | 20 APT/cybercrime group database with MITRE technique matching |
-| **APK Risk Scoring** | Dangerous permission mapping, suspicious API detection, obfuscation analysis, MITRE Mobile ATT&CK |
-| **DGA Detection** | 7-heuristic algorithm: entropy, consonant ratio, bigram/trigram frequency, dictionary matching |
-| **Domain Age Checking** | WHOIS-based newly registered domain detection with risk scoring |
-
-### Key Differentiators
-
-- **Zero Cloud Dependency**: All analysis runs locally with Ollama - no data leaves your network
-- **Analyst-Grade Output**: Shows WHY something is malicious with detailed evidence and MITRE mapping
-- **Production-Grade Scoring**: Multi-source weighted composite scoring with confidence levels
-- **Real-Time Investigation**: Async operations for fast multi-source lookups
-- **15 Free Intelligence Sources**: Works without any API keys using free OSINT feeds
-
----
-
-## Architecture
-
-```
-=================================================================
- AI THREAT INTELLIGENCE AUTOMATION PLATFORM — SYSTEM WORKFLOW
-=================================================================
-
-[SECURITY DATA SOURCES / ENTRY POINTS]
-  - Direct IOC input          → Flow A (ioc_investigator.py)
-  - Chat goal (analyst asks)  → Flow B (agent_loop.py, ReAct)
-  - Alert / SIEM event        → Flow C (playbook_engine.py, YAML)
-------------------------------------------------------------------
-
-① ALERT / IOC INGESTION
-   รับ input เข้าระบบ 3 ทาง ตามช่องทางด้านบน
-   Component: FastAPI endpoint / playbook trigger
-
-② CACHE CHECK (Flow C only)
-   recall_previous_analysis — เช็คว่าเคยวิเคราะห์ IOC นี้มาก่อนหรือยัง
-   Component: recall_ioc tool
-
-③ IOC EXTRACTION
-   extract_iocs — ดึง IOC ทั้งหมดจาก text/alert (IP, domain, hash, URL, email)
-   Component: regex/NLP extractor
-
-④ CONTEXT ENRICHMENT
-   Flow A : TI lookup จาก 20+ threat intel sources
-   Flow B : เรียก investigate_ioc / analyze_malware / analyze_email ผ่าน shared tool registry
-   Flow C : enrichment ผ่าน 17 MCP tools ตามลำดับที่ fix ไว้ (alert_triage.yaml)
-   Flow C→incident_response.yaml : enrichment เพิ่ม (hash/IP/domain/URL intel + OSINT: Shodan, MISP, HudsonRock, Ransomwatch)
-   Component: ThreatIntelligence integration, MCP servers (threat_intel_tools, remnux_tools, osint-tools, forensics-tools)
-
-⑤ RISK CALCULATION (deterministic)
-   Flow A/B : Scoring engine คำนวณ threat_score → verdict (MALICIOUS/SUSPICIOUS/CLEAN)
-   Flow C (alert_triage) : อ่าน verdict จาก context ที่ flatten ไว้แล้ว (เรียก scoring ผ่าน tool เดียวกัน)
-   ⚠ GAP: incident_response.yaml ไม่ใช้ scoring engine เลย — ตัดสินใจจาก raw condition ตรงๆ
-       (hash_threat_check.malicious / ip_reputation.blocklisted / feodo_check.found)
-   Component: ToolBasedScoring (VERDICT_THRESHOLDS: MALICIOUS 70 / SUSPICIOUS 40 / CLEAN 0)
-
-⑥ LLM NARRATIVE + VALIDATION
-   LLM (Llama3.2:3b) สรุปผลเป็นภาษาธรรมชาติ — ไม่ตัดสิน verdict เอง
-   validate_llm_analysis() บังคับ verdict ให้ตรงกับ threat_score + เช็ค hallucination
-   Component: llm_analyzer.py, Ollama local inference
-
-------------------------------------------------------------------
- BRANCH ตาม severity
-------------------------------------------------------------------
-   CLEAN / Informational        → ไม่สร้าง ticket, จบ flow
-   MALICIOUS / SUSPICIOUS       → สร้าง ticket + ต้อง investigate
-   PHISHING (email เท่านั้น)     → สร้าง ticket (ต้อง normalize verdict list — ทำแล้ว)
-------------------------------------------------------------------
-
-⑦ HUMAN-IN-THE-LOOP APPROVAL
-   Flow B/C : approve_action / reject_action / _wait_for_approval
-   incident_response.yaml : requires_approval บังคับที่ isolate_device, block_malicious_indicators,
-                             quarantine_artifacts (การกระทำที่กระทบระบบจริง)
-   Component: approval queue ในโครง agent_loop / playbook_engine
-
-⑧ CONTAINMENT ACTIONS (incident_response.yaml เท่านั้น)
-   immediate_containment (isolate) → block_malicious_indicators → quarantine_artifacts
-   ⚠ GAP: ทำงานแยกขาดจาก ticketing system ของ Flow A/B/C — ไม่มี ticket_id ผูกกับ action พวกนี้
-   Component: isolate_device / block_ip / quarantine_file tools
-
-⑨ VERIFICATION & RECOVERY (incident_response.yaml เท่านั้น)
-   verify_clean → cve_check → kev_check (CISA KEV)
-   Component: search_logs, vulnerability-tools MCP
-
-⑩ REPORTING & CLOSURE
-   Flow A            : create_incident_ticket(result) — ครบ ทำงานถูกต้อง
-   Flow C (alert_triage) : summary รวม highest verdict + เช็ค ticket ที่สร้างระหว่างทาง — แก้แล้ว (Phase 3)
-   incident_response.yaml : document_incident (action: final_answer) สร้างแค่ report text
-   ⚠ GAP: ไม่เรียก create_incident_ticket, ไม่มี verdict summary, ไม่เชื่อมกับ audit trail ของระบบหลัก
-   Component: ticketing.py / playbook_engine._find_highest_verdict()
-
-=================================================================
- GAP SUMMARY (สำหรับสไลด์ "Gaps" — สิ่งที่ diagram เดิมแบบ linear ไม่ได้บอก)
-=================================================================
- 1. incident_response.yaml ไม่ผ่าน scoring engine เลย — ใช้ raw condition ของตัวเอง
- 2. incident_response.yaml ไม่เรียก ticketing — containment/eradication ที่ทำไปไม่มี ticket ผูกไว้
- 3. incident_response.yaml ไม่มี audit trail แบบ highest-verdict ที่เพิ่งแก้ใน alert_triage.yaml
- 4. Notification (Email/LINE/Teams) ยังไม่ได้ implement — และ LINE Notify / Teams webhook เดิม
-    ถูก deprecate ไปแล้ว ต้องใช้ LINE Messaging API และ Teams Power Automate Workflows แทน
-=================================================================
-
+```text
+Security input
+  ├─ Flow A: direct IOC/file/email analysis
+  │    └─ analyzers + integrations → scoring → validated result → report/ticket
+  ├─ Flow B: interactive agent investigation
+  │    └─ AgentLoop → built-in/MCP tools → observations → final response
+  └─ Flow C: YAML playbook execution
+       └─ PlaybookEngine → interpolation/conditions/for_each → tools → context
 ```
 
----
+**Flow A** accepts API or UI submissions. Specialized analyzers and configured intelligence sources produce evidence; deterministic scoring is authoritative and an LLM may summarize but must not replace the computed verdict.
 
-## Quick Start
+**Flow B** lets the agent select registered local or MCP tools, record observations, and pause for human approval where required. Sessions and audit information are exposed through the web/API layer.
 
-### Prerequisites
+**Flow C** loads YAML steps, interpolates parameters, evaluates conditions, expands `for_each`, and dispatches local or `mcp:server/tool` calls. MCP calls return `{result, server, tool}`. Template resolution supports both `step.result.data.field` and compatibility paths such as `step.data.field` by traversing verified MCP wrappers automatically. Approval state is preserved when protected execution resumes. Basic Host Forensic Triage uses four single-host, approval-gated remote collection steps.
 
-- Python 3.10+
-- Ollama (optional, for AI analysis)
+## 4. Security and data-boundary model
 
-### Installation
+CABTA is a **local-first deployment with optional external intelligence, LLM, sandbox, notification, and remote-host integrations**.
+
+Data may leave the local environment when using:
+
+- threat-intelligence APIs, which receive queried indicators;
+- remote vLLM/OpenAI-compatible endpoints, which receive prompt context;
+- sandboxes, which may receive samples or metadata;
+- SMTP or LINE channels, which receive notification content; or
+- SSH collection, which connects to an approved host and returns command output.
+
+Review provider policies and minimize submitted data. Never commit API keys, tokens, passwords, private keys, or populated configuration. SSH collection requires a host-and-username allowlist, a dedicated known-hosts file, and Paramiko `RejectPolicy`; unknown host keys are not accepted automatically. Errors do not expose private-key contents or credential-bearing exception details.
+
+## 5. Quick Start
+
+Requirements: Python 3.10+, plus Ollama or external tools only for features that need them.
 
 ```bash
-# Clone repository
 git clone https://github.com/kanokrot/cabta-llm.git
 cd cabta-llm
-
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate    # Linux/Mac
-# or
-.\venv\Scripts\activate     # Windows
-
-# Install dependencies
+python -m venv .venv
+source .venv/bin/activate             # Linux/macOS
+# .\.venv\Scripts\Activate.ps1       # Windows PowerShell
 pip install -r requirements.txt
-
-# Copy and configure
-cp config.yaml.example config.yaml
-# Edit config.yaml with your API keys (optional - works without them)
-
-# Verify installation
-pytest
+cp config.yaml.example config.yaml    # Windows: Copy-Item config.yaml.example config.yaml
+python -m uvicorn src.web.app:create_app --factory --host 127.0.0.1 --port 3003
 ```
 
-### Start the Web Dashboard
+Open `http://localhost:3003` or Swagger UI at `http://localhost:3003/api/docs`. Review `config.yaml` first. The example file does not yet document every optional MCP, notification, agent, and remote-host section.
 
-```bash
-python -m uvicorn src.web.app:create_app --factory --host 0.0.0.0 --port 3003
+## 6. Configuration
+
+Use placeholders and keep populated configuration out of source control:
+
+```yaml
+api_keys:
+  virustotal: "<api-key>"
+  abuseipdb: "<api-key>"
+
+llm:
+  provider: "ollama"
+  base_url: "http://localhost:11434"
+  model: "<model-name>"
+
+ticketing:
+  create_on_verdict: ["MALICIOUS", "SUSPICIOUS"]
+
+notifications:
+  enabled: false
+  create_on_verdict: ["MALICIOUS", "SUSPICIOUS"]
+  email:
+    enabled: false
+    smtp_host: "<smtp-host>"
+    smtp_port: 587
+    smtp_user: "<smtp-user>"
+    smtp_password: "<smtp-password>"
+    from_addr: "<sender>"
+    to_addrs: ["<recipient>"]
+  line:
+    enabled: false
+    channel_access_token: "<token>"
+    to_user_id: "<user-id>"
+
+remote_hosts: []
 ```
 
-Open http://localhost:3003 in your browser.
+`NotificationManager` activates configured SMTP email and LINE Messaging API channels for verdicts in `notifications.create_on_verdict`. Notification payloads may contain sensitive findings. MCP servers use `mcp_servers`; supported components may use `BTA_CONFIG` to select an alternate configuration file.
 
-### Ollama Setup (Optional)
+## 7. LLM backends
+
+LLM use is optional; deterministic scoring remains authoritative.
+
+### Ollama (local)
 
 ```bash
-# Install Ollama
-curl -fsSL https://ollama.com/install.sh | sh   # Linux
-# or download from https://ollama.com for Windows/Mac
-
-# Pull recommended model (default is tuned for low-VRAM GPUs, e.g. 4GB)
-ollama pull llama3.2:3b
-
-# Verify
+ollama pull <model-name>
 ollama list
 ```
 
-### RAG Knowledge Base (Optional)
-
-CABTA can retrieve relevant playbook/MITRE context into agent prompts via a lightweight local vector store (ChromaDB + `sentence-transformers/all-MiniLM-L6-v2`, CPU-only so it doesn't compete with Ollama for VRAM):
-
-```bash
-pip install chromadb sentence-transformers --break-system-packages
+```yaml
+llm:
+  provider: "ollama"
+  base_url: "http://localhost:11434"
+  model: "<model-name>"
 ```
 
-Seed data lives in `data/rag_knowledge/*.yaml`; the store persists under `~/.blue-team-assistant/rag_store` by default.
-
----
-
-## Configuration
-
-Edit `config.yaml` with your settings:
+### vLLM/OpenAI-compatible (remote or self-hosted)
 
 ```yaml
-# API Keys (all optional - 15 free sources work without keys)
-api_keys:
-  virustotal: "your-vt-api-key"
-  abuseipdb: "your-abuseipdb-key"
-  shodan: "your-shodan-key"
-  alienvault: "your-otx-key"
-
-# LLM Configuration
 llm:
-  provider: "ollama"           # ollama, openai, anthropic
-  ollama_model: "llama3.2:3b"
-  ollama_endpoint: "http://localhost:11434"
-
-# Ticketing (optional)
-ticketing:
-  create_on_verdict:            # Verdicts that auto-create an incident ticket
-    - "MALICIOUS"
-    - "SUSPICIOUS"
+  provider: "vllm"
+  vllm_base_url: "https://<approved-host>/v1"
+  vllm_model: "<model-name>"
+  vllm_api_key: "<api-key-if-required>"
 ```
 
-### API Key Sources
+Prompt context may be sent to this endpoint. Review its access, retention, and privacy controls.
 
-| Source | Free Tier | URL |
-|--------|-----------|-----|
-| VirusTotal | 500 req/day | https://www.virustotal.com/gui/join-us |
-| AbuseIPDB | 1000 req/day | https://www.abuseipdb.com/register |
-| Shodan | 100 req/month | https://account.shodan.io/register |
-| AlienVault OTX | Unlimited | https://otx.alienvault.com/accounts/signup |
-| GreyNoise | 50 req/day | https://viz.greynoise.io/signup |
+Optional RAG uses seed data in `data/rag_knowledge/` and defaults to `~/.blue-team-assistant/rag_store`:
 
-### Free Sources (No API Key Required)
-
-These 15 OSINT sources work out of the box:
-
-| Source | Type |
-|--------|------|
-| Abuse.ch URLhaus | Malicious URLs |
-| Abuse.ch MalwareBazaar | Malware samples |
-| Abuse.ch ThreatFox | IOC sharing |
-| Abuse.ch Feodo Tracker | Botnet C2 |
-| OpenPhish | Phishing URLs |
-| Malpedia | Malware families |
-| CIRCL MISP | Threat sharing |
-| HudsonRock | Breach data |
-| Shodan InternetDB | Passive recon |
-| Ransomwatch | Ransomware groups |
-| EPSS | Exploit prediction |
-| IPinfo (lite) | IP geolocation |
-| RDAP | Domain registration |
-| BGPView | ASN/prefix data |
-| Google Safe Browsing | URL reputation |
-
----
-
-## Analysis Modules
-
-### File Analysis
-
-Supports **15+ file types** with specialized analyzers:
-
-| Analyzer | File Types | Capabilities |
-|----------|-----------|--------------|
-| **PE Analyzer** | .exe, .dll, .sys | Imports, sections, entropy, packer detection, TLS callbacks, PDB path, Rich header, resource analysis, manifest UAC check |
-| **Ransomware Analyzer** | Any PE | Crypto constants, ransom notes, Bitcoin/Onion extraction, VSS deletion, family detection |
-| **Beacon Config Extractor** | Any PE | Cobalt Strike beacon XOR decryption, TLV config parsing, C2/port/watermark extraction |
-| **ELF Analyzer** | Linux binaries | Symbols, sections, capabilities |
-| **Mach-O Analyzer** | macOS binaries | Universal binaries, entitlements |
-| **APK Analyzer** | Android apps | Permissions, APIs, risk scoring, obfuscation, MITRE Mobile ATT&CK |
-| **Office Analyzer** | .docx, .xlsx, .pptx | Macros (VBA), OLE objects, DDE links |
-| **PDF Analyzer** | .pdf | JavaScript, launch actions, embedded files |
-| **Script Analyzer** | .ps1, .bat, .vbs, .js | De-obfuscation (PowerShell, JavaScript, VBScript, Batch) |
-| **Text Analyzer** | .txt, .log, .csv, .conf | C2 patterns, IOC extraction, credential indicators |
-| **Archive Analyzer** | .zip, .rar, .7z, .tar | Nested extraction, path traversal detection |
-| **Memory Analyzer** | .dmp, .raw, .vmem | Volatility 3 integration, process analysis, code injection |
-
-### Email Forensics
-
-Comprehensive email security analysis:
-
-- **Authentication**: SPF, DKIM, DMARC, ARC validation with scoring
-- **BEC Detection**: Urgency patterns, financial fraud, executive impersonation, reply-to mismatch, auth failures
-- **Phishing Analysis**: URL chain analysis, brand impersonation, lookalike domains, typosquatting
-- **Threat Indicators**: Tracking pixels, HTML forms, URL shorteners, data URIs, JavaScript, callback phishing
-- **DFIR Forensics**: Relay chain analysis, hop timing, infrastructure profiling, sender reputation
-- **Attachments**: Malware scanning, double extension detection, embedded content analysis
-- **Detection Rules**: Auto-generated KQL, Splunk SPL, Sigma, FortiMail, Proofpoint, Mimecast, M365
-
-### IOC Investigation
-
-Multi-source investigation for any indicator type:
-
-- **Supported Types**: IPv4/IPv6, domains, URLs, file hashes (MD5/SHA1/SHA256), email addresses, CVE IDs
-- **Intelligence Sources**: 20+ sources queried in parallel with async operations
-- **Enrichment**: DGA detection (7 heuristics), domain age checking (WHOIS), threat actor profiling
-- **STIX Export**: One-click export to STIX 2.1 bundles with TLP marking
-- **Scoring**: Source-weighted confidence scoring with kill-chain detection
-
----
-
-## Scoring System
-
-CABTA uses a multi-layered scoring architecture:
-
-| Layer | Purpose | Weight |
-|-------|---------|--------|
-| **Tool-Based Scoring** | Aggregates scores from individual analysis tools | Primary |
-| **Intelligent Scoring** | Source-weighted IOC confidence with freshness decay | IOC-specific |
-| **Adaptive Scoring** | Kill-chain stage detection, combo patterns, temporal analysis | Overlay |
-| **Enhanced Scoring** | BEC, ransomware, and deep inspection score integration | Domain-specific |
-| **False Positive Filter** | Filters CA domains, version strings, internal ranges | Final pass |
-
-### Verdicts
-
-| Score | Verdict | Description |
-|-------|---------|-------------|
-| 70-100 | **MALICIOUS** | High confidence threat |
-| 40-69 | **SUSPICIOUS** | Requires investigation |
-| 1-39 | **CLEAN** | Low risk |
-| 0 | **UNKNOWN** | Insufficient data |
-| N/A | **SPAM** | Unsolicited but not malicious |
-| N/A | **RANSOMWARE** | Ransomware-specific verdict |
-
-The scoring engine is the single source of truth for the final verdict (`src/integrations/verdict_validator.py`) — the LLM only explains/summarizes findings and never overrides the deterministic score.
-
----
-
-## Incident Ticketing
-
-When an analysis resolves to a verdict listed in `ticketing.create_on_verdict` (MALICIOUS/SUSPICIOUS by default), CABTA automatically opens an incident ticket in a local SQLite database (`data/tickets/tickets.db`). Tickets track the IOC, verdict, status, summary, and recommendations, and are viewable at `/tickets` or via `GET /api/tickets`.
-
----
-
-## Threat Intelligence Sources
-
-### Premium (API Key Required)
-
-| Source | Capabilities |
-|--------|-------------|
-| **VirusTotal** | File/URL/Domain/IP scanning, detection ratios, behavioral analysis |
-| **AbuseIPDB** | IP reputation, abuse reports, confidence scoring |
-| **Shodan** | Port scanning, service detection, vulnerability assessment |
-| **AlienVault OTX** | Pulse-based threat intelligence, IOC correlation |
-| **GreyNoise** | Internet scanner identification, benign/malicious classification |
-
-### Free Sources (No Key Required)
-
-15 sources including Abuse.ch feeds, OpenPhish, Malpedia, CIRCL MISP, HudsonRock, Ransomwatch, EPSS, and more.
-
----
-
-## Detection Rule Generation
-
-CABTA auto-generates detection rules in **7 SIEM/tool formats**:
-
-| Format | Target |
-|--------|--------|
-| **KQL** | Microsoft Defender / Sentinel |
-| **Splunk SPL** | Splunk SIEM |
-| **Sigma** | Universal SIEM format |
-| **YARA** | File-based detection |
-| **FortiMail** | Fortinet email gateway |
-| **Proofpoint** | Proofpoint email security |
-| **Mimecast** | Mimecast email security |
-
-Rules include sender-based, URL-based, attachment-based, and behavioral detections with proper metadata (author, date, severity, MITRE mapping).
-
----
-
-## Project Structure
- 
+```bash
+pip install chromadb sentence-transformers
 ```
+
+## 8. MCP servers: available versus enabled
+
+The repository contains 12 FastMCP modules with 79 decorated tools. Presence does not mean enabled.
+
+### Available in the repository
+
+| Module | Tools | Enabled |
+|---|---:|:---:|
+| `flare_tools` | 4 | No |
+| `forensics_tools` | 8 | Yes |
+| `free_osint_tools` | 11 | Yes |
+| `ghidra_tools` | 5 | No |
+| `malwoverview_tools` | 7 | Yes |
+| `mobsf_tools` | 4 | No |
+| `network_tools` | 8 | Yes |
+| `osint_tools` | 8 | Yes |
+| `remnux_tools` | 7 | Yes |
+| `remote_tools` | 4 | Yes |
+| `threat_intel_tools` | 8 | Yes |
+| `vulnerability_tools` | 5 | No |
+
+### Enabled/configured
+
+| Server | Module | Transport | Tools |
+|---|---|---|---:|
+| `osint_tools` | `src.mcp_servers.osint_tools` | stdio | 8 |
+| `free_osint_tools` | `src.mcp_servers.free_osint_tools` | stdio | 11 |
+| `network_tools` | `src.mcp_servers.network_tools` | stdio | 8 |
+| `malwoverview_tools` | `src.mcp_servers.malwoverview_tools` | stdio | 7 |
+| `forensics_tools` | `src.mcp_servers.forensics_tools` | stdio | 8 |
+| `remnux_tools` | `src.mcp_servers.remnux_tools` | stdio | 7 |
+| `threat_intel_tools` | `src.mcp_servers.threat_intel_tools` | stdio | 8 |
+| `remote_tools` | `src.mcp_servers.remote_tools` | stdio | 4 |
+
+Some modules require external binaries, services, or credentials. MCP management and discovery are available under `/api/mcp`.
+
+## 9. Playbooks and approval behavior
+
+| Playbook | Steps | MCP steps | Approval steps |
+|---|---:|---:|---:|
+| Alert Triage | 21 | 17 | 0 |
+| Email Investigation | 35 | 30 | 0 |
+| Exploit Reversing | 46 | 43 | 0 |
+| Basic Host Forensic Triage | 15 | 11 | 4 |
+| Incident Response | 38 | 29 | 3 |
+| IOC Triage | 20 | 15 | 0 |
+| Unified Malware Analysis | 60 | 48 | 1 |
+| Malware Deep Dive | 45 | 42 | 0 |
+| Phishing Investigation | 21 | 16 | 0 |
+
+`requires_approval: true` pauses before a protected operation; approval or rejection is available through playbook/agent session APIs. A playbook with zero approval steps is not necessarily safe for unattended production use. Playbooks support templates, conditions, and `for_each`; review every tool before automation.
+
+## 10. Remote Host Collection
+
+`remote_tools` performs read-only Linux collection over SSH and is wired into four approval-gated Basic Host Forensic Triage steps.
+
+```yaml
+remote_hosts:
+  - name: "<reference-name>"
+    host: "<hostname-or-ip>"
+    port: 22
+    username: "<ssh-account>"
+    key_path: "<private-key-path>"
+    known_hosts_path: "<dedicated-known-hosts-path>"
+    description: "<optional-description>"
+```
+
+The connection must match `host` and `username`. The private key is referenced by path, while the allowlist supplies the pinned known-hosts file. With `remote_hosts: []`, every remote call is rejected and real collection is unavailable until approved infrastructure is provisioned.
+
+| Tool | Command(s) | Result |
+|---|---|---|
+| `system_info_collect` | `uname -a`, `hostname`, `uptime` | System identity and uptime |
+| `process_list_collect` | `ps aux` | Raw process snapshot |
+| `netstat_collect` | `ss -tanp` | Raw TCP states plus unique validated peer IPs from `ESTAB` rows |
+| `event_log_collect` | `journalctl --since ... --no-pager` | Raw journal text for a named time range |
+
+Raw network output retains LISTEN and other states; `remote_ips` contains only non-loopback, non-unspecified ESTAB peers. Empty or malformed output yields `[]`. Stable `{status, error, data}` errors cover allowlist, key, known-host, authentication, timeout, and SSH failures without returning credentials.
+
+## 11. Analysis modules
+
+**File and malware:** PE deep inspection, ransomware and packer indicators, Cobalt Strike extraction, ELF, Mach-O, APK, Office, PDF, scripts, text, archives, firmware, and memory.
+
+**Email:** SPF/DKIM/DMARC/ARC assessment, BEC and impersonation detection, relay analysis, URLs, attachments, tracking pixels, forms, shorteners, and callback phishing.
+
+**IOC:** IPv4/IPv6, domains, URLs, hashes, email, and CVEs with configured reputation, DGA, domain-age, ASN/geolocation, and threat-actor context.
+
+**Scoring and reporting:** tool-based, source-aware, adaptive, enhanced, and false-positive-filter layers; JSON, HTML, PDF, SOC output, MITRE Navigator, STIX, and detection rules. Common verdicts include `MALICIOUS`, `SUSPICIOUS`, `CLEAN`, and `UNKNOWN`.
+
+## 12. API and Web UI
+
+Use `/api/docs` as the generated, authoritative API reference.
+
+| Prefix | Purpose |
+|---|---|
+| `/api/analysis` | IOC, file, and email analysis |
+| `/api/reports` | JSON, HTML, HTML download, MITRE, and PDF reports |
+| `/api/dashboard` | Statistics and activity |
+| `/api/config` | Health, version/info, settings, and tool/system status |
+| `/api/cases` | Cases, status, analyses, and notes |
+| `/api/agent` | Investigations, sessions, approvals, cancellation, and audit |
+| `/api/chat` | Interactive chat sessions |
+| `/api/playbooks` | Listing, execution, approval, and reports |
+| `/api/mcp` | Server management, checks, and tool discovery |
+| `/api/tickets` | Incident tickets |
+
+The UI includes dashboards, SOC operations, analysis forms, history, cases, tickets, reports, agent pages, playbooks, MCP management, and settings.
+
+## 13. Testing
+
+```bash
+python -m pytest
+python -m pytest tests/test_remote_tools.py -v
+```
+
+Last verified **2026-09-02**:
+
+```text
+921 passed, 3 known failures
+```
+
+The known failures were the unsuffixed `for_each` result reference, URLhaus direct call, and URLhaus through MCP. This is a dated observation, not a permanent expectation; re-run tests in the current environment and distinguish network-dependent failures from unit regressions.
+
+## 14. Known limitations
+
+- Web/OpenAPI exposes product version 2.0.0, while stale 1.0.0 metadata remains in separate source, MCP identity, and report-footer locations.
+- `config.yaml.example` does not yet cover every optional runtime section documented here.
+- Remote collection is Linux-specific and unusable while `remote_hosts` is empty.
+- `ss` parsing assumes standard iproute2 columns and enriches only ESTAB peers; TIME-WAIT/CLOSE-WAIT remain only in raw output.
+- Event-log time ranges use a small named mapping and otherwise default to 24 hours.
+- Some MCP modules require unconfigured external tools or services.
+- The unsuffixed `for_each` aggregate-reference bug remains separate from MCP wrapper resolution.
+- External integration tests depend on credentials, provider availability, and network access.
+- Real SSH end-to-end validation requires separately approved hosts, keys, and known-hosts files.
+
+## 15. Project structure
+
+```text
 CABTA/
-|-- src/
-|   |-- agent/                   # AI agent & playbook-driven triage
-|   |   |-- agent_loop.py               # Main orchestration loop (THINK/ACT/OBSERVE)
-|   |   |-- agent_response_parsing.py   # LLM response/JSON parsing helpers
-|   |   |-- agent_tool_selection.py     # Tool filtering & prompt-block building
-|   |   |-- agent_llm_backends.py       # Ollama/Anthropic chat & generate adapters
-|   |   |-- agent_state.py              # Session/investigation state
-|   |   |-- agent_store.py              # Persistence for agent data
-|   |   |-- correlation.py              # Alert-to-IOC correlation
-|   |   |-- mcp_client.py               # MCP tool server client
-|   |   |-- memory.py                   # RAG / knowledge retrieval
-|   |   |-- playbook_engine.py          # YAML playbook execution
-|   |   |-- sandbox_orchestrator.py     # Sandbox submission coordination
-|   |   |-- tool_registry.py            # Available tool registry
-|   |   +-- adapters/                   # Agent tool adapters
-|   |-- analyzers/                # File type analyzers
-|   |   |-- pe_analyzer.py              # PE analysis + deep inspection
-|   |   |-- ransomware_analyzer.py      # Ransomware detection
-|   |   |-- beacon_config_extractor.py  # Cobalt Strike beacon extraction
-|   |   |-- memory_analyzer.py          # Volatility 3 memory forensics
-|   |   |-- bec_detector.py             # Business Email Compromise detection
-|   |   |-- email_threat_indicators.py  # Email threat checks
-|   |   |-- text_analyzer.py            # C2/IOC text file analysis
-|   |   |-- apk_analyzer.py             # Android APK risk scoring
-|   |   |-- firmware_analyzer.py        # Firmware inspection
-|   |   |-- file_type_router.py         # Magic bytes + MIME routing
-|   |   |-- deobfuscators/              # Script de-obfuscation helpers
-|   |   +-- ...                         # ELF, Mach-O, Office, PDF, Script, Archive
-|   |-- cache/                    # Result caching
-|   |   |-- analysis_cache.py           # Analysis result cache
-|   |   +-- ioc_cache.py                # IOC lookup cache
-|   |-- decoders/                 # Gateway URL decoders
-|   |   |-- proofpoint_decoder.py       # Proofpoint URL Defense decoder
-|   |   +-- safelinks_decoder.py        # Microsoft Safe Links decoder
-|   |-- detection/                # Detection rule generation
-|   |   |-- rule_generator.py           # KQL, Sigma, YARA, Snort
-|   |   +-- llm_rule_generator.py       # LLM-assisted rule generation
-|   |-- integrations/             # External service integrations
-|   |   |-- llm_analyzer.py             # Ollama/Anthropic LLM analysis
-|   |   |-- threat_actor_profiler.py    # 20 APT group database
-|   |   |-- stix_generator.py           # STIX 2.1 indicator export
-|   |   |-- threat_intel.py             # 20+ TI source clients
-|   |   |-- threat_intel_extended.py    # Additional TI source clients
-|   |   |-- sandboxes.py                # Sandbox client(s)
-|   |   |-- sandbox_integration.py      # Sandbox result integration
-|   |   |-- sandbox_submitter.py        # Sandbox submission handling
-|   |   |-- ticketing.py                # SQLite incident ticket creation
-|   |   +-- verdict_validator.py        # Verdict consistency validation (scoring is authoritative)
-|   |-- mcp_servers/              # MCP tool servers (11)
-|   |   |-- flare_tools.py
-|   |   |-- forensics_tools.py
-|   |   |-- free_osint_tools.py
-|   |   |-- ghidra_tools.py
-|   |   |-- malwoverview_tools.py
-|   |   |-- mobsf_tools.py
-|   |   |-- network_tools.py
-|   |   |-- osint_tools.py
-|   |   |-- remnux_tools.py
-|   |   |-- threat_intel_tools.py
-|   |   +-- vulnerability_tools.py
-|   |-- models/                   # Shared data models
-|   |   +-- analysis_result.py
-|   |-- rag/                      # Retrieval-augmented generation
-|   |   +-- rag_knowledge_base.py       # ChromaDB knowledge base for agent prompts
-|   |-- reporting/                # Report generation
-|   |   |-- advanced_report_generator.py
-|   |   |-- executive_pdf.py
-|   |   |-- executive_summary.py
-|   |   |-- html_generator.py
-|   |   |-- html_report_generator.py
-|   |   |-- markdown_generator.py
-|   |   |-- mitre_navigator.py          # MITRE ATT&CK Navigator layer export
-|   |   |-- raw_output_collector.py
-|   |   |-- soc_output_formatter.py
-|   |   +-- timeline_generator.py
-|   |-- scoring/                  # Multi-layered scoring engine
-|   |   |-- tool_based_scoring.py       # Per-tool weighted scoring
-|   |   |-- intelligent_scoring.py      # Source-weighted IOC scoring
-|   |   |-- adaptive_scoring.py         # Kill-chain & combo detection
-|   |   |-- enhanced_scoring.py         # BEC/ransomware scoring
-|   |   |-- false_positive_filter.py    # FP filtering
-|   |   +-- signature_verifier.py       # Signature verification
-|   |-- tools/                    # High-level analysis tools
-|   |   |-- malware_analyzer.py         # File analysis pipeline
-|   |   |-- email_analyzer.py           # Email analysis pipeline
-|   |   |-- ioc_investigator.py         # IOC investigation pipeline
-|   |   +-- external_tool_runner.py     # External CLI tool execution
-|   |-- utils/                    # Utilities
-|   |   |-- dga_detector.py             # 7-heuristic DGA detection
-|   |   |-- domain_age_checker.py       # WHOIS domain age checking
-|   |   |-- entropy_analyzer.py         # Shannon entropy analysis
-|   |   |-- mitre_kill_chain.py         # Kill-chain stage mapping
-|   |   |-- mitre_mapper.py             # MITRE technique mapping
-|   |   +-- rate_limiter.py             # API rate limiting
-|   |-- web/                      # FastAPI web application
-|   |   |-- app.py                      # Application factory
-|   |   |-- analysis_manager.py         # Analysis job management
-|   |   |-- case_store.py               # Case management persistence
-|   |   |-- websocket.py                # Real-time updates
-|   |   +-- routes/                     # API & page routes (incl. tickets.py)
-|   |-- server.py                 # MCP/agent server entry point
-|   +-- soc_agent.py              # SOC agent entry point
-|-- templates/                    # Jinja2 HTML templates
-|-- static/                       # CSS, JS, images
-|-- data/
-|   |-- fuzzy_hash_db.json        # Fuzzy hash database
-|   |-- playbooks/                # Agent playbooks (10 files)
-|   |-- rag_knowledge/            # RAG seed data (playbooks + MITRE mappings)
-|   +-- tickets/                  # SQLite incident ticket database
-|-- docs/                         # Architecture, installation, usage docs
-|-- examples/                     # Sample test files
-|-- tests/                        # Test suite
-|-- docker-compose.sandbox.yml    # Sandbox environment definition
-|-- config.yaml.example           # Configuration template
-+-- requirements.txt              # Python dependencies
+├─ src/
+│  ├─ agent/          # Agent, MCP client, sessions, RAG, playbook engine
+│  ├─ analyzers/      # File, email, malware, and memory analysis
+│  ├─ integrations/   # TI, LLM, sandbox, notifications, tickets, STIX
+│  ├─ mcp_servers/    # 12 FastMCP modules
+│  ├─ reporting/      # JSON/HTML/PDF/SOC reports
+│  ├─ scoring/        # Deterministic scoring
+│  └─ web/            # FastAPI application and routes
+├─ data/
+│  ├─ playbooks/      # 9 YAML playbooks
+│  └─ rag_knowledge/  # RAG seeds
+├─ docs/              # Documentation and screenshots
+├─ examples/          # Synthetic/sample inputs
+├─ static/            # Web assets
+├─ templates/         # Web templates
+├─ tests/             # Automated tests
+├─ config.yaml.example
+└─ requirements.txt
 ```
 
----
+## 16. Contributing, license, and disclaimer
 
-## API Reference
+### Contributing
 
-### Analysis Endpoints
+Fork the repository, create a focused branch, add tests for behavioral changes, run targeted and full suites, document security/configuration effects, and open a pull request with verification results. Never commit populated configurations, tokens, passwords, API/private keys, known-host material, or sensitive samples.
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/analysis/ioc` | Submit IOC for investigation |
-| POST | `/api/analysis/file` | Upload file for malware analysis |
-| POST | `/api/analysis/email` | Upload .eml for email forensics |
-| GET | `/api/analysis/{id}` | Get analysis results |
-| GET | `/api/analysis/{id}/status` | Check analysis progress |
-| GET | `/api/analysis/history/` | List all analyses |
+### License
 
-### Report Endpoints
+Licensed under the MIT License; see [LICENSE](LICENSE).
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/reports/{id}/json` | JSON report |
-| GET | `/api/reports/{id}/html` | HTML report |
-| GET | `/api/reports/{id}/mitre` | MITRE ATT&CK Navigator layer |
-
-### Dashboard & Config
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/dashboard/stats` | Dashboard statistics |
-| GET | `/api/config/health` | System health check |
-| GET | `/api/config/tools` | Available analysis tools |
-| GET/POST | `/api/config/settings` | Application settings |
-
-### Ticketing
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/tickets` | List all auto-created incident tickets |
-
-Full API documentation available at http://localhost:3003/api/docs (Swagger UI).
-
----
-
-## Examples
-
-The `examples/` directory contains synthetic test files:
-
-| File | Expected Result |
-|------|----------------|
-| `sample_c2_config.txt` | MALICIOUS (90-100) - C2 patterns, persistence, lateral movement |
-| `sample_ioc_list.txt` | Mixed - IOCs for bulk investigation |
-
-```bash
-# Test file analysis with a C2 config
-curl -X POST http://localhost:3003/api/analysis/file -F "file=@examples/sample_c2_config.txt"
-
-# Test IOC investigation
-curl -X POST http://localhost:3003/api/analysis/ioc -H "Content-Type: application/json" -d '{"value": "203.0.113.50"}'
-```
-
----
-
-## MCP Server Integration
-
-CABTA can run as an MCP (Model Context Protocol) server for integration with MCP-compatible clients:
-
-```json
-{
-  "mcpServers": {
-    "cabta-remnux": {
-      "command": "python",
-      "args": ["-m", "src.mcp_servers.remnux_tools"],
-      "cwd": "/path/to/CABTA"
-    }
-  }
-}
-```
-
-Available MCP servers: `remnux_tools`, `flare_tools`, `forensics_tools`, `threat_intel_tools`, `osint_tools`, `network_tools`, `vulnerability_tools`, `free_osint_tools`, `ghidra_tools`, `malwoverview_tools`, `mobsf_tools`.
-
----
-
-## Contributing
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit changes (`git commit -m 'Add amazing feature'`)
-4. Push to branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-### Development Setup
-
-```bash
-git clone https://github.com/kanokrot/cabta-llm.git
-cd cabta-llm
-pip install -r requirements.txt
-pip install pytest black flake8
-pytest
-```
-
----
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
----
-
-## Author
+### Author
 
 **Original Author: Ugur Ates**
+
 - GitHub: [@ugurrates](https://github.com/ugurrates)
 - Medium: [@ugur.can.ates](https://medium.com/@ugur.can.ates)
 - LinkedIn: [Ugur Ates](https://www.linkedin.com/in/ugurcanates/)
 
 This fork ([kanokrot/cabta-llm](https://github.com/kanokrot/cabta-llm)) is maintained by [@kanokrot](https://github.com/kanokrot), building on the original CABTA project.
 
----
-
-## Acknowledgments
+### Acknowledgments
 
 - [MITRE ATT&CK](https://attack.mitre.org/) for the threat framework
 - [VirusTotal](https://www.virustotal.com/) for threat intelligence
 - [Ollama](https://ollama.com/) for local LLM support
 - [Mandiant FLARE](https://github.com/mandiant) for capa and FLOSS
-- [Abuse.ch](https://abuse.ch/) for free threat intelligence feeds
+- [Abuse.ch](https://abuse.ch/) for free threat-intelligence feeds
 
----
+### Disclaimer
 
-## Disclaimer
-
-This tool is intended for authorized security testing and research only. Users are responsible for ensuring they have proper authorization before analyzing any files or investigating any indicators. The author is not responsible for any misuse of this tool.
+CABTA is intended for authorized security testing, investigation, and research. Users are responsible for authorization, data and credential protection, reviewing automated findings, and legal/provider compliance. The authors and maintainers are not responsible for misuse.
