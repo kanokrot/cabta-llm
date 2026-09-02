@@ -167,10 +167,34 @@ def _parse_literal(text: str) -> Any:
 
 
 def _resolve_var(var_path: str, context: Dict) -> Any:
-    """Resolve a dotted variable path in the context dict."""
+    """Resolve a dotted path, transparently traversing MCP result wrappers."""
     parts = var_path.split(".")
     obj = context
     for part in parts:
+        if isinstance(obj, dict) and part in obj:
+            obj = obj[part]
+        else:
+            break
+    else:
+        return obj
+
+    # MCPClientManager stores successful calls as
+    # {"result": {...}, "server": ..., "tool": ...}. Preserve normal path
+    # resolution first, then retry legacy playbook references through that
+    # wrapper so ``step.field`` remains compatible with ``step.result.field``.
+    if len(parts) < 2:
+        return None
+    root = context.get(parts[0])
+    if not (
+        isinstance(root, dict)
+        and isinstance(root.get("result"), dict)
+        and "server" in root
+        and "tool" in root
+    ):
+        return None
+
+    obj = root["result"]
+    for part in parts[1:]:
         if isinstance(obj, dict) and part in obj:
             obj = obj[part]
         else:
