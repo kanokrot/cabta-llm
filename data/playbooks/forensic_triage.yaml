@@ -9,6 +9,12 @@ input_params:
   - name: host_identifier
     description: Hostname or IP address of the affected host
     required: true
+  - name: remote_username
+    description: SSH account for the approved remote host
+    required: true
+  - name: remote_key_path
+    description: Path to the SSH private key for the approved remote host
+    required: true
   - name: suspicious_file_path
     description: Path to a suspicious file found on the host (if known)
     required: false
@@ -19,29 +25,41 @@ input_params:
 steps:
   # ===== Collection =====
   - name: collect_system_info
-    tool: mcp:forensics_tools/system_info
+    tool: mcp:remote_tools/system_info_collect
     params:
       host: "{{host_identifier}}"
+      username: "{{remote_username}}"
+      key_path: "{{remote_key_path}}"
     description: Collect basic host info (hostname, OS, current time, logged-in users)
+    requires_approval: true
 
   - name: collect_running_processes
-    tool: mcp:forensics_tools/process_list
+    tool: mcp:remote_tools/process_list_collect
     params:
       host: "{{host_identifier}}"
+      username: "{{remote_username}}"
+      key_path: "{{remote_key_path}}"
     description: Snapshot of currently running processes (volatile data)
+    requires_approval: true
 
   - name: collect_network_connections
-    tool: mcp:forensics_tools/netstat_capture
+    tool: mcp:remote_tools/netstat_collect
     params:
       host: "{{host_identifier}}"
+      username: "{{remote_username}}"
+      key_path: "{{remote_key_path}}"
     description: Snapshot of active network connections (volatile data)
+    requires_approval: true
 
   - name: collect_event_logs
-    tool: mcp:forensics_tools/event_log_collect
+    tool: mcp:remote_tools/event_log_collect
     params:
       host: "{{host_identifier}}"
+      username: "{{remote_username}}"
+      key_path: "{{remote_key_path}}"
       time_range: "last_24h"
     description: Collect relevant event/syslog entries around the incident window
+    requires_approval: true
 
   - name: collect_suspicious_file
     tool: mcp:forensics_tools/file_metadata

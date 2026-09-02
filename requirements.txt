@@ -5,6 +5,7 @@
 requests>=2.28.0
 pyyaml>=6.0
 python-dateutil>=2.8.0
+paramiko>=3.4.0  # SSH remote host collection
 
 # File Analysis
 pefile>=2023.2.7
