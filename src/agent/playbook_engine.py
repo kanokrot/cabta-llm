@@ -728,16 +728,18 @@ class PlaybookEngine:
         like ``{{alert_text}}`` is left un-interpolated whenever the caller's
         key doesn't happen to match the playbook's declared param name.
 
-        Missing required params are backfilled from the first generic key
-        that has a value, in this priority order: ``query``, ``user_input``,
-        ``message``. Params that already have a value in *input_data* are
-        left untouched.
+        A single missing required param is backfilled from the first generic
+        key that has a value, in this priority order: ``query``,
+        ``user_input``, ``message``. Playbooks with multiple required params
+        must receive those values explicitly; no generic value is broadcast.
         """
         required_params = [
             p.get("name") for p in pb.get("input_params", [])
             if isinstance(p, dict) and p.get("required") and p.get("name")
         ]
         if not required_params:
+            return input_data
+        if len(required_params) > 1:
             return input_data
 
         fallback_value = None
