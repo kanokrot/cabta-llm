@@ -1,128 +1,123 @@
-# MCP-FOR-SOC v6.0.0 - Windows Kurulum Rehberi
+# CABTA — Windows Installation Guide
 
-## 📋 Gereksinimler
+## Requirements
 
-### Python Paketleri (pip ile)
+### Python packages
+
+Install the core Windows-compatible packages:
+
 ```powershell
 pip install oletools python-magic-bin pefile yara-python requests
 ```
 
-> **Not:** Windows'ta `python-magic-bin` kullanın (`python-magic` değil)
+> **Note:** On Windows, use `python-magic-bin` rather than `python-magic`.
 
 ---
 
-## 🔧 Harici Araç Kurulumları
+## External tool installation
 
-### 1. Mandiant capa (Capability Detection)
+### 1. Mandiant capa (capability detection)
 
-**İndirme:**
+**Download:**
+
 - https://github.com/mandiant/capa/releases
-- `capa-vX.X.X-windows.zip` dosyasını indir
+- Download the `capa-vX.X.X-windows.zip` release archive.
 
-**Kurulum:**
+**Install:**
+
 ```powershell
-# ZIP'i çıkar ve PATH'e ekle
+# Extract the archive and add its directory to PATH
 Expand-Archive capa-v7.0.1-windows.zip -DestinationPath C:\Tools\capa
 [Environment]::SetEnvironmentVariable("Path", $env:Path + ";C:\Tools\capa", "User")
 
-# Test
+# Verify
 capa --version
 ```
 
 ---
 
-### 2. Mandiant FLOSS (Obfuscated String Extraction)
+### 2. Mandiant FLOSS (obfuscated string extraction)
 
-**İndirme:**
+**Download:**
+
 - https://github.com/mandiant/flare-floss/releases
-- `floss-vX.X.X-windows.zip` dosyasını indir
+- Download the `floss-vX.X.X-windows.zip` release archive.
 
-**Kurulum:**
+**Install:**
+
 ```powershell
 Expand-Archive floss-v3.1.0-windows.zip -DestinationPath C:\Tools\floss
 [Environment]::SetEnvironmentVariable("Path", $env:Path + ";C:\Tools\floss", "User")
 
-# Test
+# Verify
 floss --version
 ```
 
 ---
 
-### 3. Detect It Easy (DIE) - Packer/Compiler Detection
+### 3. Detect It Easy (DIE) — packer/compiler detection
 
-**İndirme:**
+**Download:**
+
 - https://github.com/horsicq/DIE-engine/releases
-- `die_win64_portable_X.XX.zip` dosyasını indir
+- Download the `die_win64_portable_X.XX.zip` release archive.
 
-**Kurulum:**
+**Install:**
+
 ```powershell
 Expand-Archive die_win64_portable_3.09.zip -DestinationPath C:\Tools\die
 [Environment]::SetEnvironmentVariable("Path", $env:Path + ";C:\Tools\die", "User")
 
-# Test (CLI versiyonu)
+# Verify the CLI version
 diec --version
 ```
 
 ---
 
-### 4. binwalk (Firmware/Embedded Analysis)
+### 4. binwalk (firmware/embedded analysis)
 
-**Seçenek A - WSL ile (Önerilen):**
+**Option A — WSL (recommended):**
+
 ```powershell
-# WSL kurulu ise
+# Run this when WSL is installed
 wsl sudo apt install binwalk
 ```
 
-**Seçenek B - Native Windows:**
+**Option B — native Windows:**
+
 ```powershell
 pip install binwalk
 ```
 
-> **Not:** Windows native binwalk bazı özellikleri desteklemeyebilir. Kritik firmware analizi için WSL önerilir.
+> **Note:** Native Windows binwalk may not support every extraction feature. WSL is recommended for critical firmware analysis.
 
 ---
 
 ### 5. Didier Stevens PDF Tools
 
-**İndirme:**
+**Download:**
+
 - https://github.com/DidierStevens/DidierStevensSuite
 
-**Kurulum:**
+**Install:**
+
 ```powershell
-# Git clone veya ZIP indir
+# Clone the repository, or download and extract its ZIP archive
 git clone https://github.com/DidierStevens/DidierStevensSuite.git C:\Tools\DidierStevens
 
-# PATH'e ekle
+# Add the directory to PATH
 [Environment]::SetEnvironmentVariable("Path", $env:Path + ";C:\Tools\DidierStevens", "User")
 
-# Kullanım
+# Verify direct script execution
 python C:\Tools\DidierStevens\pdfid.py sample.pdf
 python C:\Tools\DidierStevens\pdf-parser.py sample.pdf
 ```
 
 ---
 
-### 6. Sysinternals Strings (Microsoft)
+## Recommended directory structure
 
-**İndirme:**
-- https://docs.microsoft.com/en-us/sysinternals/downloads/strings
-
-**Kurulum:**
-```powershell
-# İndir ve çıkar
-Invoke-WebRequest -Uri "https://download.sysinternals.com/files/Strings.zip" -OutFile Strings.zip
-Expand-Archive Strings.zip -DestinationPath C:\Tools\Sysinternals
-[Environment]::SetEnvironmentVariable("Path", $env:Path + ";C:\Tools\Sysinternals", "User")
-
-# Test
-strings64 -accepteula
-```
-
----
-
-## 📁 Önerilen Dizin Yapısı
-
-```
+```text
 C:\Tools\
 ├── capa\
 │   └── capa.exe
@@ -131,48 +126,45 @@ C:\Tools\
 ├── die\
 │   ├── diec.exe
 │   └── die.exe (GUI)
-├── DidierStevens\
-│   ├── pdfid.py
-│   └── pdf-parser.py
-└── Sysinternals\
-    └── strings64.exe
+└── DidierStevens\
+    ├── pdfid.py
+    └── pdf-parser.py
 ```
 
 ---
 
-## ⚙️ PATH Yapılandırması (Tek Seferde)
+## Configure PATH in one step
 
 ```powershell
-# Tüm araçları PATH'e ekle
+# Add every native tool/script directory to the user PATH
 $newPaths = @(
     "C:\Tools\capa",
-    "C:\Tools\floss", 
+    "C:\Tools\floss",
     "C:\Tools\die",
-    "C:\Tools\DidierStevens",
-    "C:\Tools\Sysinternals"
+    "C:\Tools\DidierStevens"
 )
 
 $currentPath = [Environment]::GetEnvironmentVariable("Path", "User")
 $newPath = $currentPath + ";" + ($newPaths -join ";")
 [Environment]::SetEnvironmentVariable("Path", $newPath, "User")
 
-# Yeni terminal aç ve test et
+# Open a new terminal before running the verification commands
 ```
 
 ---
 
-## ✅ Kurulum Doğrulama
+## Verify the installation
 
 ```powershell
-# Test script
-Write-Host "=== MCP-FOR-SOC v6.0 Tool Check ===" -ForegroundColor Cyan
+Write-Host "=== CABTA Tool Check ===" -ForegroundColor Cyan
 
 $tools = @{
     "capa" = "capa --version"
     "floss" = "floss --version"
     "diec" = "diec --version"
-    "strings" = "strings64 -accepteula 2>&1 | Select-Object -First 1"
+    "binwalk" = "binwalk --version"
     "pdfid" = "python -c `"import sys; sys.path.insert(0,'C:\\Tools\\DidierStevens'); import pdfid; print('OK')`""
+    "pdf-parser" = "if (Test-Path -LiteralPath 'C:\Tools\DidierStevens\pdf-parser.py') { 'OK' } else { throw 'pdf-parser.py not found' }"
 }
 
 foreach ($tool in $tools.Keys) {
@@ -187,53 +179,57 @@ foreach ($tool in $tools.Keys) {
 
 ---
 
-## 🐍 Python Entegrasyonu
+## How CABTA Finds These Tools
 
-MCP-FOR-SOC otomatik olarak PATH'teki araçları bulur. Manuel yapılandırma için:
+CABTA has two separate tool-resolution mechanisms. They serve different execution paths and are not interchangeable.
 
-```python
-# config.py veya environment variable
-import os
+### Main analysis pipeline
 
-# Windows tool paths (opsiyonel override)
-os.environ['CAPA_PATH'] = r'C:\Tools\capa\capa.exe'
-os.environ['FLOSS_PATH'] = r'C:\Tools\floss\floss.exe'
-os.environ['DIEC_PATH'] = r'C:\Tools\die\diec.exe'
-```
+`src/tools/external_tool_runner.py::_discover_tools()` is used by `pe_analyzer.py`, `pdf_analyzer.py`, `firmware_analyzer.py`, and `obfuscated_string_analyzer.py`.
 
----
+At startup, it calls `shutil.which()` once for each candidate in `TOOL_BINARIES`. There is no fallback directory. If a tool cannot be found on `PATH` during startup, it remains unavailable to the main analysis pipeline for that session. After changing `PATH`, open a new terminal and restart CABTA.
 
-## ⚠️ Bilinen Windows Sorunları
+### MCP FLARE tool layer
 
-| Araç | Sorun | Çözüm |
-|------|-------|-------|
-| binwalk | Bazı extraction özellikleri çalışmaz | WSL kullan |
-| FLOSS | Uzun sürebilir (5-10 dk) | Timeout artır |
-| capa | Büyük dosyalarda yavaş | --format json kullan |
-| strings | EULA kabul gerekli | -accepteula flag |
+`src/mcp_servers/flare_tools.py` is used only by the MCP tools `capa_analyze`, `floss_extract`, and `diec_identify`. This layer uses `shutil.which()` and then hardcoded fallbacks such as `C:\Tools\capa\capa.exe`.
+
+Those fallback paths help only the MCP FLARE layer. They do not make the tools discoverable by the main analysis pipeline.
+
+**Always add each installed tool directory to the system or user `PATH`. Do not rely solely on the `C:\Tools\...` MCP fallback paths.**
 
 ---
 
-## 📦 Hızlı Başlangıç (Chocolatey ile)
+## Known Windows issues
+
+| Tool | Issue | Suggested action |
+|---|---|---|
+| binwalk | Some extraction features may not work natively | Use WSL |
+| FLOSS | Analysis may take 5–10 minutes | Increase the relevant timeout |
+| capa | Large files may take longer to analyze | Use JSON output where appropriate |
+
+---
+
+## Quick Start with Chocolatey
 
 ```powershell
-# Chocolatey kurulu ise
-choco install sysinternals -y
+# Install Python when Chocolatey is available
 choco install python -y
+
+# Install Python packages
 pip install oletools pefile yara-python python-magic-bin
 
-# Manuel kurulum gereken araçlar
-# capa, floss, die - GitHub releases'dan indir
+# Download capa, FLOSS, and Detect It Easy manually from their release pages
+# Install Didier Stevens PDF Tools from its GitHub repository
+# Install binwalk through WSL or pip as described above
 ```
 
 ---
 
-## 🔗 İndirme Linkleri (Direkt)
+## Direct download links
 
-| Araç | Link |
-|------|------|
+| Tool | Link |
+|---|---|
 | capa | https://github.com/mandiant/capa/releases/latest |
 | FLOSS | https://github.com/mandiant/flare-floss/releases/latest |
-| DIE | https://github.com/horsicq/DIE-engine/releases/latest |
-| Strings | https://download.sysinternals.com/files/Strings.zip |
+| Detect It Easy | https://github.com/horsicq/DIE-engine/releases/latest |
 | PDF Tools | https://github.com/DidierStevens/DidierStevensSuite |
