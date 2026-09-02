@@ -71,10 +71,13 @@ steps:
 
   # ===== Examination =====
   - name: persistence_check
-    tool: mcp:forensics_tools/autoruns_check
+    tool: mcp:remote_tools/autoruns_check
     params:
       host: "{{host_identifier}}"
+      username: "{{remote_username}}"
+      key_path: "{{remote_key_path}}"
     description: Check startup items, scheduled tasks, and registry run keys for persistence mechanisms
+    requires_approval: true
 
   - name: hash_reputation_check
     tool: mcp:threat_intel_tools/malwarebazaar_hash_lookup

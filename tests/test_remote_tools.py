@@ -8,6 +8,7 @@ import pytest
 
 from src.mcp_servers.remote_tools import (
     _extract_ips_from_ss_output,
+    autoruns_check,
     event_log_collect,
     netstat_collect,
     process_list_collect,
@@ -454,3 +455,171 @@ def test_collection_tools_authentication_error_closes_client(
         "data": None,
     }
     client.close.assert_called_once()
+
+
+@patch("src.mcp_servers.remote_tools.paramiko.SSHClient")
+def test_autoruns_check_success_no_findings(mock_ssh_client, tmp_path):
+    key_file = tmp_path / "id_test"
+    key_file.write_text("mock-private-key-content", encoding="utf-8")
+    client = mock_ssh_client.return_value
+    client.exec_command.side_effect = [
+        _command_result("no crontab for analyst"),
+        _command_result("sshd.service enabled\nsystemd-journald.service enabled"),
+        _command_result(""),
+    ]
+
+    result = autoruns_check("192.0.2.10", "analyst", str(key_file))
+
+    assert result["status"] == "success"
+    assert result["error"] is None
+    assert result["suspicious"] is False
+    assert result["suspicious_findings"] == []
+    persistence = result["data"]["persistence_check"]
+    assert persistence["suspicious"] is False
+    assert persistence["suspicious_findings"] == []
+    client.close.assert_called_once()
+
+
+@patch("src.mcp_servers.remote_tools.paramiko.SSHClient")
+def test_autoruns_check_detects_high_confidence_single_match(
+    mock_ssh_client,
+    tmp_path,
+):
+    key_file = tmp_path / "id_test"
+    key_file.write_text("mock-private-key-content", encoding="utf-8")
+    client = mock_ssh_client.return_value
+    client.exec_command.side_effect = [
+        _command_result("@reboot mkfifo named-pipe"),
+        _command_result("sshd.service enabled"),
+        _command_result(""),
+    ]
+
+    result = autoruns_check("192.0.2.10", "analyst", str(key_file))
+
+    assert result["suspicious"] is True
+    assert result["suspicious_findings"] == [
+        {
+            "keyword": "mkfifo",
+            "confidence": "high",
+            "source_command": "cron_jobs",
+        }
+    ]
+
+
+@patch("src.mcp_servers.remote_tools.paramiko.SSHClient")
+def test_autoruns_check_low_confidence_requires_two_matches(
+    mock_ssh_client,
+    tmp_path,
+):
+    key_file = tmp_path / "id_test"
+    key_file.write_text("mock-private-key-content", encoding="utf-8")
+    client = mock_ssh_client.return_value
+    client.exec_command.side_effect = [
+        _command_result("@daily curl https://example.invalid/health"),
+        _command_result("sshd.service enabled"),
+        _command_result(""),
+    ]
+
+    one_match = autoruns_check("192.0.2.10", "analyst", str(key_file))
+
+    assert one_match["suspicious"] is False
+    assert one_match["suspicious_findings"] == [
+        {
+            "keyword": "curl",
+            "confidence": "low",
+            "source_command": "cron_jobs",
+        }
+    ]
+
+    client.exec_command.side_effect = [
+        _command_result("@daily curl https://example.invalid/health"),
+        _command_result("custom.service enabled from /tmp/custom.service"),
+        _command_result(""),
+    ]
+
+    two_matches = autoruns_check("192.0.2.10", "analyst", str(key_file))
+
+    assert two_matches["suspicious"] is True
+    assert two_matches["suspicious_findings"] == [
+        {
+            "keyword": "curl",
+            "confidence": "low",
+            "source_command": "cron_jobs",
+        },
+        {
+            "keyword": "/tmp/",
+            "confidence": "low",
+            "source_command": "systemd_enabled",
+        },
+    ]
+
+
+@patch("src.mcp_servers.remote_tools.paramiko.SSHClient")
+def test_autoruns_check_rejects_host_not_in_allowlist(
+    mock_ssh_client,
+    monkeypatch,
+    tmp_path,
+):
+    key_file = tmp_path / "id_test"
+    key_file.write_text("mock-private-key-content", encoding="utf-8")
+    monkeypatch.setattr(
+        "src.mcp_servers.remote_tools._load_allowed_hosts",
+        lambda: [],
+    )
+
+    result = autoruns_check("198.51.100.20", "analyst", str(key_file))
+
+    assert result == {
+        "status": "error",
+        "error": "Host is not in the approved allowlist",
+        "data": None,
+    }
+    mock_ssh_client.assert_not_called()
+
+
+@patch("src.mcp_servers.remote_tools.paramiko.SSHClient")
+def test_autoruns_check_authentication_error(mock_ssh_client, tmp_path):
+    key_file = tmp_path / "id_test"
+    key_file.write_text("mock-private-key-content", encoding="utf-8")
+    client = mock_ssh_client.return_value
+    client.connect.side_effect = paramiko.AuthenticationException("denied")
+
+    result = autoruns_check("192.0.2.10", "analyst", str(key_file))
+
+    assert result == {
+        "status": "error",
+        "error": "SSH authentication failed",
+        "data": None,
+    }
+    client.close.assert_called_once()
+
+
+@patch("src.mcp_servers.remote_tools.paramiko.SSHClient")
+def test_autoruns_check_tolerates_individual_command_failure(
+    mock_ssh_client,
+    tmp_path,
+):
+    key_file = tmp_path / "id_test"
+    key_file.write_text("mock-private-key-content", encoding="utf-8")
+    client = mock_ssh_client.return_value
+    failed_crontab = _command_result("")
+    failed_crontab[2].read.return_value = b"no crontab for analyst"
+    failed_crontab[1].channel.recv_exit_status.return_value = 1
+    client.exec_command.side_effect = [
+        failed_crontab,
+        _command_result("sshd.service enabled"),
+        _command_result(""),
+    ]
+
+    result = autoruns_check("192.0.2.10", "analyst", str(key_file))
+
+    assert result["status"] == "success"
+    cron_jobs = result["data"]["persistence_check"]["cron_jobs"]
+    assert cron_jobs == {
+        "stdout": "",
+        "stderr": "no crontab for analyst",
+        "exit_status": 1,
+    }
+    assert result["data"]["persistence_check"]["systemd_enabled"]["stdout"] == (
+        "sshd.service enabled"
+    )

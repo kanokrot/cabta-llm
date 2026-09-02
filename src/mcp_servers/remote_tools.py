@@ -23,6 +23,30 @@ _SYSTEM_INFO_COMMANDS = {
     "hostname": "hostname",
     "uptime": "uptime",
 }
+_PERSISTENCE_COMMANDS = {
+    "cron_jobs": "crontab -l",
+    "systemd_enabled": "systemctl list-unit-files --state=enabled",
+    "rc_local": "cat /etc/rc.local",
+}
+_HIGH_CONFIDENCE_PERSISTENCE_KEYWORDS = (
+    "nc -e",
+    "/dev/tcp/",
+    "bash -i",
+    "mkfifo",
+    "xmrig",
+    "mimikatz",
+)
+_LOW_CONFIDENCE_PERSISTENCE_KEYWORDS = (
+    "curl",
+    "wget",
+    "| sh",
+    "| bash",
+    "base64 -d",
+    "base64 --decode",
+    "/tmp/",
+    "/dev/shm/",
+    "/var/tmp/",
+)
 _TIME_RANGE_SINCE = {
     "last_1h": "1 hour ago",
     "last_24h": "24 hours ago",
@@ -90,6 +114,43 @@ def _extract_ips_from_ss_output(raw_output: str) -> list[str]:
             remote_ips.append(normalized)
 
     return remote_ips
+
+
+def _detect_suspicious_persistence(
+    commands_output: dict[str, dict],
+) -> tuple[bool, list[dict]]:
+    """Detect suspicious persistence indicators in collected command output."""
+    findings = []
+    seen: set[tuple[str, str]] = set()
+    high_confidence_match = False
+    low_confidence_matches = 0
+
+    for source_command, command_result in commands_output.items():
+        stdout = str(command_result.get("stdout", "")).casefold()
+        for confidence, keywords in (
+            ("high", _HIGH_CONFIDENCE_PERSISTENCE_KEYWORDS),
+            ("low", _LOW_CONFIDENCE_PERSISTENCE_KEYWORDS),
+        ):
+            for keyword in keywords:
+                match_count = stdout.count(keyword.casefold())
+                if not match_count:
+                    continue
+                if confidence == "high":
+                    high_confidence_match = True
+                else:
+                    low_confidence_matches += match_count
+
+                dedupe_key = (keyword, source_command)
+                if dedupe_key not in seen:
+                    seen.add(dedupe_key)
+                    findings.append({
+                        "keyword": keyword,
+                        "confidence": confidence,
+                        "source_command": source_command,
+                    })
+
+    suspicious = high_confidence_match or low_confidence_matches >= 2
+    return suspicious, findings
 
 
 def _collect_remote_commands(
@@ -290,6 +351,46 @@ def event_log_collect(
             "port": port,
             "event_logs": event_logs,
             "time_range": time_range,
+        },
+    }
+
+
+@mcp.tool()
+def autoruns_check(
+    host: str,
+    username: str,
+    key_path: str,
+    port: int = 22,
+) -> dict[str, Any]:
+    """Collect persistence mechanisms from an allowlisted, pinned target.
+
+    Args:
+        host: Hostname or IP address, which must be on the allowlist.
+        username: Remote SSH account name, which must match the allowlist.
+        key_path: Local path to the SSH private key. Key contents are never
+            logged or returned.
+        port: SSH service port (default 22).
+    """
+    result = _collect_remote_commands(
+        host, username, key_path, port, _PERSISTENCE_COMMANDS
+    )
+    if result["status"] == "error":
+        return result
+    persistence_check = result["data"]
+    suspicious, suspicious_findings = _detect_suspicious_persistence(
+        persistence_check
+    )
+    persistence_check["suspicious"] = suspicious
+    persistence_check["suspicious_findings"] = suspicious_findings
+    return {
+        "status": "success",
+        "error": None,
+        "suspicious": suspicious,
+        "suspicious_findings": suspicious_findings,
+        "data": {
+            "host": host,
+            "port": port,
+            "persistence_check": persistence_check,
         },
     }
 
