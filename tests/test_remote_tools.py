@@ -93,6 +93,7 @@ def test_extract_ips_from_ss_output_handles_empty_or_malformed(raw_output):
 def approved_test_host(monkeypatch, tmp_path):
     """Keep the six original scenarios approved by the new allowlist gate."""
     known_hosts = tmp_path / "known_hosts"
+    key_file = tmp_path / "id_test"
     known_hosts.write_text("mock-known-host", encoding="utf-8")
     monkeypatch.setattr(
         "src.mcp_servers.remote_tools._load_allowed_hosts",
@@ -100,6 +101,7 @@ def approved_test_host(monkeypatch, tmp_path):
             {
                 "host": "192.0.2.10",
                 "username": "analyst",
+                "key_path": str(key_file),
                 "known_hosts_path": str(known_hosts),
             }
         ],
@@ -172,8 +174,24 @@ def test_system_info_collect_connection_timeout(mock_ssh_client, tmp_path):
 
 
 @patch("src.mcp_servers.remote_tools.paramiko.SSHClient")
-def test_system_info_collect_missing_key_does_not_connect(mock_ssh_client, tmp_path):
+def test_system_info_collect_missing_key_does_not_connect(
+    mock_ssh_client,
+    monkeypatch,
+    approved_test_host,
+    tmp_path,
+):
     missing_key = tmp_path / "missing-key"
+    monkeypatch.setattr(
+        "src.mcp_servers.remote_tools._load_allowed_hosts",
+        lambda: [
+            {
+                "host": "192.0.2.10",
+                "username": "analyst",
+                "key_path": str(missing_key),
+                "known_hosts_path": str(approved_test_host),
+            }
+        ],
+    )
     client = mock_ssh_client.return_value
 
     result = system_info_collect("192.0.2.10", "analyst", str(missing_key))
@@ -204,11 +222,24 @@ def test_system_info_collect_closes_client_after_ssh_error(mock_ssh_client, tmp_
 @patch("src.mcp_servers.remote_tools.paramiko.SSHClient")
 def test_system_info_collect_error_does_not_expose_credentials(
     mock_ssh_client,
+    monkeypatch,
+    approved_test_host,
     tmp_path,
 ):
     key_content = "TOP-SECRET-PRIVATE-KEY-CONTENT"
     key_file = tmp_path / "sensitive-key-name"
     key_file.write_text(key_content, encoding="utf-8")
+    monkeypatch.setattr(
+        "src.mcp_servers.remote_tools._load_allowed_hosts",
+        lambda: [
+            {
+                "host": "192.0.2.10",
+                "username": "analyst",
+                "key_path": str(key_file),
+                "known_hosts_path": str(approved_test_host),
+            }
+        ],
+    )
     client = mock_ssh_client.return_value
     client.connect.side_effect = paramiko.AuthenticationException(
         f"bad credential {key_content} from {key_file}"
@@ -246,6 +277,74 @@ def test_system_info_collect_rejects_host_not_in_allowlist(
 
 
 @patch("src.mcp_servers.remote_tools.paramiko.SSHClient")
+def test_system_info_collect_accepts_matching_pinned_key(
+    mock_ssh_client,
+    tmp_path,
+):
+    key_file = tmp_path / "id_test"
+    key_file.write_text("mock-private-key-content", encoding="utf-8")
+    client = mock_ssh_client.return_value
+    client.exec_command.side_effect = [
+        _command_result("Linux test-host 6.1.0"),
+        _command_result("test-host"),
+        _command_result("up 2 days"),
+    ]
+
+    result = system_info_collect("192.0.2.10", "analyst", str(key_file))
+
+    assert result["status"] == "success"
+    client.connect.assert_called_once()
+
+
+@patch("src.mcp_servers.remote_tools.paramiko.SSHClient")
+def test_system_info_collect_rejects_key_not_matching_pinned_credential(
+    mock_ssh_client,
+    tmp_path,
+):
+    caller_key = tmp_path / "different-key"
+    caller_key.write_text("different-mock-private-key-content", encoding="utf-8")
+
+    result = system_info_collect("192.0.2.10", "analyst", str(caller_key))
+
+    assert result == {
+        "status": "error",
+        "error": "key_path does not match the pinned credential for this host",
+        "data": None,
+    }
+    mock_ssh_client.assert_not_called()
+
+
+@patch("src.mcp_servers.remote_tools.paramiko.SSHClient")
+def test_system_info_collect_rejects_allowlist_entry_without_key_path(
+    mock_ssh_client,
+    monkeypatch,
+    approved_test_host,
+    tmp_path,
+):
+    key_file = tmp_path / "id_test"
+    key_file.write_text("mock-private-key-content", encoding="utf-8")
+    monkeypatch.setattr(
+        "src.mcp_servers.remote_tools._load_allowed_hosts",
+        lambda: [
+            {
+                "host": "192.0.2.10",
+                "username": "analyst",
+                "known_hosts_path": str(approved_test_host),
+            }
+        ],
+    )
+
+    result = system_info_collect("192.0.2.10", "analyst", str(key_file))
+
+    assert result == {
+        "status": "error",
+        "error": "No pinned key_path is configured for this host",
+        "data": None,
+    }
+    mock_ssh_client.assert_not_called()
+
+
+@patch("src.mcp_servers.remote_tools.paramiko.SSHClient")
 def test_system_info_collect_missing_known_hosts_does_not_connect(
     mock_ssh_client,
     monkeypatch,
@@ -260,6 +359,7 @@ def test_system_info_collect_missing_known_hosts_does_not_connect(
             {
                 "host": "192.0.2.10",
                 "username": "analyst",
+                "key_path": str(key_file),
                 "known_hosts_path": str(missing_known_hosts),
             }
         ],

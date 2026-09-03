@@ -224,7 +224,7 @@ remote_hosts:
     description: "<optional-description>"
 ```
 
-The connection must match `host` and `username`. The private key is referenced by path, while the allowlist supplies the pinned known-hosts file. With `remote_hosts: []`, every remote call is rejected and real collection is unavailable until approved infrastructure is provisioned.
+The connection must match `host` and `username`, and the caller-supplied `key_path` must match the private-key path pinned in that allowlist entry. Entries without `key_path` are rejected. The allowlist also supplies the pinned known-hosts file. With `remote_hosts: []`, every remote call is rejected and real collection is unavailable until approved infrastructure is provisioned.
 
 | Tool | Command(s) | Result |
 |---|---|---|

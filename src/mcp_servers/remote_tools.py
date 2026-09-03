@@ -172,9 +172,17 @@ def _collect_remote_commands(
     if allowed_host is None:
         return _error("Host is not in the approved allowlist")
 
+    pinned_key_path = allowed_host.get("key_path")
+    if not isinstance(pinned_key_path, str) or not pinned_key_path.strip():
+        return _error("No pinned key_path is configured for this host")
+
+    private_key = Path(key_path).expanduser().resolve()
+    pinned_private_key = Path(pinned_key_path).expanduser().resolve()
+    if private_key != pinned_private_key:
+        return _error("key_path does not match the pinned credential for this host")
+
     client = paramiko.SSHClient()
     try:
-        private_key = Path(key_path).expanduser()
         if not private_key.is_file():
             return _error("SSH private key file was not found")
 
