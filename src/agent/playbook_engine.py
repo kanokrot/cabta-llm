@@ -219,6 +219,7 @@ def safe_evaluate_condition(condition: str, context: Dict) -> bool:
     - ``file_type in ('PE', 'ELF')``
     - ``cond1 and cond2``   (split on ' and ')
     - ``cond1 or cond2``    (split on ' or ')
+    - bare ``{{var}}`` truthy check
 
     Returns False on any parse error (safe default).
     """
@@ -297,6 +298,10 @@ def safe_evaluate_condition(condition: str, context: Dict) -> bool:
                 return op_func(left_val, right_val)
             except TypeError:
                 return False
+
+        # Pattern: bare variable or dotted path (truthy check)
+        if re.fullmatch(r"\w[\w.]*", condition):
+            return bool(_resolve_var(condition, flat_ctx))
 
         # Unrecognised pattern
         logger.debug("[PLAYBOOK] Could not parse condition: %s", condition)
