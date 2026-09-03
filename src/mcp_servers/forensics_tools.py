@@ -25,6 +25,8 @@ from typing import Any, List, Optional
 
 from mcp.server.fastmcp import FastMCP
 
+from src.utils.mitre_mapper import MITREMapper
+
 logger = logging.getLogger(__name__)
 
 mcp = FastMCP("forensics-tools")
@@ -698,6 +700,37 @@ def search_logs(
             "error": f"Log search failed: {e}",
             "log_source": log_source,
         }, indent=2, default=str)
+
+
+@mcp.tool()
+def mitre_attack_mapper(findings: dict) -> dict:
+    """Map forensic findings to a capa-compatible MITRE ATT&CK summary.
+
+    Args:
+        findings: Named forensic findings. Values may be strings or structured
+            values and are coerced to text before indicator matching.
+    """
+    content = "\n".join(
+        str(value)
+        for value in findings.values()
+        if value is not None and value != ""
+    )
+    mapped = MITREMapper.map_indicators(content)
+
+    mitre_attacks = []
+    seen_ids = set()
+    for technique in mapped:
+        technique_id = technique.get("technique_id", "")
+        if not technique_id or technique_id in seen_ids:
+            continue
+        seen_ids.add(technique_id)
+        mitre_attacks.append({
+            "technique": technique.get("technique_name", ""),
+            "id": technique_id,
+            "tactic": technique.get("tactic", ""),
+        })
+
+    return {"capabilities": [], "mitre_attacks": mitre_attacks}
 
 
 def main():
