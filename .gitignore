@@ -62,6 +62,8 @@ nul
 htmlcov/
 .tox/
 .nox/
+docs/test_report.xlsx
+scripts/reporting/_junit_results.xml
 
 # --- Local Settings ---
 .claude/
