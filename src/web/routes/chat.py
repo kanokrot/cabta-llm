@@ -21,6 +21,28 @@ class ChatMessage(BaseModel):
     playbook_id: Optional[str] = None
 
 
+def _parse_structured_params(message: str) -> dict | None:
+    """Parse 'key: value' per-line message into a dict.
+
+    Returns None (caller should fall back to plain query/user_input)
+    unless every non-empty line contains a colon.
+    """
+    lines = [line for line in message.splitlines() if line.strip()]
+    if not lines:
+        return None
+    parsed = {}
+    for line in lines:
+        if ":" not in line:
+            return None
+        key, _, value = line.partition(":")
+        key = key.strip()
+        value = value.strip()
+        if not key:
+            return None
+        parsed[key] = value
+    return parsed
+
+
 @router.post('')
 async def send_message(request: Request, body: ChatMessage):
     """Send a message to the agent.
@@ -41,6 +63,9 @@ async def send_message(request: Request, body: ChatMessage):
         try:
             # Parse input params from message
             input_data = {"query": body.message, "user_input": body.message}
+            structured = _parse_structured_params(body.message)
+            if structured:
+                input_data.update(structured)
             session_id = await engine.start(
                 body.playbook_id, input_data, case_id=None,
             )
