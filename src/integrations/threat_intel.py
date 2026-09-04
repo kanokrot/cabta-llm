@@ -8,6 +8,7 @@ from typing import Dict, Optional, List
 from datetime import datetime
 import logging
 import json
+from ..cache.ioc_cache import IOCCache
 from ..utils.api_key_validator import get_valid_key
 
 logger = logging.getLogger(__name__)
@@ -34,6 +35,7 @@ class ThreatIntelligence:
         self.config = config
         self.api_keys = config.get('api_keys', {})
         self.timeout = aiohttp.ClientTimeout(total=config.get('timeouts', {}).get('api_timeout', 30))
+        self._ioc_cache = IOCCache()
         
         # Cache for C2 feeds (refresh hourly)
         self._c2_cache = None
@@ -913,20 +915,37 @@ class ThreatIntelligence:
         # Execute all checks with timeout
         import asyncio
         
-        async def safe_execute(name: str, coro) -> tuple:
+        async def safe_execute(name: str, coro, ioc: str, ioc_type: str) -> tuple:
             """Execute with timeout and error handling."""
             try:
                 result = await asyncio.wait_for(coro, timeout=15.0)
+                if result and result.get('status') != '⚠':
+                    self._ioc_cache.set(ioc, ioc_type, name, result)
                 return name, result
             except asyncio.TimeoutError:
                 logger.warning(f"[INTEL] {name}: Timeout after 15s")
-                return name, {'status': '⚠', 'error': 'Timeout'}
+                cached = self._ioc_cache.get(ioc, ioc_type, name)
+                if cached is not None:
+                    cached_copy = dict(cached)
+                    cached_copy['cached'] = True
+                    cached_copy['cache_reason'] = 'timeout'
+                    return name, cached_copy
+                return name, {'status': '⚠', 'error': 'Timeout', 'cached': False}
             except Exception as e:
                 logger.error(f"[INTEL] {name} failed: {e}")
-                return name, {'status': '⚠', 'error': str(e)}
+                cached = self._ioc_cache.get(ioc, ioc_type, name)
+                if cached is not None:
+                    cached_copy = dict(cached)
+                    cached_copy['cached'] = True
+                    cached_copy['cache_reason'] = 'error'
+                    return name, cached_copy
+                return name, {'status': '⚠', 'error': str(e), 'cached': False}
         
         # Run all tasks concurrently
-        safe_tasks = [safe_execute(name, coro) for name, coro in tasks]
+        safe_tasks = [
+            safe_execute(name, coro, ioc, ioc_type)
+            for name, coro in tasks
+        ]
         completed = await asyncio.gather(*safe_tasks, return_exceptions=True)
         
         # Process results
