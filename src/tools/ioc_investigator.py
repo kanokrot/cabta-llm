@@ -63,6 +63,21 @@ class IOCInvestigator:
             except Exception as exc:
                 logger.warning(f"[IOC] RAG knowledge base unavailable (non-fatal): {exc}")
                 self.rag_kb = None
+
+    @staticmethod
+    def _extract_malware_family(sources: Dict) -> str:
+        """Scan per-source threat intel results for a malware family / threat name.
+        Priority: malware_family > malware > botnet > threat.
+        Returns 'Unknown' if none found.
+        """
+        for source_data in sources.values():
+            if not isinstance(source_data, dict):
+                continue
+            for key in ('malware_family', 'malware', 'botnet', 'threat'):
+                value = source_data.get(key)
+                if value and str(value).strip() and str(value) != 'Unknown':
+                    return str(value)
+        return 'Unknown'
     
     def _is_trusted_infrastructure(self, ioc: str, ioc_type: str) -> bool:
         """Check if IOC belongs to trusted infrastructure."""
@@ -279,7 +294,10 @@ class IOCInvestigator:
                 llm_analysis = {'note': f'LLM analysis failed: {llm_err}'}
 
         # Generate detection rules
-        detection_rules = RuleGenerator.generate_ioc_rules(ioc, ioc_type, {'verdict': verdict})
+        malware_family = self._extract_malware_family(intel_results.get('sources', {}))
+        detection_rules = RuleGenerator.generate_ioc_rules(
+            ioc, ioc_type, {'verdict': verdict, 'malware_family': malware_family}
+        )
 
         # Generate recommendations
         # Prioritize LLM-generated recommendations if they exist and are valid
@@ -306,6 +324,7 @@ class IOCInvestigator:
             'ioc_type': ioc_type,
             'threat_score': threat_score,
             'verdict': verdict,
+            'malware_family': malware_family,
             'coverage': coverage,
             # Standardized keys
             'sources': intel_results.get('sources', {}),  # Direct 'sources' key for consistency
