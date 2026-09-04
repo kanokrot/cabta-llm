@@ -4,11 +4,20 @@ Case Management API endpoints.
 """
 
 import logging
+import sqlite3
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Request
 
-from ..models import CaseCreate, CaseNote, CaseStatusUpdate
+from ..case_store import _severity_to_4tier
+from ..models import (
+    CaseCreate,
+    CaseNote,
+    CaseStatusUpdate,
+    IncidentReport,
+    IncidentReportCreate,
+    IncidentReportUpdate,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -47,6 +56,45 @@ async def get_case(request: Request, case_id: str):
     if case is None:
         raise HTTPException(404, 'Case not found')
     return case
+
+
+@router.post('/{case_id}/incident-report', response_model=IncidentReport)
+async def create_incident_report(
+    request: Request, case_id: str, payload: IncidentReportCreate
+):
+    """Create the incident report for a case."""
+    store = request.app.state.case_store
+    case = store.get_case(case_id)
+    if case is None:
+        raise HTTPException(404, 'Case not found')
+    fields = payload.model_dump(exclude_none=True)
+    if 'severity_4tier' not in fields:
+        fields['severity_4tier'] = _severity_to_4tier(case['severity'])
+    try:
+        return store.create_incident_report(case_id, **fields)
+    except sqlite3.IntegrityError:
+        raise HTTPException(409, 'Incident report already exists')
+
+
+@router.get('/{case_id}/incident-report', response_model=IncidentReport)
+async def get_incident_report(request: Request, case_id: str):
+    """Get a case incident report."""
+    report = request.app.state.case_store.get_incident_report(case_id)
+    if report is None:
+        raise HTTPException(404, 'Incident report not found')
+    return report
+
+
+@router.patch('/{case_id}/incident-report', response_model=IncidentReport)
+async def update_incident_report(
+    request: Request, case_id: str, payload: IncidentReportUpdate
+):
+    """Partially update a case incident report."""
+    store = request.app.state.case_store
+    fields = payload.model_dump(exclude_none=True)
+    if not store.update_incident_report(case_id, **fields):
+        raise HTTPException(404, 'Incident report not found')
+    return store.get_incident_report(case_id)
 
 
 @router.patch('/{case_id}/status')

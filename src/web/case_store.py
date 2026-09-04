@@ -21,6 +21,37 @@ logger = logging.getLogger(__name__)
 
 _DEFAULT_DB = Path.home() / '.blue-team-assistant' / 'cache' / 'cases.db'
 
+_INCIDENT_REPORT_FIELDS = (
+    'threat_type',
+    'threat_description',
+    'attacker_ip',
+    'target_ip',
+    'affected_username',
+    'attack_outcome',
+    'occurrence_note',
+    'detected_at',
+    'detection_device',
+    'severity_4tier',
+    'findings',
+    'analysis',
+    'impact',
+    'remediation',
+    'reference',
+)
+_INCIDENT_REPORT_JSON_FIELDS = {
+    'findings', 'analysis', 'impact', 'remediation', 'reference'
+}
+
+
+def _severity_to_4tier(case_severity: str) -> str:
+    """Map a case severity value to its four-tier report label."""
+    return {
+        'low': 'Low',
+        'medium': 'Medium',
+        'high': 'High',
+        'critical': 'Critical',
+    }.get(case_severity.lower(), '') if case_severity else ''
+
 
 class CaseStore:
     """SQLite-backed case management."""
@@ -127,6 +158,78 @@ class CaseStore:
         return updated
 
     # ------------------------------------------------------------------ #
+    # Incident reports
+    # ------------------------------------------------------------------ #
+
+    def create_incident_report(self, case_id: str, **fields) -> Dict:
+        unknown = set(fields) - set(_INCIDENT_REPORT_FIELDS)
+        if unknown:
+            raise ValueError(f"Unknown incident report fields: {sorted(unknown)}")
+
+        now = datetime.now(timezone.utc).isoformat()
+        values = {
+            key: json.dumps(value) if key in _INCIDENT_REPORT_JSON_FIELDS else value
+            for key, value in fields.items()
+        }
+        columns = ['case_id', *values.keys(), 'created_at', 'updated_at']
+        parameters = [case_id, *values.values(), now, now]
+        placeholders = ', '.join('?' for _ in columns)
+
+        with self._lock:
+            conn = self._connect()
+            try:
+                conn.execute(
+                    f"INSERT INTO case_incident_reports ({', '.join(columns)}) "
+                    f"VALUES ({placeholders})",
+                    parameters,
+                )
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
+            finally:
+                conn.close()
+        return self.get_incident_report(case_id)
+
+    def get_incident_report(self, case_id: str) -> Optional[Dict]:
+        conn = self._connect()
+        cur = conn.execute(
+            "SELECT * FROM case_incident_reports WHERE case_id = ?", (case_id,)
+        )
+        row = cur.fetchone()
+        if row is None:
+            conn.close()
+            return None
+        report = self._row_to_dict(cur.description, row)
+        conn.close()
+        for field in _INCIDENT_REPORT_JSON_FIELDS:
+            report[field] = json.loads(report[field])
+        return report
+
+    def update_incident_report(self, case_id: str, **fields) -> bool:
+        unknown = set(fields) - set(_INCIDENT_REPORT_FIELDS)
+        if unknown:
+            raise ValueError(f"Unknown incident report fields: {sorted(unknown)}")
+
+        values = {
+            key: json.dumps(value) if key in _INCIDENT_REPORT_JSON_FIELDS else value
+            for key, value in fields.items()
+        }
+        values['updated_at'] = datetime.now(timezone.utc).isoformat()
+        assignments = ', '.join(f"{key} = ?" for key in values)
+
+        with self._lock:
+            conn = self._connect()
+            cur = conn.execute(
+                f"UPDATE case_incident_reports SET {assignments} WHERE case_id = ?",
+                (*values.values(), case_id),
+            )
+            conn.commit()
+            updated = cur.rowcount > 0
+            conn.close()
+        return updated
+
+    # ------------------------------------------------------------------ #
     # Case-Analysis linking
     # ------------------------------------------------------------------ #
 
@@ -199,6 +302,29 @@ class CaseStore:
                 content    TEXT NOT NULL,
                 author     TEXT DEFAULT 'analyst',
                 created_at TEXT NOT NULL
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS case_incident_reports (
+                case_id             TEXT PRIMARY KEY,
+                threat_type         TEXT DEFAULT '',
+                threat_description  TEXT DEFAULT '',
+                attacker_ip         TEXT DEFAULT '',
+                target_ip           TEXT DEFAULT '',
+                affected_username   TEXT DEFAULT '',
+                attack_outcome      TEXT DEFAULT '',
+                occurrence_note     TEXT DEFAULT '',
+                detected_at         TEXT DEFAULT '',
+                detection_device    TEXT DEFAULT '',
+                severity_4tier      TEXT DEFAULT '',
+                findings            TEXT DEFAULT '[]',
+                analysis            TEXT DEFAULT '[]',
+                impact              TEXT DEFAULT '[]',
+                remediation         TEXT DEFAULT '[]',
+                reference           TEXT DEFAULT '[]',
+                created_at          TEXT NOT NULL,
+                updated_at          TEXT NOT NULL,
+                FOREIGN KEY (case_id) REFERENCES cases(id)
             )
         """)
         conn.commit()

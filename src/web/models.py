@@ -137,6 +137,49 @@ class CaseStatusUpdate(BaseModel):
     status: CaseStatus
 
 
+class IncidentReportCreate(BaseModel):
+    threat_type: Optional[str] = None
+    threat_description: Optional[str] = None
+    attacker_ip: Optional[str] = None
+    target_ip: Optional[str] = None
+    affected_username: Optional[str] = None
+    attack_outcome: Optional[str] = None
+    occurrence_note: Optional[str] = None
+    detected_at: Optional[str] = None
+    detection_device: Optional[str] = None
+    severity_4tier: Optional[str] = None
+    findings: Optional[List[str]] = None
+    analysis: Optional[List[str]] = None
+    impact: Optional[List[str]] = None
+    remediation: Optional[List[str]] = None
+    reference: Optional[List[str]] = None
+
+
+class IncidentReportUpdate(IncidentReportCreate):
+    pass
+
+
+class IncidentReport(BaseModel):
+    case_id: str
+    threat_type: str = ''
+    threat_description: str = ''
+    attacker_ip: str = ''
+    target_ip: str = ''
+    affected_username: str = ''
+    attack_outcome: str = ''
+    occurrence_note: str = ''
+    detected_at: str = ''
+    detection_device: str = ''
+    severity_4tier: str = ''
+    findings: List[str] = Field(default_factory=list)
+    analysis: List[str] = Field(default_factory=list)
+    impact: List[str] = Field(default_factory=list)
+    remediation: List[str] = Field(default_factory=list)
+    reference: List[str] = Field(default_factory=list)
+    created_at: datetime
+    updated_at: datetime
+
+
 class CaseSummary(BaseModel):
     id: str
     title: str
