@@ -180,10 +180,9 @@ async def list_ollama_models(
         return {'models': [], 'error': str(exc)}
 
 
-@router.get('/ollama-health')
-async def ollama_health(
-    endpoint: str = Query(default='http://localhost:11434'),
-):
+async def _check_ollama_health(
+    endpoint: str = 'http://localhost:11434',
+) -> dict:
     """Check if Ollama is running and the configured model is available.
 
     Returns connectivity status, running model, and available models
@@ -240,6 +239,14 @@ async def ollama_health(
     return result
 
 
+@router.get('/ollama-health')
+async def ollama_health(
+    endpoint: str = Query(default='http://localhost:11434'),
+):
+    """Check Ollama health using the requested endpoint."""
+    return await _check_ollama_health(endpoint)
+
+
 @router.get('/system-status')
 async def system_status():
     """Aggregate system status for the dashboard health widget."""
@@ -249,7 +256,7 @@ async def system_status():
     tools = tools_resp['tools']
     tools_available = sum(1 for t in tools.values() if t.get('available'))
 
-    ollama_resp = await ollama_health()
+    ollama_resp = await _check_ollama_health()
 
     return {
         'status': 'healthy',
