@@ -225,6 +225,7 @@ class IOCInvestigator:
 
         # Calculate base threat score
         threat_score = IntelligentScoring.calculate_ioc_score(intel_results)
+        coverage = IntelligentScoring.calculate_source_coverage(intel_results)
 
         # Domain enrichment (age + DGA) for domain and URL IOCs
         domain_enrichment = {}
@@ -241,7 +242,7 @@ class IOCInvestigator:
                         f"-> adjusted score {threat_score}"
                     )
 
-        verdict = determine_verdict(threat_score)
+        verdict = determine_verdict(threat_score, coverage)
 
         # Sync updated threat_score to intel_results before LLM analysis
         intel_results["threat_score"] = threat_score
@@ -305,6 +306,7 @@ class IOCInvestigator:
             'ioc_type': ioc_type,
             'threat_score': threat_score,
             'verdict': verdict,
+            'coverage': coverage,
             # Standardized keys
             'sources': intel_results.get('sources', {}),  # Direct 'sources' key for consistency
             'sources_checked': intel_results.get('sources_checked', 0),

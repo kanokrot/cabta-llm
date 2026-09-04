@@ -207,6 +207,43 @@ class IntelligentScoring:
             base_score += domain_bonus
 
         return max(0, min(100, int(base_score)))
+
+    @staticmethod
+    def calculate_source_coverage(intel_results: Dict) -> Dict:
+        """Classify source availability independently from threat scoring."""
+        coverage = {
+            "sources_flagged": 0,
+            "sources_clean": 0,
+            "sources_unavailable": 0,
+            "sources_stale": 0,
+            "total_sources_attempted": 0,
+        }
+
+        sources = intel_results.get('sources', {})
+        if not isinstance(sources, dict):
+            return coverage
+
+        for source_data in sources.values():
+            if not isinstance(source_data, dict):
+                continue
+
+            coverage["total_sources_attempted"] += 1
+            is_cached = source_data.get('cached') is True
+
+            if source_data.get('status') == '⚠' and not is_cached:
+                coverage["sources_unavailable"] += 1
+                continue
+
+            if is_cached:
+                coverage["sources_stale"] += 1
+
+            score = IntelligentScoring._get_source_score(source_data)
+            if score > 0:
+                coverage["sources_flagged"] += 1
+            else:
+                coverage["sources_clean"] += 1
+
+        return coverage
     
     @staticmethod
     def calculate_file_score(file_data: Dict = None, hash_score: int = 0, ioc_results: list = None, file_analysis: Dict = None, intel_score: int = None) -> int:

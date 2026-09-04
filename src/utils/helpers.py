@@ -8,6 +8,9 @@ from datetime import datetime
 import logging
 
 logger = logging.getLogger(__name__)
+
+INCONCLUSIVE_COVERAGE_THRESHOLD = 0.3
+
 def calculate_file_hashes(file_path: str) -> Dict[str, str]:
     """
     Calculate MD5, SHA1, SHA256 hashes of a file.
@@ -57,17 +60,31 @@ def normalize_score(score: float, max_score: float = 100.0) -> int:
         return max(0, min(100, int(normalized)))
     except:
         return 0
-def determine_verdict(score: int) -> str:
+def determine_verdict(score: int, coverage: dict = None) -> str:
     """
     Determine verdict based on threat score.
     Thresholds match the Verdicts table in README.md exactly.
 
     Args:
         score: Threat score (0-100)
+        coverage: Optional source coverage metrics
 
     Returns:
         Verdict: 'MALICIOUS', 'SUSPICIOUS', 'CLEAN', 'UNKNOWN'
     """
+    if coverage is not None:
+        total_sources = coverage.get('total_sources_attempted', 0)
+        sources_flagged = coverage.get('sources_flagged', 0)
+        sources_clean = coverage.get('sources_clean', 0)
+
+        if score >= 70 and sources_flagged > 0:
+            return 'MALICIOUS'
+
+        if total_sources > 0:
+            coverage_ratio = (sources_flagged + sources_clean) / total_sources
+            if coverage_ratio < INCONCLUSIVE_COVERAGE_THRESHOLD:
+                return 'UNKNOWN'
+
     if score >= 70:
         return 'MALICIOUS'
     elif score >= 40:
