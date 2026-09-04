@@ -36,7 +36,9 @@ class RuleGenerator:
             'kql': RuleGenerator._generate_kql_ioc(ioc, ioc_type, context),
             'spl': RuleGenerator._generate_spl_ioc(ioc, ioc_type, context),
             'sigma': RuleGenerator._generate_sigma_ioc(ioc, ioc_type, context),
-            'xql': RuleGenerator._generate_xql_ioc(ioc, ioc_type, context)
+            'xql': RuleGenerator._generate_xql_ioc(ioc, ioc_type, context),
+            'suricata': RuleGenerator._generate_suricata_ioc(ioc, ioc_type, context),
+            'firewall': RuleGenerator._generate_firewall_ioc(ioc, ioc_type, context),
         }
         
         return rules
@@ -311,6 +313,53 @@ dataset = xdr_data
 | limit 100"""
         
         return "// XQL - IOC type not supported"
+
+    @staticmethod
+    def _generate_suricata_ioc(ioc: str, ioc_type: str, context: Dict) -> str:
+        """Generate a Suricata rule for a network IOC."""
+        escaped_ioc = str(ioc).replace('\\', '\\\\').replace('"', '\\"').replace(';', '\\;')
+        sid = 1_000_000 + int(
+            hashlib.sha256(f'{ioc_type}:{ioc}'.encode('utf-8')).hexdigest()[:8], 16
+        ) % 8_000_000
+        malware_family = context.get('malware_family', 'Unknown') if context else 'Unknown'
+
+        if ioc_type in ('ipv4', 'ip'):
+            return (
+                f'alert ip $HOME_NET any -> {ioc} any '
+                f'(msg:"BTA {malware_family} outbound connection to {escaped_ioc}"; '
+                f'sid:{sid}; rev:1;)'
+            )
+        if ioc_type == 'domain':
+            return (
+                'alert dns $HOME_NET any -> $EXTERNAL_NET 53 '
+                f'(msg:"BTA DNS query for {escaped_ioc}"; dns.query; '
+                f'content:"{escaped_ioc}"; nocase; sid:{sid}; rev:1;)'
+            )
+        if ioc_type == 'url':
+            return (
+                'alert http $HOME_NET any -> $EXTERNAL_NET any '
+                f'(msg:"BTA HTTP request for {escaped_ioc}"; http.uri; '
+                f'content:"{escaped_ioc}"; nocase; sid:{sid}; rev:1;)'
+            )
+        return f'# Suricata rule not supported for IOC type: {ioc_type}'
+
+    @staticmethod
+    def _generate_firewall_ioc(ioc: str, ioc_type: str, context: Dict) -> str:
+        """Generate a vendor-neutral firewall blocklist entry."""
+        if ioc_type not in ('ipv4', 'ip', 'domain', 'url'):
+            return f'# Firewall blocklist entry not supported for IOC type: {ioc_type}'
+
+        verdict = context.get('verdict', 'Unknown') if context else 'Unknown'
+        malware_family = context.get('malware_family', 'Unknown') if context else 'Unknown'
+
+        def quote(value: object) -> str:
+            return str(value).replace('\\', '\\\\').replace('"', '\\"')
+
+        normalized_type = 'ipv4' if ioc_type == 'ip' else ioc_type
+        return (
+            f'action=deny indicator_type={normalized_type} indicator="{quote(ioc)}" '
+            f'verdict="{quote(verdict)}" malware_family="{quote(malware_family)}"'
+        )
     
     @staticmethod
     def _generate_kql_file(file_data: Dict) -> str:

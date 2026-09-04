@@ -540,6 +540,7 @@ class ToolRegistry:
             analysis_result: Dict = None,
             rule_type: str = 'all',
             rule_types: List[str] = None,
+            network_iocs=None,
             **_kw,
         ) -> Dict:
             from ..detection.rule_generator import RuleGenerator
@@ -554,6 +555,71 @@ class ToolRegistry:
                         f"{type(analysis_result).__name__}."
                     )
                 }
+
+            def normalize_network_iocs(raw_iocs):
+                """Return supported network IOCs as (value, type) pairs."""
+                from ipaddress import ip_address
+
+                def infer_type(value):
+                    value = str(value).strip()
+                    if value.lower().startswith(('http://', 'https://')):
+                        return 'url'
+                    try:
+                        return 'ipv4' if ip_address(value).version == 4 else None
+                    except ValueError:
+                        return 'domain' if value else None
+
+                if not raw_iocs:
+                    return []
+
+                if isinstance(raw_iocs, dict):
+                    aggregate = raw_iocs.get('iocs', raw_iocs)
+                    if isinstance(aggregate, dict):
+                        key_types = {
+                            'ipv4': 'ipv4',
+                            'ips': 'ipv4',
+                            'ip': 'ipv4',
+                            'domains': 'domain',
+                            'urls': 'url',
+                        }
+                        pairs = [
+                            (str(value), ioc_type)
+                            for key, ioc_type in key_types.items()
+                            if isinstance(aggregate.get(key), list)
+                            for value in aggregate[key]
+                            if value
+                        ]
+                        if pairs:
+                            return pairs
+                    raw_iocs = [raw_iocs]
+
+                if not isinstance(raw_iocs, (list, tuple)):
+                    return []
+
+                pairs = []
+                type_aliases = {
+                    'ip': 'ipv4',
+                    'ipv4': 'ipv4',
+                    'domain': 'domain',
+                    'hostname': 'domain',
+                    'url': 'url',
+                    'uri': 'url',
+                }
+                for item in raw_iocs:
+                    if isinstance(item, str):
+                        value = item.strip()
+                        ioc_type = infer_type(value)
+                    elif isinstance(item, dict):
+                        value = str(item.get('ioc') or item.get('value') or '').strip()
+                        supplied_type = str(
+                            item.get('ioc_type') or item.get('type') or ''
+                        ).lower()
+                        ioc_type = type_aliases.get(supplied_type) or infer_type(value)
+                    else:
+                        continue
+                    if value and ioc_type in ('ipv4', 'domain', 'url'):
+                        pairs.append((value, ioc_type))
+                return pairs
 
             if 'ioc' in analysis_result and 'ioc_type' in analysis_result:
                 context = {
@@ -633,6 +699,14 @@ class ToolRegistry:
                 rules = RuleGenerator.generate_capa_rules(capa_summary)
                 if 'error' in rules:
                     return rules
+                for ioc_value, ioc_type in normalize_network_iocs(network_iocs):
+                    ioc_rules = RuleGenerator.generate_ioc_rules(
+                        ioc_value, ioc_type, {'verdict': 'Unknown', 'malware_family': 'Unknown'}
+                    )
+                    for generated_type in ('suricata', 'firewall'):
+                        rules.setdefault(generated_type, []).append(
+                            ioc_rules[generated_type]
+                        )
             elif (
                 'hashes' in analysis_result
                 or 'file_info' in analysis_result
@@ -660,6 +734,10 @@ class ToolRegistry:
                 }
 
             if isinstance(rule_types, list) and rule_types:
+                rule_types = [
+                    'suricata' if requested_type == 'snort' else requested_type
+                    for requested_type in rule_types
+                ]
                 available_types = list(rules.keys())
                 rules = {
                     generated_type: generated_rule
@@ -675,6 +753,7 @@ class ToolRegistry:
                         )
                     }
             elif rule_type != 'all':
+                rule_type = 'suricata' if rule_type == 'snort' else rule_type
                 if rule_type in rules:
                     rules = {rule_type: rules[rule_type]}
                 else:
@@ -703,7 +782,8 @@ class ToolRegistry:
                         "type": "string",
                         "enum": [
                             "kql", "sigma", "yara", "spl", "xql", "fortimail",
-                            "proofpoint", "mimecast", "microsoft365", "all",
+                            "proofpoint", "mimecast", "microsoft365", "suricata",
+                            "firewall", "snort", "all",
                         ],
                         "description": "Type of rule to generate. Default 'all'.",
                     },
