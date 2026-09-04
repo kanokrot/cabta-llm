@@ -69,3 +69,27 @@ class TestThaiTextRendering:
 
         assert os.path.exists(output_path)
         assert os.path.getsize(output_path) > 0
+
+
+def test_bold_tag_resolves_to_bold_face_via_registered_family(tmp_path):
+    """<b> inside a Paragraph styled with THAI_FONT_REGULAR must resolve to
+    THAI_FONT_BOLD, not silently fall back to the regular face. This requires
+    pdfmetrics.registerFontFamily(), not just two independent registerFont() calls."""
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.platypus import Paragraph
+
+    register_thai_fonts()
+    style = ParagraphStyle(name="BoldTest", fontName=THAI_FONT_REGULAR, fontSize=12)
+    para = Paragraph("Normal <b>Bold</b> Normal", style)
+
+    # Force layout so ReportLab resolves the font for each text fragment
+    para.wrap(400, 200)
+
+    # Collect the actual font names used across the paragraph's rendered fragments
+    used_fonts = {
+        frag.fontName for line in para.blPara.lines for frag in line.words
+    }
+
+    assert THAI_FONT_BOLD in used_fonts, (
+        f"Expected {THAI_FONT_BOLD} to be used for <b> text, got fonts: {used_fonts}"
+    )

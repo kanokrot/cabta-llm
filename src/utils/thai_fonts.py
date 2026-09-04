@@ -30,6 +30,13 @@ def register_thai_fonts() -> bool:
         pdfmetrics.registerFont(
             TTFont(THAI_FONT_BOLD, _FONT_DIR / "Sarabun-Bold.ttf")
         )
+        pdfmetrics.registerFontFamily(
+            THAI_FONT_REGULAR,
+            normal=THAI_FONT_REGULAR,
+            bold=THAI_FONT_BOLD,
+            italic=THAI_FONT_REGULAR,
+            boldItalic=THAI_FONT_BOLD,
+        )
     except Exception as exc:
         logger.warning("Unable to register Thai fonts: %s", exc)
         return False
