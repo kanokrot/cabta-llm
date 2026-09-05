@@ -422,7 +422,7 @@
     .detection-rule-tab {
         border: none;
         background: rgba(255,255,255,0.05);
-        color: var(--bs-secondary-color);
+        color: var(--text-secondary);
         padding: 0.4rem 0.85rem;
         border-radius: 6px 6px 0 0;
         font-size: 0.78rem;
@@ -432,8 +432,11 @@
         margin-right: 2px;
     }
     .detection-rule-tab.active {
-        background: rgba(var(--bs-primary-rgb), 0.15);
-        color: var(--bs-primary);
+        background: rgba(0, 212, 255, 0.15);
+        color: var(--color-primary);
+    }
+    [data-theme="light"] .detection-rule-tab.active {
+        background: rgba(8, 145, 178, 0.08);
     }
     .detection-rule-pane {
         display: none;
