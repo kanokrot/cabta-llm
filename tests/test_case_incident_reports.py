@@ -148,3 +148,60 @@ def test_get_incident_report_returns_404_when_missing(client_and_store):
     response = client.get(f"/cases/{case_id}/incident-report")
 
     assert response.status_code == 404
+
+
+def test_get_incident_report_pdf_returns_404_when_no_report(client_and_store):
+    client, store = client_and_store
+    case_id = store.create_case("No report yet")
+
+    response = client.get(f"/cases/{case_id}/incident-report/pdf")
+
+    assert response.status_code == 404
+
+
+def test_get_incident_report_pdf_returns_pdf_bytes(client_and_store):
+    client, store = client_and_store
+    case_id = store.create_case("Has report")
+    store.create_incident_report(
+        case_id, threat_type="Phishing", findings=["test"]
+    )
+
+    response = client.get(f"/cases/{case_id}/incident-report/pdf")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/pdf"
+    assert response.content[:4] == b"%PDF"
+    assert "inline" in response.headers.get("content-disposition", "")
+
+
+def test_get_incident_report_pdf_download_query_param_forces_attachment(
+    client_and_store,
+):
+    client, store = client_and_store
+    case_id = store.create_case("Download variant")
+    store.create_incident_report(case_id, threat_type="Malware")
+
+    response = client.get(f"/cases/{case_id}/incident-report/pdf?download=1")
+
+    assert response.status_code == 200
+    assert "attachment" in response.headers.get("content-disposition", "")
+    assert f"incident-report-{case_id}.pdf" in response.headers.get(
+        "content-disposition", ""
+    )
+
+
+def test_get_incident_report_pdf_returns_500_and_cleans_up_on_generation_failure(
+    client_and_store, monkeypatch
+):
+    import src.web.routes.cases as cases_route
+
+    case_id = client_and_store[1].create_case("Will fail")
+    client_and_store[1].create_incident_report(case_id, threat_type="X")
+
+    monkeypatch.setattr(
+        cases_route, "generate_incident_report_pdf", lambda data, path: None
+    )
+
+    response = client_and_store[0].get(f"/cases/{case_id}/incident-report/pdf")
+
+    assert response.status_code == 500
