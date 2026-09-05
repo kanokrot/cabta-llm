@@ -36,14 +36,16 @@
     .rule-tab-content pre {
         background-color: var(--bg-tertiary, #1e2230);
         border: 1px solid var(--border-color, #2d3748);
-        border-radius: 6px; padding: 1rem; overflow-x: auto;
+        border-radius: 6px; padding: 3rem 1rem 1rem; overflow-x: auto;
         max-height: 400px; font-size: 0.8rem; line-height: 1.5;
         color: var(--text-primary, #e2e8f0); margin-bottom: 0;
     }
     .rule-tab-content .tab-pane { padding-top: 0.75rem; }
-    .copy-btn { position: absolute; top: 0.5rem; right: 0.5rem; font-size: 0.75rem; opacity: 0.7; }
-    .copy-btn:hover { opacity: 1; }
+    .copy-btn { font-size: 0.75rem; color: var(--text-secondary); }
+    .copy-btn:hover { color: var(--bs-btn-hover-color); }
     .rule-wrapper { position: relative; }
+    .rule-wrapper > pre { padding-top: 3rem; }
+    .rule-copy-actions { position: absolute; top: 0.5rem; right: 0.5rem; display: flex; gap: 0.35rem; z-index: 2; }
     .kv-table td:first-child {
         width: 200px; font-weight: 600;
         color: var(--text-secondary, #94a3b8); font-size: 0.82rem; white-space: nowrap;
@@ -1399,13 +1401,21 @@
                     {% for rule_type, rule_content in rule_items %}
                     {% if rule_content %}
                     <div class="tab-pane fade {% if loop.first %}show active{% endif %}"
-                         id="tabpane-{{ loop.index }}" role="tabpanel">
+                        id="tabpane-{{ loop.index }}" role="tabpanel">
                         <div class="rule-wrapper">
-                            <button class="btn btn-sm btn-outline-secondary copy-btn no-print"
-                                    data-rule-id="rulecode-{{ loop.index }}"
-                                    title="Copy {{ rule_type | upper | e }} rule">
-                                <i class="bi bi-clipboard me-1"></i>Copy
-                            </button>
+                            <div class="rule-copy-actions no-print">
+                                <button class="btn btn-sm btn-outline-secondary copy-btn"
+                                        data-rule-id="rulecode-{{ loop.index }}"
+                                        title="Copy {{ rule_type | upper | e }} rule">
+                                    <i class="bi bi-clipboard me-1"></i>Copy
+                                </button>
+                                <button class="btn btn-sm btn-outline-secondary copy-btn"
+                                        data-rule-id="rulecode-{{ loop.index }}"
+                                        data-copy-format="{{ rule_type | e }}"
+                                        title="Copy as a Markdown code block">
+                                    <i class="bi bi-markdown me-1"></i>Copy format
+                                </button>
+                            </div>
                             <pre id="rulecode-{{ loop.index }}"><code>{{ rule_content | e }}</code></pre>
                         </div>
                     </div>
@@ -1418,9 +1428,31 @@
                 <div class="detail-section">
                     {% if rule is mapping %}
                         <h6>{{ rule.type | default('Rule') | e }}</h6>
-                        <div class="rule-wrapper"><pre><code>{{ rule.rule | default(rule.content | default('')) | e }}</code></pre></div>
+                        <div class="rule-wrapper">
+                            <div class="rule-copy-actions no-print">
+                                <button class="btn btn-sm btn-outline-secondary copy-btn" data-rule-id="rulecode-list-{{ loop.index }}">
+                                    <i class="bi bi-clipboard me-1"></i>Copy
+                                </button>
+                                <button class="btn btn-sm btn-outline-secondary copy-btn" data-rule-id="rulecode-list-{{ loop.index }}"
+                                        data-copy-format="{{ rule.type | default('rule') | e }}" title="Copy as a Markdown code block">
+                                    <i class="bi bi-markdown me-1"></i>Copy format
+                                </button>
+                            </div>
+                            <pre id="rulecode-list-{{ loop.index }}"><code>{{ rule.rule | default(rule.content | default('')) | e }}</code></pre>
+                        </div>
                     {% else %}
-                        <div class="rule-wrapper"><pre><code>{{ rule | e }}</code></pre></div>
+                        <div class="rule-wrapper">
+                            <div class="rule-copy-actions no-print">
+                                <button class="btn btn-sm btn-outline-secondary copy-btn" data-rule-id="rulecode-list-{{ loop.index }}">
+                                    <i class="bi bi-clipboard me-1"></i>Copy
+                                </button>
+                                <button class="btn btn-sm btn-outline-secondary copy-btn" data-rule-id="rulecode-list-{{ loop.index }}"
+                                        data-copy-format="text" title="Copy as a Markdown code block">
+                                    <i class="bi bi-markdown me-1"></i>Copy format
+                                </button>
+                            </div>
+                            <pre id="rulecode-list-{{ loop.index }}"><code>{{ rule | e }}</code></pre>
+                        </div>
                     {% endif %}
                 </div>
                 {% endfor %}
@@ -1638,9 +1670,33 @@
         btn.addEventListener('click', function () {
             var el = document.getElementById(btn.getAttribute('data-rule-id'));
             if (!el) return;
-            copyTextToClipboard(el.textContent || '', btn, true);
+            var text = el.textContent || '';
+            var formatType = btn.getAttribute('data-copy-format');
+            if (formatType) text = detectionRuleMarkdown(formatType, text);
+            copyTextToClipboard(text, btn, true, formatType ? 'Copy format' : 'Copy');
         });
     });
+
+    function detectionRuleMarkdown(ruleType, content) {
+        var normalizedType = String(ruleType || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        var languageMap = {
+            sigma: 'yaml',
+            sigmarule: 'yaml',
+            splunkspl: 'spl',
+            kqldefendersentinel: 'kql',
+            yararule: 'yara',
+            cortexxdrxql: 'xql',
+            microsoft365: 'powershell',
+            m365: 'powershell',
+            m365defenderpowershell: 'powershell',
+            firewallfortigate: 'shell',
+            fortigate: 'shell'
+        };
+        var language = languageMap[normalizedType] || normalizedType || 'text';
+        var rule = String(content || '').trim();
+        if (/^```[\s\S]*```\s*$/.test(rule)) return rule;
+        return '```' + language + '\n' + rule + '\n```';
+    }
 
     /* ── Raw JSON viewer — safe textContent only, no innerHTML ── */
     var rawJsonPre = document.getElementById('rawJsonPre');
@@ -1676,7 +1732,7 @@
     }
 
     /* ── Shared clipboard helper (no innerHTML anywhere) ──────── */
-    function copyTextToClipboard(text, btn, isRuleBtn) {
+    function copyTextToClipboard(text, btn, isRuleBtn, defaultLabel) {
         function onSuccess() {
             if (!btn) return;
             var icon = btn.querySelector('i');
@@ -1692,7 +1748,7 @@
                     var ri = document.createElement('i');
                     ri.className = 'bi bi-clipboard me-1';
                     btn.appendChild(ri);
-                    btn.appendChild(document.createTextNode('Copy'));
+                    btn.appendChild(document.createTextNode(defaultLabel || 'Copy'));
                 }, 1500);
             } else if (icon) {
                 var origClass = icon.className;
