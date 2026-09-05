@@ -437,7 +437,7 @@
     }
     .detection-rule-pane {
         display: none;
-        background: rgba(0,0,0,0.25);
+        background: var(--code-bg);
         border: 1px solid rgba(255,255,255,0.08);
         border-radius: 0 6px 6px 6px;
         padding: 0.75rem;
@@ -446,10 +446,11 @@
     .detection-rule-pane.active { display: block; }
     .detection-rule-pane pre {
         margin: 0;
+        padding-top: 2.25rem;
         font-size: 0.78rem;
         white-space: pre-wrap;
         word-break: break-word;
-        color: #e0e0e0;
+        color: var(--text-primary);
         max-height: 300px;
         overflow-y: auto;
     }
@@ -461,7 +462,18 @@
         font-size: 0.72rem;
         border-radius: 4px;
         z-index: 2;
+        color: var(--text-secondary);
     }
+    .btn-copy-rule:hover { color: var(--bs-btn-hover-color); }
+    .rule-copy-actions {
+        position: absolute;
+        top: 0.5rem;
+        right: 0.5rem;
+        z-index: 2;
+        display: flex;
+        gap: 0.35rem;
+    }
+    .rule-copy-actions .btn-copy-rule { position: static; }
 
     /* ── LLM Analysis Card ── */
     .llm-analysis-card {
@@ -1337,6 +1349,34 @@
         }
     };
 
+    function detectionRuleMarkdown(ruleType, content) {
+        var normalizedType = String(ruleType || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        var languageMap = {
+            sigma: 'yaml',
+            sigmarule: 'yaml',
+            splunkspl: 'spl',
+            kqldefendersentinel: 'kql',
+            yararule: 'yara',
+            cortexxdrxql: 'xql',
+            microsoft365: 'powershell',
+            m365: 'powershell',
+            m365defenderpowershell: 'powershell',
+            firewallfortigate: 'shell',
+            fortigate: 'shell'
+        };
+        var language = languageMap[normalizedType] || normalizedType || 'text';
+        var rule = String(content || '').trim();
+        if (/^```[\s\S]*```\s*$/.test(rule)) return rule;
+        return '```' + language + '\n' + rule + '\n```';
+    }
+
+    window.copyIOCFormattedRule = function (btn) {
+        var pane = btn.closest('.detection-rule-pane');
+        var pre = pane ? pane.querySelector('pre') : null;
+        if (!pane || !pre) return;
+        copyIOCToClipboard(detectionRuleMarkdown(pane.getAttribute('data-rule-key'), pre.textContent));
+    };
+
     function fallbackCopy(text) {
         var ta = document.createElement('textarea');
         ta.value = text;
@@ -1713,8 +1753,11 @@
                 html += '</div>';
                 ruleTypes.forEach(function(rt, ri) {
                     html += '<div class="detection-rule-pane' + (ri === 0 ? ' active' : '') + '" data-rule-key="' + escAttr(rt.key) + '">' +
-                        '<button class="btn btn-sm btn-outline-light btn-copy-rule" onclick="copyIOCToClipboard(document.querySelector(\'[data-rule-key=' + escAttr(rt.key) + '] pre\').textContent)">' +
+                        '<div class="rule-copy-actions">' +
+                        '<button class="btn btn-sm btn-outline-secondary btn-copy-rule" onclick="copyIOCToClipboard(this.closest(\'.detection-rule-pane\').querySelector(\'pre\').textContent)">' +
                         '<i class="bi bi-clipboard me-1"></i>Copy</button>' +
+                        '<button class="btn btn-sm btn-outline-secondary btn-copy-rule" onclick="copyIOCFormattedRule(this)" title="Copy as a Markdown code block">' +
+                        '<i class="bi bi-markdown me-1"></i>Copy format</button></div>' +
                         '<pre>' + escHtml(rules[rt.key]) + '</pre></div>';
                 });
                 html += '</div>';
