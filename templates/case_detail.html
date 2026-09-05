@@ -112,6 +112,103 @@
     </div>
 </div>
 
+<!-- Incident Report -->
+<div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0"><i class="bi bi-file-earmark-text me-2"></i>รายงานเหตุการณ์ภัยคุกคาม</h5>
+        <a id="downloadIncidentReportPdfBtn" class="btn btn-sm btn-outline-primary disabled"
+           href="#" aria-disabled="true">
+            <i class="bi bi-file-earmark-pdf me-1"></i>ดาวน์โหลด PDF
+        </a>
+    </div>
+    <div class="card-body">
+        <div id="incidentReportStatus" class="small mb-3" style="color: var(--text-secondary);">
+            กำลังโหลดข้อมูลรายงาน...
+        </div>
+        <form id="incidentReportForm">
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label for="incidentThreatType" class="form-label">ประเภทภัยคุกคาม</label>
+                    <input id="incidentThreatType" name="threat_type" type="text" class="form-control">
+                </div>
+                <div class="col-md-6">
+                    <label for="incidentSeverity" class="form-label">ระดับความรุนแรง</label>
+                    <select id="incidentSeverity" name="severity_4tier" class="form-select">
+                        <option value="">-- เลือกระดับ --</option>
+                        <option value="Critical" {% if case.severity == 'critical' %}selected{% endif %}>Critical</option>
+                        <option value="High" {% if case.severity == 'high' %}selected{% endif %}>High</option>
+                        <option value="Medium" {% if case.severity == 'medium' %}selected{% endif %}>Medium</option>
+                        <option value="Low" {% if case.severity == 'low' %}selected{% endif %}>Low</option>
+                    </select>
+                </div>
+                <div class="col-12">
+                    <label for="incidentThreatDescription" class="form-label">รายละเอียดภัยคุกคาม</label>
+                    <textarea id="incidentThreatDescription" name="threat_description" class="form-control" rows="3"></textarea>
+                </div>
+                <div class="col-md-6">
+                    <label for="incidentAttackerIp" class="form-label">IP ผู้โจมตี</label>
+                    <input id="incidentAttackerIp" name="attacker_ip" type="text" class="form-control">
+                </div>
+                <div class="col-md-6">
+                    <label for="incidentTargetIp" class="form-label">IP เป้าหมาย</label>
+                    <input id="incidentTargetIp" name="target_ip" type="text" class="form-control">
+                </div>
+                <div class="col-md-6">
+                    <label for="incidentAffectedUsername" class="form-label">ชื่อผู้ใช้ที่ได้รับผลกระทบ</label>
+                    <input id="incidentAffectedUsername" name="affected_username" type="text" class="form-control">
+                </div>
+                <div class="col-md-6">
+                    <label for="incidentAttackOutcome" class="form-label">ผลลัพธ์การโจมตี</label>
+                    <input id="incidentAttackOutcome" name="attack_outcome" type="text" class="form-control">
+                </div>
+                <div class="col-md-6">
+                    <label for="incidentDetectedAt" class="form-label">เวลาที่ตรวจพบ</label>
+                    <input id="incidentDetectedAt" name="detected_at" type="text" class="form-control"
+                           placeholder="YYYY-MM-DD HH:MM">
+                </div>
+                <div class="col-md-6">
+                    <label for="incidentDetectionDevice" class="form-label">อุปกรณ์ที่ตรวจพบ</label>
+                    <input id="incidentDetectionDevice" name="detection_device" type="text" class="form-control">
+                </div>
+                <div class="col-12">
+                    <label for="incidentOccurrenceNote" class="form-label">หมายเหตุการเกิดเหตุ</label>
+                    <textarea id="incidentOccurrenceNote" name="occurrence_note" class="form-control" rows="2"></textarea>
+                </div>
+            </div>
+
+            <hr class="my-4" style="border-color: var(--border-color);">
+            <p class="small mb-3" style="color: var(--text-secondary);">ช่องรายการด้านล่าง: กรอกหนึ่งรายการต่อหนึ่งบรรทัด</p>
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label for="incidentFindings" class="form-label">ผลการตรวจสอบ</label>
+                    <textarea id="incidentFindings" name="findings" class="form-control" rows="4"></textarea>
+                </div>
+                <div class="col-md-6">
+                    <label for="incidentAnalysis" class="form-label">การวิเคราะห์</label>
+                    <textarea id="incidentAnalysis" name="analysis" class="form-control" rows="4"></textarea>
+                </div>
+                <div class="col-md-6">
+                    <label for="incidentImpact" class="form-label">ผลกระทบ</label>
+                    <textarea id="incidentImpact" name="impact" class="form-control" rows="4"></textarea>
+                </div>
+                <div class="col-md-6">
+                    <label for="incidentRemediation" class="form-label">การแก้ไขและป้องกัน</label>
+                    <textarea id="incidentRemediation" name="remediation" class="form-control" rows="4"></textarea>
+                </div>
+                <div class="col-12">
+                    <label for="incidentReference" class="form-label">เอกสารอ้างอิง</label>
+                    <textarea id="incidentReference" name="reference" class="form-control" rows="3"></textarea>
+                </div>
+            </div>
+            <div class="mt-4 d-flex justify-content-end">
+                <button type="submit" class="btn btn-primary" id="saveIncidentReportBtn">
+                    <i class="bi bi-save me-1"></i>บันทึกรายงาน
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <!-- Linked Analyses -->
 <div class="card mb-4">
     <div class="card-header d-flex justify-content-between align-items-center">
@@ -243,6 +340,129 @@
         'use strict';
 
         var caseId = {{ case.id | tojson }};
+
+        /* --------------------------------------------------
+           Incident Report
+        -------------------------------------------------- */
+        var incidentForm = document.getElementById('incidentReportForm');
+        var incidentStatus = document.getElementById('incidentReportStatus');
+        var incidentSaveBtn = document.getElementById('saveIncidentReportBtn');
+        var incidentPdfBtn = document.getElementById('downloadIncidentReportPdfBtn');
+        var incidentApiUrl = '/api/cases/' + encodeURIComponent(caseId) + '/incident-report';
+        var reportExists = false;
+        var incidentScalarFields = [
+            'threat_type', 'threat_description', 'attacker_ip', 'target_ip',
+            'affected_username', 'attack_outcome', 'occurrence_note', 'detected_at',
+            'detection_device', 'severity_4tier'
+        ];
+        var incidentListFields = ['findings', 'analysis', 'impact', 'remediation', 'reference'];
+
+        function setIncidentReportExists(exists) {
+            reportExists = exists;
+            if (!incidentPdfBtn) return;
+            if (exists) {
+                incidentPdfBtn.href = incidentApiUrl + '/pdf?download=1';
+                incidentPdfBtn.classList.remove('disabled');
+                incidentPdfBtn.setAttribute('aria-disabled', 'false');
+            } else {
+                incidentPdfBtn.href = '#';
+                incidentPdfBtn.classList.add('disabled');
+                incidentPdfBtn.setAttribute('aria-disabled', 'true');
+            }
+        }
+
+        function incidentField(name) {
+            return incidentForm.querySelector('[name="' + name + '"]');
+        }
+
+        function populateIncidentReport(report) {
+            incidentScalarFields.forEach(function (name) {
+                var field = incidentField(name);
+                if (field) field.value = report[name] || '';
+            });
+            incidentListFields.forEach(function (name) {
+                var field = incidentField(name);
+                if (field) field.value = Array.isArray(report[name]) ? report[name].join('\n') : '';
+            });
+        }
+
+        function incidentReportPayload() {
+            var payload = {};
+            incidentScalarFields.forEach(function (name) {
+                var field = incidentField(name);
+                payload[name] = field ? field.value.trim() : '';
+            });
+            incidentListFields.forEach(function (name) {
+                var field = incidentField(name);
+                payload[name] = field ? field.value.split(/\r?\n/).map(function (item) {
+                    return item.trim();
+                }).filter(Boolean) : [];
+            });
+            return payload;
+        }
+
+        if (incidentForm) {
+            fetch(incidentApiUrl)
+                .then(function (response) {
+                    if (response.status === 404) return null;
+                    if (!response.ok) throw new Error('HTTP ' + response.status);
+                    return response.json();
+                })
+                .then(function (report) {
+                    if (report) {
+                        populateIncidentReport(report);
+                        setIncidentReportExists(true);
+                        incidentStatus.textContent = 'โหลดรายงานที่บันทึกไว้แล้ว';
+                    } else {
+                        setIncidentReportExists(false);
+                        incidentStatus.textContent = 'ยังไม่มีรายงาน — บันทึกเพื่อสร้างรายงานใหม่';
+                    }
+                })
+                .catch(function (err) {
+                    incidentStatus.textContent = 'โหลดรายงานไม่สำเร็จ: ' + err.message;
+                    console.error('[BTA Case] Incident report load failed:', err.message);
+                });
+
+            incidentForm.addEventListener('submit', function (event) {
+                event.preventDefault();
+                incidentSaveBtn.disabled = true;
+                var method = reportExists ? 'PATCH' : 'POST';
+
+                fetch(incidentApiUrl, {
+                    method: reportExists ? 'PATCH' : 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(incidentReportPayload())
+                })
+                .then(function (response) {
+                    if (!response.ok) throw new Error('HTTP ' + response.status);
+                    return response.json();
+                })
+                .then(function (report) {
+                    populateIncidentReport(report);
+                    setIncidentReportExists(true);
+                    incidentStatus.textContent = method === 'POST' ? 'สร้างรายงานแล้ว' : 'บันทึกการแก้ไขแล้ว';
+                    if (window.BTADashboard && window.BTADashboard.showToast) {
+                        window.BTADashboard.showToast('บันทึกรายงานเหตุการณ์สำเร็จ', 'success');
+                    }
+                })
+                .catch(function (err) {
+                    incidentStatus.textContent = 'บันทึกรายงานไม่สำเร็จ: ' + err.message;
+                    console.error('[BTA Case] Incident report save failed:', err.message);
+                    if (window.BTADashboard && window.BTADashboard.showToast) {
+                        window.BTADashboard.showToast('บันทึกรายงานไม่สำเร็จ: ' + err.message, 'error');
+                    }
+                })
+                .finally(function () {
+                    incidentSaveBtn.disabled = false;
+                });
+            });
+        }
+
+        if (incidentPdfBtn) {
+            incidentPdfBtn.addEventListener('click', function (event) {
+                if (!reportExists) event.preventDefault();
+            });
+        }
 
         /* --------------------------------------------------
            Status Update (capitalized values)
