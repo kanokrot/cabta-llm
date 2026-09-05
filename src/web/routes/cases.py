@@ -4,11 +4,16 @@ Case Management API endpoints.
 """
 
 import logging
+import os
 import sqlite3
+import tempfile
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import FileResponse
+from starlette.background import BackgroundTask
 
+from ...reporting.incident_report_pdf import generate_incident_report_pdf
 from ..case_store import _severity_to_4tier
 from ..models import (
     CaseCreate,
@@ -83,6 +88,37 @@ async def get_incident_report(request: Request, case_id: str):
     if report is None:
         raise HTTPException(404, 'Incident report not found')
     return report
+
+
+@router.get('/{case_id}/incident-report/pdf')
+async def get_incident_report_pdf(
+    request: Request, case_id: str, download: bool = False
+):
+    """Generate a PDF for a case incident report."""
+    store = request.app.state.case_store
+    report = store.get_incident_report(case_id)
+    if report is None:
+        raise HTTPException(404, 'Incident report not found')
+
+    with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as temp_file:
+        temp_path = temp_file.name
+
+    report_path = generate_incident_report_pdf(report, temp_path)
+    if report_path is None:
+        try:
+            os.unlink(temp_path)
+        except OSError:
+            pass
+        raise HTTPException(500, 'Failed to generate incident report PDF')
+
+    disposition_type = 'attachment' if download else 'inline'
+    return FileResponse(
+        path=report_path,
+        media_type='application/pdf',
+        filename=f'incident-report-{case_id}.pdf',
+        background=BackgroundTask(os.unlink, report_path),
+        content_disposition_type=disposition_type,
+    )
 
 
 @router.patch('/{case_id}/incident-report', response_model=IncidentReport)
