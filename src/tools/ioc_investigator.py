@@ -299,6 +299,20 @@ class IOCInvestigator:
             ioc, ioc_type, {'verdict': verdict, 'malware_family': malware_family}
         )
 
+        if (
+            ioc_type in ('ipv4', 'ip', 'domain', 'url')
+            and self.config.get('analysis', {}).get('enable_llm', True)
+            and detection_rules.get('firewall')
+        ):
+            try:
+                fortigate_cli = await self.llm_analyzer.translate_firewall_to_fortigate(
+                    detection_rules['firewall'], ioc, ioc_type, verdict, malware_family
+                )
+                if fortigate_cli:
+                    detection_rules['firewall_fortigate'] = fortigate_cli
+            except Exception as exc:
+                logger.warning(f"[IOC] FortiGate translation failed (non-fatal): {exc}")
+
         # Generate recommendations
         # Prioritize LLM-generated recommendations if they exist and are valid
         if llm_analysis and isinstance(llm_analysis.get('recommendations'), list) and llm_analysis['recommendations']:

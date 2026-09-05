@@ -892,6 +892,75 @@ Make rules specific to the threat indicators found. Include:
             logger.error(f"[LLM] Rule generation failed: {e}")
             return self._generate_basic_rules(analysis_result)
 
+    async def translate_firewall_to_fortigate(
+        self, abstract_rule: str, ioc: str, ioc_type: str,
+        verdict: str, malware_family: str
+    ) -> Optional[str]:
+        """
+        Translate a vendor-neutral firewall blocklist entry into real
+        FortiGate CLI syntax using the configured LLM provider.
+
+        Returns the FortiGate CLI string on success, or None if the LLM
+        call failed or the output didn't pass a basic sanity check
+        (caller should treat None as "translation unavailable" and NOT
+        surface a firewall_fortigate key at all — never fabricate output).
+        """
+        try:
+            prompt = f"""You are a network security engineer configuring a FortiGate firewall.
+
+Translate this abstract blocklist entry into valid FortiGate CLI syntax
+that blocks the indicator via an address object + firewall policy deny rule.
+
+Abstract entry: {abstract_rule}
+Indicator: {ioc}
+Indicator type: {ioc_type}
+Verdict: {verdict}
+Malware family: {malware_family}
+
+Requirements:
+1. Use proper FortiGate CLI syntax (config firewall address / edit / set subnet or set fqdn / next / end)
+2. Include a firewall policy block that denies traffic to/from this address object
+3. Add a comment referencing the malware family and verdict
+4. Be syntactically correct and deployable as-is
+
+Respond in JSON format:
+{{
+    "fortigate_cli": "the full CLI configuration block as a single string with \\n for newlines"
+}}
+
+Return ONLY the JSON object, no other text."""
+
+            if self.provider == 'ollama':
+                response_data = await self._call_ollama_api(prompt)
+            elif self.provider == 'vllm':
+                response_data = await self._call_vllm_api(prompt)
+            else:
+                response_data = await self._call_anthropic_api(prompt)
+
+            if not response_data or not isinstance(response_data, dict):
+                return None
+
+            cli = response_data.get('fortigate_cli', '')
+            if not isinstance(cli, str) or not cli.strip():
+                return None
+
+            # Basic sanity check — must look like real FortiGate config blocks.
+            # This is NOT full syntax validation (no FortiGate device to test
+            # against), just a guard against obviously-wrong LLM output.
+            cli_lower = cli.lower()
+            required_markers = ('config firewall', 'edit', 'end')
+            if not all(marker in cli_lower for marker in required_markers):
+                logger.warning(
+                    f"[LLM] FortiGate translation for {ioc} failed sanity check, discarding"
+                )
+                return None
+
+            return cli
+
+        except Exception as e:
+            logger.error(f"[LLM] FortiGate translation failed for {ioc}: {e}")
+            return None
+
     def _generate_basic_rules(self, analysis_result: Dict) -> Dict:
         """Generate basic rules as fallback."""
         ioc = analysis_result.get('ioc', '')
