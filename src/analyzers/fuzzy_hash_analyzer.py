@@ -510,7 +510,8 @@ class FuzzyHashAnalyzer:
                 matches.append({
                     'family': family,
                     'match_type': 'imphash',
-                    'confidence': 'HIGH'
+                    'confidence': 'HIGH',
+                    'mitre_techniques': signatures.get('mitre_techniques', [])
                 })
             
             # Check TLSH patterns (if we had them populated)

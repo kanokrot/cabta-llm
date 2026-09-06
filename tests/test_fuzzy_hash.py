@@ -148,6 +148,21 @@ class TestKnownFamilyCheck:
         assert len(matches) >= 1
         assert matches[0]['family'] == 'emotet'
 
+    def test_imphash_match_includes_family_mitre_techniques(self):
+        analyzer = FuzzyHashAnalyzer()
+        emotet = analyzer.KNOWN_FAMILIES['emotet']
+
+        matches = analyzer._check_known_families({
+            'imphash': emotet['imphashes'][0],
+        })
+
+        match = next(item for item in matches if item['family'] == 'emotet')
+        assert match['mitre_techniques'] == [
+            'T1566.001',
+            'T1059.005',
+            'T1071.001',
+        ]
+
     def test_no_match_for_random_hash(self):
         analyzer = FuzzyHashAnalyzer()
         matches = analyzer._check_known_families({'imphash': 'ffffffffffffffffffffffffffffffff'})
