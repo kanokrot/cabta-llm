@@ -363,6 +363,22 @@ class TestFastAPIEndpoints:
         layer = r2.json()
         assert len(layer['techniques']) == 1
 
+    def test_report_mitre_layer_accepts_malware_analyzer_mapping(self):
+        mgr = self.app.state.analysis_manager
+        aid = mgr.create_job('file', {'filename': 'sample.exe'})
+        mgr.complete_job(aid, {'mitre_mapping': [
+            {'technique_id': 'T1059', 'tactic': 'Execution', 'technique_name': 'Scripting'}
+        ]}, verdict='SUSPICIOUS', score=50)
+
+        response = self.client.get(f'/api/reports/{aid}/mitre')
+
+        assert response.status_code == 200
+        layer = response.json()
+        assert any(
+            technique['techniqueID'] == 'T1059'
+            for technique in layer['techniques']
+        )
+
     def test_file_upload(self):
         import io
         file_content = b'MZ' + b'\x00' * 100

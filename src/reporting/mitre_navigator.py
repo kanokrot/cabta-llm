@@ -209,7 +209,18 @@ class MITRENavigatorExporter:
         techniques_dict = {}  # technique_id -> NavigatorTechnique
         
         # 1. From MITRE mapping in analysis
-        mitre_mapping = analysis_result.get('mitre_mapping', {})
+        raw_mapping = analysis_result.get('mitre_mapping', {})
+        if isinstance(raw_mapping, list):
+            mitre_mapping = {
+                item.get('technique_id'): item
+                for item in raw_mapping
+                if isinstance(item, dict) and item.get('technique_id')
+            }
+        elif isinstance(raw_mapping, dict):
+            mitre_mapping = raw_mapping
+        else:
+            mitre_mapping = {}
+
         for technique_id, data in mitre_mapping.items():
             if not technique_id.startswith('T'):
                 continue

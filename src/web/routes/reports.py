@@ -71,7 +71,7 @@ async def get_mitre_layer(request: Request, analysis_id: str):
         raise HTTPException(404, 'Analysis not found')
 
     result = job.get('result') or {}
-    techniques = result.get('mitre_techniques', [])
+    techniques = result.get('mitre_mapping') or result.get('mitre_techniques') or []
 
     # Build Navigator layer
     layer = {
