@@ -416,9 +416,6 @@ index=* earliest=-30d
         reference = "https://github.com/ugur-ates/blue-team-assistant"
     
     strings:
-        // File hashes
-        $hash_sha256 = "{sha256}" ascii wide nocase
-        $hash_md5 = "{md5}" ascii wide nocase
 """
         
         # Add suspicious strings
@@ -442,18 +439,23 @@ index=* earliest=-30d
         $vba_shell = /Shell\\s*\\(|WScript\\.Shell/i
         $vba_exec = /\\.Run\\s*\\(|\\.Exec\\s*\\(/i
     
-    condition:
-        (
-            $hash_sha256 or $hash_md5
-        ) or (
-            2 of ($sus_*) and 1 of ($ioc_*)
-        ) or (
-            3 of ($ps_*)
-        ) or (
-            $vba_shell and $vba_exec
-        )
-}}
 """
+
+        condition_parts = []
+        if indicators and iocs:
+            condition_parts.append('2 of ($sus_*) and 1 of ($ioc_*)')
+        elif indicators:
+            condition_parts.append('2 of ($sus_*)')
+        elif iocs:
+            condition_parts.append('1 of ($ioc_*)')
+        condition_parts.extend([
+            '3 of ($ps_*)',
+            '$vba_shell and $vba_exec',
+        ])
+
+        rule += "\n    condition:\n        "
+        rule += "\n        or ".join(f"({condition})" for condition in condition_parts)
+        rule += "\n}\n"
         
         return rule
     
