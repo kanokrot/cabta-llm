@@ -8,6 +8,7 @@ import json
 from datetime import datetime
 from typing import Dict, List, Optional
 import logging
+import uuid
 
 logger = logging.getLogger(__name__)
 class LLMRuleGenerator:
@@ -325,8 +326,9 @@ DeviceFileEvents
     
     def _fallback_sigma(self, ioc: str, ioc_type: str) -> str:
         """Fallback SIGMA rule."""
+        rule_id = uuid.uuid5(uuid.NAMESPACE_URL, f"{ioc_type}:{ioc}")
         return f"""title: IOC Detection - {ioc_type.upper()}
-id: mcp-soc-auto-{hash(ioc) % 10000:04d}
+id: {rule_id}
 status: experimental
 description: Detects {ioc_type} IOC - {ioc[:30]}
 author: Ugur Ates

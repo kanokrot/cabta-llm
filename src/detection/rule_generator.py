@@ -5,6 +5,7 @@ from typing import Dict, List
 import hashlib
 import logging
 import re
+import uuid
 
 logger = logging.getLogger(__name__)
 class RuleGenerator:
@@ -206,9 +207,10 @@ index=* earliest=-30d
         
         # Determine level based on verdict
         level = 'critical' if verdict == 'MALICIOUS' else 'high' if verdict == 'SUSPICIOUS' else 'medium'
+        rule_id = uuid.uuid5(uuid.NAMESPACE_URL, f"{ioc_type}:{ioc}")
         
         rule = f"""title: Detection of {malware_family} IOC - {ioc}
-id: mcp-soc-{ioc_type}-{hash(ioc) % 10000:04d}
+id: {rule_id}
 status: experimental
 description: Detects network activity related to {verdict} IOC
 author: Ugur Ates
@@ -465,9 +467,10 @@ index=* earliest=-30d
         md5 = file_data.get('md5', '')
         malware_family = file_data.get('malware_family', 'Unknown')
         indicators = file_data.get('suspicious_indicators', [])
+        rule_id = uuid.uuid5(uuid.NAMESPACE_URL, f"file:{sha256}")
         
         rule = f"""title: Detection of {malware_family} - {filename}
-id: mcp-soc-file-{hash(sha256) % 10000:04d}
+id: {rule_id}
 status: experimental
 description: Detects execution or presence of potentially malicious file
 author: Ugur Ates
@@ -563,8 +566,9 @@ EmailUrlInfo
 """
 
         # SIGMA Rule
+        rule_id = uuid.uuid5(uuid.NAMESPACE_URL, f"email:{sender}")
         sigma = f"""title: Phishing Email Detection - {sender_domain}
-id: mcp-soc-email-{hash(sender) % 10000:04d}
+id: {rule_id}
 status: experimental
 description: Detects emails from known phishing sender or containing malicious indicators
 author: Ugur Ates
