@@ -13,6 +13,12 @@ from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Set, Tuple
 
+from src.utils.mitre_keyword_patterns import (
+    KEYWORD_TECHNIQUE_MAP,
+    TTP_PATTERN_KEYWORD_ORDER,
+)
+from src.utils.mitre_technique_names import get_technique_name
+
 logger = logging.getLogger(__name__)
 
 # ====================================================================== #
@@ -39,65 +45,34 @@ _RE_MITRE = re.compile(r"\bT\d{4}(?:\.\d{3})?\b")
 #  MITRE ATT&CK TTP behavioural patterns
 # ====================================================================== #
 
-_TTP_PATTERNS: List[Tuple[str, str, str, str]] = [
-    # (keyword, technique_id, technique_name, tactic)
-    # Initial Access
-    ("phishing", "T1566", "Phishing", "initial-access"),
-    ("spearphish", "T1566.001", "Spearphishing Attachment", "initial-access"),
-    ("drive-by", "T1189", "Drive-by Compromise", "initial-access"),
-    # Execution
-    ("powershell", "T1059.001", "PowerShell", "execution"),
-    ("cmd.exe", "T1059.003", "Windows Command Shell", "execution"),
-    ("wscript", "T1059.005", "Visual Basic", "execution"),
-    ("cscript", "T1059.005", "Visual Basic", "execution"),
-    ("macro", "T1204.002", "Malicious File", "execution"),
-    ("vba", "T1204.002", "Malicious File", "execution"),
-    ("shellcode", "T1059", "Command and Scripting Interpreter", "execution"),
-    # Persistence
-    ("registry run", "T1547.001", "Registry Run Keys", "persistence"),
-    ("scheduled task", "T1053.005", "Scheduled Task", "persistence"),
-    ("startup folder", "T1547.001", "Registry Run Keys", "persistence"),
-    ("service", "T1543.003", "Windows Service", "persistence"),
-    # Privilege Escalation
-    ("uac bypass", "T1548.002", "Bypass User Account Control", "privilege-escalation"),
-    ("token", "T1134", "Access Token Manipulation", "privilege-escalation"),
-    # Defense Evasion
-    ("obfuscation", "T1027", "Obfuscated Files or Information", "defense-evasion"),
-    ("packed", "T1027.002", "Software Packing", "defense-evasion"),
-    ("base64", "T1140", "Deobfuscate/Decode Files or Information", "defense-evasion"),
-    ("injection", "T1055", "Process Injection", "defense-evasion"),
-    ("hollow", "T1055.012", "Process Hollowing", "defense-evasion"),
-    ("amsi bypass", "T1562.001", "Disable or Modify Tools", "defense-evasion"),
-    # Credential Access
-    ("mimikatz", "T1003.001", "LSASS Memory", "credential-access"),
-    ("credential dump", "T1003", "OS Credential Dumping", "credential-access"),
-    ("keylog", "T1056.001", "Keylogging", "credential-access"),
-    # Discovery
-    ("whoami", "T1033", "System Owner/User Discovery", "discovery"),
-    ("ipconfig", "T1016", "System Network Configuration Discovery", "discovery"),
-    ("net view", "T1018", "Remote System Discovery", "discovery"),
-    ("systeminfo", "T1082", "System Information Discovery", "discovery"),
-    # Lateral Movement
-    ("psexec", "T1570", "Lateral Tool Transfer", "lateral-movement"),
-    ("wmi", "T1047", "Windows Management Instrumentation", "lateral-movement"),
-    ("rdp", "T1021.001", "Remote Desktop Protocol", "lateral-movement"),
-    ("smb", "T1021.002", "SMB/Windows Admin Shares", "lateral-movement"),
-    # Collection
-    ("screenshot", "T1113", "Screen Capture", "collection"),
-    ("clipboard", "T1115", "Clipboard Data", "collection"),
-    # Command and Control
-    ("c2", "T1071", "Application Layer Protocol", "command-and-control"),
-    ("beacon", "T1071.001", "Web Protocols", "command-and-control"),
-    ("dns tunnel", "T1071.004", "DNS", "command-and-control"),
-    ("tor", "T1090.003", "Multi-hop Proxy", "command-and-control"),
-    # Exfiltration
-    ("exfiltrat", "T1041", "Exfiltration Over C2 Channel", "exfiltration"),
-    ("upload", "T1567", "Exfiltration Over Web Service", "exfiltration"),
-    # Impact
-    ("ransom", "T1486", "Data Encrypted for Impact", "impact"),
-    ("wiper", "T1485", "Data Destruction", "impact"),
-    ("encrypt", "T1486", "Data Encrypted for Impact", "impact"),
-]
+_TTP_PATTERN_CONFLICTS = {
+    "base64": ("T1140", "Deobfuscate/Decode Files or Information", "defense-evasion"),
+    "macro": ("T1204.002", "Malicious File", "execution"),
+}
+_TTP_PATTERN_METADATA_OVERRIDES = {
+    "obfuscation": {"name": "Obfuscated Files or Information"},
+    "keylog": {"tactic": "credential-access"},
+    "whoami": {"name": "System Owner/User Discovery"},
+    "ipconfig": {"name": "System Network Configuration Discovery"},
+    "wmi": {"tactic": "lateral-movement"},
+}
+
+_TTP_PATTERNS: List[Tuple[str, str, str, str]] = []
+for _keyword in TTP_PATTERN_KEYWORD_ORDER:
+    if _keyword in _TTP_PATTERN_CONFLICTS:
+        _technique_id, _technique_name, _tactic = _TTP_PATTERN_CONFLICTS[_keyword]
+    else:
+        _technique_id = KEYWORD_TECHNIQUE_MAP[_keyword]
+        _metadata = get_technique_name(_technique_id)
+        _technique_name = _metadata["name"]
+        _tactic = _metadata["tactic"].lower().replace(" ", "-")
+        _overrides = _TTP_PATTERN_METADATA_OVERRIDES.get(_keyword, {})
+        _technique_name = _overrides.get("name", _technique_name)
+        _tactic = _overrides.get("tactic", _tactic)
+
+    _TTP_PATTERNS.append((_keyword, _technique_id, _technique_name, _tactic))
+
+del _keyword, _technique_id, _technique_name, _tactic, _metadata, _overrides
 
 # Private / loopback IP prefixes to filter out
 _PRIVATE_IP_PREFIXES = ("10.", "127.", "192.168.", "0.", "169.254.", "172.16.",

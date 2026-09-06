@@ -5,113 +5,38 @@ from typing import Dict, List
 import re
 import logging
 
+from src.utils.mitre_keyword_patterns import (
+    KEYWORD_TECHNIQUE_MAP,
+    MITRE_MAPPER_KEYWORD_ORDER,
+)
+from src.utils.mitre_technique_names import get_technique_name
+
 logger = logging.getLogger(__name__)
 # Comprehensive MITRE ATT&CK Mapping
-MITRE_MAPPING = {
-    # ==================== Execution (TA0002) ====================
-    'powershell': {'technique': 'T1059.001', 'tactic': 'Execution', 'name': 'PowerShell'},
-    'cmd.exe': {'technique': 'T1059.003', 'tactic': 'Execution', 'name': 'Windows Command Shell'},
-    'wscript': {'technique': 'T1059.005', 'tactic': 'Execution', 'name': 'Visual Basic'},
-    'cscript': {'technique': 'T1059.005', 'tactic': 'Execution', 'name': 'Visual Basic'},
-    'mshta': {'technique': 'T1218.005', 'tactic': 'Defense Evasion', 'name': 'Mshta'},
-    'rundll32': {'technique': 'T1218.011', 'tactic': 'Defense Evasion', 'name': 'Rundll32'},
-    'regsvr32': {'technique': 'T1218.010', 'tactic': 'Defense Evasion', 'name': 'Regsvr32'},
-    'wmic': {'technique': 'T1047', 'tactic': 'Execution', 'name': 'Windows Management Instrumentation'},
-    'invoke-expression': {'technique': 'T1059.001', 'tactic': 'Execution', 'name': 'PowerShell'},
-    'iex': {'technique': 'T1059.001', 'tactic': 'Execution', 'name': 'PowerShell'},
-    
-    # ==================== Persistence (TA0003) ====================
-    'schtasks': {'technique': 'T1053.005', 'tactic': 'Persistence', 'name': 'Scheduled Task'},
-    'scheduled task': {'technique': 'T1053.005', 'tactic': 'Persistence', 'name': 'Scheduled Task'},
-    'new-scheduledtask': {'technique': 'T1053.005', 'tactic': 'Persistence', 'name': 'Scheduled Task'},
-    'currentversion\\run': {'technique': 'T1547.001', 'tactic': 'Persistence', 'name': 'Registry Run Keys'},
-    'currentversion\\runonce': {'technique': 'T1547.001', 'tactic': 'Persistence', 'name': 'Registry Run Keys'},
-    'startup folder': {'technique': 'T1547.001', 'tactic': 'Persistence', 'name': 'Registry Run Keys'},
-    'new-service': {'technique': 'T1543.003', 'tactic': 'Persistence', 'name': 'Windows Service'},
-    'sc create': {'technique': 'T1543.003', 'tactic': 'Persistence', 'name': 'Windows Service'},
-    'userinit': {'technique': 'T1547.004', 'tactic': 'Persistence', 'name': 'Winlogon Helper DLL'},
-    'winlogon': {'technique': 'T1547.004', 'tactic': 'Persistence', 'name': 'Winlogon Helper DLL'},
-    
-    # ==================== Defense Evasion (TA0005) ====================
-    'encodedcommand': {'technique': 'T1027', 'tactic': 'Defense Evasion', 'name': 'Obfuscated Files'},
-    '-enc': {'technique': 'T1027', 'tactic': 'Defense Evasion', 'name': 'Obfuscated Files'},
-    '-e ': {'technique': 'T1027', 'tactic': 'Defense Evasion', 'name': 'Obfuscated Files'},
-    'base64': {'technique': 'T1027', 'tactic': 'Defense Evasion', 'name': 'Obfuscated Files'},
-    'set-mppreference': {'technique': 'T1562.001', 'tactic': 'Defense Evasion', 'name': 'Disable or Modify Tools'},
-    'disablerealtimemonitoring': {'technique': 'T1562.001', 'tactic': 'Defense Evasion', 'name': 'Disable or Modify Tools'},
-    'disablebehaviormonitoring': {'technique': 'T1562.001', 'tactic': 'Defense Evasion', 'name': 'Disable or Modify Tools'},
-    'disableioavprotection': {'technique': 'T1562.001', 'tactic': 'Defense Evasion', 'name': 'Disable or Modify Tools'},
-    'add-mppreference': {'technique': 'T1562.001', 'tactic': 'Defense Evasion', 'name': 'Disable or Modify Tools'},
-    'exclusionpath': {'technique': 'T1562.001', 'tactic': 'Defense Evasion', 'name': 'Disable or Modify Tools'},
-    'amsi': {'technique': 'T1562.001', 'tactic': 'Defense Evasion', 'name': 'Disable or Modify Tools'},
-    'virtualalloc': {'technique': 'T1055', 'tactic': 'Defense Evasion', 'name': 'Process Injection'},
-    'virtualprotect': {'technique': 'T1055', 'tactic': 'Defense Evasion', 'name': 'Process Injection'},
-    'createremotethread': {'technique': 'T1055', 'tactic': 'Defense Evasion', 'name': 'Process Injection'},
-    'writeprocessmemory': {'technique': 'T1055', 'tactic': 'Defense Evasion', 'name': 'Process Injection'},
-    'ntcreatethreadex': {'technique': 'T1055', 'tactic': 'Defense Evasion', 'name': 'Process Injection'},
-    
-    # ==================== Credential Access (TA0006) ====================
-    'mimikatz': {'technique': 'T1003.001', 'tactic': 'Credential Access', 'name': 'LSASS Memory'},
-    'sekurlsa': {'technique': 'T1003.001', 'tactic': 'Credential Access', 'name': 'LSASS Memory'},
-    'lsass': {'technique': 'T1003.001', 'tactic': 'Credential Access', 'name': 'LSASS Memory'},
-    'procdump': {'technique': 'T1003.001', 'tactic': 'Credential Access', 'name': 'LSASS Memory'},
-    'minidump': {'technique': 'T1003.001', 'tactic': 'Credential Access', 'name': 'LSASS Memory'},
-    'get-credential': {'technique': 'T1056.002', 'tactic': 'Credential Access', 'name': 'GUI Input Capture'},
-    'kerberos::': {'technique': 'T1558', 'tactic': 'Credential Access', 'name': 'Steal or Forge Kerberos'},
-    'dpapi': {'technique': 'T1555.004', 'tactic': 'Credential Access', 'name': 'Windows Credential Manager'},
-    
-    # ==================== Discovery (TA0007) ====================
-    'whoami': {'technique': 'T1033', 'tactic': 'Discovery', 'name': 'System Owner Discovery'},
-    'systeminfo': {'technique': 'T1082', 'tactic': 'Discovery', 'name': 'System Information Discovery'},
-    'ipconfig': {'technique': 'T1016', 'tactic': 'Discovery', 'name': 'System Network Config Discovery'},
-    'net user': {'technique': 'T1087.001', 'tactic': 'Discovery', 'name': 'Local Account Discovery'},
-    'net group': {'technique': 'T1069.001', 'tactic': 'Discovery', 'name': 'Local Groups Discovery'},
-    'net localgroup': {'technique': 'T1069.001', 'tactic': 'Discovery', 'name': 'Local Groups Discovery'},
-    'get-aduser': {'technique': 'T1087.002', 'tactic': 'Discovery', 'name': 'Domain Account Discovery'},
-    'get-adcomputer': {'technique': 'T1018', 'tactic': 'Discovery', 'name': 'Remote System Discovery'},
-    'get-adgroup': {'technique': 'T1069.002', 'tactic': 'Discovery', 'name': 'Domain Groups Discovery'},
-    'get-wmiobject': {'technique': 'T1082', 'tactic': 'Discovery', 'name': 'System Information Discovery'},
-    'tasklist': {'technique': 'T1057', 'tactic': 'Discovery', 'name': 'Process Discovery'},
-    'get-process': {'technique': 'T1057', 'tactic': 'Discovery', 'name': 'Process Discovery'},
-    
-    # ==================== Lateral Movement (TA0008) ====================
-    'psexec': {'technique': 'T1570', 'tactic': 'Lateral Movement', 'name': 'Lateral Tool Transfer'},
-    'invoke-wmimethod': {'technique': 'T1047', 'tactic': 'Execution', 'name': 'WMI'},
-    'invoke-command': {'technique': 'T1021.006', 'tactic': 'Lateral Movement', 'name': 'WinRM'},
-    'enter-pssession': {'technique': 'T1021.006', 'tactic': 'Lateral Movement', 'name': 'WinRM'},
-    
-    # ==================== Collection (TA0009) ====================
-    'clipboard': {'technique': 'T1115', 'tactic': 'Collection', 'name': 'Clipboard Data'},
-    'screenshot': {'technique': 'T1113', 'tactic': 'Collection', 'name': 'Screen Capture'},
-    'keylogger': {'technique': 'T1056.001', 'tactic': 'Collection', 'name': 'Keylogging'},
-    
-    # ==================== Command and Control (TA0011) ====================
-    'downloadstring': {'technique': 'T1105', 'tactic': 'Command and Control', 'name': 'Ingress Tool Transfer'},
-    'downloadfile': {'technique': 'T1105', 'tactic': 'Command and Control', 'name': 'Ingress Tool Transfer'},
-    'downloaddata': {'technique': 'T1105', 'tactic': 'Command and Control', 'name': 'Ingress Tool Transfer'},
-    'invoke-webrequest': {'technique': 'T1105', 'tactic': 'Command and Control', 'name': 'Ingress Tool Transfer'},
-    'invoke-restmethod': {'technique': 'T1105', 'tactic': 'Command and Control', 'name': 'Ingress Tool Transfer'},
-    'webclient': {'technique': 'T1105', 'tactic': 'Command and Control', 'name': 'Ingress Tool Transfer'},
-    'start-bitstransfer': {'technique': 'T1105', 'tactic': 'Command and Control', 'name': 'Ingress Tool Transfer'},
-    'certutil': {'technique': 'T1105', 'tactic': 'Command and Control', 'name': 'Ingress Tool Transfer'},
-    'bitsadmin': {'technique': 'T1105', 'tactic': 'Command and Control', 'name': 'Ingress Tool Transfer'},
-    
-    # ==================== Exfiltration (TA0010) ====================
-    'compress-archive': {'technique': 'T1560.001', 'tactic': 'Exfiltration', 'name': 'Archive via Utility'},
-    '7z': {'technique': 'T1560.001', 'tactic': 'Exfiltration', 'name': 'Archive via Utility'},
-    'rar': {'technique': 'T1560.001', 'tactic': 'Exfiltration', 'name': 'Archive via Utility'},
-    
-    # ==================== Impact (TA0040) ====================
-    'cipher /w': {'technique': 'T1485', 'tactic': 'Impact', 'name': 'Data Destruction'},
-    'vssadmin delete': {'technique': 'T1490', 'tactic': 'Impact', 'name': 'Inhibit System Recovery'},
-    'bcdedit': {'technique': 'T1490', 'tactic': 'Impact', 'name': 'Inhibit System Recovery'},
-    'wbadmin delete': {'technique': 'T1490', 'tactic': 'Impact', 'name': 'Inhibit System Recovery'},
-    
-    # ==================== Initial Access (TA0001) - Email specific ====================
-    'phishing': {'technique': 'T1566', 'tactic': 'Initial Access', 'name': 'Phishing'},
-    'spearphishing': {'technique': 'T1566.001', 'tactic': 'Initial Access', 'name': 'Spearphishing Attachment'},
-    'macro': {'technique': 'T1566.001', 'tactic': 'Initial Access', 'name': 'Spearphishing Attachment'},
+_MITRE_MAPPING_CONFLICTS = {
+    "base64": {"technique": "T1027", "tactic": "Defense Evasion", "name": "Obfuscated Files"},
+    "macro": {"technique": "T1566.001", "tactic": "Initial Access", "name": "Spearphishing Attachment"},
 }
+_MITRE_MAPPING_METADATA_OVERRIDES = {
+    "invoke-wmimethod": {"name": "WMI"},
+}
+
+MITRE_MAPPING = {}
+for _keyword in MITRE_MAPPER_KEYWORD_ORDER:
+    if _keyword in _MITRE_MAPPING_CONFLICTS:
+        MITRE_MAPPING[_keyword] = dict(_MITRE_MAPPING_CONFLICTS[_keyword])
+        continue
+
+    _technique_id = KEYWORD_TECHNIQUE_MAP[_keyword]
+    _metadata = get_technique_name(_technique_id)
+    MITRE_MAPPING[_keyword] = {
+        "technique": _technique_id,
+        "tactic": _metadata["tactic"],
+        "name": _metadata["name"],
+    }
+    MITRE_MAPPING[_keyword].update(_MITRE_MAPPING_METADATA_OVERRIDES.get(_keyword, {}))
+
+del _keyword, _technique_id, _metadata
 class MITREMapper:
     """Map indicators to MITRE ATT&CK techniques."""
     
