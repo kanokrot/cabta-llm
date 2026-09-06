@@ -38,6 +38,7 @@ class RuleGenerator:
             'spl': RuleGenerator._generate_spl_ioc(ioc, ioc_type, context),
             'sigma': RuleGenerator._generate_sigma_ioc(ioc, ioc_type, context),
             'xql': RuleGenerator._generate_xql_ioc(ioc, ioc_type, context),
+            'dql': RuleGenerator._generate_dql_ioc(ioc, ioc_type, context),
             'suricata': RuleGenerator._generate_suricata_ioc(ioc, ioc_type, context),
             'firewall': RuleGenerator._generate_firewall_ioc(ioc, ioc_type, context),
         }
@@ -315,6 +316,16 @@ dataset = xdr_data
 | limit 100"""
         
         return "// XQL - IOC type not supported"
+
+    @staticmethod
+    def _generate_dql_ioc(ioc: str, ioc_type: str, context: Dict) -> str:
+        """Generate DQL (Dynatrace Query Language) rule for IOC."""
+        if ioc_type in ('ipv4', 'ip', 'domain', 'hash', 'url'):
+            return f"""// DQL - Hunt for {ioc_type.upper()}: {ioc}
+fetch logs, from:-30d
+| filter contains(content, "{ioc}")
+| summarize count = count(), by:{{dt.entity.host, log.source}}"""
+        return "// DQL - IOC type not supported"
 
     @staticmethod
     def _generate_suricata_ioc(ioc: str, ioc_type: str, context: Dict) -> str:
