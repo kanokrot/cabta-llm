@@ -54,6 +54,31 @@ def test_report_html_download_returns_attachment(tmp_path):
     )
 
 
+def test_report_detection_rules_offer_raw_and_markdown_copy(tmp_path):
+    app = _build_report_app(tmp_path)
+    job_id = app.state.analysis_manager.create_job("ioc", {"value": "test"})
+    app.state.analysis_manager.complete_job(
+        job_id,
+        {
+            "verdict": "MALICIOUS",
+            "detection_rules": {
+                "kql": "DeviceProcessEvents\n| take 10",
+                "sigma": "title: Test rule",
+            },
+        },
+        verdict="MALICIOUS",
+        score=90,
+    )
+
+    response = TestClient(app).get(f"/api/reports/{job_id}/html")
+
+    assert response.status_code == 200
+    assert response.text.count("Copy format\n") == 2
+    assert 'data-copy-format="kql"' in response.text
+    assert 'data-copy-format="sigma"' in response.text
+    assert "sigma: 'yaml'" in response.text
+
+
 def test_print_css_hides_actual_cabta_navbar():
     css_path = Path(__file__).resolve().parents[1] / "static" / "css" / "themes.css"
     css = css_path.read_text(encoding="utf-8")
