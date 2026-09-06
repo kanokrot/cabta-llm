@@ -371,7 +371,7 @@
         background: rgba(0,0,0,0.25);
         border: 1px solid rgba(255,255,255,0.08);
         border-radius: 8px;
-        padding: 14px;
+        padding: 48px 14px 14px;
         font-size: 0.8rem;
         max-height: 400px;
         overflow-y: auto;
@@ -396,6 +396,15 @@
     }
     .btn-copy-rule:hover { background: rgba(var(--bs-primary-rgb,13,110,253),0.2); color: var(--bs-primary, #0d6efd); }
     .btn-copy-rule.copied { color: #198754; border-color: #198754; }
+    .rule-copy-actions {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        z-index: 2;
+        display: flex;
+        gap: 6px;
+    }
+    .rule-copy-actions .btn-copy-rule { position: static; }
 
     /* ===== Sandbox & Dynamic Analysis ===== */
     .sandbox-report-btn {

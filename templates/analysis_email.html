@@ -1289,14 +1289,57 @@
             h += '<div class="tab-pane fade' + (k === 0 ? ' show active' : '') + '" id="rule-panel-' + rt.key + '" role="tabpanel">'
                 + '<div class="d-flex justify-content-between align-items-center mb-2">'
                 + '<span class="text-muted small"><i class="bi ' + rt.icon + ' me-1"></i>' + escHtmlLocal(rt.desc) + '</span>'
-                + '<button class="btn btn-sm btn-outline-primary rule-copy-trigger" data-rule-key="' + rt.key + '">'
-                + '<i class="bi bi-clipboard me-1"></i>Copy</button></div>'
+                + '<div class="d-flex gap-2"><button class="btn btn-sm btn-outline-primary rule-copy-trigger" data-rule-key="' + rt.key + '">'
+                + '<i class="bi bi-clipboard me-1"></i>Copy</button>'
+                + '<button class="btn btn-sm btn-outline-primary rule-copy-format-trigger" data-rule-key="' + rt.key + '" title="Copy as a Markdown code block">'
+                + '<i class="bi bi-markdown me-1"></i>Copy format</button></div></div>'
                 + '<div class="detection-rule-block"><pre><code id="rule-code-' + rt.key + '">' + escapedRule + '</code></pre></div></div>';
         }
         h += '</div>';
         return h;
     }
     window.renderDetectionRules = renderDetectionRules;
+
+    function detectionRuleMarkdown(ruleType, content) {
+        var normalizedType = String(ruleType || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        var languageMap = {
+            sigma: 'yaml',
+            sigmarule: 'yaml',
+            splunkspl: 'spl',
+            kqldefendersentinel: 'kql',
+            yararule: 'yara',
+            cortexxdrxql: 'xql',
+            microsoft365: 'powershell',
+            m365: 'powershell',
+            m365defenderpowershell: 'powershell',
+            firewallfortigate: 'shell',
+            fortigate: 'shell'
+        };
+        var language = languageMap[normalizedType] || normalizedType || 'text';
+        var rule = String(content || '').trim();
+        if (/^```[\s\S]*```\s*$/.test(rule)) return rule;
+        return '```' + language + '\n' + rule + '\n```';
+    }
+
+    function wireDetectionRuleCopyButtons() {
+        var copyBtns = document.querySelectorAll('.rule-copy-trigger, .rule-copy-format-trigger');
+        for (var ci = 0; ci < copyBtns.length; ci++) {
+            copyBtns[ci].addEventListener('click', function() {
+                var key = this.getAttribute('data-rule-key');
+                var codeEl = document.getElementById('rule-code-' + key);
+                if (!codeEl) return;
+                var text = codeEl.textContent;
+                if (this.classList.contains('rule-copy-format-trigger')) {
+                    text = detectionRuleMarkdown(key, text);
+                }
+                copyToClipboard(text);
+                var origHtml = this.innerHTML;
+                this.innerHTML = '<i class="bi bi-check me-1"></i>Copied!';
+                var self = this;
+                setTimeout(function() { self.innerHTML = origHtml; }, 1500);
+            });
+        }
+    }
 
     /* ========================================================
      *  AI / LLM ANALYSIS RENDERER
@@ -1628,23 +1671,8 @@
                     /* --- Detection Rules tab --- */
                     if (data.detection_rules) {
                         setSanitizedHTML(document.getElementById('resultDetection'), renderDetectionRules(data.detection_rules));
-                        /* Wire up copy buttons for detection rules */
-                        setTimeout(function() {
-                            var copyBtns = document.querySelectorAll('.rule-copy-trigger');
-                            for (var ci = 0; ci < copyBtns.length; ci++) {
-                                copyBtns[ci].addEventListener('click', function() {
-                                    var key = this.getAttribute('data-rule-key');
-                                    var codeEl = document.getElementById('rule-code-' + key);
-                                    if (codeEl) {
-                                        copyToClipboard(codeEl.textContent);
-                                        var origHtml = this.innerHTML;
-                                        this.innerHTML = '<i class="bi bi-check me-1"></i>Copied!';
-                                        var self = this;
-                                        setTimeout(function() { self.innerHTML = origHtml; }, 1500);
-                                    }
-                                });
-                            }
-                        }, 100);
+                        /* Wire up raw and Markdown-format copy buttons. */
+                        setTimeout(wireDetectionRuleCopyButtons, 100);
                     }
 
                     /* --- Pipeline steps in Overview --- */
@@ -1756,22 +1784,7 @@
                             if (data.forensics) setSanitizedHTML(document.getElementById('resultForensics'), renderForensics(data.forensics));
                             if (data.detection_rules) {
                                 setSanitizedHTML(document.getElementById('resultDetection'), renderDetectionRules(data.detection_rules));
-                                setTimeout(function() {
-                                    var copyBtns = document.querySelectorAll('.rule-copy-trigger');
-                                    for (var ci = 0; ci < copyBtns.length; ci++) {
-                                        copyBtns[ci].addEventListener('click', function() {
-                                            var key = this.getAttribute('data-rule-key');
-                                            var codeEl = document.getElementById('rule-code-' + key);
-                                            if (codeEl) {
-                                                copyToClipboard(codeEl.textContent);
-                                                var origHtml = this.innerHTML;
-                                                this.innerHTML = '<i class="bi bi-check me-1"></i>Copied!';
-                                                var self = this;
-                                                setTimeout(function() { self.innerHTML = origHtml; }, 1500);
-                                            }
-                                        });
-                                    }
-                                }, 100);
+                                setTimeout(wireDetectionRuleCopyButtons, 100);
                             }
 
                             if (data.raw_output && data.raw_output.pipeline_steps) {

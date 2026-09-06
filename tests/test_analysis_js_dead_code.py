@@ -212,3 +212,14 @@ def test_template_has_own_id_param_autoload(template_texts, name):
         "Same concern as above: this must exist independently now that "
         "analysis.js no longer provides it centrally."
     )
+
+
+def test_detection_rule_markdown_copy_is_available_on_all_analysis_pages(
+    analysis_js_text, template_texts
+):
+    """Every interactive analysis flow exposes the formatted-copy action."""
+    assert "window.copyFormattedRuleToClipboard" in analysis_js_text
+    assert "Copy format" in analysis_js_text
+    assert "Copy format" in template_texts["ioc"]
+    assert "Copy format" in template_texts["email"]
+    assert "rule-copy-format-trigger" in template_texts["email"]

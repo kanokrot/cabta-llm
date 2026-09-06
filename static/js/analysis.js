@@ -499,6 +499,73 @@
         return escHtml(String(val));
     }
 
+    function detectionRuleMarkdown(ruleType, content) {
+        var normalizedType = String(ruleType || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        var languageMap = {
+            sigma: 'yaml',
+            sigmarule: 'yaml',
+            splunkspl: 'spl',
+            kqldefendersentinel: 'kql',
+            yararule: 'yara',
+            cortexxdrxql: 'xql',
+            microsoft365: 'powershell',
+            m365: 'powershell',
+            m365defenderpowershell: 'powershell',
+            firewallfortigate: 'shell',
+            fortigate: 'shell'
+        };
+        var language = languageMap[normalizedType] || normalizedType || 'text';
+        var rule = String(content || '').trim();
+
+        /* Avoid nesting fences when an upstream rule is already Markdown. */
+        if (/^```[\s\S]*```\s*$/.test(rule)) return rule;
+        return '```' + language + '\n' + rule + '\n```';
+    }
+
+    function restoreRuleCopyButton(btn, label) {
+        while (btn.firstChild) btn.removeChild(btn.firstChild);
+        var icon = document.createElement('i');
+        icon.className = 'bi bi-clipboard';
+        btn.appendChild(icon);
+        btn.appendChild(document.createTextNode(' ' + label));
+    }
+
+    function writeRuleToClipboard(text, btn, defaultLabel) {
+        function onSuccess() {
+            btn.classList.add('copied');
+            while (btn.firstChild) btn.removeChild(btn.firstChild);
+            var icon = document.createElement('i');
+            icon.className = 'bi bi-check-lg';
+            btn.appendChild(icon);
+            btn.appendChild(document.createTextNode(' Copied!'));
+            setTimeout(function () {
+                btn.classList.remove('copied');
+                restoreRuleCopyButton(btn, defaultLabel);
+            }, 1500);
+        }
+
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(onSuccess).catch(function () {
+                fallbackRuleCopy(text, onSuccess);
+            });
+        } else {
+            fallbackRuleCopy(text, onSuccess);
+        }
+    }
+
+    function fallbackRuleCopy(text, onSuccess) {
+        var textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.style.cssText = 'position:fixed;top:0;left:0;opacity:0;pointer-events:none;';
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+        try {
+            if (document.execCommand('copy')) onSuccess();
+        } catch (e) { /* Clipboard access is unavailable. */ }
+        document.body.removeChild(textarea);
+    }
+
     /**
      * Copy detection rule text to clipboard.
      * Called from onclick handlers in rendered detection rule blocks.
@@ -507,21 +574,16 @@
     function copyRuleToClipboard(btn, preId) {
         var pre = document.getElementById(preId);
         if (!pre) return;
-        navigator.clipboard.writeText(pre.textContent.trim()).then(function () {
-            btn.classList.add('copied');
-            btn.textContent = 'Copied!';
-            setTimeout(function () {
-                btn.classList.remove('copied');
-                /* Restore button content safely using DOM methods */
-                while (btn.firstChild) btn.removeChild(btn.firstChild);
-                var icon = document.createElement('i');
-                icon.className = 'bi bi-clipboard';
-                btn.appendChild(icon);
-                btn.appendChild(document.createTextNode(' Copy'));
-            }, 1500);
-        });
+        writeRuleToClipboard(pre.textContent.trim(), btn, 'Copy');
+    }
+
+    function copyFormattedRuleToClipboard(btn, preId, ruleType) {
+        var pre = document.getElementById(preId);
+        if (!pre) return;
+        writeRuleToClipboard(detectionRuleMarkdown(ruleType, pre.textContent), btn, 'Copy format');
     }
     window.copyRuleToClipboard = copyRuleToClipboard;
+    window.copyFormattedRuleToClipboard = copyFormattedRuleToClipboard;
 
     function toggleStringCategory(catId) {
         var el = document.getElementById(catId);
@@ -1531,8 +1593,12 @@
                     var content = ruleMap[rt] || '';
                     if (typeof content !== 'string') content = JSON.stringify(content, null, 2);
                     drHtml += '<div class="tab-pane fade' + (idx === 0 ? ' show active' : '') + '" id="panel-' + tabId + '" role="tabpanel">';
+                    var formatType = rt.toLowerCase().replace(/[^a-z0-9]/g, '');
                     drHtml += '<div class="detection-rule-block">';
+                    drHtml += '<div class="rule-copy-actions">';
                     drHtml += '<button class="btn-copy-rule" onclick="copyRuleToClipboard(this, \'' + preId + '\')"><i class="bi bi-clipboard"></i> Copy</button>';
+                    drHtml += '<button class="btn-copy-rule" onclick="copyFormattedRuleToClipboard(this, \'' + preId + '\', \'' + formatType + '\')" title="Copy as a Markdown code block"><i class="bi bi-markdown"></i> Copy format</button>';
+                    drHtml += '</div>';
                     drHtml += '<pre id="' + preId + '">' + escHtml(content) + '</pre>';
                     drHtml += '</div></div>';
                 });
