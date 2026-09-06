@@ -319,12 +319,29 @@ dataset = xdr_data
 
     @staticmethod
     def _generate_dql_ioc(ioc: str, ioc_type: str, context: Dict) -> str:
-        """Generate DQL (Dynatrace Query Language) rule for IOC."""
-        if ioc_type in ('ipv4', 'ip', 'domain', 'hash', 'url'):
-            return f"""// DQL - Hunt for {ioc_type.upper()}: {ioc}
-fetch logs, from:-30d
-| filter contains(content, "{ioc}")
-| summarize count = count(), by:{{dt.entity.host, log.source}}"""
+        """Generate DQL (OpenSearch Dashboards Query Language, used by the
+        Wazuh indexer/dashboard) for an IOC. Field names below are
+        best-effort guesses at common Wazuh alert field names (e.g. Sysmon
+        decoder fields) — CABTA does not yet have a live Wazuh ingestion
+        pipeline to verify exact field mappings against, so this is a
+        reference query format, not a verified-live query."""
+        if ioc_type in ('ipv4', 'ip'):
+            return (
+                f'// DQL (Wazuh/OpenSearch) - Hunt for IP: {ioc}\n'
+                f'srcip:"{ioc}" or data.win.eventdata.destinationIp:"{ioc}"'
+            )
+        elif ioc_type == 'domain':
+            return (
+                f'// DQL (Wazuh/OpenSearch) - Hunt for Domain: {ioc}\n'
+                f'data.win.eventdata.queryName:"{ioc}" or url:"{ioc}"'
+            )
+        elif ioc_type == 'hash':
+            return (
+                f'// DQL (Wazuh/OpenSearch) - Hunt for Hash: {ioc}\n'
+                f'data.win.eventdata.hashes:"{ioc}" or md5:"{ioc}" or sha256:"{ioc}"'
+            )
+        elif ioc_type == 'url':
+            return f'// DQL (Wazuh/OpenSearch) - Hunt for URL: {ioc}\nurl:"{ioc}"'
         return "// DQL - IOC type not supported"
 
     @staticmethod
