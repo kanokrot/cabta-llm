@@ -971,13 +971,13 @@
     <div class="collapse show" id="capabilitiesCollapse">
         <div class="card-body">
             {% if capabilities is mapping %}
-                {% if capabilities.mitre_techniques is defined and capabilities.mitre_techniques is iterable %}
+                {% if capabilities.attack_techniques is defined and capabilities.attack_techniques is iterable %}
                 <h6 style="color:var(--text-secondary);">MITRE ATT&CK Techniques</h6>
                 <div class="table-responsive">
                     <table class="table table-sm table-hover mb-0">
                         <thead><tr style="background-color:var(--bg-tertiary);"><th>ID</th><th>Tactic</th><th>Technique</th><th>Description</th></tr></thead>
                         <tbody>
-                        {% for t in capabilities.mitre_techniques %}
+                        {% for t in capabilities.attack_techniques %}
                         <tr>
                             <td><span class="mitre-badge">{{ t.technique_id | default(t.id | default('')) | e }}</span></td>
                             <td style="color:var(--text-secondary);">{{ t.tactic | default('') | e }}</td>
@@ -1539,7 +1539,7 @@
                             <tr>
                                 <td style="color:var(--text-secondary);">{{ item.tactic | default('') | e }}</td>
                                 <td>{{ item.technique | default(item.name | default('')) | e }}</td>
-                                <td><span class="mitre-badge">{{ item.id | default('') | e }}</span></td>
+                                <td><span class="mitre-badge">{{ item.technique_id | default(item.id | default('')) | e }}</span></td>
                                 <td style="font-size:0.8rem;color:var(--text-secondary);">{{ item.description | default('') | e }}</td>
                             </tr>
                             {% endfor %}
