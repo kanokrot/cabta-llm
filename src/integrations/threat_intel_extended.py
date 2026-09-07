@@ -20,7 +20,7 @@ class ThreatIntelExtended:
         """GreyNoise - Internet scanner detection."""
         api_key = self.api_keys.get('greynoise', '')
         if not api_key:
-            return {'source': 'GreyNoise', 'status': 'No valid API key configured', 'found': False}
+            return {'source': 'GreyNoise', 'status': '⚠', 'error': 'No valid API key configured', 'found': False}
         
         try:
             url = f'https://api.greynoise.io/v3/community/{ip}'
@@ -38,22 +38,22 @@ class ThreatIntelExtended:
                             'last_seen': data.get('last_seen', ''),
                             'status': '✓' if data.get('noise') else '✗'
                         }
-            return {'source': 'GreyNoise', 'status': 'Error', 'found': False}
+            return {'source': 'GreyNoise', 'status': '⚠', 'error': 'Error', 'found': False}
         except Exception as e:
             logger.error(f"[GreyNoise] Error: {e}")
-            return {'source': 'GreyNoise', 'status': 'Error', 'found': False}
+            return {'source': 'GreyNoise', 'status': '⚠', 'error': str(e), 'found': False}
     
     async def check_censys(self, ioc: str, ioc_type: str) -> Dict:
         """Censys - Internet-wide scanning data."""
         api_key = get_valid_key(self.api_keys, 'censys')
         if not api_key:
-            return {'source': 'Censys', 'status': 'No valid API key configured', 'found': False}
+            return {'source': 'Censys', 'status': '⚠', 'error': 'No valid API key configured', 'found': False}
         
         try:
             if ioc_type == 'ipv4':
                 url = f'https://api.platform.censys.io/v3/global/asset/host/{ioc}'
             else:
-                return {'source': 'Censys', 'status': 'Unsupported type', 'found': False}
+                return {'source': 'Censys', 'status': '⚠', 'error': 'Unsupported type', 'found': False}
             
             headers = {'Authorization': f'Bearer {api_key}'}
             async with aiohttp.ClientSession(timeout=self.timeout) as session:
@@ -72,7 +72,7 @@ class ThreatIntelExtended:
             return {'source': 'Censys', 'status': 'Not found', 'found': False}
         except Exception as e:
             logger.error(f"[Censys] Error: {e}")
-            return {'source': 'Censys', 'status': 'Error', 'found': False}
+            return {'source': 'Censys', 'status': '⚠', 'error': str(e), 'found': False}
     
     async def check_talos(self, ip: str) -> Dict:
         """
@@ -88,7 +88,8 @@ class ThreatIntelExtended:
             if not re.match(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$', ip):
                 return {
                     'source': 'Talos Intelligence',
-                    'status': 'Only IPv4 supported',
+                    'status': '⚠',
+                    'error': 'Only IPv4 supported',
                     'found': False,
                     'url': f'https://talosintelligence.com/reputation_center/lookup?search={ip}',
                 }
@@ -147,7 +148,8 @@ class ThreatIntelExtended:
                 logger.warning("[Talos] dnspython not available for SBRS lookup")
                 return {
                     'source': 'Talos Intelligence',
-                    'status': 'dnspython required',
+                    'status': '⚠',
+                    'error': 'dnspython required',
                     'found': False,
                     'url': f'https://talosintelligence.com/reputation_center/lookup?search={ip}',
                 }
@@ -176,7 +178,7 @@ class ThreatIntelExtended:
         """Pulsedive - Community threat intelligence."""
         api_key = self.api_keys.get('pulsedive', '')
         if not api_key:
-            return {'source': 'Pulsedive', 'status': 'No valid API key configured', 'found': False}
+            return {'source': 'Pulsedive', 'status': '⚠', 'error': 'No valid API key configured', 'found': False}
         
         try:
             url = f'https://pulsedive.com/api/info.php'
@@ -197,13 +199,13 @@ class ThreatIntelExtended:
             return {'source': 'Pulsedive', 'status': 'Not found', 'found': False}
         except Exception as e:
             logger.error(f"[Pulsedive] Error: {e}")
-            return {'source': 'Pulsedive', 'status': 'Error', 'found': False}
+            return {'source': 'Pulsedive', 'status': '⚠', 'error': str(e), 'found': False}
     
     async def check_criminalip(self, ip: str) -> Dict:
         """Criminal IP - Threat scoring."""
         api_key = self.api_keys.get('criminalip', '')
         if not api_key:
-            return {'source': 'Criminal IP', 'status': 'No valid API key configured', 'found': False}
+            return {'source': 'Criminal IP', 'status': '⚠', 'error': 'No valid API key configured', 'found': False}
         
         try:
             url = f'https://api.criminalip.io/v1/ip/scan/{ip}'
@@ -225,13 +227,13 @@ class ThreatIntelExtended:
             return {'source': 'Criminal IP', 'status': 'Not found', 'found': False}
         except Exception as e:
             logger.error(f"[Criminal IP] Error: {e}")
-            return {'source': 'Criminal IP', 'status': 'Error', 'found': False}
+            return {'source': 'Criminal IP', 'status': '⚠', 'error': str(e), 'found': False}
     
     async def check_ipqualityscore(self, ip: str) -> Dict:
         """IPQualityScore - Fraud detection."""
         api_key = self.api_keys.get('ipqualityscore', '')
         if not api_key:
-            return {'source': 'IPQualityScore', 'status': 'No valid API key configured', 'found': False}
+            return {'source': 'IPQualityScore', 'status': '⚠', 'error': 'No valid API key configured', 'found': False}
         
         try:
             url = f'https://ipqualityscore.com/api/json/ip/{api_key}/{ip}'
@@ -253,7 +255,7 @@ class ThreatIntelExtended:
             return {'source': 'IPQualityScore', 'status': 'Not found', 'found': False}
         except Exception as e:
             logger.error(f"[IPQualityScore] Error: {e}")
-            return {'source': 'IPQualityScore', 'status': 'Error', 'found': False}
+            return {'source': 'IPQualityScore', 'status': '⚠', 'error': str(e), 'found': False}
     
     async def check_spamhaus(self, ip: str) -> Dict:
         """Spamhaus - Spam/malware tracking."""
@@ -280,13 +282,13 @@ class ThreatIntelExtended:
                 }
         except Exception as e:
             logger.error(f"[Spamhaus] Error: {e}")
-            return {'source': 'Spamhaus', 'status': 'Error', 'found': False}
+            return {'source': 'Spamhaus', 'status': '⚠', 'error': str(e), 'found': False}
     
     async def check_phishtank(self, url: str) -> Dict:
         """PhishTank - Phishing URL database."""
         api_key = self.api_keys.get('phishtank', '')
         if not api_key:
-            return {'source': 'PhishTank', 'status': 'No valid API key configured', 'found': False}
+            return {'source': 'PhishTank', 'status': '⚠', 'error': 'No valid API key configured', 'found': False}
         
         try:
             import urllib.parse
@@ -312,7 +314,7 @@ class ThreatIntelExtended:
             return {'source': 'PhishTank', 'status': 'Not found', 'found': False}
         except Exception as e:
             logger.error(f"[PhishTank] Error: {e}")
-            return {'source': 'PhishTank', 'status': 'Error', 'found': False}
+            return {'source': 'PhishTank', 'status': '⚠', 'error': str(e), 'found': False}
     
     async def check_circl(self, ioc: str) -> Dict:
         """CIRCL - Passive DNS/SSL."""
@@ -332,7 +334,7 @@ class ThreatIntelExtended:
             return {'source': 'CIRCL', 'status': 'Not found', 'found': False}
         except Exception as e:
             logger.error(f"[CIRCL] Error: {e}")
-            return {'source': 'CIRCL', 'status': 'Error', 'found': False}
+            return {'source': 'CIRCL', 'status': '⚠', 'error': str(e), 'found': False}
     
     async def check_ip2proxy(self, ip: str) -> Dict:
         """
@@ -345,7 +347,7 @@ class ThreatIntelExtended:
         """
         api_key = self.api_keys.get('ip2proxy', '')
         if not api_key:
-            return {'source': 'IP2Proxy', 'status': 'No API key', 'found': False}
+            return {'source': 'IP2Proxy', 'status': '⚠', 'error': 'No API key', 'found': False}
         
         try:
             url = f'https://api.ip2proxy.com/?ip={ip}&key={api_key}&package=PX11'
@@ -399,16 +401,17 @@ class ThreatIntelExtended:
                         else:
                             return {
                                 'source': 'IP2Proxy',
-                                'status': data.get('response', 'Error'),
+                                'status': '⚠',
+                                'error': data.get('response', 'Error'),
                                 'found': False
                             }
-            return {'source': 'IP2Proxy', 'status': 'Request failed', 'found': False}
+            return {'source': 'IP2Proxy', 'status': '⚠', 'error': 'Request failed', 'found': False}
                         
         except asyncio.TimeoutError:
-            return {'source': 'IP2Proxy', 'status': 'Timeout', 'found': False}
+            return {'source': 'IP2Proxy', 'status': '⚠', 'error': 'Timeout', 'found': False}
         except Exception as e:
             logger.error(f"[IP2Proxy] Error: {e}")
-            return {'source': 'IP2Proxy', 'status': 'Error', 'found': False}
+            return {'source': 'IP2Proxy', 'status': '⚠', 'error': str(e), 'found': False}
     
     async def check_triage(self, file_hash: str) -> Dict:
         """
@@ -418,7 +421,7 @@ class ThreatIntelExtended:
         """
         api_key = self.api_keys.get('triage', '')
         if not api_key:
-            return {'source': 'Triage', 'status': 'No API key', 'found': False}
+            return {'source': 'Triage', 'status': '⚠', 'error': 'No API key', 'found': False}
         
         try:
             headers = {
@@ -503,13 +506,13 @@ class ThreatIntelExtended:
                     elif response.status == 404:
                         return {'source': 'Triage', 'status': '✗', 'found': False}
                     else:
-                        return {'source': 'Triage', 'status': f'HTTP {response.status}', 'found': False}
+                        return {'source': 'Triage', 'status': '⚠', 'error': f'HTTP {response.status}', 'found': False}
                         
         except asyncio.TimeoutError:
-            return {'source': 'Triage', 'status': 'Timeout', 'found': False}
+            return {'source': 'Triage', 'status': '⚠', 'error': 'Timeout', 'found': False}
         except Exception as e:
             logger.error(f"[Triage] Error: {e}")
-            return {'source': 'Triage', 'status': 'Error', 'found': False}
+            return {'source': 'Triage', 'status': '⚠', 'error': str(e), 'found': False}
     
     async def check_threatzone(self, file_hash: str) -> Dict:
         """
@@ -525,7 +528,7 @@ class ThreatIntelExtended:
         """
         api_key = self.api_keys.get('threatzone', '')
         if not api_key:
-            return {'source': 'Threat.Zone', 'status': 'No API key', 'found': False}
+            return {'source': 'Threat.Zone', 'status': '⚠', 'error': 'No API key', 'found': False}
         
         try:
             headers = {
@@ -617,14 +620,14 @@ class ThreatIntelExtended:
                         return {'source': 'Threat.Zone', 'status': '✗', 'found': False}
                     
                     elif response.status == 401:
-                        return {'source': 'Threat.Zone', 'status': 'Invalid API key', 'found': False}
+                        return {'source': 'Threat.Zone', 'status': '⚠', 'error': 'Invalid API key', 'found': False}
                     elif response.status == 404:
                         return {'source': 'Threat.Zone', 'status': '✗', 'found': False}
                     else:
-                        return {'source': 'Threat.Zone', 'status': f'HTTP {response.status}', 'found': False}
+                        return {'source': 'Threat.Zone', 'status': '⚠', 'error': f'HTTP {response.status}', 'found': False}
                         
         except asyncio.TimeoutError:
-            return {'source': 'Threat.Zone', 'status': 'Timeout', 'found': False}
+            return {'source': 'Threat.Zone', 'status': '⚠', 'error': 'Timeout', 'found': False}
         except Exception as e:
             logger.error(f"[Threat.Zone] Error: {e}")
-            return {'source': 'Threat.Zone', 'status': 'Error', 'found': False}
+            return {'source': 'Threat.Zone', 'status': '⚠', 'error': str(e), 'found': False}
