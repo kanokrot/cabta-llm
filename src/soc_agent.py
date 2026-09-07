@@ -301,7 +301,7 @@ def print_ioc_results(result: dict, ioc: str):
             print(f"│  Status: ✅ CLEAN")
             print(f"│  Details: No scanning activity detected")
     else:
-        print(f"│  Status: ⚠️ {greynoise.get('status', 'No API key')}")
+        print(f"│  Status: ⚠️ {greynoise.get('error') or greynoise.get('status', 'No API key')}")
     print(f"└─────────────────────────────────────────────────────────────\n")
     
     # ========== SOURCE 14: Censys ==========
@@ -318,7 +318,7 @@ def print_ioc_results(result: dict, ioc: str):
             print(f"│  Status: ✅ NOT FOUND")
             print(f"│  Details: No Censys records")
     else:
-        print(f"│  Status: ⚠️ {censys.get('status', 'No API key')}")
+        print(f"│  Status: ⚠️ {censys.get('error') or censys.get('status', 'No API key')}")
     print(f"└─────────────────────────────────────────────────────────────\n")
     
     # ========== SOURCE 15: Talos Intelligence ==========
@@ -348,7 +348,7 @@ def print_ioc_results(result: dict, ioc: str):
             print(f"│  Status: ✅ CLEAN")
             print(f"│  Details: Not found in Pulsedive")
     else:
-        print(f"│  Status: ⚠️ {pulsedive.get('status', 'No API key')}")
+        print(f"│  Status: ⚠️ {pulsedive.get('error') or pulsedive.get('status', 'No API key')}")
     print(f"└─────────────────────────────────────────────────────────────\n")
     
     # ========== SOURCE 17: ThreatCrowd ==========
@@ -382,7 +382,7 @@ def print_ioc_results(result: dict, ioc: str):
         else:
             print(f"│  Status: ✅ NOT FOUND")
     else:
-        print(f"│  Status: ⚠️ {criminalip.get('status', 'No API key')}")
+        print(f"│  Status: ⚠️ {criminalip.get('error') or criminalip.get('status', 'No API key')}")
     print(f"└─────────────────────────────────────────────────────────────\n")
     
     # ========== SOURCE 19: IPQualityScore ==========
@@ -400,7 +400,7 @@ def print_ioc_results(result: dict, ioc: str):
         else:
             print(f"│  Status: ✅ CLEAN")
     else:
-        print(f"│  Status: ⚠️ {ipqs.get('status', 'No API key')}")
+        print(f"│  Status: ⚠️ {ipqs.get('error') or ipqs.get('status', 'No API key')}")
     print(f"└─────────────────────────────────────────────────────────────\n")
     
     # ========== SOURCE 20: Spamhaus ==========
@@ -414,7 +414,7 @@ def print_ioc_results(result: dict, ioc: str):
             print(f"│  Status: ✅ NOT LISTED")
             print(f"│  Details: Not on Spamhaus blocklist")
     else:
-        print(f"│  Status: ⚠️ {spamhaus.get('status', 'Error')}")
+        print(f"│  Status: ⚠️ {spamhaus.get('error') or spamhaus.get('status', 'Error')}")
     print(f"└─────────────────────────────────────────────────────────────\n")
     
     # ========== SOURCE 21: PhishTank ==========
@@ -430,7 +430,7 @@ def print_ioc_results(result: dict, ioc: str):
             print(f"│  Status: ✅ CLEAN")
             print(f"│  Details: Not in PhishTank database")
     else:
-        print(f"│  Status: ⚠️ {phishtank.get('status', 'No API key')}")
+        print(f"│  Status: ⚠️ {phishtank.get('error') or phishtank.get('status', 'No API key')}")
     print(f"└─────────────────────────────────────────────────────────────\n")
     
     # ========== SOURCE 22: CIRCL ==========
@@ -445,7 +445,7 @@ def print_ioc_results(result: dict, ioc: str):
             print(f"│  Status: ✅ NOT FOUND")
             print(f"│  Details: No CIRCL records")
     else:
-        print(f"│  Status: ⚠️ {circl.get('status', 'Error')}")
+        print(f"│  Status: ⚠️ {circl.get('error') or circl.get('status', 'Error')}")
     print(f"└─────────────────────────────────────────────────────────────\n")
     
     print()
