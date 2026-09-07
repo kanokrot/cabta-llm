@@ -1776,12 +1776,12 @@
                 var statusClass = 'info';
                 var statusLabel = '';
                 if (!srcData) { statusClass = 'clean'; statusLabel = 'No Data'; }
+                else if ((srcData.status === '⚠' && typeof srcData.error === 'string' && srcData.error.toLowerCase().includes('api key')) || srcData.status === 'No valid API key configured') { statusClass = 'nokey'; statusLabel = 'No API Key'; }
                 else if (srcData.error) { statusClass = 'error'; statusLabel = 'Error'; }
                 else if (srcData.malicious) { statusClass = 'hit'; statusLabel = 'Malicious'; }
                 else if (srcData.status === '✓' || srcData.detected || srcData.found === true || srcData.listed === true) { statusClass = 'hit'; statusLabel = 'Detected'; }
                 else if (srcData.score > 0 || (srcData.confidence !== undefined && srcData.confidence > 50)) { statusClass = 'hit'; statusLabel = 'Flagged'; }
                 else if (srcData.status === '⚠' || (srcData.message && !srcData.found)) { statusClass = 'warn'; statusLabel = 'Warning'; }
-                else if (srcData.status === 'No valid API key configured') { statusClass = 'nokey'; statusLabel = 'No API Key'; }
                 else if (srcData.found === false || srcData.status === '✗') { statusClass = 'clean'; statusLabel = 'Clean'; }
                 else { statusClass = 'clean'; statusLabel = 'Clean'; }
 
