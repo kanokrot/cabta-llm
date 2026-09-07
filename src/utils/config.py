@@ -66,8 +66,7 @@ def get_default_config() -> Dict[str, Any]:
             
             # Extended sources
             'greynoise': os.environ.get('GREYNOISE_API_KEY', ''),
-            'censys_id': os.environ.get('CENSYS_API_ID', ''),
-            'censys_secret': os.environ.get('CENSYS_API_SECRET', ''),
+            'censys': os.environ.get('CENSYS_API_KEY', ''),
             'pulsedive': os.environ.get('PULSEDIVE_API_KEY', ''),
             'criminalip': os.environ.get('CRIMINALIP_API_KEY', ''),
             'ipqualityscore': os.environ.get('IPQS_API_KEY', ''),

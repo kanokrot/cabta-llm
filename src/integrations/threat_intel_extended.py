@@ -45,23 +45,22 @@ class ThreatIntelExtended:
     
     async def check_censys(self, ioc: str, ioc_type: str) -> Dict:
         """Censys - Internet-wide scanning data."""
-        api_id = self.api_keys.get('censys_id', '')
-        api_secret = self.api_keys.get('censys_secret', '')
-        if not api_id or not api_secret:
+        api_key = get_valid_key(self.api_keys, 'censys')
+        if not api_key:
             return {'source': 'Censys', 'status': 'No valid API key configured', 'found': False}
         
         try:
             if ioc_type == 'ipv4':
-                url = f'https://search.censys.io/api/v2/hosts/{ioc}'
+                url = f'https://api.platform.censys.io/v3/global/asset/host/{ioc}'
             else:
                 return {'source': 'Censys', 'status': 'Unsupported type', 'found': False}
             
-            auth = aiohttp.BasicAuth(api_id, api_secret)
+            headers = {'Authorization': f'Bearer {api_key}'}
             async with aiohttp.ClientSession(timeout=self.timeout) as session:
-                async with session.get(url, auth=auth) as response:
+                async with session.get(url, headers=headers) as response:
                     if response.status == 200:
                         data = await response.json()
-                        result = data.get('result', {})
+                        result = data.get('result', {}).get('resource', {})
                         return {
                             'source': 'Censys',
                             'found': True,
