@@ -13,7 +13,11 @@ from ..integrations.threat_intel import ThreatIntelligence
 from ..integrations.llm_analyzer import LLMAnalyzer
 from ..integrations.ticketing import create_incident_ticket
 from ..utils.ioc_extractor import IOCExtractor
-from ..utils.helpers import determine_verdict, extract_domain_from_url
+from ..utils.helpers import (
+    determine_verdict,
+    extract_domain_from_url,
+    is_domain_or_subdomain,
+)
 from ..utils.domain_age_checker import check_domain_age
 from ..utils.dga_detector import detect_dga
 from ..scoring.intelligent_scoring import IntelligentScoring
@@ -79,20 +83,32 @@ class IOCInvestigator:
                     return str(value)
         return 'Unknown'
     
-    def _is_trusted_infrastructure(self, ioc: str, ioc_type: str) -> bool:
-        """Check if IOC belongs to trusted infrastructure."""
-        ioc_lower = ioc.lower()
-        
+    def _trusted_infrastructure_match(self, ioc: str, ioc_type: str):
+        """Return trust-decision provenance, or ``None`` if not trusted.
+
+        This check gates an early CLEAN verdict, so malformed and ambiguous
+        URLs deliberately fail closed and continue through threat intelligence.
+        """
         if ioc_type == 'domain':
-            for trusted in TRUSTED_DOMAINS:
-                if ioc_lower == trusted or ioc_lower.endswith('.' + trusted):
-                    return True
+            hostname = ioc.lower()
         elif ioc_type == 'url':
-            for trusted in TRUSTED_DOMAINS:
-                if trusted in ioc_lower:
-                    return True
-        
-        return False
+            hostname = extract_domain_from_url(ioc)
+            if hostname is None:
+                return None
+        else:
+            return None
+
+        for trusted in TRUSTED_DOMAINS:
+            if is_domain_or_subdomain(hostname, trusted):
+                return {
+                    'hostname': hostname,
+                    'matched_domain': trusted,
+                }
+        return None
+
+    def _is_trusted_infrastructure(self, ioc: str, ioc_type: str) -> bool:
+        """Check whether the IOC's actual host is trusted."""
+        return self._trusted_infrastructure_match(ioc, ioc_type) is not None
     
     async def _enrich_domain(self, domain: str) -> Dict:
         """
@@ -221,8 +237,15 @@ class IOCInvestigator:
             return {'error': f'Unable to categorize IOC: {ioc}'}
 
         # Check if trusted infrastructure - skip heavy investigation
-        if self._is_trusted_infrastructure(ioc, ioc_type):
-            logger.info(f"[IOC] Skipping trusted infrastructure: {ioc}")
+        trusted_match = self._trusted_infrastructure_match(ioc, ioc_type)
+        if trusted_match:
+            logger.info(
+                "[IOC] Skipping trusted infrastructure: %s "
+                "(hostname=%s, matched_domain=%s)",
+                ioc,
+                trusted_match['hostname'],
+                trusted_match['matched_domain'],
+            )
             return {
                 'ioc': ioc,
                 'ioc_type': ioc_type,
@@ -231,6 +254,8 @@ class IOCInvestigator:
                 'sources': {},
                 'sources_checked': 0,
                 'sources_flagged': 0,
+                'trusted_hostname': trusted_match['hostname'],
+                'trusted_domain': trusted_match['matched_domain'],
                 'note': 'Trusted infrastructure (Certificate Authority / CDN / Major vendor)',
                 'recommendations': ['No action required - legitimate infrastructure'],
             }

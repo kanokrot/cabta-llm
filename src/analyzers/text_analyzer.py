@@ -12,6 +12,8 @@ from pathlib import Path
 from typing import Dict, List, Tuple, Optional
 from collections import Counter
 
+from ..utils.helpers import is_domain_or_subdomain
+
 logger = logging.getLogger(__name__)
 
 
@@ -312,7 +314,10 @@ class TextFileAnalyzer:
                         reasons.append(f'Suspicious path: {sp}')
                         break
 
-                is_whitelisted = any(host.endswith(d) for d in whitelist_domains)
+                is_whitelisted = any(
+                    is_domain_or_subdomain(host, domain)
+                    for domain in whitelist_domains
+                )
 
             except Exception:
                 is_whitelisted = False

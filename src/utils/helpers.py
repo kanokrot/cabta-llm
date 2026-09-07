@@ -203,13 +203,51 @@ def extract_domain_from_url(url: str) -> Optional[str]:
         >>> print(domain)
         'evil.com'
     """
-    from urllib.parse import urlparse
-    
-    try:
-        parsed = urlparse(url)
-        return parsed.netloc or None
-    except:
+    from urllib.parse import urlsplit
+
+    if not isinstance(url, str):
         return None
+
+    # Backslashes in an HTTP(S) URL are interpreted differently by RFC-style
+    # parsers and WHATWG/browser parsers.  This helper is used in security
+    # decisions, so ambiguous or malformed URLs must fail closed.
+    if "\\" in url or any(ord(char) <= 0x20 or ord(char) == 0x7F for char in url):
+        return None
+
+    try:
+        parsed = urlsplit(url)
+        if parsed.scheme.lower() not in ('http', 'https') or not parsed.netloc:
+            return None
+
+        # Accessing port performs urllib's validation (non-numeric and
+        # out-of-range ports raise ValueError).
+        _ = parsed.port
+        hostname = parsed.hostname
+    except (TypeError, ValueError):
+        return None
+
+    if not hostname:
+        return None
+
+    # A single trailing dot is the valid absolute-DNS-name form.
+    return hostname[:-1] if hostname.endswith('.') else hostname
+
+
+def is_domain_or_subdomain(hostname: str, parent_domain: str) -> bool:
+    """Return whether *hostname* is *parent_domain* or one of its subdomains.
+
+    Matching on a DNS-label boundary prevents lookalikes such as
+    ``evilmicrosoft.com`` and parent/suffix confusion such as
+    ``microsoft.com.evil.example`` from being treated as trusted.
+    """
+    if not isinstance(hostname, str) or not isinstance(parent_domain, str):
+        return False
+
+    hostname = hostname.lower()
+    parent_domain = parent_domain.lower()
+    if not hostname or not parent_domain:
+        return False
+    return hostname == parent_domain or hostname.endswith('.' + parent_domain)
 def is_valid_hash(hash_string: str, hash_type: str) -> bool:
     """
     Validate hash format.
