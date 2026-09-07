@@ -95,3 +95,33 @@ def test_timeout_with_cache_counted_stale_and_scored():
         "sources_stale": 2,
         "total_sources_attempted": 2,
     }
+
+
+def test_extended_integration_missing_api_key_counted_unavailable_not_clean():
+    coverage = IntelligentScoring.calculate_source_coverage({
+        "sources": {
+            "GreyNoise": {
+                "source": "GreyNoise",
+                "status": "⚠",
+                "error": "No valid API key configured",
+                "found": False,
+            }
+        }
+    })
+
+    assert coverage["sources_unavailable"] == 1
+    assert coverage["sources_clean"] == 0
+
+
+def test_core_integration_missing_api_key_counted_unavailable_control():
+    coverage = IntelligentScoring.calculate_source_coverage({
+        "sources": {
+            "alienvault": {
+                "status": "⚠",
+                "error": "No valid API key configured",
+            }
+        }
+    })
+
+    assert coverage["sources_unavailable"] == 1
+    assert coverage["sources_clean"] == 0

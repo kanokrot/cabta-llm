@@ -77,7 +77,8 @@ async def test_check_censys_missing_api_key():
 
     assert result == {
         'source': 'Censys',
-        'status': 'No valid API key configured',
+        'status': '⚠',
+        'error': 'No valid API key configured',
         'found': False,
     }
 
@@ -90,6 +91,7 @@ async def test_check_censys_unsupported_ioc_type():
 
     assert result == {
         'source': 'Censys',
-        'status': 'Unsupported type',
+        'status': '⚠',
+        'error': 'Unsupported type',
         'found': False,
     }
