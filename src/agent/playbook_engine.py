@@ -427,6 +427,48 @@ def _collect_malicious_iocs(context: Dict) -> List[str]:
     return matched
 
 
+def _collect_malicious_file_paths(context: Dict) -> List[str]:
+    """Join extract_file_hashes's pairs with computed_hash_threat_check
+    results/items by index to recover file paths for hashes confirmed
+    malicious. extract_file_hashes is a single-execution (non-for_each)
+    step, so its raw tool result is exposed both as context["extract_file_hashes"]
+    (a dict with "pairs"/"hashes" keys) and flattened as
+    context["extract_file_hashes_pairs"] / context["extract_file_hashes_hashes"]
+    (see _run_step_loop's nested-field exposure at line 1430-1432).
+    Read-only, never raises, returns [] on any mismatch or missing data.
+    Does not deduplicate by hash — only by file_path, so two different
+    files sharing a hash both appear."""
+    matched: List[str] = []
+    seen = set()
+    try:
+        pairs = context.get("extract_file_hashes_pairs")
+        if not isinstance(pairs, list):
+            extract_step = context.get("extract_file_hashes")
+            pairs = extract_step.get("pairs") if isinstance(extract_step, dict) else None
+        items = context.get("computed_hash_threat_check_items")
+        results = context.get("computed_hash_threat_check_results")
+        if not isinstance(pairs, list) or not isinstance(items, list) or not isinstance(results, list):
+            return []
+        for pair, item, result in zip(pairs, items, results):
+            if not isinstance(pair, dict):
+                continue
+            if pair.get("sha256") != item:
+                continue
+            if not _is_malicious_result(result):
+                continue
+            fp = pair.get("file_path")
+            if not isinstance(fp, str) or not fp:
+                continue
+            if fp in seen:
+                continue
+            seen.add(fp)
+            matched.append(fp)
+    except Exception as exc:
+        logger.debug("[PLAYBOOK] _collect_malicious_file_paths failed: %s", exc)
+        return []
+    return matched
+
+
 def _find_highest_verdict(context: Dict) -> Optional[str]:
     """สแกน context หา verdict ทุกตัวที่เกิดจาก tool results ระหว่าง playbook
     แล้วคืนตัวที่รุนแรงที่สุด (read-only, ไม่แก้ context)
@@ -1438,6 +1480,7 @@ class PlaybookEngine:
                     )
 
                 context["collected_malicious_iocs"] = _collect_malicious_iocs(context)
+                context["collected_malicious_file_paths"] = _collect_malicious_file_paths(context)
 
                 # Resolve the next step
                 current_step = self._resolve_next(

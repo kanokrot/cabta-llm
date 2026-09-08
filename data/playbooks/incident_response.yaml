@@ -290,9 +290,12 @@ steps:
 
   - name: quarantine_artifacts
     tool: quarantine_file
+    for_each: "collected_malicious_file_paths"
     params:
-      file_path: "{{collected_malicious_iocs}}"
-    description: Quarantine malicious files and artifacts
+      file_path: "{{item}}"
+    condition:
+      if: "{{collected_malicious_file_paths}}"
+    description: Quarantine confirmed malicious files and artifacts
     requires_approval: true
 
   # ===== Phase 4: Recovery =====
