@@ -81,50 +81,6 @@ class MITREMapper:
         return techniques
     
     @staticmethod
-    def map_from_categories(categories: List[str]) -> List[Dict]:
-        """
-        Map string categories to MITRE techniques.
-        
-        Args:
-            categories: List of malware behavior categories
-        
-        Returns:
-            List of MITRE techniques
-        """
-        techniques = []
-        seen = set()
-        
-        category_mapping = {
-            'network': {'technique': 'T1071', 'tactic': 'Command and Control', 'name': 'Application Layer Protocol'},
-            'persistence': {'technique': 'T1547', 'tactic': 'Persistence', 'name': 'Boot or Logon Autostart Execution'},
-            'evasion': {'technique': 'T1027', 'tactic': 'Defense Evasion', 'name': 'Obfuscated Files or Information'},
-            'obfuscation': {'technique': 'T1027', 'tactic': 'Defense Evasion', 'name': 'Obfuscated Files or Information'},
-            'crypto': {'technique': 'T1486', 'tactic': 'Impact', 'name': 'Data Encrypted for Impact'},
-            'execution': {'technique': 'T1059', 'tactic': 'Execution', 'name': 'Command and Scripting Interpreter'},
-            'disable_security': {'technique': 'T1562', 'tactic': 'Defense Evasion', 'name': 'Impair Defenses'},
-            'credential': {'technique': 'T1003', 'tactic': 'Credential Access', 'name': 'OS Credential Dumping'},
-            'discovery': {'technique': 'T1082', 'tactic': 'Discovery', 'name': 'System Information Discovery'},
-            'lateral': {'technique': 'T1021', 'tactic': 'Lateral Movement', 'name': 'Remote Services'},
-            'exfiltration': {'technique': 'T1041', 'tactic': 'Exfiltration', 'name': 'Exfiltration Over C2 Channel'},
-            'keylogger': {'technique': 'T1056', 'tactic': 'Collection', 'name': 'Input Capture'},
-            'screenshot': {'technique': 'T1113', 'tactic': 'Collection', 'name': 'Screen Capture'},
-        }
-        
-        for category in categories:
-            cat_lower = category.lower()
-            if cat_lower in category_mapping and category_mapping[cat_lower]['technique'] not in seen:
-                mapping = category_mapping[cat_lower]
-                techniques.append({
-                    'technique_id': mapping['technique'],
-                    'technique_name': mapping['name'],
-                    'tactic': mapping['tactic'],
-                    'indicator': category
-                })
-                seen.add(mapping['technique'])
-        
-        return techniques
-    
-    @staticmethod
     def render_mitre_table(techniques: List[Dict]) -> str:
         """
         Render MITRE techniques as formatted ASCII table.
