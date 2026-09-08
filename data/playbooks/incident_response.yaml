@@ -237,6 +237,20 @@ steps:
       file_path: "{{item}}"
     description: Forensic metadata analysis of malicious files
 
+  - name: extract_file_hashes
+    tool: extract_file_hash_pairs
+    params:
+      file_paths: "{{forensic_file_analysis_items}}"
+      file_metadata_results: "{{forensic_file_analysis_results}}"
+    description: Pair analyzed file paths with their computed SHA-256 hashes
+
+  - name: computed_hash_threat_check
+    tool: mcp:threat_intel_tools/malwarebazaar_hash_lookup
+    for_each: "extract_file_hashes.hashes"
+    params:
+      hash_value: "{{item}}"
+    description: Check forensically-computed file hashes against MalwareBazaar
+
   - name: prefetch_analysis
     tool: mcp:forensics_tools/parse_windows_prefetch
     for_each: "extract_incident_iocs.executables"
@@ -277,7 +291,7 @@ steps:
   - name: quarantine_artifacts
     tool: quarantine_file
     params:
-      file_path: "{{forensic_file_analysis.malicious_artifacts}}"
+      file_path: "{{collected_malicious_iocs}}"
     description: Quarantine malicious files and artifacts
     requires_approval: true
 
