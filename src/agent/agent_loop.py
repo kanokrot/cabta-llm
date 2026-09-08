@@ -1029,14 +1029,6 @@ class AgentLoop:
     async def _ollama_generate(self, prompt: str) -> Optional[str]:
         return await self.llm_backend.ollama_generate(prompt)
 
-    async def _anthropic_chat(
-        self, messages: List[Dict], tools: List[Dict],
-    ) -> Optional[Any]:
-        return await self.llm_backend.anthropic_chat(messages, tools)
-
-    async def _anthropic_generate(self, prompt: str) -> Optional[str]:
-        return await self.llm_backend.anthropic_generate(prompt)
-
     # ================================================================== #
     #  Response parsing helpers (thin wrappers delegating to
     #  agent_response_parsing; kept on AgentLoop because tests call
