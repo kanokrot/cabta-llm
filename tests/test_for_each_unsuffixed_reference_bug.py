@@ -58,5 +58,5 @@ def test_unsuffixed_template_reference_should_detect_malicious_loop_result():
     assert resolved_value == expected_malicious_flag, (
         "BUG: for_each result stored under 'url_urlhaus_results' is not "
         "accessible via unsuffixed template '{{url_urlhaus.malicious}}' — "
-        "see playbook_engine.py:1261-1264"
+        "see _execute_for_each in playbook_engine.py"
     )

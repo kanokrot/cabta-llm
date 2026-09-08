@@ -174,6 +174,19 @@ def _parse_literal(text: str) -> Any:
 def _resolve_var(var_path: str, context: Dict) -> Any:
     """Resolve a dotted path, transparently traversing MCP result wrappers."""
     parts = var_path.split(".")
+
+    def for_each_flag_fallback() -> Any:
+        if len(parts) != 2 or parts[0] in context:
+            return None
+        suffix = {
+            "malicious": "_any_malicious",
+            "suspicious": "_any_suspicious",
+        }.get(parts[1])
+        if suffix is None:
+            return None
+        key = f"{parts[0]}{suffix}"
+        return context[key] if key in context else None
+
     obj = context
     for part in parts:
         if isinstance(obj, dict) and part in obj:
@@ -188,7 +201,7 @@ def _resolve_var(var_path: str, context: Dict) -> Any:
     # resolution first, then retry legacy playbook references through that
     # wrapper so ``step.field`` remains compatible with ``step.result.field``.
     if len(parts) < 2:
-        return None
+        return for_each_flag_fallback()
     root = context.get(parts[0])
     if not (
         isinstance(root, dict)
@@ -196,14 +209,14 @@ def _resolve_var(var_path: str, context: Dict) -> Any:
         and "server" in root
         and "tool" in root
     ):
-        return None
+        return for_each_flag_fallback()
 
     obj = root["result"]
     for part in parts[1:]:
         if isinstance(obj, dict) and part in obj:
             obj = obj[part]
         else:
-            return None
+            return for_each_flag_fallback()
     return obj
 
 
