@@ -185,7 +185,7 @@ async def approve_action(request: Request, session_id: str, body: ApprovalReques
         except Exception as exc:
             return {"success": False, "error": str(exc)}
     else:
-        # Flow A: Agent Loop session
+        # Flow B: Agent Loop session
         agent_loop = _require_agent_loop(request)
         if body.approved:
             success = await agent_loop.approve_action(session_id, approved_by=body.approved_by)
