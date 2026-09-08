@@ -644,13 +644,15 @@ class ToolRegistry:
                 rules = RuleGenerator.generate_email_rules(email_data)
             elif any(
                 isinstance(analysis_result.get(key), list)
-                for key in ('ipv4', 'ip', 'domains', 'urls', 'sha256')
+                for key in ('ipv4', 'ip', 'domains', 'urls', 'md5', 'sha1', 'sha256')
             ):
                 aggregate_key_types = {
                     'ipv4': 'ipv4',
                     'ip': 'ipv4',
                     'domains': 'domain',
                     'urls': 'url',
+                    'md5': 'md5',
+                    'sha1': 'sha1',
                     'sha256': 'sha256',
                 }
                 aggregate_iocs = [

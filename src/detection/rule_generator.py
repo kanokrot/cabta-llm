@@ -158,7 +158,7 @@ DeviceNetworkEvents
 | project Timestamp, DeviceName, RemoteUrl, InitiatingProcessFileName
 | summarize count() by DeviceName, RemoteUrl"""
         
-        elif ioc_type == 'hash':
+        elif ioc_type in ('hash', 'md5', 'sha1', 'sha256'):
             return f"""// KQL - Hunt for Hash: {ioc}
 DeviceFileEvents
 | where Timestamp > ago(30d)
@@ -190,7 +190,7 @@ index=* earliest=-30d
 | search url="*{ioc}*" OR domain="*{ioc}*"
 | stats count by host, url, domain"""
         
-        elif ioc_type == 'hash':
+        elif ioc_type in ('hash', 'md5', 'sha1', 'sha256'):
             return f"""# SPL - Hunt for Hash: {ioc}
 index=* earliest=-30d
 | search hash="{ioc}" OR sha256="{ioc}" OR md5="{ioc}"
@@ -314,6 +314,13 @@ dataset = xdr_data
 | filter event_type = DNS_QUERY and dns_query_name contains "{ioc}"
 | fields agent_hostname, dns_query_name, process_name
 | limit 100"""
+
+        elif ioc_type in ('hash', 'md5', 'sha1', 'sha256'):
+            return f"""// XQL - Hunt for File Hash: {ioc}
+dataset = xdr_data
+| filter event_type = FILE and (action_file_sha256 = "{ioc}" or action_file_sha1 = "{ioc}" or action_file_md5 = "{ioc}")
+| fields agent_hostname, action_file_name, action_file_path, action_file_sha256, action_file_sha1, action_file_md5, actor_process_image_name
+| limit 100"""
         
         return "// XQL - IOC type not supported"
 
@@ -335,7 +342,7 @@ dataset = xdr_data
                 f'// DQL (Wazuh/OpenSearch) - Hunt for Domain: {ioc}\n'
                 f'data.win.eventdata.queryName:"{ioc}" or url:"{ioc}"'
             )
-        elif ioc_type == 'hash':
+        elif ioc_type in ('hash', 'md5', 'sha1', 'sha256'):
             return (
                 f'// DQL (Wazuh/OpenSearch) - Hunt for Hash: {ioc}\n'
                 f'data.win.eventdata.hashes:"{ioc}" or md5:"{ioc}" or sha256:"{ioc}"'
