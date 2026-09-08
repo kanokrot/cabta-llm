@@ -109,6 +109,29 @@ async def block_ip(
         return {"status": "error", "simulated": True, "error": str(exc)}
 
 
+async def extract_file_hash_pairs(
+    file_paths: List[str],
+    file_metadata_results: List[Any],
+    **_kw,
+) -> Dict[str, Any]:
+    """Pair file paths with SHA-256 values from file metadata results."""
+    try:
+        pairs = []
+        for file_path, result in zip(file_paths, file_metadata_results):
+            inner = result.get("result", result) if isinstance(result, dict) else None
+            hashes = inner.get("hashes") if isinstance(inner, dict) else None
+            sha256 = hashes.get("sha256") if isinstance(hashes, dict) else None
+            if isinstance(sha256, str) and sha256:
+                pairs.append({"file_path": file_path, "sha256": sha256})
+        return {
+            "pairs": pairs,
+            "hashes": [pair["sha256"] for pair in pairs],
+        }
+    except Exception as exc:
+        logger.error(f"[TOOLS] extract_file_hash_pairs failed: {exc}", exc_info=True)
+        return {"status": "error", "error": str(exc), "pairs": [], "hashes": []}
+
+
 async def quarantine_file(file_path: str, **_kw) -> Dict[str, Any]:
     """SIMULATED ACTION — ไม่ใช่ EDR/firewall integration จริง เขียน record ลง local JSON เท่านั้น สำหรับ demo/proof-of-concept
 
@@ -1075,6 +1098,35 @@ class ToolRegistry:
             executor=block_ip,
             requires_approval=True,
             is_dangerous=True,
+        )
+
+        # -------------------------------------------------------------- #
+        # 13. extract_file_hash_pairs
+        # -------------------------------------------------------------- #
+        self.register_local_tool(
+            name="extract_file_hash_pairs",
+            description=(
+                "Pair file paths with SHA-256 hashes extracted from file metadata "
+                "results, returning ordered pairs and a flat hash list."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "file_paths": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "File paths in the original for_each order.",
+                    },
+                    "file_metadata_results": {
+                        "type": "array",
+                        "items": {},
+                        "description": "Matching file metadata results in for_each order.",
+                    },
+                },
+                "required": ["file_paths", "file_metadata_results"],
+            },
+            category="analysis",
+            executor=extract_file_hash_pairs,
         )
 
         # -------------------------------------------------------------- #
