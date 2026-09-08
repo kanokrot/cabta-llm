@@ -89,6 +89,49 @@ async def test_execute_from_step_resumes_for_each_once_per_item(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_execute_from_step_logs_one_batch_approval_audit_entry(tmp_path):
+    async def tool_result(tool_name, params):
+        if params["target"] == "host-b":
+            return {"item": params["target"], "error": "collection failed"}
+        return {"item": params["target"], "collected": True}
+
+    items = ["host-a", "host-b", "host-c"]
+    engine, _agent_loop, session_id, captured = _build_paused_engine(
+        tmp_path,
+        {
+            "name": "remote_collect",
+            "tool": "remote_collect",
+            "for_each": "remote_hosts",
+            "params": {"target": "{{item}}"},
+            "requires_approval": True,
+        },
+        {"remote_hosts": items},
+        tool_result,
+    )
+
+    await engine.execute_from_step(session_id, approved=True, approved_by="test")
+
+    approval_entries = [
+        entry
+        for entry in engine.store.get_audit_log(session_id)
+        if entry["action_type"] == "approval_granted"
+    ]
+    assert len(approval_entries) == 1
+
+    entry = approval_entries[0]
+    assert entry["action"] == "remote_collect"
+    assert entry["approved_by"] == "test"
+    assert entry["status"] == "error"
+    assert entry["before_state"] == {
+        "for_each": "remote_hosts",
+        "items": items,
+    }
+    assert isinstance(entry["after_state"], list)
+    assert entry["after_state"] == captured["context"]["remote_collect_results"]
+    assert len(entry["after_state"]) == len(items)
+
+
+@pytest.mark.asyncio
 async def test_execute_from_step_keeps_single_approved_tool_call_behavior(tmp_path):
     async def tool_result(tool_name, params):
         return {"blocked": True, "ip": params["ip_address"]}

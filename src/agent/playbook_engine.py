@@ -1009,6 +1009,30 @@ class PlaybookEngine:
             context, next_step_name = await self._execute_for_each(
                 session_id, pending_step, context, step_number,
             )
+            iteration_results = context[f"{pending_step.name}_results"]
+            batch_items = context[f"{pending_step.name}_items"]
+            action_status = (
+                "error"
+                if any(
+                    isinstance(result, dict) and "error" in result
+                    for result in iteration_results
+                )
+                else "success"
+            )
+            self.store.add_audit_entry(
+                session_id=session_id,
+                action=pending_step.tool,
+                action_type="approval_granted",
+                actor="human",
+                requires_approval=True,
+                before_state={
+                    "for_each": pending_step.for_each,
+                    "items": batch_items,
+                },
+                after_state=iteration_results,
+                approved_by=approved_by,
+                status=action_status,
+            )
         elif approved:
             params = self._interpolate_params(pending_step.params, context)
             self.agent_loop._notify(session_id, {
