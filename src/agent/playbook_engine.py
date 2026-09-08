@@ -1447,7 +1447,26 @@ class PlaybookEngine:
             should_ticket = highest_verdict in ticket_verdicts
             if should_ticket and session_id:
                 ticket_verdict = highest_verdict or "MALICIOUS"
-                for ioc in malicious_iocs:
+                tickets_to_create = list(malicious_iocs)
+                if not tickets_to_create:
+                    # Playbooks with no for_each step (e.g. malware_analysis.yaml,
+                    # ioc_triage.yaml) never populate {step}_any_malicious, so
+                    # malicious_iocs is always empty here even when highest_verdict
+                    # matches config. Fall back to a single ticket so these runs
+                    # still get an audit record, trying progressively
+                    # less-specific identifiers: direct IOC input -> IOC
+                    # investigation result's ioc -> file hash (malware playbooks)
+                    # -> file path -> last resort.
+                    fallback_result = _find_ioc_investigation_result(context)
+                    fallback_ioc = (
+                        context.get("ioc")
+                        or (fallback_result or {}).get("ioc")
+                        or _resolve_var("local_full_analysis.hashes.sha256", context)
+                        or context.get("file_path")
+                        or "unknown_ioc"
+                    )
+                    tickets_to_create = [fallback_ioc]
+                for ioc in tickets_to_create:
                     try:
                         ticket_job_result = {
                             "ioc": ioc,
