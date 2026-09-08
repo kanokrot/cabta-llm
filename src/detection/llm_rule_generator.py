@@ -4,6 +4,7 @@ LLM-Powered Detection Rule Generator v1.0.0
 Generates intelligent, context-aware detection rules using local LLM (Ollama).
 """
 
+import hashlib
 import json
 from datetime import datetime
 from typing import Dict, List, Optional
@@ -361,7 +362,7 @@ DeviceFileEvents
         families = context.get('malware_families', [])
         family_name = families[0] if families else 'Unknown'
         
-        return f"""rule BTA_Detection_{hash(sha256) % 10000:04d} {{
+        return f"""rule BTA_Detection_{int(hashlib.sha256(sha256.encode()).hexdigest()[:8], 16) % 10000:04d} {{
     meta:
         description = "Detects {family_name} malware"
         author = "Blue Team Assistant"

@@ -742,7 +742,7 @@ end
 
 # URL Rewrite/Block Rule
 {{
-    "rule_name": "BTA-URL-Block-{hash(sender) % 1000:03d}",
+    "rule_name": "BTA-URL-Block-{int(hashlib.sha256(sender.encode()).hexdigest()[:8], 16) % 1000:03d}",
     "description": "Block malicious URLs from phishing campaign",
     "enabled": true,
     "conditions": {{
@@ -814,7 +814,7 @@ Set-HostedContentFilterPolicy -Identity Default `
     -BlockedSenderDomains @{{Add="{sender_domain}"}}
 
 # 3. Create anti-phishing policy
-New-AntiPhishPolicy -Name "BTA-AntiPhish-{hash(sender) % 1000:03d}" `
+New-AntiPhishPolicy -Name "BTA-AntiPhish-{int(hashlib.sha256(sender.encode()).hexdigest()[:8], 16) % 1000:03d}" `
     -Enabled $true `
     -EnableOrganizationDomainsProtection $true `
     -EnableMailboxIntelligence $true `
