@@ -905,6 +905,14 @@ class ToolRegistry:
         if ioc_investigator is not None:
             async def _search_threat_intel(query: str, source: str = 'all', **_kw) -> Dict:
                 """Search threat intel for a query string across all configured sources."""
+                if source != 'all':
+                    return {
+                        "error": (
+                            "source filtering is not yet supported; "
+                            f"'{source}' was requested but investigate() searches all "
+                            "configured sources. Use source='all' or omit this parameter."
+                        )
+                    }
                 return await ioc_investigator.investigate(query)
 
             self.register_local_tool(
