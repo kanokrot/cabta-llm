@@ -18,6 +18,7 @@ from src.utils.mitre_keyword_patterns import (
     TTP_PATTERN_KEYWORD_ORDER,
 )
 from src.utils.mitre_technique_names import get_technique_name
+from ..utils.mitre_kill_chain import KillChainAnalyzer, normalize_tactic
 
 logger = logging.getLogger(__name__)
 
@@ -114,6 +115,7 @@ class CorrelationEngine:
 
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         self._config = config or {}
+        self._kill_chain_analyzer = KillChainAnalyzer()
 
         # Stateful indexes (for cross-session correlation)
         self._ioc_map: Dict[str, List[Dict]] = defaultdict(list)
@@ -152,6 +154,21 @@ class CorrelationEngine:
             # Step 3: Map to MITRE ATT&CK TTPs
             ttp_matches = self._detect_ttps(findings)
 
+            try:
+                normalized_ttps = [
+                    {
+                        **ttp,
+                        "tactic": normalize_tactic(ttp.get("tactic", "")),
+                    }
+                    for ttp in ttp_matches
+                ]
+                kill_chain_assessment = self._kill_chain_analyzer.analyze(
+                    normalized_ttps
+                ).to_dict()
+            except Exception as exc:
+                logger.warning("[CORRELATION] kill-chain analysis failed: %s", exc)
+                kill_chain_assessment = {"error": str(exc)}
+
             # Step 4: Build entity relationship graph
             entity_graph = self._build_entity_graph(per_finding_iocs, findings)
 
@@ -174,6 +191,7 @@ class CorrelationEngine:
             return {
                 "ioc_overlaps": ioc_overlaps,
                 "ttp_matches": ttp_matches,
+                "kill_chain_assessment": kill_chain_assessment,
                 "entity_graph": entity_graph,
                 "severity": severity,
                 "escalation_recommendations": recommendations,

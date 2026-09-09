@@ -33,6 +33,30 @@ PHASES = [
     'Impact',
 ]
 
+_TACTIC_NORMALIZATION = {
+    'initial-access': PHASES[0],
+    'execution': PHASES[1],
+    'persistence': PHASES[2],
+    'privilege-escalation': PHASES[3],
+    'defense-evasion': PHASES[4],
+    'credential-access': PHASES[5],
+    'discovery': PHASES[6],
+    'lateral-movement': PHASES[7],
+    'collection': PHASES[8],
+    'command-and-control': PHASES[9],
+    'exfiltration': PHASES[10],
+    'impact': PHASES[11],
+}
+
+
+def normalize_tactic(tactic: str) -> str:
+    """Normalize a MITRE ATT&CK tactic to its canonical kill-chain phase."""
+    if tactic in PHASES:
+        return tactic
+
+    normalized = tactic.strip().lower().replace("_", "-").replace(" ", "-")
+    return _TACTIC_NORMALIZATION.get(normalized, tactic)
+
 # Risk severity per phase (later stages = higher risk)
 PHASE_SEVERITY = {
     'Initial Access': 0.3,
