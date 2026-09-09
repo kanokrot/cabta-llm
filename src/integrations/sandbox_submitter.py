@@ -107,6 +107,16 @@ class SandboxSubmitter:
         'virustotal': 650 * 1024 * 1024,  # 650MB
         'triage': 200 * 1024 * 1024,      # 200MB
     }
+
+    # VirusTotal's standard file upload endpoint does not provide a private
+    # submission option. Never silently downgrade a requested private upload.
+    PRIVATE_SUBMISSION_SUPPORT = {
+        'anyrun': True,
+        'hybrid': True,
+        'joe': True,
+        'virustotal': False,
+        'triage': True,
+    }
     
     def __init__(self, config: Dict):
         """
@@ -114,20 +124,23 @@ class SandboxSubmitter:
         
         Config should contain:
         {
-            'anyrun_api_key': '...',
-            'hybrid_api_key': '...',
-            'joe_api_key': '...',
-            'virustotal_api_key': '...',
-            'triage_api_key': '...',
+            'api_keys': {
+                'anyrun': '...',
+                'hybrid_analysis': '...',
+                'joe_sandbox': '...',
+                'virustotal': '...',
+                'triage': '...',
+            }
         }
         """
         self.config = config
+        configured_api_keys = config.get('api_keys', {})
         self.api_keys = {
-            'anyrun': config.get('anyrun_api_key', os.environ.get('ANYRUN_API_KEY', '')),
-            'hybrid': config.get('hybrid_api_key', os.environ.get('HYBRID_ANALYSIS_API_KEY', '')),
-            'joe': config.get('joe_api_key', os.environ.get('JOE_SANDBOX_API_KEY', '')),
-            'virustotal': config.get('virustotal_api_key', os.environ.get('VT_API_KEY', '')),
-            'triage': config.get('triage_api_key', os.environ.get('TRIAGE_API_KEY', '')),
+            'anyrun': configured_api_keys.get('anyrun', os.environ.get('ANYRUN_API_KEY', '')),
+            'hybrid': configured_api_keys.get('hybrid_analysis', os.environ.get('HYBRID_API_KEY', '')),
+            'joe': configured_api_keys.get('joe_sandbox', os.environ.get('JOESANDBOX_API_KEY', '')),
+            'virustotal': configured_api_keys.get('virustotal', os.environ.get('VIRUSTOTAL_API_KEY', '')),
+            'triage': configured_api_keys.get('triage', os.environ.get('TRIAGE_API_KEY', '')),
         }
         
         # Track submissions
@@ -191,7 +204,21 @@ class SandboxSubmitter:
         
         # Submit to each provider
         tasks = []
+        invoked_providers = []
         for provider in providers:
+            if private and not self.PRIVATE_SUBMISSION_SUPPORT.get(provider, False):
+                message = (
+                    f"Skipping {provider}: private submission was requested but "
+                    "the provider does not support it"
+                )
+                logger.warning(f"[SANDBOX] {message}")
+                results[provider] = SubmissionResult(
+                    provider=provider,
+                    success=False,
+                    error_message=message
+                )
+                continue
+
             # Check size limit
             if file_size > self.SIZE_LIMITS.get(provider, 100*1024*1024):
                 results[provider] = SubmissionResult(
@@ -204,12 +231,12 @@ class SandboxSubmitter:
             tasks.append(self._submit_to_provider(
                 provider, file_path, file_data, sha256, private
             ))
+            invoked_providers.append(provider)
         
         # Execute submissions
         if tasks:
             submission_results = await asyncio.gather(*tasks, return_exceptions=True)
-            for i, result in enumerate(submission_results):
-                provider = providers[i]
+            for provider, result in zip(invoked_providers, submission_results):
                 if isinstance(result, Exception):
                     results[provider] = SubmissionResult(
                         provider=provider,
@@ -239,6 +266,18 @@ class SandboxSubmitter:
                                    file_data: bytes, sha256: str,
                                    private: bool) -> SubmissionResult:
         """Submit to specific provider."""
+        if private and not self.PRIVATE_SUBMISSION_SUPPORT.get(provider, False):
+            message = (
+                f"Skipping {provider}: private submission was requested but "
+                "the provider does not support it"
+            )
+            logger.warning(f"[SANDBOX] {message}")
+            return SubmissionResult(
+                provider=provider,
+                success=False,
+                error_message=message
+            )
+
         api_key = self.api_keys.get(provider)
         if not api_key:
             return SubmissionResult(
@@ -679,11 +718,7 @@ def should_submit_to_sandbox(threat_score: int, verdict: str) -> bool:
     - Submit files with score 30-70 (unknown/suspicious)
     - Don't submit known clean (<30) or known malicious (>70)
     """
-    if verdict == 'CLEAN' and threat_score < 30:
-        return False  # Probably safe
-    if verdict == 'MALICIOUS' and threat_score > 70:
-        return False  # Already known malicious
-    return True
+    return 30 <= threat_score <= 70
 async def auto_submit_suspicious(file_path: str, threat_score: int,
                                   config: Dict) -> Optional[Dict]:
     """
@@ -697,16 +732,21 @@ async def auto_submit_suspicious(file_path: str, threat_score: int,
     Returns:
         Submission results or None if not submitted
     """
-    if not should_submit_to_sandbox(threat_score, 
-                                     'SUSPICIOUS' if 30 <= threat_score <= 70 else 'CLEAN'):
+    if not should_submit_to_sandbox(threat_score, 'SUSPICIOUS'):
         logger.info(f"[SANDBOX] Skipping submission for score {threat_score}")
         return None
     
     submitter = SandboxSubmitter(config)
     results = await submitter.submit_file(file_path, private=True)
     
+    no_providers_configured = (
+        len(results) == 1
+        and 'error' in results
+        and results['error'].error_message == "No sandbox providers configured"
+    )
+
     return {
-        'submitted': True,
+        'submitted': not no_providers_configured,
         'results': {
             provider: {
                 'success': result.success,
