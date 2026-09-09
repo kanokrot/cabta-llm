@@ -1212,15 +1212,30 @@ function downloadJSON() {{
         e = self._escape
         
         accordions = ""
-        rule_types = [
-            ('kql', 'KQL (Microsoft Defender / Sentinel)'),
-            ('yara', 'YARA Rule'),
-            ('sigma', 'SIGMA Rule'),
-            ('spl', 'SPL (Splunk)')
-        ]
+        titles = {
+            'kql': 'KQL (Microsoft Defender / Sentinel)',
+            'yara': 'YARA Rule',
+            'sigma': 'SIGMA Rule',
+            'spl': 'SPL (Splunk)',
+        }
+
+        # Dict insertion order keeps generator-defined formats stable while
+        # allowing new or caller-specific formats to render automatically.
+        renderable = []
+        for key, value in rules.items():
+            if value in (None, "", []):
+                continue
+            if isinstance(value, (list, tuple)):
+                value = "\n\n".join(str(rule) for rule in value)
+            elif not isinstance(value, str):
+                value = json.dumps(value, indent=2, default=str)
+            title = titles.get(key, key.replace('_', ' ').upper())
+            renderable.append((title, value))
+
+        if not renderable:
+            return ""
         
-        for i, (key, title) in enumerate(rule_types):
-            content = rules.get(key, f'No {key.upper()} rule generated')
+        for i, (title, content) in enumerate(renderable):
             accordions += f"""
             <div class="accordion-item">
                 <div class="accordion-header">
