@@ -120,7 +120,7 @@ steps:
     params:
       findings:
         persistence: "{{persistence_check}}"
-        network: "{{process_ip_reputation}}"
+        network: "{{process_ip_reputation_results}}"
         file: "{{hash_reputation_check}}"
     description: Map observed artifacts to MITRE ATT&CK techniques (e.g., T1547, T1071)
 

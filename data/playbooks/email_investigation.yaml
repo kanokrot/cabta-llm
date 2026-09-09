@@ -274,7 +274,7 @@ steps:
     params:
       analysis_result: "{{parse_email}}"
       iocs: "{{extract_email_iocs}}"
-      threat_intel: "{{threatfox_all}}"
+      threat_intel: "{{threatfox_all_results}}"
     description: >
       MALICIOUS EMAIL CONFIRMED - generate block rules:
       - Block sender domain/IP

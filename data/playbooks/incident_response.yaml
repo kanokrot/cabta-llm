@@ -225,7 +225,7 @@ steps:
       network_analysis:
         zeek: "{{zeek_log_analysis}}"
         suricata: "{{suricata_alert_analysis}}"
-        port_check: "{{suspicious_port_check}}"
+        port_check: "{{suspicious_port_check_results}}"
       timeline: "{{timeline_analysis}}"
     description: Cross-correlate all findings - determine common attack patterns and TTPs
 

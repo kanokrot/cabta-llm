@@ -167,7 +167,7 @@ steps:
     params:
       playbook: incident_response
       incident_description: "{{alert_text}}"
-      enriched_iocs: "{{threatfox_all}}"
+      enriched_iocs: "{{threatfox_all_results}}"
     description: >
       HIGH PRIORITY - Confirmed threat found.
       IOCs matched in threat intel databases.
