@@ -1423,6 +1423,10 @@ async def main():
                 print(f"\n🔬 Auto-submitting to sandboxes...")
                 submit_result = await auto_submit_suspicious(args.path, score, config)
                 
+                # TODO: `if submit_result:` is always truthy when a dict is returned, even when
+                # submit_result['submitted'] is False (e.g. no provider configured) — this prints
+                # "Submitted to sandboxes:" followed by an error, which reads as contradictory.
+                # Should branch on submit_result.get('submitted') instead of dict truthiness.
                 if submit_result:
                     print(f"   Submitted to sandboxes:")
                     for provider, data in submit_result.get('results', {}).items():

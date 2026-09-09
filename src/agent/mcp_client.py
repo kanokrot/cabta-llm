@@ -692,6 +692,7 @@ class _RawJsonRpcClient:
         resp = await self.request("initialize", {
             "protocolVersion": "2024-11-05",
             "capabilities": {},
+            # TODO: Centralize product version instead of hardcoding. Currently 1.0.0 here vs 2.0.0 in web UI — MCP handshake reports stale version.
             "clientInfo": {"name": "blue-team-agent", "version": "1.0.0"},
         })
         # Send initialized notification
@@ -763,6 +764,7 @@ class _HttpJsonRpcClient:
         resp = await self.request("initialize", {
             "protocolVersion": "2024-11-05",
             "capabilities": {},
+            # TODO: Same stale version literal as line 695 — centralize product version (currently hardcoded 1.0.0, web UI is 2.0.0).
             "clientInfo": {"name": "blue-team-agent", "version": "1.0.0"},
         })
         return resp
