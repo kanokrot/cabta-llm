@@ -1704,6 +1704,194 @@
         return output;
     }
 
+    function ruleArtifactError(response) {
+        return response.json().then(function (payload) {
+            var detail = payload && payload.detail;
+            if (detail && typeof detail === 'object') {
+                return detail.message || JSON.stringify(detail);
+            }
+            return detail || ('HTTP ' + response.status + ' - ' + response.statusText);
+        }).catch(function () {
+            return 'HTTP ' + response.status + ' - ' + response.statusText;
+        });
+    }
+
+    function ruleArtifactUrl(analysisId, ruleType, action) {
+        return '/api/reports/' + encodeURIComponent(analysisId) + '/rules/' +
+            encodeURIComponent(ruleType) + '/' + action;
+    }
+
+    function updateRuleArtifactControls(analysisId, ruleType, state) {
+        document.querySelectorAll('[data-analysis-id][data-rule-type]').forEach(function (element) {
+            if (element.getAttribute('data-analysis-id') !== analysisId ||
+                    element.getAttribute('data-rule-type') !== ruleType) return;
+            var action = element.getAttribute('data-rule-action');
+            if (action === 'download' || action === 'deploy') {
+                element.disabled = state.status !== 'approved' && state.status !== 'deployed';
+            }
+            if (element.hasAttribute('data-rule-status')) {
+                element.className = 'badge align-self-center ' +
+                    (state.status === 'deployed' ? 'text-bg-info' :
+                        (state.status === 'approved' ? 'text-bg-success' : 'text-bg-warning'));
+                element.textContent = state.status === 'deployed' ? 'Manually deployed' :
+                    (state.status === 'approved' ? 'Approved for export' : 'Pending review');
+                if (state.status === 'deployed' && state.deployed_by) {
+                    element.title = 'Marked by ' + state.deployed_by + ' at ' + state.deployed_at;
+                } else if (state.status === 'approved' && state.approved_by) {
+                    element.title = 'Approved by ' + state.approved_by + ' at ' + state.approved_at;
+                }
+            }
+        });
+    }
+
+    function saveRuleArtifact(response, fallbackFilename) {
+        return response.blob().then(function (blob) {
+            var disposition = response.headers.get('content-disposition') || '';
+            var filenameMatch = disposition.match(/filename="?([^";]+)"?/i);
+            var link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = filenameMatch ? filenameMatch[1] : fallbackFilename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(link.href);
+        });
+    }
+
+    function approveRuleArtifact(button) {
+        var analysisId = button.getAttribute('data-analysis-id');
+        var ruleType = button.getAttribute('data-rule-type');
+        var approvedBy = window.prompt('Reviewer name for this rule export approval:', 'unknown');
+        if (approvedBy === null) return;
+        button.disabled = true;
+        fetch(ruleArtifactUrl(analysisId, ruleType, 'approve'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ approved_by: approvedBy.trim() || 'unknown' })
+        }).then(function (response) {
+            if (!response.ok) {
+                return ruleArtifactError(response).then(function (message) {
+                    throw new Error(message);
+                });
+            }
+            return response.json();
+        }).then(function (state) {
+            updateRuleArtifactControls(analysisId, ruleType, state);
+            showToast(ruleType.toUpperCase() + ' rule approved for export.', 'success');
+        }).catch(function (error) {
+            showToast('Approval failed: ' + error.message, 'error');
+        }).finally(function () {
+            button.disabled = false;
+        });
+    }
+
+    function downloadRuleArtifact(button) {
+        var analysisId = button.getAttribute('data-analysis-id');
+        var ruleType = button.getAttribute('data-rule-type');
+        fetch(ruleArtifactUrl(analysisId, ruleType, 'download')).then(function (response) {
+            if (!response.ok) {
+                return ruleArtifactError(response).then(function (message) {
+                    throw new Error(message);
+                });
+            }
+            return saveRuleArtifact(response, ruleType + '.txt');
+        }).catch(function (error) {
+            showToast('Download failed: ' + error.message, 'error');
+        });
+    }
+
+    function markRuleArtifactDeployed(button) {
+        var analysisId = button.getAttribute('data-analysis-id');
+        var ruleType = button.getAttribute('data-rule-type');
+        var deployedBy = window.prompt(
+            'Name of the person recording this manual deployment:',
+            'unknown'
+        );
+        if (deployedBy === null) return;
+        fetch(ruleArtifactUrl(analysisId, ruleType, 'mark-deployed'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ deployed_by: deployedBy.trim() || 'unknown' })
+        }).then(function (response) {
+            if (!response.ok) {
+                return ruleArtifactError(response).then(function (message) {
+                    throw new Error(message);
+                });
+            }
+            return response.json();
+        }).then(function (state) {
+            updateRuleArtifactControls(analysisId, ruleType, state);
+            showToast(ruleType.toUpperCase() + ' marked as manually deployed.', 'success');
+        }).catch(function (error) {
+            showToast('Could not record deployment: ' + error.message, 'error');
+        });
+    }
+
+    function exportSelectedRuleArtifacts(button) {
+        var analysisId = button.getAttribute('data-analysis-id');
+        var selectedTypes = [];
+        document.querySelectorAll('[data-rule-select]').forEach(function (checkbox) {
+            if (checkbox.checked && checkbox.getAttribute('data-analysis-id') === analysisId) {
+                selectedTypes.push(checkbox.getAttribute('data-rule-type'));
+            }
+        });
+        if (!selectedTypes.length) {
+            showToast('Select at least one rule type.', 'error');
+            return;
+        }
+        var url = '/api/reports/' + encodeURIComponent(analysisId) +
+            '/rules/export/zip?rule_types=' + encodeURIComponent(selectedTypes.join(','));
+        fetch(url).then(function (response) {
+            if (!response.ok) {
+                return ruleArtifactError(response).then(function (message) {
+                    throw new Error(message);
+                });
+            }
+            return saveRuleArtifact(
+                response,
+                'analysis-' + analysisId + '-detection-rules.zip'
+            );
+        }).catch(function (error) {
+            showToast('ZIP export failed: ' + error.message, 'error');
+        });
+    }
+
+    function initializeRuleArtifactControls() {
+        var seen = {};
+        document.querySelectorAll('[data-rule-status]').forEach(function (element) {
+            var analysisId = element.getAttribute('data-analysis-id');
+            var ruleType = element.getAttribute('data-rule-type');
+            var stateKey = analysisId + ':' + ruleType;
+            if (seen[stateKey]) return;
+            seen[stateKey] = true;
+            fetch(ruleArtifactUrl(analysisId, ruleType, 'status'))
+                .then(function (response) {
+                    if (!response.ok) throw new Error('HTTP ' + response.status);
+                    return response.json();
+                })
+                .then(function (state) {
+                    updateRuleArtifactControls(analysisId, ruleType, state);
+                })
+                .catch(function () { /* Keep the pending-review defaults. */ });
+        });
+
+        document.querySelectorAll('[data-rule-action]').forEach(function (button) {
+            button.addEventListener('click', function () {
+                var action = button.getAttribute('data-rule-action');
+                if (action === 'approve') approveRuleArtifact(button);
+                if (action === 'download') downloadRuleArtifact(button);
+                if (action === 'deploy') markRuleArtifactDeployed(button);
+                if (action === 'zip') exportSelectedRuleArtifacts(button);
+            });
+        });
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initializeRuleArtifactControls);
+    } else {
+        initializeRuleArtifactControls();
+    }
+
     // Expose callback-based analysis functions globally for template inline scripts
     window.startIOCAnalysis = startIOCAnalysis;
     window.startFileAnalysis = startFileAnalysis;

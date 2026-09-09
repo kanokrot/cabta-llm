@@ -46,6 +46,8 @@
     .rule-wrapper { position: relative; }
     .rule-wrapper > pre { padding-top: 3rem; }
     .rule-copy-actions { position: absolute; top: 0.5rem; right: 0.5rem; display: flex; gap: 0.35rem; z-index: 2; }
+    .rule-export-actions { position: static; justify-content: flex-end; flex-wrap: wrap; margin-bottom: 0.5rem; }
+    .rule-export-actions + pre { padding-top: 1rem; }
     .kv-table td:first-child {
         width: 200px; font-weight: 600;
         color: var(--text-secondary, #94a3b8); font-size: 0.82rem; white-space: nowrap;
@@ -1384,6 +1386,25 @@
             {% if detection_rules is mapping %}
                 {# Build tabs dynamically from dict keys — FIX: iterate items() not list #}
                 {% set rule_items = detection_rules.items() | list %}
+                <div class="d-flex flex-wrap align-items-center gap-2 mb-3 no-print">
+                    <span class="small text-muted me-1">Export selection:</span>
+                    {% for rule_type, rule_content in rule_items %}
+                    {% if rule_content %}
+                    <label class="form-check form-check-inline mb-0">
+                        <input class="form-check-input" type="checkbox" checked
+                               data-rule-select
+                               data-analysis-id="{{ job.id | e }}"
+                               data-rule-type="{{ rule_type | lower | e }}">
+                        <span class="form-check-label small">{{ rule_type | upper | e }}</span>
+                    </label>
+                    {% endif %}
+                    {% endfor %}
+                    <button class="btn btn-sm btn-outline-primary ms-auto"
+                            data-rule-action="zip"
+                            data-analysis-id="{{ job.id | e }}">
+                        <i class="bi bi-file-earmark-zip me-1"></i>Export selected as ZIP
+                    </button>
+                </div>
                 <ul class="nav nav-tabs mb-0" id="ruleTabs" role="tablist">
                     {% for rule_type, rule_content in rule_items %}
                     {% if rule_content %}
@@ -1403,7 +1424,7 @@
                     <div class="tab-pane fade {% if loop.first %}show active{% endif %}"
                         id="tabpane-{{ loop.index }}" role="tabpanel">
                         <div class="rule-wrapper">
-                            <div class="rule-copy-actions no-print">
+                            <div class="rule-copy-actions rule-export-actions no-print">
                                 <button class="btn btn-sm btn-outline-secondary copy-btn"
                                         data-rule-id="rulecode-{{ loop.index }}"
                                         title="Copy {{ rule_type | upper | e }} rule">
@@ -1414,6 +1435,29 @@
                                         data-copy-format="{{ rule_type | e }}"
                                         title="Copy as a Markdown code block">
                                     <i class="bi bi-markdown me-1"></i>Copy format
+                                </button>
+                                <span class="badge text-bg-warning align-self-center"
+                                      data-rule-status
+                                      data-analysis-id="{{ job.id | e }}"
+                                      data-rule-type="{{ rule_type | lower | e }}">Pending review</span>
+                                <button class="btn btn-sm btn-outline-success"
+                                        data-rule-action="approve"
+                                        data-analysis-id="{{ job.id | e }}"
+                                        data-rule-type="{{ rule_type | lower | e }}">
+                                    <i class="bi bi-check-circle me-1"></i>Approve export
+                                </button>
+                                <button class="btn btn-sm btn-outline-primary" disabled
+                                        data-rule-action="download"
+                                        data-analysis-id="{{ job.id | e }}"
+                                        data-rule-type="{{ rule_type | lower | e }}">
+                                    <i class="bi bi-download me-1"></i>Download
+                                </button>
+                                <button class="btn btn-sm btn-outline-info" disabled
+                                        data-rule-action="deploy"
+                                        data-analysis-id="{{ job.id | e }}"
+                                        data-rule-type="{{ rule_type | lower | e }}"
+                                        title="Record a manual deployment; this does not contact an external system">
+                                    <i class="bi bi-person-check me-1"></i>Mark as Deployed
                                 </button>
                             </div>
                             <pre id="rulecode-{{ loop.index }}"><code>{{ rule_content | e }}</code></pre>
