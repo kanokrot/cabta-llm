@@ -41,6 +41,7 @@ def test_for_each_conditions_use_any_malicious_keys(builtin_playbooks):
 
     assert "{{process_ip_reputation.malicious}}" not in forensic_condition
     assert "process_ip_reputation_any_malicious == true" in forensic_condition
+    assert "{{persistence_check_collection_error}}" in forensic_condition
 
     assert "{{url_check.malicious}}" not in phishing_condition
     assert "{{attachment_hash_check.malicious}}" not in phishing_condition

@@ -220,6 +220,35 @@ def _resolve_var(var_path: str, context: Dict) -> Any:
     return obj
 
 
+def _tool_call_ended_in_error(result: Any) -> bool:
+    """Return whether a single tool result represents a collection failure."""
+    if not isinstance(result, dict):
+        return False
+
+    if result.get("status") == "error" or result.get("error") not in (None, ""):
+        return True
+
+    inner = result.get("result")
+    if not isinstance(inner, dict):
+        return False
+    return (
+        inner.get("status") == "error"
+        or inner.get("error") not in (None, "")
+    )
+
+
+def _store_single_step_result(
+    context: Dict[str, Any], step_name: str, result: Any,
+) -> None:
+    """Expose a single tool call's result and reusable collection-error flag."""
+    context[step_name] = result
+    context["last_result"] = result
+    if isinstance(result, dict):
+        for key, val in result.items():
+            context[f"{step_name}_{key}"] = val
+    context[f"{step_name}_collection_error"] = _tool_call_ended_in_error(result)
+
+
 def safe_evaluate_condition(condition: str, context: Dict) -> bool:
     """
     Evaluate a step condition safely WITHOUT using eval().
@@ -1086,11 +1115,7 @@ class PlaybookEngine:
                         "[PLAYBOOK] Notification dispatch failed: %s", notify_exc,
                     )
 
-            context[pending_step.name] = result
-            context["last_result"] = result
-            if isinstance(result, dict):
-                for key, val in result.items():
-                    context[f"{pending_step.name}_{key}"] = val
+            _store_single_step_result(context, pending_step.name, result)
 
             success = not (isinstance(result, dict) and "error" in result)
             next_step_name = pending_step.on_success if success else pending_step.on_failure
@@ -1489,13 +1514,7 @@ class PlaybookEngine:
                     )
 
                     # Store result in context
-                    context[current_step.name] = result
-                    context["last_result"] = result
-
-                    # Also expose nested result fields
-                    if isinstance(result, dict):
-                        for key, val in result.items():
-                            context[f"{current_step.name}_{key}"] = val
+                    _store_single_step_result(context, current_step.name, result)
 
                     # Determine next step
                     success = not (isinstance(result, dict) and "error" in result)

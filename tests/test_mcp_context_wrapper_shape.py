@@ -91,6 +91,7 @@ async def test_mcp_result_wrapper_is_stored_in_playbook_context(tmp_path):
     context = captured["context"]
     assert context["collect_processes"] == wrapped_response
     assert context["collect_processes"]["result"]["data"]["host"] == "192.0.2.10"
+    assert context["collect_processes_collection_error"] is False
     assert _resolve_var("collect_processes.result.data.host", context) == "192.0.2.10"
     assert _resolve_var("collect_processes.data.host", context) == "192.0.2.10"
 
