@@ -217,6 +217,7 @@ class IntelligentScoring:
             "sources_unavailable": 0,
             "sources_stale": 0,
             "total_sources_attempted": 0,
+            "sources_skipped_not_applicable": 0,
         }
 
         sources = intel_results.get('sources', {})
@@ -225,6 +226,18 @@ class IntelligentScoring:
 
         for source_data in sources.values():
             if not isinstance(source_data, dict):
+                continue
+
+            status = str(source_data.get('status', '')).strip()
+            reason = str(
+                source_data.get('error') or source_data.get('message') or ''
+            ).strip().lower()
+            if (
+                source_data.get('not_applicable') is True
+                or status == '➖'
+                or reason == 'not applicable'
+            ):
+                coverage["sources_skipped_not_applicable"] += 1
                 continue
 
             coverage["total_sources_attempted"] += 1

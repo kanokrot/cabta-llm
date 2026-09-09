@@ -911,6 +911,14 @@ class ThreatIntelligence:
           
             tasks.append(('triage', self.extended.check_triage(ioc)))
             tasks.append(('threatzone', self.extended.check_threatzone(ioc)))
+
+        # A source is attempted only when a task was created for this IOC type.
+        # Mark every untouched placeholder explicitly so downstream coverage
+        # accounting does not mistake it for a clean response.
+        attempted_source_names = {name for name, _ in tasks}
+        for name, source_result in results.items():
+            if name not in attempted_source_names:
+                source_result['not_applicable'] = True
         
         # Execute all checks with timeout
         import asyncio
@@ -976,9 +984,9 @@ class ThreatIntelligence:
         
         avg_score = int(total_score / score_count) if score_count > 0 else 0
         
-        # Count actually checked sources (not "Not applicable")
-        sources_checked = sum(1 for r in results.values() 
-                             if isinstance(r, dict) and r.get('error') != 'Not applicable')
+        # Count sources for which a query task was actually created.  This
+        # includes error/timeout responses, but excludes not-applicable sources.
+        sources_checked = len(attempted_source_names)
         
         return {
             'ioc': ioc,

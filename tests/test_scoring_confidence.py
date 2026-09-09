@@ -1,3 +1,5 @@
+import pytest
+
 from src.scoring.intelligent_scoring import IntelligentScoring
 
 
@@ -33,6 +35,7 @@ def test_all_sources_flagged_high_coverage():
         "sources_unavailable": 0,
         "sources_stale": 0,
         "total_sources_attempted": 2,
+        "sources_skipped_not_applicable": 0,
     }
 
 
@@ -67,6 +70,7 @@ def test_timeout_without_cache_counted_unavailable():
         "sources_unavailable": 1,
         "sources_stale": 0,
         "total_sources_attempted": 1,
+        "sources_skipped_not_applicable": 0,
     }
 
 
@@ -94,6 +98,7 @@ def test_timeout_with_cache_counted_stale_and_scored():
         "sources_unavailable": 0,
         "sources_stale": 2,
         "total_sources_attempted": 2,
+        "sources_skipped_not_applicable": 0,
     }
 
 
@@ -124,4 +129,67 @@ def test_core_integration_missing_api_key_counted_unavailable_control():
     })
 
     assert coverage["sources_unavailable"] == 1
+    assert coverage["sources_clean"] == 0
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "IP only",
+        "URL only",
+        "Hash only",
+        "Domain/IP only",
+        "URL/Domain",
+        "Domain only",
+    ],
+)
+def test_not_applicable_placeholder_status_is_excluded(message):
+    coverage = IntelligentScoring.calculate_source_coverage({
+        "sources": {
+            "placeholder": {"status": "➖", "message": message},
+        }
+    })
+
+    assert coverage == {
+        "sources_flagged": 0,
+        "sources_clean": 0,
+        "sources_unavailable": 0,
+        "sources_stale": 0,
+        "total_sources_attempted": 0,
+        "sources_skipped_not_applicable": 1,
+    }
+
+
+def test_explicit_not_applicable_marker_excludes_pending_placeholder():
+    coverage = IntelligentScoring.calculate_source_coverage({
+        "sources": {
+            "c2_trackers": {
+                "status": "⏳",
+                "message": "Pending",
+                "not_applicable": True,
+            },
+        }
+    })
+
+    assert coverage["sources_skipped_not_applicable"] == 1
+    assert coverage["total_sources_attempted"] == 0
+    assert coverage["sources_clean"] == 0
+
+
+@pytest.mark.parametrize(
+    ("reason_key", "reason_value"),
+    [
+        ("message", "Not applicable"),
+        ("error", "Not applicable"),
+    ],
+)
+def test_legacy_not_applicable_reason_is_excluded(reason_key, reason_value):
+    coverage = IntelligentScoring.calculate_source_coverage({
+        "sources": {
+            "legacy_source": {reason_key: reason_value},
+        }
+    })
+
+    assert coverage["sources_skipped_not_applicable"] == 1
+    assert coverage["total_sources_attempted"] == 0
     assert coverage["sources_clean"] == 0
