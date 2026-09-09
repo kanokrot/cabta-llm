@@ -142,6 +142,52 @@ async def quarantine_file(file_path: str, **_kw) -> Dict[str, Any]:
     local path), records "simulated, source file not found" instead of
     raising.
     """
+    if not isinstance(file_path, str):
+        return {
+            "status": "error",
+            "simulated": True,
+            "error": f"file_path must be a string, got {type(file_path).__name__}",
+        }
+
+    import ipaddress
+    import re
+
+    common_file_extensions = {
+        "7z", "bat", "bin", "bmp", "bz2", "cfg", "cmd", "conf", "csv",
+        "dat", "dll", "doc", "docx", "eml", "exe", "gif", "gz", "htm",
+        "html", "ini", "jpeg", "jpg", "js", "json", "log", "md", "msg",
+        "pcap", "pcapng", "pdf", "png", "ppt", "pptx", "ps1", "py", "rar",
+        "rtf", "sh", "svg", "sys", "tar", "ts", "txt", "xls", "xlsx",
+        "xml", "xz", "yaml", "yml", "zip",
+    }
+    has_path_separator = "/" in file_path or "\\" in file_path
+    is_hex_hash = (
+        not has_path_separator
+        and re.fullmatch(r"(?:[0-9a-fA-F]{32}|[0-9a-fA-F]{40}|[0-9a-fA-F]{64})", file_path)
+        is not None
+    )
+    try:
+        is_ip_address = ipaddress.ip_address(file_path) is not None
+    except ValueError:
+        is_ip_address = False
+
+    suffix = file_path.rsplit(".", 1)[-1].lower() if "." in file_path else ""
+    is_domain_like = (
+        not has_path_separator
+        and suffix not in common_file_extensions
+        and re.fullmatch(
+            r"(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,63}",
+            file_path,
+        )
+        is not None
+    )
+    if is_hex_hash or is_ip_address or is_domain_like:
+        return {
+            "status": "error",
+            "simulated": True,
+            "error": f"file_path appears to be an IOC, not a filesystem path: {file_path}",
+        }
+
     try:
         quarantine_dir = _SIMULATED_ACTIONS_DIR / "quarantine"
         quarantine_dir.mkdir(parents=True, exist_ok=True)
