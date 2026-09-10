@@ -300,7 +300,14 @@ class IOCInvestigator:
                 if domain_age.get('is_newly_registered'):
                     rag_query_parts.append('newly_registered')
                 rag_query = ' '.join(rag_query_parts)
-                rag_hits = self.rag_kb.query(rag_query, max_distance=0.60)
+                rag_hits = self.rag_kb.query(
+                    rag_query,
+                    max_distance=0.60,
+                    metadata_filter={
+                        'verdict': verdict.upper(),
+                        'ioc_type': {'$in': [ioc_type, 'any']},
+                    },
+                )
             except Exception as exc:
                 logger.warning(f"[IOC] RAG query failed (non-fatal): {exc}")
                 rag_hits = []

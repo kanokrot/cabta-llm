@@ -195,6 +195,7 @@ class RAGKnowledgeBase:
         n_results: int = 3,
         category_filter: Optional[str] = None,
         max_distance: Optional[float] = None,
+        metadata_filter: Optional[Dict] = None,
     ) -> List[Dict]:
         """
         ค้นหาเอกสารที่เกี่ยวข้องที่สุดกับ query_text (semantic similarity search)
@@ -204,28 +205,56 @@ class RAGKnowledgeBase:
             n_results: จำนวนผลลัพธ์สูงสุดที่ต้องการ
             category_filter: กรองเฉพาะ category เช่น "playbook" หรือ "mitre_mapping"
             max_distance: cosine distance สูงสุดที่ยอมรับ ถ้าไม่ระบุจะไม่กรอง
+            metadata_filter: additional Chroma metadata fields to match
 
         Returns:
             list ของ dict {"text": ..., "metadata": ..., "distance": ...}
             เรียงจาก relevant มากไปน้อย (distance ยิ่งน้อยยิ่งใกล้เคียง)
         """
-        where = {"category": category_filter} if category_filter else None
+        # Chroma requires a single root expression for multi-field filters.
+        conditions = []
+        if category_filter:
+            conditions.append({"category": category_filter})
+        if metadata_filter:
+            conditions.extend(
+                {field: value}
+                for field, value in metadata_filter.items()
+                if value is not None and value != ""
+            )
 
-        results = self._collection.query(
-            query_texts=[query_text],
-            n_results=n_results,
-            where=where,
-        )
+        if len(conditions) == 1:
+            where = conditions[0]
+        elif conditions:
+            where = {"$and": conditions}
+        else:
+            where = None
 
-        hits = []
-        docs = results.get("documents", [[]])[0]
-        metas = results.get("metadatas", [[]])[0]
-        dists = results.get("distances", [[]])[0]
+        def _vector_search(query_filter: Optional[Dict]) -> List[Dict]:
+            results = self._collection.query(
+                query_texts=[query_text],
+                n_results=n_results,
+                where=query_filter,
+            )
 
-        for text, meta, dist in zip(docs, metas, dists):
-            if max_distance is not None and dist > max_distance:
-                continue
-            hits.append({"text": text, "metadata": meta, "distance": dist})
+            hits = []
+            docs = results.get("documents", [[]])[0]
+            metas = results.get("metadatas", [[]])[0]
+            dists = results.get("distances", [[]])[0]
+
+            for text, meta, dist in zip(docs, metas, dists):
+                if max_distance is not None and dist > max_distance:
+                    continue
+                hits.append({"text": text, "metadata": meta, "distance": dist})
+            return hits
+
+        hits = _vector_search(where)
+        if where is not None and not hits:
+            logger.debug(
+                "[RAG] Filtered query returned no hits for where=%s; "
+                "falling back to unfiltered vector search",
+                where,
+            )
+            hits = _vector_search(None)
 
         logger.info(f"[RAG] Query '{query_text[:50]}...' -> {len(hits)} hits")
         return hits
