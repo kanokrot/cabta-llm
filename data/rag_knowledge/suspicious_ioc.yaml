@@ -1,5 +1,5 @@
 - id: playbook_suspicious_ioc_001
-  text: >
+  text: |
     เมื่อ IOC ได้รับ verdict เป็น SUSPICIOUS, ให้เน้นการเฝ้าระวังและวิเคราะห์ตามแนวทาง NIST SP 800-61 Rev. 3 (Detect & Identify Functions):
     1. **Enhanced Monitoring (เพิ่มการเฝ้าระวัง):**
        - เพิ่ม IOC เข้าสู่ monitoring watchlist ใน SIEM/EDR เพื่อติดตามกิจกรรมที่เกี่ยวข้องเป็นพิเศษ

@@ -1,5 +1,5 @@
 - id: playbook_newly_registered_domain
-  text: >
+  text: |
     Domain ที่เพิ่งจดทะเบียนเป็น indicator ที่ต้องให้ความสนใจเป็นพิเศษในการทำ enrichment และ threat hunting:
     - **High-Risk Indicator:** Domain ที่มีอายุต่ำกว่า 30-60 วันมักมีความเสี่ยงสูงกว่าปกติ เนื่องจากผู้โจมตีมักใช้ domain ที่เพิ่งจดทะเบียนใหม่สำหรับแคมเปญ Phishing หรือ C2 server เพื่อหลีกเลี่ยง reputation-based blocking.
     - **Correlation with DGA:** หาก domain ที่เพิ่งจดทะเบียนใหม่มีลักษณะเป็น Domain Generation Algorithm (DGA) (เช่น entropy สูง, รูปแบบสุ่ม), ความเสี่ยงจะยิ่งสูงขึ้นมาก เพราะเป็นเทคนิคที่ botnet ส่วนใหญ่ใช้ในการติดต่อกับ C2 server.

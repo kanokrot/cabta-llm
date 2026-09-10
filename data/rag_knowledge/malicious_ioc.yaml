@@ -1,5 +1,5 @@
 - id: playbook_malicious_ioc_001
-  text: >
+  text: |
     เมื่อ IOC ได้รับการยืนยันว่าเป็น MALICIOUS, ให้ปฏิบัติตามกระบวนการจัดการเหตุการณ์ตามแนวทาง NIST SP 800-61 Rev. 3 ดังนี้
     1. **Respond Function (การตอบสนองต่อเหตุการณ์)**
        - **Containment (จำกัดความเสียหาย):**
