@@ -178,6 +178,7 @@ def validate_llm_analysis(
     all_known_sources: Optional[list] = None,
     ioc_type: Optional[str] = None,
     rag_context: Optional[list] = None,
+    authoritative_verdict: Optional[str] = None,
 ) -> Dict:
     """
     Entry point เดียวที่ llm_analyzer.py เรียกใช้
@@ -190,6 +191,8 @@ def validate_llm_analysis(
         all_known_sources: list ของ source names ทั้งหมด (ถ้าไม่ส่งมา จะข้ามการเช็ค hallucination)
         ioc_type: ประเภท IOC ปัจจุบัน
         rag_context: RAG entries ที่ถูกดึงมาใช้ในรอบนี้
+        authoritative_verdict: Final deterministic verdict already computed by
+            the caller. When omitted, fall back to deriving it from threat_score.
 
     Returns:
         llm_result ที่ผ่านการ validate ครบทุกชั้นแล้ว
@@ -198,8 +201,10 @@ def validate_llm_analysis(
         return llm_result
 
     # ชั้น 1: บังคับ verdict ให้ตรงกับ scoring engine
-    if threat_score is not None:
+    if authoritative_verdict is None and threat_score is not None:
         authoritative_verdict = compute_authoritative_verdict(threat_score)
+
+    if authoritative_verdict is not None:
         llm_result = enforce_verdict_consistency(llm_result, authoritative_verdict)
 
     # ชั้น 2: เช็ค hallucination ของ source names

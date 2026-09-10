@@ -310,7 +310,11 @@ class IOCInvestigator:
         if self.config.get('analysis', {}).get('enable_llm', True):
             try:
                 llm_analysis = await self.llm_analyzer.analyze_ioc_results(
-                    ioc, ioc_type, intel_results, rag_context=rag_hits
+                    ioc,
+                    ioc_type,
+                    intel_results,
+                    rag_context=rag_hits,
+                    authoritative_verdict=verdict,
                 )
                 if llm_analysis is None:
                     llm_analysis = {'note': 'LLM unavailable - results based on threat intelligence only'}

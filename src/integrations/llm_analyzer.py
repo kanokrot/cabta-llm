@@ -75,7 +75,12 @@ class LLMAnalyzer:
         logger.info(f"[LLM] Provider: {self.provider} | Model: {_model_map.get(self.provider, self.anthropic_model)}")
 
     async def analyze_ioc_results(
-        self, ioc: str, ioc_type: str, results: Dict, rag_context: Optional[list] = None
+        self,
+        ioc: str,
+        ioc_type: str,
+        results: Dict,
+        rag_context: Optional[list] = None,
+        authoritative_verdict: Optional[str] = None,
     ) -> Dict:
         """
         Analyze IOC investigation results using LLM.
@@ -85,6 +90,8 @@ class LLMAnalyzer:
             ioc_type: IOC type
             results: Investigation results from all sources
             rag_context: Optional list of retrieved knowledge base entries
+            authoritative_verdict: Final coverage-aware verdict from the IOC
+                investigator
 
         Returns:
             LLM analysis with verdict and recommendations
@@ -166,7 +173,9 @@ Keep it concise and factual."""
                     threat_score=results.get('threat_score', 0),
                     all_known_sources=ALL_TI_SOURCES,
                     ioc_type=ioc_type,
-                    rag_context=rag_context,)
+                    rag_context=rag_context,
+                    authoritative_verdict=authoritative_verdict,
+                )
                 return response_data
             else:
                 return {'error': 'Failed to get LLM response', 'provider': self.provider}
