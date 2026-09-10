@@ -31,13 +31,58 @@ def test_extract_ips_from_ss_output_returns_unique_remote_peers():
 Netid State Recv-Q Send-Q Local Address:Port Peer Address:Port Process
 tcp ESTAB 0 0 10.0.0.5:22 198.51.100.20:54321 users:((\"sshd\",pid=10,fd=4))
 tcp ESTAB 0 0 10.0.0.5:443 [2001:db8::25]:51000 users:((\"nginx\",pid=20,fd=7))
-udp UNCONN 0 0 10.0.0.5:53 198.51.100.20:53000 users:((\"dns\",pid=30,fd=8))
+udp UNCONN 0 0 10.0.0.5:53 203.0.113.53:53000 users:((\"dns\",pid=30,fd=8))
 """
 
     assert _extract_ips_from_ss_output(raw_output) == [
         "198.51.100.20",
         "2001:db8::25",
+        "203.0.113.53",
     ]
+
+
+def test_extract_ips_from_ss_output_includes_udp_unconn_real_peer():
+    raw_output = """\
+Netid State Recv-Q Send-Q Local Address:Port Peer Address:Port Process
+udp UNCONN 0 0 10.0.0.5:53000 198.51.100.53:53 users:((\"beacon\",pid=30,fd=8))
+"""
+
+    assert _extract_ips_from_ss_output(raw_output) == ["198.51.100.53"]
+
+
+def test_extract_ips_from_ss_output_filters_udp_unconn_wildcard_peers():
+    raw_output = """\
+Netid State Recv-Q Send-Q Local Address:Port Peer Address:Port Process
+udp UNCONN 0 0 10.0.0.5:53000 * users:((\"dns-a\",pid=30,fd=8))
+udp UNCONN 0 0 10.0.0.5:53001 0.0.0.0:* users:((\"dns-b\",pid=31,fd=9))
+udp UNCONN 0 0 [2001:db8::5]:53002 [::]:* users:((\"dns-c\",pid=32,fd=10))
+udp UNCONN 0 0 127.0.0.1:53003 127.0.0.1:53 users:((\"dns-d\",pid=33,fd=11))
+udp UNCONN 0 0 [::1]:53004 [::1]:53 users:((\"dns-e\",pid=34,fd=12))
+"""
+
+    assert _extract_ips_from_ss_output(raw_output) == []
+
+
+def test_extract_ips_from_ss_output_includes_udp_established_peer():
+    raw_output = """\
+Netid State Recv-Q Send-Q Local Address:Port Peer Address:Port Process
+udp ESTAB 0 0 10.0.0.5:53000 198.51.100.54:53 users:((\"dns\",pid=30,fd=8))
+"""
+
+    assert _extract_ips_from_ss_output(raw_output) == ["198.51.100.54"]
+
+
+def test_extract_ips_from_ss_output_mixed_protocols_preserve_tcp_and_dedup():
+    raw_output = """\
+Netid State Recv-Q Send-Q Local Address:Port Peer Address:Port Process
+tcp ESTAB 0 0 10.0.0.5:443 198.51.100.20:51000 users:((\"https\",pid=10,fd=4))
+udp UNCONN 0 0 10.0.0.5:53000 198.51.100.20:53 users:((\"dns\",pid=20,fd=5))
+udp UNCONN 0 0 10.0.0.5:53001 0.0.0.0:* users:((\"listener\",pid=30,fd=6))
+tcp LISTEN 0 128 10.0.0.5:8080 203.0.113.99:40000 users:((\"app\",pid=40,fd=7))
+raw ESTAB 0 0 10.0.0.5:1 192.0.2.99:1 users:((\"raw\",pid=50,fd=8))
+"""
+
+    assert _extract_ips_from_ss_output(raw_output) == ["198.51.100.20"]
 
 
 def test_extract_ips_from_ss_output_filters_local_and_wildcard_peers():
@@ -427,7 +472,7 @@ def test_system_info_collect_reports_bad_host_key(
     ("tool", "kwargs", "command", "data_key", "output"),
     [
         (process_list_collect, {}, "ps aux", "process_list", "root 1 init"),
-        (netstat_collect, {}, "ss -tanp", "network_connections", "LISTEN 0 128"),
+        (netstat_collect, {}, "ss -tuanp", "network_connections", "LISTEN 0 128"),
         (
             event_log_collect,
             {"time_range": "last_24h"},

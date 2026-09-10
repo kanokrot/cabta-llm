@@ -230,10 +230,10 @@ The connection must match `host` and `username`, and the caller-supplied `key_pa
 |---|---|---|
 | `system_info_collect` | `uname -a`, `hostname`, `uptime` | System identity and uptime |
 | `process_list_collect` | `ps aux` | Raw process snapshot |
-| `netstat_collect` | `ss -tanp` | Raw TCP states plus unique validated peer IPs from `ESTAB` rows |
+| `netstat_collect` | `ss -tuanp` | Raw TCP/UDP states plus unique validated peers from TCP `ESTAB` and UDP `ESTAB`/`UNCONN`; UDP peers reflect kernel connectionless tracking and may be less definitive than TCP `ESTAB` |
 | `event_log_collect` | `journalctl --since ... --no-pager` | Raw journal text for a named time range |
 
-Raw network output retains LISTEN and other states; `remote_ips` contains only non-loopback, non-unspecified ESTAB peers. Empty or malformed output yields `[]`. Stable `{status, error, data}` errors cover allowlist, key, known-host, authentication, timeout, and SSH failures without returning credentials.
+Raw network output retains LISTEN and other states; `remote_ips` contains only non-loopback, non-unspecified TCP `ESTAB` or UDP `ESTAB`/`UNCONN` peers. Empty or malformed output yields `[]`. Stable `{status, error, data}` errors cover allowlist, key, known-host, authentication, timeout, and SSH failures without returning credentials.
 
 ## 11. Analysis modules
 
@@ -284,7 +284,7 @@ The known failures were the unsuffixed `for_each` result reference, URLhaus dire
 - Web/OpenAPI exposes product version 2.0.0, while stale 1.0.0 metadata remains in separate source, MCP identity, and report-footer locations.
 - `config.yaml.example` does not yet cover every optional runtime section documented here.
 - Remote collection is Linux-specific and unusable while `remote_hosts` is empty.
-- `ss` parsing assumes standard iproute2 columns and enriches only ESTAB peers; TIME-WAIT/CLOSE-WAIT remain only in raw output.
+- `ss` parsing assumes standard iproute2 columns and enriches TCP `ESTAB` plus UDP `ESTAB`/`UNCONN` peers; other states remain only in raw output.
 - Event-log time ranges use a small named mapping and otherwise default to 24 hours.
 - Some MCP modules require unconfigured external tools or services.
 - The unsuffixed `for_each` aggregate-reference bug remains separate from MCP wrapper resolution.

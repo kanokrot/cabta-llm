@@ -88,7 +88,16 @@ def _extract_ips_from_ss_output(raw_output: str) -> list[str]:
         columns = line.split()
         if len(columns) < 6 or columns[0].lower() == "netid":
             continue
-        if columns[1].casefold() != "estab":
+
+        netid = columns[0].casefold()
+        state = columns[1].casefold()
+        if netid == "tcp":
+            if state != "estab":
+                continue
+        elif netid == "udp":
+            if state not in {"estab", "unconn"}:
+                continue
+        else:
             continue
 
         peer_endpoint = columns[5]
@@ -303,7 +312,7 @@ def netstat_collect(
         port: SSH service port (default 22).
     """
     result = _collect_remote_commands(
-        host, username, key_path, port, {"network_connections": "ss -tanp"}
+        host, username, key_path, port, {"network_connections": "ss -tuanp"}
     )
     if result["status"] == "error":
         return result
