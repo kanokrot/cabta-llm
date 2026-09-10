@@ -1,0 +1,23 @@
+{
+  "verdict_coverage": {
+    "MALICIOUS": 1,
+    "SUSPICIOUS": 1,
+    "CLEAN": 0,
+    "UNKNOWN": 0,
+    "PHISHING": 1,
+    "SPAM": 0
+  },
+  "ioc_type_coverage": {
+    "ipv4": 2,
+    "domain": 2,
+    "url": 2,
+    "md5": 2,
+    "sha1": 2,
+    "sha256": 2,
+    "email": 3,
+    "unknown": 2
+  },
+  "unreachable_category": [
+    "mitre_mapping"
+  ]
+}
