@@ -15,7 +15,18 @@
        - สำหรับผู้ใช้ที่ตกเป็นเหยื่อ, ให้ทำการ reset credentials และตรวจสอบกิจกรรมที่น่าสงสัยในบัญชี
        - ส่ง phishing email ตัวอย่าง (พร้อม header) ให้ทีม Threat Intelligence เพื่อวิเคราะห์และปรับปรุงระบบป้องกัน
   metadata:
+    schema_version: "cabta-rag-provenance/1"
+    citation_id: playbook_phishing_email
+    knowledge_type: course_of_action
     category: playbook
     verdict: PHISHING
     ioc_type: email
     source: "Aligned with NIST SP 800-61 Rev. 3 (CSF 2.0 Respond/Recover Functions) and CISA guidelines"
+    source_name: "NIST"
+    source_url: "https://csrc.nist.gov/pubs/sp/800/61/r3/final"
+    source_version: "SP 800-61 Rev. 3"
+    confidence: 80
+    tlp: "TLP:CLEAR"
+    created: "2026-08-09T05:07:48Z"
+    modified: "2026-09-10T17:15:26Z"
+    revoked: false
