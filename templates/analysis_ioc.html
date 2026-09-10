@@ -655,6 +655,25 @@
         margin: 0.1rem;
     }
 
+    .source-detail-responsive-row {
+        grid-column: 1 / -1;
+    }
+
+    .domain-enrichment-details > summary,
+    .rag-reference-details > summary {
+        cursor: pointer;
+        color: var(--bs-secondary-color);
+        font-size: 0.75rem;
+    }
+    .rag-reference-text {
+        max-height: 18rem;
+        overflow: auto;
+        white-space: pre-wrap;
+        word-break: break-word;
+        margin: 0.5rem 0 0;
+        font-size: 0.78rem;
+    }
+
     /* ── Bulk IOC Cards ── */
     .bulk-ioc-card {
         border: 1px solid rgba(255,255,255,0.08);
@@ -1561,6 +1580,176 @@
         return c2;
     }
 
+    function renderMalwareFamily(data) {
+        if (!data || data.malware_family === undefined || data.malware_family === null) return '';
+        var family = String(data.malware_family).trim();
+        if (!family || family.toLowerCase() === 'unknown') return '';
+        return '<div class="ioc-detail-row"><span class="ioc-detail-label">Malware Family</span>' +
+            '<span class="ioc-detail-value">' + escHtml(String(family)) + '</span></div>';
+    }
+
+    function renderCoverageSection(data) {
+        var coverage = data && data.coverage;
+        if (!coverage || typeof coverage !== 'object' || Array.isArray(coverage)) return '';
+
+        var fields = [
+            { key: 'sources_flagged', label: 'Sources flagged' },
+            { key: 'sources_clean', label: 'Sources clean' },
+            { key: 'sources_unavailable', label: 'Sources unavailable' },
+            { key: 'sources_stale', label: 'Sources stale' },
+            { key: 'total_sources_attempted', label: 'Total sources attempted' }
+        ];
+        if (coverage.sources_skipped_not_applicable !== undefined && coverage.sources_skipped_not_applicable !== null) {
+            fields.push({
+                key: 'sources_skipped_not_applicable',
+                label: 'Skipped (not applicable to this IOC type)'
+            });
+        }
+
+        var items = '';
+        fields.forEach(function(field) {
+            var value = coverage[field.key];
+            if (value === undefined || value === null || value === '') return;
+            var displayValue = typeof value === 'boolean' ? (value ? 'Yes' : 'No') : ((typeof value === 'object') ? JSON.stringify(value, null, 2) : String(value));
+            items += '<div class="col-12 col-md-6 source-detail-item">' +
+                '<span class="source-detail-key">' + escHtml(String(field.label)) + '</span>' +
+                '<span class="source-detail-val">' + escHtml(String(displayValue)) + '</span></div>';
+        });
+        if (!items) return '';
+
+        return '<div class="mt-3 pt-3 border-top">' +
+            '<h6 class="mb-2"><i class="bi bi-broadcast-pin me-2"></i>Source Coverage</h6>' +
+            '<div class="source-detail-grid"><div class="row g-2 source-detail-responsive-row">' + items + '</div></div></div>';
+    }
+
+    function renderDomainEnrichmentSection(data) {
+        var enrichment = data && data.domain_enrichment;
+        if (!enrichment || typeof enrichment !== 'object' || Array.isArray(enrichment)) return '';
+
+        function hasValue(value) {
+            return value !== undefined && value !== null && value !== '';
+        }
+
+        function displayValue(value) {
+            if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+            if (typeof value === 'object') return JSON.stringify(value, null, 2);
+            return String(value);
+        }
+
+        function renderField(label, value) {
+            if (!hasValue(value)) return '';
+            return '<div class="col-12 col-md-6 source-detail-item">' +
+                '<span class="source-detail-key">' + escHtml(String(label)) + '</span>' +
+                '<span class="source-detail-val">' + escHtml(String(displayValue(value))) + '</span></div>';
+        }
+
+        function renderBlock(title, block, primaryFields, includeAdvanced) {
+            if (!block || typeof block !== 'object' || Array.isArray(block)) return '';
+
+            var fieldHtml = '';
+            if (hasValue(block.error)) fieldHtml += renderField('Error', block.error);
+            primaryFields.forEach(function(field) {
+                fieldHtml += renderField(field.label, block[field.key]);
+            });
+
+            var advancedHtml = '';
+            if (includeAdvanced) {
+                var primaryKeys = primaryFields.map(function(field) { return field.key; });
+                primaryKeys.push('error');
+                Object.keys(block).forEach(function(key) {
+                    if (primaryKeys.indexOf(key) >= 0) return;
+                    advancedHtml += renderField(key, block[key]);
+                });
+            }
+
+            if (!fieldHtml && !advancedHtml) return '';
+            var html = '<div class="col-12 col-md-6"><div class="ioc-detail-card mb-0 h-100">' +
+                '<h6 class="mb-2">' + escHtml(String(title)) + '</h6>';
+            if (fieldHtml) {
+                html += '<div class="source-detail-grid"><div class="row g-2 source-detail-responsive-row">' + fieldHtml + '</div></div>';
+            }
+            if (advancedHtml) {
+                html += '<details class="domain-enrichment-details mt-2"><summary>Advanced heuristics</summary>' +
+                    '<div class="source-detail-grid"><div class="row g-2 source-detail-responsive-row">' + advancedHtml + '</div></div></details>';
+            }
+            return html + '</div></div>';
+        }
+
+        var blocks = '';
+        blocks += renderBlock('Domain Age', enrichment.domain_age, [
+            { key: 'age_days', label: 'Age (days)' },
+            { key: 'is_newly_registered', label: 'Newly registered' },
+            { key: 'risk_level', label: 'Risk level' }
+        ], false);
+        blocks += renderBlock('DGA Analysis', enrichment.dga_analysis, [
+            { key: 'is_dga', label: 'DGA detected' },
+            { key: 'confidence', label: 'Confidence' },
+            { key: 'dga_family_guess', label: 'DGA family guess' }
+        ], true);
+        if (hasValue(enrichment.error)) blocks += renderField('Error', enrichment.error);
+        if (!blocks) return '';
+
+        return '<div class="ioc-detail-card">' +
+            '<h6 class="mb-3"><i class="bi bi-globe2 me-2"></i>Domain Enrichment</h6>' +
+            '<div class="row g-3">' + blocks + '</div></div>';
+    }
+
+    function renderRagReferencesSection(data) {
+        var references = data && data.rag_references;
+        if (!Array.isArray(references) || references.length === 0) return '';
+
+        function hasValue(value) {
+            return value !== undefined && value !== null && value !== '';
+        }
+
+        function displayValue(value) {
+            if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+            if (typeof value === 'object') return JSON.stringify(value, null, 2);
+            return String(value);
+        }
+
+        function renderSummaryField(key, value) {
+            if (!hasValue(value)) return '';
+            return '<div class="col-12 col-md-6 source-detail-item">' +
+                '<span class="source-detail-key">' + escHtml(String(key)) + '</span>' +
+                '<span class="source-detail-val">' + escHtml(String(displayValue(value))) + '</span></div>';
+        }
+
+        var referenceCards = '';
+        references.forEach(function(reference, index) {
+            if (!reference || typeof reference !== 'object' || Array.isArray(reference)) return;
+            var metadata = (reference.metadata && typeof reference.metadata === 'object' && !Array.isArray(reference.metadata))
+                ? reference.metadata : {};
+            var summary = renderSummaryField('category', metadata.category);
+            if (hasValue(metadata.topic)) {
+                summary += renderSummaryField('topic', metadata.topic);
+            } else if (hasValue(metadata.source)) {
+                summary += renderSummaryField('source', metadata.source);
+            } else if (hasValue(reference.source)) {
+                summary += renderSummaryField('source', reference.source);
+            }
+            summary += renderSummaryField('distance', reference.distance);
+
+            var textDetails = '';
+            if (hasValue(reference.text)) {
+                textDetails = '<details class="rag-reference-details mt-2"><summary>View full reference text</summary>' +
+                    '<pre class="rag-reference-text">' + escHtml(String(displayValue(reference.text))) + '</pre></details>';
+            }
+            if (!summary && !textDetails) return;
+
+            var referenceLabel = 'Reference ' + String(index + 1);
+            referenceCards += '<div class="ioc-detail-card mb-2">' +
+                '<h6 class="mb-2">' + escHtml(String(referenceLabel)) + '</h6>' +
+                (summary ? '<div class="source-detail-grid"><div class="row g-2 source-detail-responsive-row">' + summary + '</div></div>' : '') +
+                textDetails + '</div>';
+        });
+        if (!referenceCards) return '';
+
+        return '<div class="ioc-detail-card">' +
+            '<h6 class="mb-3"><i class="bi bi-journal-text me-2"></i>RAG References</h6>' +
+            referenceCards + '</div>';
+    }
+
     window.renderStructuredResult = function (data) {
         if (!data) return '<p class="text-muted">No data received.</p>';
 
@@ -1664,12 +1853,14 @@
             '<i class="bi bi-clipboard"></i></button></div>' +
             '<div class="ioc-detail-row"><span class="ioc-detail-label">First Seen</span><span>' + escHtml(firstSeen) + '</span></div>' +
             '<div class="ioc-detail-row"><span class="ioc-detail-label">Last Seen</span><span>' + escHtml(lastSeen) + '</span></div>' +
+            renderMalwareFamily(data) +
             '</div></div>';
 
         html += '</div>'; /* close row */
 
         /* --- Scoring Summary Card (sources_checked vs sources_flagged) --- */
-        var sourcesChecked = data.sources_checked || (data.sources ? Object.keys(data.sources).length : 0);
+        var sourcesChecked = (data.sources_checked !== undefined && data.sources_checked !== null)
+            ? data.sources_checked : (data.sources ? Object.keys(data.sources).length : 0);
         var sourcesFlagged = data.sources_flagged || 0;
         if (!data.sources_flagged && data.sources && typeof data.sources === 'object') {
             Object.keys(data.sources).forEach(function(sn) {
@@ -1685,6 +1876,8 @@
             '<div class="col"><div class="scoring-stat"><div class="scoring-stat-value text-danger">' + escHtml(String(sourcesFlagged)) + '</div><div class="scoring-stat-label">Sources Flagged</div></div></div>' +
             '</div>';
 
+        html += renderCoverageSection(data);
+
         /* --- Source Score Breakdown (visual bars) --- */
         if (data.source_scores && typeof data.source_scores === 'object') {
             html += '<h6 class="mt-3 mb-2" style="font-size:0.78rem;"><i class="bi bi-segmented-nav me-1"></i>Source Score Breakdown</h6>';
@@ -1699,6 +1892,8 @@
             });
         }
         html += '</div>';
+
+        html += renderDomainEnrichmentSection(data);
 
         /* --- LLM Analysis Card --- */
         if (data.llm_analysis && typeof data.llm_analysis === 'object') {
@@ -1729,6 +1924,8 @@
             }
             html += '</div>';
         }
+
+        html += renderRagReferencesSection(data);
 
         /* --- Detection Rules Section --- */
         if (data.detection_rules && typeof data.detection_rules === 'object') {
