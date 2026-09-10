@@ -103,7 +103,7 @@ class RAGKnowledgeBase:
 
     def seed(self, documents: List[Dict], skip_if_populated: bool = True) -> int:
         """
-        โหลดความรู้เข้า vector store (ทำครั้งแรกครั้งเดียว หรือตอน re-index)
+        ซิงก์ความรู้จาก seed documents เข้า vector store โดยเทียบตาม document ID
 
         Args:
             documents: list ของ dict รูปแบบ
@@ -112,25 +112,66 @@ class RAGKnowledgeBase:
                     "text": "เนื้อหา playbook / procedure ที่จะใช้ retrieve",
                     "metadata": {"category": "playbook", "verdict": "SUSPICIOUS", ...}
                 }
-            skip_if_populated: ถ้า collection มีข้อมูลอยู่แล้ว จะข้ามการ seed ซ้ำ
+            skip_if_populated: ถ้า True จะ upsert เฉพาะเอกสารใหม่หรือที่มี
+                text/metadata เปลี่ยนแปลง ถ้า False จะ force upsert ทุกเอกสาร
 
         Returns:
-            จำนวนเอกสารที่ถูก add เข้าไป
+            จำนวนเอกสารที่ถูกเพิ่มหรืออัปเดต
         """
-        if skip_if_populated and self._collection.count() > 0:
-            logger.info(
-                f"[RAG] Collection already has {self._collection.count()} docs, skip seeding "
-                f"(pass skip_if_populated=False to force re-seed)"
+        desired_by_id = {}
+        for document in documents:
+            document_id = document["id"]
+            if document_id in desired_by_id:
+                raise ValueError(f"Duplicate knowledge document id: {document_id}")
+            desired_by_id[document_id] = document
+
+        existing = self._collection.get(include=["documents", "metadatas"])
+        existing_by_id = {
+            document_id: {"text": text or "", "metadata": metadata or {}}
+            for document_id, text, metadata in zip(
+                existing.get("ids", []),
+                existing.get("documents") or [],
+                existing.get("metadatas") or [],
             )
+        }
+
+        orphan_ids = sorted(set(existing_by_id) - set(desired_by_id))
+        if orphan_ids:
+            logger.warning(
+                "[RAG] Collection contains %d orphan document(s) not present "
+                "in seed input: %s",
+                len(orphan_ids),
+                ", ".join(orphan_ids),
+            )
+
+        if skip_if_populated:
+            documents_to_sync = [
+                document
+                for document_id, document in desired_by_id.items()
+                if document_id not in existing_by_id
+                or existing_by_id[document_id]["text"] != document["text"]
+                or existing_by_id[document_id]["metadata"]
+                != document.get("metadata", {})
+            ]
+        else:
+            documents_to_sync = list(desired_by_id.values())
+
+        if not documents_to_sync:
+            logger.info("[RAG] Knowledge base already in sync")
             return 0
 
-        self._collection.add(
-            ids=[d["id"] for d in documents],
-            documents=[d["text"] for d in documents],
-            metadatas=[d.get("metadata", {}) for d in documents],
+        self._collection.upsert(
+            ids=[document["id"] for document in documents_to_sync],
+            documents=[document["text"] for document in documents_to_sync],
+            metadatas=[
+                document.get("metadata", {}) for document in documents_to_sync
+            ],
         )
-        logger.info(f"[RAG] Indexed {len(documents)} documents into knowledge base")
-        return len(documents)
+        logger.info(
+            "[RAG] Synced %d document(s) into knowledge base",
+            len(documents_to_sync),
+        )
+        return len(documents_to_sync)
 
     def add_incident(self, incident_id: str, summary: str, metadata: Dict) -> None:
         """
@@ -153,6 +194,7 @@ class RAGKnowledgeBase:
         query_text: str,
         n_results: int = 3,
         category_filter: Optional[str] = None,
+        max_distance: Optional[float] = None,
     ) -> List[Dict]:
         """
         ค้นหาเอกสารที่เกี่ยวข้องที่สุดกับ query_text (semantic similarity search)
@@ -161,6 +203,7 @@ class RAGKnowledgeBase:
             query_text: ข้อความ query เช่น "phishing email with malicious attachment"
             n_results: จำนวนผลลัพธ์สูงสุดที่ต้องการ
             category_filter: กรองเฉพาะ category เช่น "playbook" หรือ "mitre_mapping"
+            max_distance: cosine distance สูงสุดที่ยอมรับ ถ้าไม่ระบุจะไม่กรอง
 
         Returns:
             list ของ dict {"text": ..., "metadata": ..., "distance": ...}
@@ -180,6 +223,8 @@ class RAGKnowledgeBase:
         dists = results.get("distances", [[]])[0]
 
         for text, meta, dist in zip(docs, metas, dists):
+            if max_distance is not None and dist > max_distance:
+                continue
             hits.append({"text": text, "metadata": meta, "distance": dist})
 
         logger.info(f"[RAG] Query '{query_text[:50]}...' -> {len(hits)} hits")
