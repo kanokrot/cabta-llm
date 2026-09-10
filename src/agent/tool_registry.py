@@ -866,6 +866,25 @@ class ToolRegistry:
                             "Takes precedence over rule_type if both given."
                         ),
                     },
+                    "network_iocs": {
+                        "anyOf": [
+                            {
+                                "type": "array",
+                                "items": {
+                                    "anyOf": [
+                                        {"type": "string"},
+                                        {"type": "object"},
+                                    ]
+                                },
+                            },
+                            {"type": "object"},
+                        ],
+                        "description": (
+                            "Network IOCs used to augment capa/MITRE results with "
+                            "Suricata and firewall rules. Accepts an IOC list or "
+                            "an extract_iocs-style object."
+                        ),
+                    },
                 },
                 "required": ["analysis_result"],
             },

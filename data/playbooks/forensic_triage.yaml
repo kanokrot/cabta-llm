@@ -136,7 +136,7 @@ steps:
     action: final_answer
     params:
       analysis_result: "{{map_attack_technique}}"
-      iocs: "{{extract_iocs}}"
+      network_iocs: "{{extract_iocs}}"
     description: Incident confirmed - generate blocking rules and recommend action to SOC
 
   - name: document_benign
