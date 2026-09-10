@@ -7,11 +7,14 @@ analyst approval (WAITING_HUMAN).
 """
 
 import asyncio
+from copy import copy
+from datetime import datetime, timezone
 import json
 import logging
 import time
 import threading
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlparse
 
 import aiohttp
 
@@ -30,6 +33,155 @@ from .agent_tool_selection import ToolSelector
 from .agent_llm_backends import LLMBackend
 
 logger = logging.getLogger(__name__)
+
+_RAG_PROVENANCE_FIELDS = {
+    "schema_version",
+    "citation_id",
+    "knowledge_type",
+    "source_name",
+    "source_url",
+    "source_version",
+    "confidence",
+    "tlp",
+    "created",
+    "modified",
+    "revoked",
+}
+_RAG_STRING_FIELDS = _RAG_PROVENANCE_FIELDS - {"confidence", "revoked"}
+_RAG_KNOWLEDGE_TYPES = {"analytic_guidance", "attack_pattern", "course_of_action"}
+_VALID_TLP = {"TLP:CLEAR", "TLP:GREEN", "TLP:AMBER", "TLP:RED"}
+
+
+def _parse_provenance_timestamp(value: str) -> datetime:
+    """Parse an ISO-8601 provenance timestamp and require a timezone."""
+    if not isinstance(value, str):
+        raise ValueError("timestamp must be a string")
+    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        raise ValueError("timestamp must include a timezone")
+    return parsed
+
+
+def _walk_rag_references(value):
+    """Yield RAG references recursively from Flow B tool-result structures."""
+    if isinstance(value, dict):
+        references = value.get("rag_references")
+        if isinstance(references, list):
+            yield from references
+        for key, nested in value.items():
+            if key != "rag_references":
+                yield from _walk_rag_references(nested)
+    elif isinstance(value, list):
+        for nested in value:
+            yield from _walk_rag_references(nested)
+
+
+def _strip_rag_references(value):
+    """Remove unvalidated RAG payloads before findings enter an agent prompt."""
+    if isinstance(value, dict):
+        return {
+            key: _strip_rag_references(nested)
+            for key, nested in value.items()
+            if key != "rag_references"
+        }
+    if isinstance(value, list):
+        return [_strip_rag_references(nested) for nested in value]
+    return value
+
+
+def _validate_rag_reference(reference: Dict, now: Optional[datetime] = None):
+    """Validate STIX-aligned provenance at the Flow B consumption boundary."""
+    if not isinstance(reference, dict):
+        return False, "reference is not an object"
+    if not isinstance(reference.get("text"), str) or not reference["text"].strip():
+        return False, "text is missing"
+
+    metadata = reference.get("metadata")
+    if not isinstance(metadata, dict):
+        return False, "metadata is missing"
+
+    missing = sorted(_RAG_PROVENANCE_FIELDS - metadata.keys())
+    if missing:
+        return False, f"missing metadata: {', '.join(missing)}"
+
+    for field in _RAG_STRING_FIELDS:
+        if not isinstance(metadata[field], str) or not metadata[field].strip():
+            return False, f"{field} must be a non-empty string"
+
+    if metadata["schema_version"] != "cabta-rag-provenance/1":
+        return False, "unsupported schema_version"
+    if metadata["knowledge_type"] not in _RAG_KNOWLEDGE_TYPES:
+        return False, "invalid knowledge_type"
+
+    confidence = metadata["confidence"]
+    if isinstance(confidence, bool) or not isinstance(confidence, int):
+        return False, "confidence must be an integer"
+    if not 0 <= confidence <= 100:
+        return False, "confidence must be between 0 and 100"
+    if metadata["tlp"] not in _VALID_TLP:
+        return False, "invalid TLP 2.0 marking"
+
+    parsed_url = urlparse(metadata["source_url"])
+    if parsed_url.scheme != "https" or not parsed_url.netloc:
+        return False, "source_url must be an absolute HTTPS URL"
+
+    try:
+        created = _parse_provenance_timestamp(metadata["created"])
+        modified = _parse_provenance_timestamp(metadata["modified"])
+        if modified < created:
+            return False, "modified precedes created"
+        if metadata.get("valid_until"):
+            valid_until = _parse_provenance_timestamp(metadata["valid_until"])
+            if valid_until <= (now or datetime.now(timezone.utc)):
+                return False, "knowledge entry has expired"
+    except ValueError as exc:
+        return False, str(exc)
+
+    if not isinstance(metadata["revoked"], bool):
+        return False, "revoked must be boolean"
+    if metadata["revoked"]:
+        return False, "knowledge entry is revoked"
+
+    return True, ""
+
+
+def _build_flow_b_rag_blocks(findings):
+    """Build validated RAG context and a compact source list for Flow B."""
+    context_lines = []
+    source_lines = []
+    seen = set()
+
+    for reference in _walk_rag_references(findings):
+        valid, reason = _validate_rag_reference(reference)
+        metadata = reference.get("metadata", {}) if isinstance(reference, dict) else {}
+        citation_id = metadata.get("citation_id", "unknown")
+        if not valid:
+            logger.warning(
+                "[AGENT] Ignoring RAG entry %s: invalid provenance: %s",
+                citation_id,
+                reason,
+            )
+            continue
+        if citation_id in seen:
+            continue
+        seen.add(citation_id)
+
+        label = (
+            f"[KB:{citation_id}] {metadata['source_name']} "
+            f"({metadata['source_version']}) | {metadata['source_url']} | "
+            f"confidence={metadata['confidence']} | {metadata['tlp']}"
+        )
+        context_lines.extend((label, reference["text"][:1200]))
+        source_lines.append(label)
+
+    return "\n".join(context_lines), "\n".join(source_lines)
+
+
+def _append_rag_sources(answer: str, sources: str) -> str:
+    """Append validated source citations deterministically to a Flow B answer."""
+    if not sources:
+        return answer
+    return f"{answer}\n\nKnowledge sources:\n{sources}"
 
 # -------------------------------------------------------------------- #
 #  System prompt template
@@ -61,6 +213,8 @@ RULES:
 - Never execute malware on the host system. Use sandbox tools for dynamic analysis.
 - Be methodical: gather evidence first, then correlate, then conclude.
 - Only use the tools provided. Do NOT invent tool names.
+- Use knowledge-base claims only from the validated RAG context.
+- Cite every knowledge-base entry you use with its exact [KB:citation_id].
 """
 
 # Fallback prompt for when no native tool calling is available
@@ -91,6 +245,8 @@ IMPORTANT:
 - Only use tools that are listed above. Do NOT invent tool names.
 - If a playbook matches the investigation goal, prefer running the playbook for structured analysis.
 - Always include the "action" key in your JSON response.
+- Use knowledge-base claims only from the validated RAG context.
+- Cite every knowledge-base entry you use with its exact [KB:citation_id].
 """
 
 _SUMMARY_PROMPT = """\
@@ -113,6 +269,11 @@ Steps taken: {step_count}
 
 Findings:
 {findings_json}
+
+Validated knowledge context:
+{rag_context}
+
+If knowledge-base guidance is used, cite it as [KB:citation_id].
 
 Respond in plain text (no JSON).
 """
@@ -796,7 +957,12 @@ class AgentLoop:
     async def _think(self, state: AgentState) -> Optional[Dict]:
         """Build context and call the LLM to decide the next action."""
         tools_block = self.tool_selector.build_tools_block()
-        findings_block = self.tool_selector.build_findings_block(state)
+        rag_context, _ = _build_flow_b_rag_blocks(state.findings)
+        sanitized_state = copy(state)
+        sanitized_state.findings = _strip_rag_references(state.findings)
+        findings_block = self.tool_selector.build_findings_block(sanitized_state)
+        if rag_context:
+            findings_block += f"\n\nValidated RAG context (Flow B only):\n{rag_context}"
         playbooks_block = self.tool_selector.build_playbooks_block()
         all_tools = self.tools.get_tools_for_llm()
         # Filter tools to a manageable set for the LLM
@@ -978,35 +1144,40 @@ class AgentLoop:
 
     async def _generate_summary(self, state: AgentState) -> str:
         """Ask the LLM to produce a concise investigation summary."""
+        rag_context, rag_sources = _build_flow_b_rag_blocks(state.findings)
+
         # If there is a final_answer finding, use it directly
         for f in reversed(state.findings):
             if f.get("type") == "final_answer":
                 answer = f.get("answer", "")
                 verdict = f.get("verdict", "")
                 if answer:
-                    return f"[{verdict}] {answer}"
+                    return _append_rag_sources(f"[{verdict}] {answer}", rag_sources)
 
         # Otherwise ask LLM to summarise
-        findings_json = json.dumps(state.findings[-15:], default=str, indent=1)
+        sanitized_findings = _strip_rag_references(state.findings[-15:])
+        findings_json = json.dumps(sanitized_findings, default=str, indent=1)
         prompt = _SUMMARY_PROMPT.format(
             goal=state.goal,
             step_count=state.step_count,
             findings_json=findings_json[:4000],
+            rag_context=rag_context or "(none)",
         )
 
         try:
             raw = await self._call_llm_text(prompt)
             if raw:
-                return raw[:2000]
+                return _append_rag_sources(raw[:2000], rag_sources)
         except Exception as exc:
             logger.warning(f"[AGENT] Summary generation failed: {exc}")
 
         # Fallback
-        return (
+        fallback = (
             f"Investigation completed in {state.step_count} steps. "
             f"{len(state.findings)} findings collected. "
             f"Errors: {len(state.errors)}."
         )
+        return _append_rag_sources(fallback, rag_sources)
 
     # ================================================================== #
     #  LLM communication (thin wrappers delegating to self.llm_backend;
