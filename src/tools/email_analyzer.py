@@ -19,6 +19,7 @@ from ..analyzers.bec_detector import BECDetector  # BEC detection
 from ..detection.rule_generator import RuleGenerator
 from ..reporting.raw_output_collector import RawOutputCollector
 from ..integrations.ticketing import create_incident_ticket
+from ..rag.rag_knowledge_base import RAGKnowledgeBase, load_playbooks_from_yaml
 
 logger = logging.getLogger(__name__)
 class EmailAnalyzer:
@@ -45,6 +46,15 @@ class EmailAnalyzer:
         self.llm_analyzer = LLMAnalyzer(config)
         self.advanced_analyzer = AdvancedEmailAnalyzer()
         self.bec_detector = BECDetector()
+
+        self.rag_kb = None
+        if config.get('analysis', {}).get('enable_rag', True):
+            try:
+                self.rag_kb = RAGKnowledgeBase()
+                self.rag_kb.seed(load_playbooks_from_yaml())
+            except Exception as exc:
+                logger.warning(f"[EMAIL] RAG knowledge base unavailable (non-fatal): {exc}")
+                self.rag_kb = None
 
         # Cross-tool integration (set by parent)
         self.ioc_investigator = None
@@ -247,6 +257,22 @@ class EmailAnalyzer:
             # ==================== LLM ANALYSIS ====================
             llm_analysis = {}
             if self.config.get('analysis', {}).get('enable_llm', True):
+                rag_context = []
+                if self.rag_kb:
+                    try:
+                        rag_query = (
+                            f"phishing email {verdict} "
+                            f"threat score {composite_score}"
+                        )
+                        rag_context = self.rag_kb.query(
+                            rag_query,
+                            category_filter='playbook',
+                            max_distance=0.60,
+                        )
+                    except Exception as exc:
+                        logger.warning(f"[EMAIL] RAG query failed (non-fatal): {exc}")
+                        rag_context = []
+
                 email_context = {
                     **email_data,
                     'header_anomalies': header_analysis.get('anomalies', []),
@@ -267,7 +293,10 @@ class EmailAnalyzer:
                     'bec_has_financial': bec_results.get('has_financial_indicators', False),
                     'bec_has_impersonation': bec_results.get('has_impersonation_indicators', False),
                 }
-                llm_analysis = await self.llm_analyzer.analyze_email(email_context)
+                llm_analysis = await self.llm_analyzer.analyze_email(
+                    email_context,
+                    rag_context=rag_context,
+                )
             
             # ==================== FINAL RESULT ====================
             result = {

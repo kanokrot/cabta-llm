@@ -247,12 +247,17 @@ Keep it concise and factual."""
 
         return llm_result
 
-    async def analyze_email(self, email_data: Dict) -> Dict:
+    async def analyze_email(
+        self,
+        email_data: Dict,
+        rag_context: Optional[list] = None,
+    ) -> Dict:
         """
         Analyze email using LLM.
 
         Args:
             email_data: Parsed email data
+            rag_context: Optional list of retrieved knowledge base entries
 
         Returns:
             LLM analysis of email
@@ -325,6 +330,7 @@ Scoring:
 - Base Phishing Score: {context['base_score']}/100
 - Composite Score: {context['composite_score']}/100
 
+{self._format_rag_section(rag_context)}
 Based on the above tool analysis, provide your professional assessment in JSON format:
 {{
     "verdict": "PHISHING/SPAM/SUSPICIOUS/CLEAN",
