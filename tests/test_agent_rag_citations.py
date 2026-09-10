@@ -168,3 +168,131 @@ async def test_final_summary_appends_sources_deterministically():
     assert summary.startswith("[MALICIOUS] Confirmed phishing activity.")
     assert "Knowledge sources:" in summary
     assert "[KB:mitre_t1566_001]" in summary
+
+
+def test_rag_confidence_does_not_alter_investigation_verdict():
+    import copy
+
+    from src.agent.agent_loop import _strip_rag_references
+
+    stripped_by_rag_confidence = {}
+    context_by_rag_confidence = {}
+
+    for rag_confidence in (100, 60):
+        findings = [
+            {
+                "type": "tool_result",
+                "tool": "investigate_ioc",
+                "result": {
+                    "verdict": "SUSPICIOUS",
+                    "confidence": 37,
+                    "severity": "MEDIUM",
+                    "rag_references": [
+                        _reference(confidence=rag_confidence)
+                    ],
+                },
+            }
+        ]
+        findings_before_rag_build = copy.deepcopy(findings)
+
+        context, _ = _build_flow_b_rag_blocks(findings)
+
+        assert findings == findings_before_rag_build
+
+        stripped = _strip_rag_references(findings)
+        expected_stripped = copy.deepcopy(findings_before_rag_build)
+        del expected_stripped[0]["result"]["rag_references"]
+
+        assert findings == findings_before_rag_build
+        assert stripped == expected_stripped
+        assert stripped[0]["result"] == {
+            "verdict": "SUSPICIOUS",
+            "confidence": 37,
+            "severity": "MEDIUM",
+        }
+
+        stripped_by_rag_confidence[rag_confidence] = stripped
+        context_by_rag_confidence[rag_confidence] = context
+
+    assert stripped_by_rag_confidence[100] == stripped_by_rag_confidence[60]
+    assert context_by_rag_confidence[100].replace(
+        "confidence=100", "confidence=<policy>"
+    ) == context_by_rag_confidence[60].replace(
+        "confidence=60", "confidence=<policy>"
+    )
+
+
+def test_rag_confidence_field_isolated_to_citation_label_only():
+    import ast
+    import inspect
+    import textwrap
+
+    reference = _reference(confidence=42)
+    context, sources = _build_flow_b_rag_blocks([_finding(reference)])
+    expected_label = (
+        "[KB:mitre_t1566_001] MITRE ATT&CK (ATT&CK v19.2) | "
+        "https://attack.mitre.org/techniques/T1566/001/ | "
+        "confidence=42 | TLP:CLEAR"
+    )
+
+    assert sources == expected_label
+    assert context == f"{expected_label}\n{reference['text']}"
+    assert context.count("42") == 1
+    assert sources.count("42") == 1
+
+    def metadata_confidence_reads(function):
+        tree = ast.parse(textwrap.dedent(inspect.getsource(function)))
+        return [
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Subscript)
+            and isinstance(node.value, ast.Name)
+            and node.value.id == "metadata"
+            and isinstance(node.slice, ast.Constant)
+            and node.slice.value == "confidence"
+        ]
+
+    validation_reads = metadata_confidence_reads(_validate_rag_reference)
+    citation_reads = metadata_confidence_reads(_build_flow_b_rag_blocks)
+
+    assert len(validation_reads) == 1
+    assert len(citation_reads) == 1
+
+    builder_source = inspect.getsource(_build_flow_b_rag_blocks)
+    assert "determine_verdict" not in builder_source
+    assert "compute_authoritative_verdict" not in builder_source
+
+
+@pytest.mark.asyncio
+async def test_generate_summary_verdict_unaffected_by_rag_confidence():
+    summaries = {}
+    loop = object.__new__(AgentLoop)
+
+    for rag_confidence in (100, 60):
+        state = AgentState(goal="Investigate phishing")
+        state.findings = [
+            _finding(_reference(confidence=rag_confidence)),
+            {
+                "type": "final_answer",
+                "answer": "Confirmed phishing activity.",
+                "verdict": "MALICIOUS",
+            },
+        ]
+
+        summaries[rag_confidence] = await loop._generate_summary(state)
+
+    verdict_summary_100, separator_100, sources_100 = summaries[100].partition(
+        "\n\nKnowledge sources:\n"
+    )
+    verdict_summary_60, separator_60, sources_60 = summaries[60].partition(
+        "\n\nKnowledge sources:\n"
+    )
+
+    assert verdict_summary_100 == verdict_summary_60
+    assert verdict_summary_100 == "[MALICIOUS] Confirmed phishing activity."
+    assert separator_100 == separator_60 == "\n\nKnowledge sources:\n"
+    assert "confidence=100" in sources_100
+    assert "confidence=60" in sources_60
+    assert sources_100.replace(
+        "confidence=100", "confidence=<policy>"
+    ) == sources_60.replace("confidence=60", "confidence=<policy>")
