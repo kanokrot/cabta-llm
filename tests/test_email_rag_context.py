@@ -142,6 +142,17 @@ async def test_email_prompt_includes_rag_hit_from_successful_query(email_pipelin
 
 
 @pytest.mark.asyncio
+async def test_email_result_exposes_rag_references_from_successful_query(email_pipeline):
+    analyzer, email_path = email_pipeline
+    rag_context = [RAG_HIT]
+    analyzer.rag_kb.query.return_value = rag_context
+
+    result = await analyzer.analyze(str(email_path))
+
+    assert result['rag_references'] == rag_context
+
+
+@pytest.mark.asyncio
 async def test_email_analysis_continues_when_rag_query_fails(email_pipeline):
     analyzer, email_path = email_pipeline
     analyzer.rag_kb.query.side_effect = RuntimeError('RAG unavailable')
@@ -152,6 +163,65 @@ async def test_email_analysis_continues_when_rag_query_fails(email_pipeline):
     assert result['verdict'] == 'CLEAN'
     prompt = analyzer.llm_analyzer._call_ollama_api.await_args.args[0]
     assert 'Relevant Knowledge Base Entries' not in prompt
+
+
+@pytest.mark.asyncio
+async def test_email_result_has_empty_rag_references_when_query_fails(email_pipeline):
+    analyzer, email_path = email_pipeline
+    analyzer.rag_kb.query.side_effect = RuntimeError('RAG unavailable')
+
+    result = await analyzer.analyze(str(email_path))
+
+    assert result['rag_references'] == []
+
+
+@pytest.mark.asyncio
+async def test_email_result_has_empty_rag_references_when_llm_disabled(email_pipeline):
+    analyzer, email_path = email_pipeline
+    analyzer.config = {'analysis': {'enable_llm': False}}
+
+    result = await analyzer.analyze(str(email_path))
+
+    assert result['rag_references'] == []
+    analyzer.rag_kb.query.assert_not_called()
+    analyzer.llm_analyzer._call_ollama_api.assert_not_awaited()
+
+
+def test_flow_b_finds_email_level_rag_references_without_nested_iocs():
+    from src.agent.agent_loop import _build_flow_b_rag_blocks
+
+    reference = {
+        'text': 'Follow the phishing-email containment playbook.',
+        'metadata': {
+            'schema_version': 'cabta-rag-provenance/1',
+            'citation_id': 'email_phishing_playbook',
+            'knowledge_type': 'course_of_action',
+            'source_name': 'Email Phishing Playbook',
+            'source_url': 'https://example.com/playbooks/email-phishing',
+            'source_version': '1.0',
+            'confidence': 90,
+            'tlp': 'TLP:CLEAR',
+            'created': '2026-09-01T00:00:00Z',
+            'modified': '2026-09-01T00:00:00Z',
+            'revoked': False,
+        },
+        'distance': 0.1,
+    }
+    email_finding = {
+        'type': 'tool_result',
+        'tool': 'analyze_email',
+        'result': {
+            'verdict': 'PHISHING',
+            'rag_references': [reference],
+            'ioc_analysis': {'results': []},
+        },
+    }
+
+    context, sources = _build_flow_b_rag_blocks([email_finding])
+
+    assert '[KB:email_phishing_playbook]' in context
+    assert reference['text'] in context
+    assert '[KB:email_phishing_playbook]' in sources
 
 
 def test_email_analyzer_rag_init_failure_is_nonfatal(monkeypatch):

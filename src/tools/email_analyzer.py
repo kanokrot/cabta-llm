@@ -256,8 +256,8 @@ class EmailAnalyzer:
             
             # ==================== LLM ANALYSIS ====================
             llm_analysis = {}
+            rag_context = []
             if self.config.get('analysis', {}).get('enable_llm', True):
-                rag_context = []
                 if self.rag_kb:
                     try:
                         rag_query = (
@@ -329,6 +329,7 @@ class EmailAnalyzer:
                     'results': attachment_results
                 },
                 'llm_analysis': llm_analysis,
+                'rag_references': rag_context,
                 'iocs_found': {
                     'urls': len(email_data['urls']),
                     'ips': len(email_data['ips']),
