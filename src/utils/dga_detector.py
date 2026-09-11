@@ -15,6 +15,8 @@ import logging
 from collections import Counter
 from typing import Dict, List, Optional, Tuple
 
+from wordfreq import top_n_list
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -64,6 +66,10 @@ _DICTIONARY_WORDS = {
     'login', 'admin', 'user', 'account', 'support', 'help', 'group',
     'team', 'open', 'source', 'power', 'energy', 'space', 'time',
 }
+
+# Supplement the curated domain vocabulary with the 10,000 most common
+# English words to improve coverage of legitimate dictionary-word domains.
+_DICTIONARY_WORDS.update(top_n_list('en', 10_000))
 
 # Known DGA family patterns (domain length, entropy ranges, typical TLDs)
 _DGA_FAMILY_SIGNATURES = {
