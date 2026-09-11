@@ -151,10 +151,20 @@ steps:
 
   - name: confirm_phishing
     tool: generate_rules
+    on_success: document_confirmed_phishing
+    on_failure: "__end__"
     params:
       analysis_result: "{{parse_email}}"
       iocs: "{{extract_iocs}}"
     description: Phishing confirmed - generate blocking rules
+
+  - name: document_confirmed_phishing
+    action: final_answer
+    on_success: "__end__"
+    description: >
+      Confirmed phishing email. Generated blocking rules from the email
+      analysis. Verdict: Malicious phishing. Recommended actions: block the
+      sender and indicators, remove matching messages, and notify affected users.
 
   - name: document_benign
     action: final_answer
