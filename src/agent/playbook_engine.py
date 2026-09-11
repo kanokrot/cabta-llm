@@ -145,7 +145,9 @@ _VAR_IN_TUPLE = re.compile(
 )
 # Matches a string that is ENTIRELY a single {{...}} placeholder (no
 # surrounding text), so the resolved value's original type can be preserved.
-_WHOLE_VAR = re.compile(r"^\{\{(.+?)\}\}$")
+# Match exactly one whole-value token. Strings containing multiple tokens such
+# as ``"{{first}} {{second}}"`` must use _interpolate_string instead.
+_WHOLE_VAR = re.compile(r"^\{\{([^{}]+)\}\}$")
 
 
 def _parse_literal(text: str) -> Any:
