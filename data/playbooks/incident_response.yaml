@@ -36,6 +36,8 @@ steps:
 
   - name: timeline_analysis
     tool: mcp:forensics_tools/timeline_csv_parse
+    condition:
+      if: "{{incident_targets}}"
     params:
       source: "{{incident_targets}}"
       timerange: 72h
@@ -141,6 +143,8 @@ steps:
 
   - name: zeek_log_analysis
     tool: mcp:network_tools/analyze_zeek_logs
+    condition:
+      if: "{{incident_targets}}"
     params:
       target: "{{incident_targets}}"
       iocs: "{{extract_incident_iocs.iocs}}"
@@ -148,6 +152,8 @@ steps:
 
   - name: suricata_alert_analysis
     tool: mcp:network_tools/analyze_suricata_alerts
+    condition:
+      if: "{{incident_targets}}"
     params:
       target: "{{incident_targets}}"
       iocs: "{{extract_incident_iocs.iocs}}"
@@ -190,6 +196,8 @@ steps:
 
   - name: immediate_containment
     tool: isolate_device
+    condition:
+      if: "{{incident_targets}}"
     params:
       target: "{{incident_targets}}"
       isolation_type: network
@@ -200,6 +208,8 @@ steps:
 
   - name: lnk_file_analysis
     tool: mcp:forensics_tools/parse_lnk_file
+    condition:
+      if: "{{incident_targets}}"
     params:
       target: "{{incident_targets}}"
     description: Analyze Windows LNK files - evidence of lateral movement and user activity
@@ -215,6 +225,8 @@ steps:
 
   - name: cross_correlate_findings
     tool: correlate_findings
+    condition:
+      if: "{{incident_targets}}"
     params:
       ioc_results: "{{extract_incident_iocs}}"
       threat_intel:
@@ -262,6 +274,8 @@ steps:
 
   - name: event_log_analysis
     tool: mcp:forensics_tools/analyze_event_log
+    condition:
+      if: "{{incident_targets}}"
     params:
       log_source: "{{incident_targets}}"
       event_ids: [4624, 4625, 4648, 4672, 4688, 4697, 4698, 4720, 7045]
@@ -269,6 +283,8 @@ steps:
 
   - name: yara_scan
     tool: mcp:remnux_tools/yara_scan
+    condition:
+      if: "{{incident_targets.suspicious_dir}}"
     params:
       target_path: "{{incident_targets.suspicious_dir}}"
     description: YARA scan on affected system

@@ -1421,6 +1421,16 @@ class PlaybookEngine:
                             "[PLAYBOOK] Skipping step '%s' (condition false)",
                             current_step.name,
                         )
+                        self.store.add_step(
+                            session_id=session_id,
+                            step_number=step_number,
+                            step_type="skipped",
+                            content=(
+                                f"Skipped: condition '{current_step.condition}' "
+                                "evaluated false"
+                            ),
+                            tool_name=current_step.tool,
+                        )
                         current_step = self._resolve_next(
                             current_step.on_success, step_map, steps, current_step, step_index_map,
                         )
