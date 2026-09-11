@@ -28,7 +28,7 @@ steps:
   - name: extract_email_iocs
     tool: extract_iocs
     params:
-      text: "{{parse_email.body}}"
+      text: "{{parse_email.email_data.body_text}}"
     description: Extract all IOCs from email body (URL, IP, domain, hash, email)
 
   # ===== Phase 2: Sender Verification =====

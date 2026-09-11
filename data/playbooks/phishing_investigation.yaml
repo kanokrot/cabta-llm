@@ -23,7 +23,7 @@ steps:
   - name: extract_iocs
     tool: extract_iocs
     params:
-      text: "{{parse_email.body}}"
+      text: "{{parse_email.email_data.body_text}}"
     description: Extract IOCs (URL, IP, domain, hash) from the email body
 
   # ===== Sender Verification =====

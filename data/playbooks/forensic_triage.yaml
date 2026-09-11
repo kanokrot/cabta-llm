@@ -82,7 +82,7 @@ steps:
   - name: hash_reputation_check
     tool: mcp:threat_intel_tools/malwarebazaar_hash_lookup
     params:
-      hash_value: "{{collect_suspicious_file.sha256}}"
+      hash_value: "{{collect_suspicious_file.hashes.sha256}}"
     condition:
       if: "{{suspicious_file_path}}"
     description: Check the collected file hash against MalwareBazaar
