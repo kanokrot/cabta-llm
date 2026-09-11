@@ -27,6 +27,20 @@ class _MockPlaybookAgentLoop:
             "hashes": {"sha256": "a" * 64},
             "string_analysis": {"suspicious_strings": ""},
         }
+        self.email_result = {
+            "email_data": {
+                "body_text": "Routine message body",
+                "body_html": "",
+                "from": "sender@example.test",
+                "subject": "Routine message",
+                "attachments": [],
+            },
+            "sender_domain": "example.test",
+            "sender_ip": "",
+            "attachments": [],
+            "verdict": "CLEAN",
+            "composite_score": 0,
+        }
         self.investigation_result = investigation_result or NATIVE_IOC_RESULT
         self.forensic_malicious = forensic_malicious
         self.email_malicious = email_malicious
@@ -34,16 +48,52 @@ class _MockPlaybookAgentLoop:
     async def run_tool(self, tool_name, params):
         tool = tool_name.rsplit("/", 1)[-1]
         if tool == "extract_iocs":
-            return {
-                "iocs": {
-                    "ips": [],
-                    "domains": [],
-                    "urls": [],
-                    "sha256": ["a" * 64],
-                },
-                "total": 0,
-                "ips": [],
+            iocs = {
+                "ipv4": [],
+                "domains": [],
                 "urls": [],
+                "emails": [],
+                "hashes": {"md5": [], "sha1": [], "sha256": []},
+                "cve_ids": [],
+                "all_iocs": [],
+                "total": 0,
+            }
+            # Keep the nested tool payload and the top-level fields consumed by
+            # the existing built-in playbooks in this fixture.
+            return {"iocs": iocs, **iocs, "ips": [], "sha256": [], "primary_ioc": None}
+        if tool == "analyze_email":
+            return self.email_result
+        if tool == "event_log_collect":
+            return {
+                "status": "success",
+                "error": None,
+                "raw_text": "No suspicious events found.",
+                "data": {"event_logs": []},
+            }
+        if tool in {
+            "find_functions", "disassemble_entry_point", "analyze_binary",
+            "detect_shellcode", "pe_analyze", "floss_extract", "strings_analysis",
+            "string_analysis", "capa_analyze", "parse_pcap", "analyze_zeek_logs",
+            "analyze_suricata_alerts",
+        }:
+            return {
+                "output": "",
+                "decoded_strings": "",
+                "urls": [],
+                "ips": [],
+            }
+        if tool == "diec_identify":
+            return {"file_type": "exe", "file_name": "mock.bin", "output": ""}
+        if tool in {"file_metadata", "hash_file"}:
+            return {
+                "file": params.get("file_path") or params.get("path") or "mock.bin",
+                "file_size": 1024,
+                "file_type": "exe",
+                "hashes": {
+                    "md5": "b" * 32,
+                    "sha1": "c" * 40,
+                    "sha256": "a" * 64,
+                },
             }
         if tool == "generate_rules":
             return {"rules": {"sigma": ["rule: mock"]}}
@@ -54,8 +104,8 @@ class _MockPlaybookAgentLoop:
                 "capabilities": [],
                 "mitre_attacks": [{"id": "T1059", "technique": "Command Shell"}],
             }
-        if tool == "malwarebazaar_hash_lookup" and self.forensic_malicious:
-            return {"malicious": True}
+        if tool == "malwarebazaar_hash_lookup":
+            return {"malicious": self.forensic_malicious}
         if tool == "analyze_malware":
             return self.malware_result
         if tool == "investigate_ioc":
@@ -97,12 +147,24 @@ BUILTIN_CASES = [
      {"extracted_iocs", "generated_rules", "final_answer"}),
     ("forensic_triage", {
         "host_identifier": "host-1", "remote_username": "analyst",
-        "remote_key_path": "mock-key",
+        "remote_key_path": "mock-key", "suspicious_file_path": "mock.bin",
     }, {"extracted_iocs", "mitre_findings", "final_answer"}),
     ("incident_response", {"incident_description": "Suspicious activity"},
      {"extracted_iocs", "generated_rules", "final_answer"}),
     ("malware_deep_dive", {
-        "file_path": "mock.bin", "analysis_context": {"file_type": "exe"},
+        "file_path": "mock.bin",
+        "analysis_context": {
+            "file_type": "exe",
+            "verdict": "CLEAN",
+            "composite_score": 0,
+            "hashes": {"sha256": "a" * 64},
+            "extract_file_iocs": {
+                "domains": [], "ips": [], "urls": [], "all_iocs": [],
+            },
+        },
+        "pcap_file": "mock.pcap",
+        "zeek_log_path": "mock-zeek.log",
+        "suricata_log_path": "mock-suricata.json",
     }, {"generated_rules", "extracted_iocs", "final_answer"}),
     ("phishing_investigation", {"email_path": "mock.eml"},
      {"extracted_iocs", "final_answer"}),
@@ -162,6 +224,7 @@ async def test_malware_analysis_positive_ioc_is_legacy_and_enveloped(tmp_path):
         if tool_name == "extract_iocs":
             result["total"] = 1
             result["sha256"] = ["a" * 64]
+            result["primary_ioc"] = "198.51.100.7"
         return result
 
     engine.agent_loop.run_tool = positive_extract
