@@ -536,6 +536,144 @@ def _find_ioc_investigation_result(context: Dict) -> Optional[Dict]:
     return None
 
 
+def _scan_report_components(
+    context: Dict, step_names: Optional[List[str]] = None,
+) -> Optional[Dict[str, Any]]:
+    """Collect report-worthy components from original playbook step results.
+
+    Playbook execution stores each result under its step name, under
+    ``last_result``, and (for dict results) under flattened aliases.  Only the
+    named step entries are considered here so one result cannot be classified
+    repeatedly through its aliases.  MCP results are stored as
+    ``{"result": {...}, "server": ..., "tool": ...}``; that wrapper is
+    unwrapped for classification while the contained result is preserved.
+    """
+    required_ioc_keys = {'verdict', 'threat_score', 'sources', 'ioc_type'}
+    components: Dict[str, Any] = {
+        "report_type": None,
+        "ioc_investigation": None,
+        "mitre_findings": None,
+        "generated_rules": None,
+        "extracted_iocs": None,
+        "final_answer": None,
+        "triggered_playbooks": None,
+    }
+
+    # A flattened alias is identifiable because its step-name prefix is also
+    # present as an original context key.  This also excludes the synthetic
+    # ``*_collection_error`` and for_each aliases without maintaining a list of
+    # every alias-producing branch in the executor.
+    original_entries = []
+    known_step_names = set(step_names) if step_names is not None else None
+    context_keys = set(context.keys())
+    for key, value in context.items():
+        if key in {"last_result", "session_id", "playbook_id", "input"}:
+            continue
+        if known_step_names is not None:
+            if key not in known_step_names or not isinstance(value, dict):
+                continue
+            original_entries.append((key, value))
+            continue
+        if not isinstance(value, dict):
+            continue
+        if any(
+            key.startswith(f"{candidate}_")
+            for candidate in context_keys
+            if candidate != key and isinstance(context.get(candidate), dict)
+        ):
+            continue
+        original_entries.append((key, value))
+
+    rule_candidates = []
+    ioc_candidates = []
+    for step_name, stored_result in original_entries:
+        result = stored_result
+        if (
+            isinstance(result, dict)
+            and isinstance(result.get("result"), dict)
+            and "server" in result
+            and "tool" in result
+        ):
+            result = result["result"]
+
+        if not isinstance(result, dict):
+            continue
+
+        if (
+            components["ioc_investigation"] is None
+            and required_ioc_keys.issubset(result.keys())
+        ):
+            components["ioc_investigation"] = result
+
+        if (
+            components["mitre_findings"] is None
+            and isinstance(result.get("mitre_attacks"), list)
+        ):
+            components["mitre_findings"] = result["mitre_attacks"]
+
+        if "rules" in result:
+            rule_candidates.append((step_name, result["rules"]))
+
+        if "iocs" in result:
+            ioc_candidates.append((step_name, result["iocs"]))
+
+        if result.get("action") == "final_answer":
+            components["final_answer"] = result
+
+        if result.get("action") == "trigger_playbook":
+            if components["triggered_playbooks"] is None:
+                components["triggered_playbooks"] = []
+            components["triggered_playbooks"].append(result)
+
+    if rule_candidates:
+        preferred_rules = [
+            candidate for candidate in rule_candidates
+            if re.search(
+                r"(?:^|_)(?:final|later|confirm|generate|detection)(?:_|$)",
+                candidate[0].lower(),
+            )
+        ]
+        _, rules = (preferred_rules or rule_candidates)[-1]
+        components["generated_rules"] = {"rules": rules}
+
+    if ioc_candidates:
+        preferred_iocs = [
+            candidate for candidate in ioc_candidates
+            if candidate[0].lower() in {"final_ioc_extract", "final_ioc_extraction"}
+        ]
+        _, iocs = (preferred_iocs or ioc_candidates)[-1]
+        components["extracted_iocs"] = {"iocs": iocs}
+
+    populated_fields = [
+        field_name for field_name in (
+            "ioc_investigation",
+            "mitre_findings",
+            "generated_rules",
+            "extracted_iocs",
+            "final_answer",
+            "triggered_playbooks",
+        )
+        if components[field_name] is not None
+    ]
+    if not populated_fields:
+        return None
+
+    report_type_by_field = {
+        "ioc_investigation": "ioc_investigation",
+        "mitre_findings": "mitre_mapping",
+        "generated_rules": "rules",
+        "extracted_iocs": "iocs",
+        "final_answer": "final_answer",
+        "triggered_playbooks": "trigger_playbook",
+    }
+    components["report_type"] = (
+        report_type_by_field[populated_fields[0]]
+        if len(populated_fields) == 1
+        else "composite"
+    )
+    return components
+
+
 # ---------------------------------------------------------------------------
 # Engine
 # ---------------------------------------------------------------------------
@@ -1580,18 +1718,25 @@ class PlaybookEngine:
                             ioc, e,
                         )
 
-            investigation_result = _find_ioc_investigation_result(context)
-            if investigation_result is not None:
-                ioc = context.get('ioc') or investigation_result.get('ioc') or 'unknown_ioc'
+            legacy_ioc = _find_ioc_investigation_result(context)
+            components = _scan_report_components(
+                context, [step.name for step in steps]
+            )
+            if legacy_ioc is not None or components is not None:
                 try:
                     existing = self.store.get_session(session_id) or {}
                     existing_metadata = existing.get('metadata') or {}
                     if not isinstance(existing_metadata, dict):
                         existing_metadata = {}
-                    existing_metadata['ioc_investigation_result'] = investigation_result
-                    existing_metadata['ioc'] = ioc
+                    if legacy_ioc is not None:
+                        ioc = context.get('ioc') or legacy_ioc.get('ioc') or 'unknown_ioc'
+                        existing_metadata['ioc_investigation_result'] = legacy_ioc
+                        existing_metadata['ioc'] = ioc
+                    if components is not None:
+                        existing_metadata['report_envelope'] = components
                     self.store.update_session_metadata(session_id, existing_metadata)
-                    summary += " — report data available"
+                    if "report data available" not in summary:
+                        summary += " — report data available"
                 except Exception as meta_exc:
                     logger.warning(
                         "[PLAYBOOK] Failed to persist report data to session "

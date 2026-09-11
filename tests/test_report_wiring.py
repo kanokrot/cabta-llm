@@ -91,6 +91,7 @@ async def test_malicious_ioc_generates_report(tmp_path, report_dir):
     metadata = session["metadata"]
     assert metadata["ioc_investigation_result"]["verdict"] == "MALICIOUS"
     assert metadata["ioc_investigation_result"]["ioc"] == "50.16.16.211"
+    assert metadata["report_envelope"]["ioc_investigation"] == metadata["ioc_investigation_result"]
 
 
 @pytest.mark.asyncio
@@ -111,6 +112,7 @@ async def test_clean_ioc_generates_report(tmp_path, report_dir):
 
     metadata = session["metadata"]
     assert metadata["ioc_investigation_result"]["verdict"] == "CLEAN"
+    assert metadata["report_envelope"]["ioc_investigation"] == metadata["ioc_investigation_result"]
 
 
 @pytest.mark.asyncio
@@ -135,6 +137,7 @@ async def test_report_failure_does_not_fail_session(tmp_path, report_dir):
     assert "report data available" in summary
     assert "highest verdict: MALICIOUS" in summary  # verdict/ticketing unaffected
     assert session["metadata"]["ioc_investigation_result"] == mock_result
+    assert session["metadata"]["report_envelope"]["ioc_investigation"] == mock_result
 
 
 def test_report_endpoint_returns_500_on_generation_failure(tmp_path):
