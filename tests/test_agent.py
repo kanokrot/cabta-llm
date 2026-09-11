@@ -35,7 +35,12 @@ from src.agent.agent_store import AgentStore
 from src.agent.tool_registry import ToolDefinition, ToolRegistry
 from src.agent.correlation import CorrelationEngine
 from src.agent.memory import InvestigationMemory
-from src.agent.playbook_engine import PlaybookEngine, safe_evaluate_condition, PlaybookStep
+from src.agent.playbook_engine import (
+    PlaybookEngine,
+    PlaybookValidationError,
+    safe_evaluate_condition,
+    PlaybookStep,
+)
 from src.agent.sandbox_orchestrator import SandboxOrchestrator, SandboxType
 from src.agent.mcp_client import MCPClientManager, MCPServerConfig, MCPConnection
 
@@ -889,11 +894,11 @@ class TestPlaybookEngine:
         assert result == "Analyzing /tmp/mal.exe for IOC 1.2.3.4"
 
     def test_interpolate_string_unresolved(self, playbook_engine):
-        result = PlaybookEngine._interpolate_string(
-            "Value: {{missing}}",
-            {},
-        )
-        assert result == "Value: {{missing}}"
+        with pytest.raises(PlaybookValidationError, match="Unresolved template"):
+            PlaybookEngine._interpolate_string(
+                "Value: {{missing}}",
+                {},
+            )
 
 
 # ====================================================================== #
