@@ -81,6 +81,9 @@ class NoCacheStaticMiddleware(BaseHTTPMiddleware):
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
     """Application lifespan: auto-connect MCP servers on startup."""
+    from src.utils.dga_detector import _DICTIONARY_WORDS
+
+    logger.info("[STARTUP] DGA dictionary loaded: %d words", len(_DICTIONARY_WORDS))
     await _auto_connect_mcp_servers(app)
 
     # Capture the loop MCP stdio connections actually live on so

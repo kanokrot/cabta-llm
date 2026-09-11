@@ -15,7 +15,13 @@ import logging
 from collections import Counter
 from typing import Dict, List, Optional, Tuple
 
-from wordfreq import top_n_list
+try:
+    from wordfreq import top_n_list
+except Exception as exc:
+    raise RuntimeError(
+        "DGA dictionary supplement failed to import wordfreq. "
+        "Check wordfreq installation and data files."
+    ) from exc
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +50,18 @@ COMMON_TRIGRAMS = {
     'not', 'are', 'rea', 'com', 'int', 'pro', 'str', 'ous', 'tra',
 }
 
+# Common infrastructure subdomain labels that should not contribute to DGA
+# confidence.
+COMMON_INFRASTRUCTURE_SUBDOMAINS = {
+    'www', 'ns', 'ns1', 'ns2', 'ns3', 'ns4', 'mx', 'mx1', 'mx2',
+    'ftp', 'ftps', 'sftp', 'mail', 'smtp', 'imap', 'pop', 'pop3',
+    'api', 'api1', 'api2', 'cdn', 'cdn1', 'cdn2', 'cdn3', 'vpn',
+    'admin', 'portal', 'app', 'dev', 'staging', 'stage', 'test',
+    'static', 'assets', 'img', 'cpanel', 'webmail', 'autodiscover',
+    'm', 'blog', 'shop', 'secure', 'my', 'docs', 'help', 'support',
+    'status', 'cp',
+}
+
 # Minimal dictionary of common English words found in legitimate domains
 # Kept small for performance; focuses on words commonly used in domain names
 _DICTIONARY_WORDS = {
@@ -69,7 +87,19 @@ _DICTIONARY_WORDS = {
 
 # Supplement the curated domain vocabulary with the 10,000 most common
 # English words to improve coverage of legitimate dictionary-word domains.
-_DICTIONARY_WORDS.update(top_n_list('en', 10_000))
+try:
+    _DICTIONARY_WORDS.update(top_n_list('en', 10_000))
+except Exception as exc:
+    raise RuntimeError(
+        "DGA dictionary supplement failed to load from wordfreq. "
+        "Check wordfreq installation and data files."
+    ) from exc
+
+if len(_DICTIONARY_WORDS) < 5_000:
+    raise RuntimeError(
+        f"DGA dictionary supplement failed to load (got {len(_DICTIONARY_WORDS)} "
+        "words, expected >=5000). Check wordfreq installation/data files."
+    )
 
 # Known DGA family patterns (domain length, entropy ranges, typical TLDs)
 _DGA_FAMILY_SIGNATURES = {
@@ -175,6 +205,12 @@ def calculate_entropy(text: str) -> float:
         if p > 0:
             entropy -= p * math.log2(p)
     return round(entropy, 4)
+
+
+def normalized_entropy(text: str) -> float:
+    if len(text) > 1:
+        return min(1.0, calculate_entropy(text) / math.log2(len(text)))
+    return 0.0
 
 
 def calculate_consonant_ratio(text: str) -> float:
@@ -363,10 +399,8 @@ def _guess_dga_family(sld: str, entropy: float, consonant_ratio: float) -> Optio
 # Confidence calculation
 # ---------------------------------------------------------------------------
 
-SUBDOMAIN_CONFIDENCE_WEIGHT = 0.75
-
 def _calculate_confidence(
-    entropy: float,
+    text: str,
     consonant_ratio: float,
     bigram_score: float,
     trigram_score: float,
@@ -381,14 +415,15 @@ def _calculate_confidence(
     """
     score = 0.0
 
-    # Entropy: high entropy -> more likely DGA (weight: 25)
-    if entropy >= 4.0:
+    # Normalized entropy: high relative entropy -> more likely DGA
+    entropy_score = normalized_entropy(text)
+    if entropy_score >= 0.95:
         score += 25
-    elif entropy >= 3.7:
+    elif entropy_score >= 0.85:
         score += 20
-    elif entropy >= 3.5:
+    elif entropy_score >= 0.75:
         score += 15
-    elif entropy >= 3.2:
+    elif entropy_score >= 0.65:
         score += 8
 
     # Consonant ratio: high ratio -> more likely DGA (weight: 15)
@@ -507,7 +542,7 @@ def detect_dga(domain: str) -> Dict:
 
     # Calculate confidence
     confidence = _calculate_confidence(
-        entropy=entropy,
+        text=sld,
         consonant_ratio=consonant_ratio,
         bigram_score=bigram_score,
         trigram_score=trigram_score,
@@ -516,26 +551,33 @@ def detect_dga(domain: str) -> Dict:
         sld_length=len(sld),
     )
 
+    subdomain_confidence = 0
     if subdomain:
-        subdomain_entropy = calculate_entropy(subdomain)
-        subdomain_consonant_ratio = calculate_consonant_ratio(subdomain)
-        subdomain_bigram_score = calculate_bigram_score(subdomain)
-        subdomain_trigram_score = calculate_trigram_score(subdomain)
-        subdomain_digit_ratio = calculate_digit_ratio(subdomain)
-        subdomain_dict_match = check_dictionary_words(subdomain)
-        subdomain_confidence = _calculate_confidence(
-            entropy=subdomain_entropy,
-            consonant_ratio=subdomain_consonant_ratio,
-            bigram_score=subdomain_bigram_score,
-            trigram_score=subdomain_trigram_score,
-            digit_ratio=subdomain_digit_ratio,
-            dict_coverage=subdomain_dict_match['coverage'],
-            sld_length=len(subdomain),
-        )
-        confidence = min(
-            100,
-            int(confidence + subdomain_confidence * SUBDOMAIN_CONFIDENCE_WEIGHT),
-        )
+        for subdomain_label in subdomain.split('.'):
+            if (
+                subdomain_label in COMMON_INFRASTRUCTURE_SUBDOMAINS
+                or len(subdomain_label) < 5
+            ):
+                continue
+
+            subdomain_entropy = calculate_entropy(subdomain_label)
+            subdomain_consonant_ratio = calculate_consonant_ratio(subdomain_label)
+            subdomain_bigram_score = calculate_bigram_score(subdomain_label)
+            subdomain_trigram_score = calculate_trigram_score(subdomain_label)
+            subdomain_digit_ratio = calculate_digit_ratio(subdomain_label)
+            subdomain_dict_match = check_dictionary_words(subdomain_label)
+            label_confidence = _calculate_confidence(
+                text=subdomain_label,
+                consonant_ratio=subdomain_consonant_ratio,
+                bigram_score=subdomain_bigram_score,
+                trigram_score=subdomain_trigram_score,
+                digit_ratio=subdomain_digit_ratio,
+                dict_coverage=subdomain_dict_match['coverage'],
+                sld_length=len(subdomain_label),
+            )
+            subdomain_confidence = max(subdomain_confidence, label_confidence)
+
+        confidence = max(confidence, subdomain_confidence)
 
     # Classification threshold
     is_dga = confidence >= 50
