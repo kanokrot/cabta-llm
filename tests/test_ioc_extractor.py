@@ -155,6 +155,43 @@ class TestExtractAll:
         assert 'domains' in result
         assert 'urls' in result
 
+    def test_extract_cves_basic(self):
+        text = "Issues CVE-2024-1234 and CVE-2023-98765 were identified."
+        cves = IOCExtractor.extract_cves(text)
+        assert set(cves) == {'CVE-2024-1234', 'CVE-2023-98765'}
+
+    def test_extract_cves_case_insensitive(self):
+        cves = IOCExtractor.extract_cves("issue cve-2024-0001")
+        assert cves == ['CVE-2024-0001']
+
+    def test_extract_all_includes_new_keys(self):
+        result = IOCExtractor.extract_all("CVE-2024-1234 203.0.113.10")
+        assert {'cve_ids', 'all_iocs', 'total'} <= result.keys()
+
+    def test_all_iocs_excludes_emails_and_cves(self):
+        result = IOCExtractor.extract_all(
+            "attacker@example.com reported CVE-2024-1234"
+        )
+        assert 'attacker@example.com' not in result['all_iocs']
+        assert 'CVE-2024-1234' not in result['all_iocs']
+
+    def test_all_iocs_dedupe_preserves_order(self):
+        result = IOCExtractor.extract_all(
+            "http://evil-callback.xyz/path "
+            "http://EVIL-CALLBACK.XYZ/path"
+        )
+        assert [ioc.casefold() for ioc in result['all_iocs']] == [
+            'evil-callback.xyz',
+            'http://evil-callback.xyz/path',
+        ]
+        assert len({ioc.casefold() for ioc in result['all_iocs']}) == 2
+
+    def test_total_matches_all_iocs_length(self):
+        result = IOCExtractor.extract_all(
+            "203.0.113.10 evil-callback.xyz CVE-2024-1234"
+        )
+        assert result['total'] == len(result['all_iocs'])
+
 
 class TestUtilityMethods:
     """Test defanging, refanging, and categorization."""

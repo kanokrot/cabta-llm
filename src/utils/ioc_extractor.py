@@ -3,7 +3,7 @@ Author: Ugur AtesIOC extraction utilities for Blue Team Assistant."""
 
 import re
 import hashlib
-from typing import List, Dict, Set
+from typing import Any, List, Dict, Set
 from urllib.parse import urlparse
 import logging
 
@@ -371,9 +371,16 @@ class IOCExtractor:
             'sha1': list(set(re.findall(IOCExtractor.SHA1_PATTERN, text))),
             'sha256': list(set(re.findall(IOCExtractor.SHA256_PATTERN, text)))
         }
-    
+
     @staticmethod
-    def extract_all(text: str) -> Dict[str, List[str]]:
+    def extract_cves(text: str) -> List[str]:
+        """Extract unique CVE identifiers from text, normalized to uppercase."""
+        cve_pattern = r'CVE-\d{4}-\d{4,7}'
+        cves = re.findall(cve_pattern, text, re.IGNORECASE)
+        return list(set(cve.upper() for cve in cves))
+
+    @staticmethod
+    def extract_all(text: str) -> Dict[str, Any]:
         """
         Extract all IOC types from text.
         
@@ -381,19 +388,45 @@ class IOCExtractor:
             text: Input text
         
         Returns:
-            Dict containing all extracted IOCs
+            Dict containing:
+                ipv4 (List[str]): Extracted IPv4 addresses.
+                domains (List[str]): Extracted domains.
+                urls (List[str]): Extracted URLs.
+                emails (List[str]): Extracted email addresses.
+                hashes (Dict[str, List[str]]): MD5, SHA1, and SHA256 hashes.
+                cve_ids (List[str]): Extracted, uppercase CVE identifiers.
+                all_iocs (List[str]): Deduplicated non-email, non-CVE IOCs.
+                total (int): Number of values in all_iocs.
         
         Example:
             >>> iocs = IOCExtractor.extract_all("Visit http://evil.com at 203.0.113.45")
             >>> print(iocs['urls'])
             ['http://evil.com']
         """
+        ipv4 = IOCExtractor.extract_ipv4(text)
+        domains = IOCExtractor.extract_domains(text)
+        urls = IOCExtractor.extract_urls(text)
+        emails = IOCExtractor.extract_emails(text)
+        hashes = IOCExtractor.extract_hashes(text)
+        cve_ids = IOCExtractor.extract_cves(text)
+
+        all_iocs = []
+        seen = set()
+        for ioc in [*ipv4, *domains, *urls, *hashes['md5'], *hashes['sha1'], *hashes['sha256']]:
+            normalized_ioc = ioc.casefold()
+            if normalized_ioc not in seen:
+                seen.add(normalized_ioc)
+                all_iocs.append(ioc)
+
         return {
-            'ipv4': IOCExtractor.extract_ipv4(text),
-            'domains': IOCExtractor.extract_domains(text),
-            'urls': IOCExtractor.extract_urls(text),
-            'emails': IOCExtractor.extract_emails(text),
-            'hashes': IOCExtractor.extract_hashes(text)
+            'ipv4': ipv4,
+            'domains': domains,
+            'urls': urls,
+            'emails': emails,
+            'hashes': hashes,
+            'cve_ids': cve_ids,
+            'all_iocs': all_iocs,
+            'total': len(all_iocs)
         }
     
     @staticmethod
