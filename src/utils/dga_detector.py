@@ -132,6 +132,25 @@ def _extract_sld(domain: str) -> str:
     return parts[0]
 
 
+def _extract_subdomain_labels(domain: str) -> str:
+    """Extract labels before the second-level domain.
+
+    Example: 'evil.sub.example.co.uk' -> 'evil.sub'
+             'example.com' -> ''
+    """
+    domain = domain.lower().strip().rstrip('.')
+
+    multi_tlds = ['.co.uk', '.co.jp', '.com.br', '.com.au', '.org.uk', '.co.in']
+    for mt in multi_tlds:
+        if domain.endswith(mt):
+            domain = domain[:-len(mt)]
+            parts = domain.split('.')
+            return '.'.join(parts[:-1]) if len(parts) > 1 else ''
+
+    parts = domain.split('.')
+    return '.'.join(parts[:-2]) if len(parts) >= 3 else ''
+
+
 def calculate_entropy(text: str) -> float:
     """
     Calculate Shannon entropy of a string.
@@ -344,6 +363,8 @@ def _guess_dga_family(sld: str, entropy: float, consonant_ratio: float) -> Optio
 # Confidence calculation
 # ---------------------------------------------------------------------------
 
+SUBDOMAIN_CONFIDENCE_WEIGHT = 0.75
+
 def _calculate_confidence(
     entropy: float,
     consonant_ratio: float,
@@ -457,6 +478,7 @@ def detect_dga(domain: str) -> Dict:
     """
     domain = domain.lower().strip().rstrip('.')
     sld = _extract_sld(domain)
+    subdomain = _extract_subdomain_labels(domain)
 
     if not sld:
         return {
@@ -493,6 +515,27 @@ def detect_dga(domain: str) -> Dict:
         dict_coverage=dict_match['coverage'],
         sld_length=len(sld),
     )
+
+    if subdomain:
+        subdomain_entropy = calculate_entropy(subdomain)
+        subdomain_consonant_ratio = calculate_consonant_ratio(subdomain)
+        subdomain_bigram_score = calculate_bigram_score(subdomain)
+        subdomain_trigram_score = calculate_trigram_score(subdomain)
+        subdomain_digit_ratio = calculate_digit_ratio(subdomain)
+        subdomain_dict_match = check_dictionary_words(subdomain)
+        subdomain_confidence = _calculate_confidence(
+            entropy=subdomain_entropy,
+            consonant_ratio=subdomain_consonant_ratio,
+            bigram_score=subdomain_bigram_score,
+            trigram_score=subdomain_trigram_score,
+            digit_ratio=subdomain_digit_ratio,
+            dict_coverage=subdomain_dict_match['coverage'],
+            sld_length=len(subdomain),
+        )
+        confidence = min(
+            100,
+            int(confidence + subdomain_confidence * SUBDOMAIN_CONFIDENCE_WEIGHT),
+        )
 
     # Classification threshold
     is_dga = confidence >= 50

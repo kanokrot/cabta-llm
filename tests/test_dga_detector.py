@@ -12,3 +12,10 @@ def test_common_words_reduce_dga_confidence():
     assert {'credit', 'repair', 'hacking'} <= set(dictionary_match['words_found'])
     assert dictionary_match['coverage'] > 0.3158
     assert result['confidence'] < 28
+
+
+def test_dga_like_subdomain_contributes_to_confidence():
+    result = detect_dga('wa83neqa.example.com')
+
+    assert result['confidence'] >= 50
+    assert result['is_dga'] is True
