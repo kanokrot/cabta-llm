@@ -1201,7 +1201,15 @@ class PlaybookEngine:
                 status=action_status,
             )
         elif approved:
-            params = self._interpolate_params(pending_step.params, context)
+            try:
+                params = self._interpolate_params(
+                    pending_step.params, context, step_name=pending_step.name,
+                )
+            except PlaybookValidationError as exc:
+                self._record_interpolation_failure(
+                    session_id, step_number, pending_step, exc,
+                )
+                return session_id
             self.agent_loop._notify(session_id, {
                 "type": "tool_call", "step": step_number,
                 "tool": pending_step.tool, "args": params,
@@ -1265,13 +1273,22 @@ class PlaybookEngine:
                 content=f"Approval rejected: {pending_step.description or pending_step.name}",
                 tool_name=pending_step.tool,
             )
+            try:
+                before_state = self._interpolate_params(
+                    pending_step.params, context, step_name=pending_step.name,
+                )
+            except PlaybookValidationError as exc:
+                self._record_interpolation_failure(
+                    session_id, step_number, pending_step, exc,
+                )
+                return session_id
             self.store.add_audit_entry(
                 session_id=session_id,
                 action=pending_step.tool,
                 action_type="approval_rejected",
                 actor="human",
                 requires_approval=True,
-                before_state=self._interpolate_params(pending_step.params, context),
+                before_state=before_state,
                 approved_by=approved_by,
                 status="rejected",
             )
@@ -1306,7 +1323,9 @@ class PlaybookEngine:
         iteration_results = []
         for i, item in enumerate(items[:50]):  # Cap iterations
             iter_context = {**context, "item": item, "item_index": i}
-            params = self._interpolate_params(current_step.params, iter_context)
+            params = self._interpolate_params(
+                current_step.params, iter_context, step_name=current_step.name,
+            )
 
             self.agent_loop._notify(session_id, {
                 "type": "tool_call", "step": step_number,
@@ -1449,7 +1468,9 @@ class PlaybookEngine:
                         content=f"Waiting for approval: {current_step.description or current_step.name}",
                         tool_name=current_step.tool,
                         tool_params=json.dumps(
-                            self._interpolate_params(current_step.params, context),
+                            self._interpolate_params(
+                                current_step.params, context, step_name=current_step.name,
+                            ),
                             default=str,
                         ),
                     )
@@ -1459,7 +1480,9 @@ class PlaybookEngine:
                         action_type="approval_required",
                         actor="system",
                         requires_approval=True,
-                        before_state=self._interpolate_params(current_step.params, context),
+                        before_state=self._interpolate_params(
+                            current_step.params, context, step_name=current_step.name,
+                        ),
                         status="pending",
                     )
                     if self.notification_manager:
@@ -1496,7 +1519,9 @@ class PlaybookEngine:
                 # Handle action-only steps (no tool call needed)
                 if current_step.action and not current_step.tool:
                     action = current_step.action
-                    params = self._interpolate_params(current_step.params, context)
+                    params = self._interpolate_params(
+                        current_step.params, context, step_name=current_step.name,
+                    )
 
                     if action == "final_answer":
                         # Terminal step: record description as final report
@@ -1630,7 +1655,9 @@ class PlaybookEngine:
 
                 else:
                     # Single execution
-                    params = self._interpolate_params(current_step.params, context)
+                    params = self._interpolate_params(
+                        current_step.params, context, step_name=current_step.name,
+                    )
 
                     self.agent_loop._notify(session_id, {
                         "type": "tool_call", "step": step_number,
@@ -1904,7 +1931,49 @@ class PlaybookEngine:
         except Exception as exc:
             return {"error": f"Tool '{tool_name}' failed: {exc}"}
 
-    def _interpolate_params(self, params: Dict, context: Dict) -> Dict:
+    def _record_interpolation_failure(
+        self,
+        session_id: str,
+        step_number: int,
+        step: "PlaybookStep",
+        exc: PlaybookValidationError,
+    ) -> None:
+        """Record an interpolation validation failure on a playbook session."""
+        logger.error(
+            "[PLAYBOOK] Interpolation error in step '%s': %s",
+            step.name, exc,
+        )
+        self.store.add_step(
+            session_id=session_id,
+            step_number=step_number,
+            step_type="error",
+            content=f"Playbook error: {exc}",
+            tool_name=step.tool,
+        )
+        self.store.add_audit_entry(
+            session_id=session_id,
+            action=step.tool,
+            action_type="error",
+            actor="system",
+            requires_approval=step.requires_approval,
+            before_state=step.params,
+            after_state={"error": str(exc)},
+            status="failed",
+        )
+        self.store.update_session_status(
+            session_id, "failed", summary=f"Error: {str(exc)[:200]}",
+        )
+        self.agent_loop._notify(
+            session_id, {"type": "failed", "error": str(exc)[:200]},
+        )
+
+    def _interpolate_params(
+        self,
+        params: Dict,
+        context: Dict,
+        step_name: Optional[str] = None,
+        param_path: str = "",
+    ) -> Dict:
         """
         Replace ``{{variable}}`` placeholders in parameter values with
         values from the context.
@@ -1916,26 +1985,54 @@ class PlaybookEngine:
         """
         result = {}
         for key, value in params.items():
+            current_path = f"{param_path}.{key}" if param_path else str(key)
             if isinstance(value, str):
                 whole_match = _WHOLE_VAR.match(value.strip())
                 if whole_match:
-                    resolved = _resolve_var(whole_match.group(1).strip(), context)
-                    result[key] = resolved if resolved is not None else value
+                    template = whole_match.group(1).strip()
+                    resolved = _resolve_var(template, context)
+                    if resolved is None:
+                        raise PlaybookValidationError(
+                            f"Unresolved template '{{{{{template}}}}}' in "
+                            f"step '{step_name or '<unknown>'}', "
+                            f"param '{current_path}'"
+                        )
+                    result[key] = resolved
                 else:
-                    result[key] = self._interpolate_string(value, context)
+                    result[key] = self._interpolate_string(
+                        value,
+                        context,
+                        step_name=step_name,
+                        param_key=current_path,
+                    )
             elif isinstance(value, dict):
-                result[key] = self._interpolate_params(value, context)
+                result[key] = self._interpolate_params(
+                    value,
+                    context,
+                    step_name=step_name,
+                    param_path=current_path,
+                )
             elif isinstance(value, list):
                 result[key] = [
-                    self._interpolate_string(v, context) if isinstance(v, str) else v
-                    for v in value
+                    self._interpolate_string(
+                        v,
+                        context,
+                        step_name=step_name,
+                        param_key=f"{current_path}[{index}]",
+                    ) if isinstance(v, str) else v
+                    for index, v in enumerate(value)
                 ]
             else:
                 result[key] = value
         return result
 
     @staticmethod
-    def _interpolate_string(template: str, context: Dict) -> str:
+    def _interpolate_string(
+        template: str,
+        context: Dict,
+        step_name: Optional[str] = None,
+        param_key: str = "<unknown>",
+    ) -> str:
         """Replace ``{{var}}`` tokens in a string."""
 
         def _replacer(match):
@@ -1943,7 +2040,10 @@ class PlaybookEngine:
             resolved = _resolve_var(var_path, context)
             if resolved is not None:
                 return str(resolved)
-            return match.group(0)  # Leave placeholder as-is
+            raise PlaybookValidationError(
+                f"Unresolved template '{match.group(0)}' in "
+                f"step '{step_name or '<unknown>'}', param '{param_key}'"
+            )
 
         return re.sub(r"\{\{(.+?)\}\}", _replacer, template)
 
