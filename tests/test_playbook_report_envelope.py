@@ -18,7 +18,7 @@ NATIVE_IOC_RESULT = {
 class _MockPlaybookAgentLoop:
     def __init__(
         self, malware_result=None, investigation_result=None,
-        forensic_malicious=False,
+        forensic_malicious=False, email_malicious=False,
     ):
         self.config = {}
         self.malware_result = malware_result or {
@@ -29,6 +29,7 @@ class _MockPlaybookAgentLoop:
         }
         self.investigation_result = investigation_result or NATIVE_IOC_RESULT
         self.forensic_malicious = forensic_malicious
+        self.email_malicious = email_malicious
 
     async def run_tool(self, tool_name, params):
         tool = tool_name.rsplit("/", 1)[-1]
@@ -46,6 +47,8 @@ class _MockPlaybookAgentLoop:
             }
         if tool == "generate_rules":
             return {"rules": {"sigma": ["rule: mock"]}}
+        if tool == "email_security_check" and self.email_malicious:
+            return {"score": "1/3"}
         if tool == "mitre_attack_mapper":
             return {
                 "capabilities": [],
@@ -175,7 +178,7 @@ async def test_malware_analysis_positive_ioc_is_legacy_and_enveloped(tmp_path):
 @pytest.mark.asyncio
 async def test_forensic_triage_confirm_incident_classifies_tool_result(tmp_path):
     engine, store = _engine(tmp_path, forensic_malicious=True)
-    _, session = await _execute_and_approve(
+    session_id, session = await _execute_and_approve(
         engine,
         store,
         "forensic_triage",
@@ -189,17 +192,90 @@ async def test_forensic_triage_confirm_incident_classifies_tool_result(tmp_path)
 
     assert session["status"] == "completed"
     envelope = session["metadata"]["report_envelope"]
-    # NOTE: confirm_incident lacks on_success, so the engine falls through
-    # sequentially into document_benign even on the malicious branch (pre-existing
-    # playbook_engine.py branch-resolution limitation, not introduced by this
-    # commit — see also the same pattern in phishing_investigation.yaml and
-    # email_investigation.yaml). The scanner correctly captures both results as
-    # they are both genuinely present in context; this test locks in that
-    # documented behavior rather than the originally-assumed exclusive behavior.
+    # Branch-exclusivity and malicious-narrative fix reference:
+    # fix(forensic_triage): add on_success/on_failure to confirm_incident and
+    # document_malicious_incident (2026-09-11; commit pending Lol review;
+    # no commit created in this run).
     assert envelope["generated_rules"] == {"rules": {"sigma": ["rule: mock"]}}
     assert envelope["final_answer"] is not None
     assert envelope["extracted_iocs"] is not None
     assert envelope["mitre_findings"] is not None
+    final_answer_steps = [
+        step for step in store.get_steps(session_id)
+        if step.get("step_type") == "final_answer"
+    ]
+    assert len(final_answer_steps) == 1
+    assert "Malicious incident confirmed" in final_answer_steps[0]["content"]
+
+
+MALICIOUS_BRANCH_CASES = [
+    (
+        "forensic_triage",
+        {"host_identifier": "host-1", "remote_username": "analyst", "remote_key_path": "mock-key", "suspicious_file_path": "mock.bin"},
+        {"forensic_malicious": True},
+        "confirm_incident",
+        "document_malicious_incident",
+        "document_benign",
+    ),
+    (
+        "phishing_investigation",
+        {"email_path": "mock.eml"},
+        {"email_malicious": True},
+        "confirm_phishing",
+        "document_confirmed_phishing",
+        "document_benign",
+    ),
+    (
+        "email_investigation",
+        {"eml_path": "mock.eml"},
+        {"email_malicious": True},
+        "confirm_malicious_email",
+        "document_malicious_email",
+        "document_clean_email",
+    ),
+]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "playbook_id,input_data,loop_kwargs,malicious_step,final_step,clean_step",
+    MALICIOUS_BRANCH_CASES,
+)
+async def test_malicious_branch_excludes_clean_branch(
+    tmp_path,
+    monkeypatch,
+    playbook_id,
+    input_data,
+    loop_kwargs,
+    malicious_step,
+    final_step,
+    clean_step,
+):
+    import src.agent.playbook_engine as playbook_engine_module
+
+    captured_context = {}
+    original_scan = playbook_engine_module._scan_report_components
+
+    def capture_context(context, step_names=None):
+        captured_context.update(context)
+        return original_scan(context, step_names)
+
+    monkeypatch.setattr(
+        playbook_engine_module,
+        "_scan_report_components",
+        capture_context,
+    )
+    engine, store = _engine(tmp_path, **loop_kwargs)
+    session_id, session = await _execute_and_approve(engine, store, playbook_id, input_data)
+
+    assert session["status"] == "completed"
+    assert captured_context[malicious_step]
+    assert captured_context[final_step]
+    assert clean_step not in captured_context
+    assert any(
+        step.get("step_type") == "final_answer"
+        for step in store.get_steps(session_id)
+    )
 
 
 @pytest.mark.asyncio
