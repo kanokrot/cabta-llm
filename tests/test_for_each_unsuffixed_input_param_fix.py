@@ -47,6 +47,10 @@ CASES = [
             }
         ],
         ["203.0.113.7"],
+        {
+            "persistence_check": {},
+            "hash_reputation_check": {},
+        },
         id="forensic-mitre-network-results",
     ),
     pytest.param(
@@ -66,6 +70,7 @@ CASES = [
             }
         ],
         ["evil.example"],
+        {"alert_text": "Suspicious IOC observed in alert"},
         id="alert-trigger-enriched-results",
     ),
     pytest.param(
@@ -85,6 +90,10 @@ CASES = [
             }
         ],
         ["https://evil.example/payload"],
+        {
+            "parse_email": {},
+            "extract_email_iocs": {},
+        },
         id="email-generate-rules-threat-intel-results",
     ),
     pytest.param(
@@ -104,6 +113,16 @@ CASES = [
             }
         ],
         ["198.51.100.9"],
+        {
+            "extract_incident_iocs": {},
+            "threatfox_check_ipv4_results": [],
+            "threatfox_check_domains_results": [],
+            "threatfox_check_urls_results": [],
+            "threatfox_check_sha256_results": [],
+            "zeek_log_analysis": {},
+            "suricata_alert_analysis": {},
+            "timeline_analysis": {},
+        },
         id="incident-correlation-port-results",
     ),
 ]
@@ -117,6 +136,7 @@ CASES = [
         "producer_step",
         "iteration_results",
         "iteration_items",
+        "fixture_context",
     ),
     CASES,
 )
@@ -127,6 +147,7 @@ def test_for_each_input_param_uses_and_resolves_results(
     producer_step,
     iteration_results,
     iteration_items,
+    fixture_context,
 ):
     step = _step(playbook_name, consumer_step)
     expected_template = f"{{{{{producer_step}_results}}}}"
@@ -136,7 +157,9 @@ def test_for_each_input_param_uses_and_resolves_results(
     assert configured_value == expected_template
     assert configured_value != bare_template
 
+    # Placeholder values only to satisfy fail-fast; they are not the real field contract.
     context = {
+        **fixture_context,
         f"{producer_step}_results": iteration_results,
         f"{producer_step}_items": iteration_items,
         f"{producer_step}_any_malicious": True,
