@@ -271,6 +271,8 @@ steps:
 
   - name: confirm_malicious_email
     tool: generate_rules
+    on_success: document_malicious_email
+    on_failure: "__end__"
     params:
       analysis_result: "{{parse_email}}"
       iocs: "{{extract_email_iocs}}"
@@ -282,6 +284,14 @@ steps:
       - Block hash
       - YARA rule
       - Email filter rule
+
+  - name: document_malicious_email
+    action: final_answer
+    on_success: "__end__"
+    description: >
+      Malicious email confirmed. Generated blocking rules for the sender,
+      URLs, hashes, and email filtering. Verdict: Malicious. Recommended
+      actions: deploy the rules, remove matching messages, and notify affected users.
 
   - name: document_clean_email
     action: final_answer
