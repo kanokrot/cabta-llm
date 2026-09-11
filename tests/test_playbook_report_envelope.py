@@ -70,17 +70,85 @@ class _MockPlaybookAgentLoop:
                 "raw_text": "No suspicious events found.",
                 "data": {"event_logs": []},
             }
-        if tool in {
-            "find_functions", "disassemble_entry_point", "analyze_binary",
-            "detect_shellcode", "pe_analyze", "floss_extract", "strings_analysis",
-            "string_analysis", "capa_analyze", "parse_pcap", "analyze_zeek_logs",
-            "analyze_suricata_alerts",
-        }:
+        # These are representative structured fields observed in the MCP
+        # implementations.  This is not exhaustive contract verification for
+        # every field; the compatibility ``output`` fields exist because some
+        # built-in YAML still references them even when the tool is structured.
+        if tool == "find_functions":
             return {
+                "file": "mock.bin", "function_count": 0, "functions": [],
                 "output": "",
-                "decoded_strings": "",
-                "urls": [],
-                "ips": [],
+            }
+        if tool == "disassemble_entry_point":
+            return {
+                "entry_point": None, "file_offset": None,
+                "instruction_count": 0, "instructions": [], "output": "",
+            }
+        if tool == "analyze_binary":
+            return {
+                "file": "mock.bin", "size": 1024,
+                "md5": "b" * 32, "sha256": "a" * 64,
+                "format": "Unknown/Raw", "entropy": 0.0, "output": "",
+            }
+        if tool == "detect_shellcode":
+            return {
+                "file": "mock.bin", "finding_count": 0, "findings": [],
+                "has_shellcode_indicators": False, "output": "",
+            }
+        if tool == "pe_analyze":
+            return {
+                "file": "mock.bin", "valid_pe": False, "headers": {},
+                "sections": [], "imports": [], "exports": [],
+                "suspicious_indicators": [], "resources": [], "output": "",
+            }
+        if tool == "floss_extract":
+            return {
+                "file": "mock.bin", "static_strings": 0, "stack_strings": 0,
+                "decoded_strings": 0, "tight_strings": 0,
+                "sample_strings": [], "output": "",
+            }
+        if tool == "strings_analysis":
+            return {
+                "file": "mock.bin", "strings": [], "total_extracted": 0,
+                "output": "",
+            }
+        if tool == "string_analysis":
+            return {
+                "file": "mock.bin", "total_ascii_strings": 0,
+                "total_unicode_strings": 0,
+                "categorized": {
+                    "urls": [], "ips": [], "domains": [], "emails": [],
+                    "file_paths": [], "registry_keys": [],
+                    "api_calls": [], "suspicious": [],
+                },
+                "sample_strings": [], "output": "", "urls": [], "ips": [],
+            }
+        if tool == "capa_analyze":
+            return {
+                "file": "mock.bin", "matched_rules": 0,
+                "capabilities": [], "mitre_attacks": [], "output": "",
+            }
+        if tool == "parse_pcap":
+            return {
+                "file": "mock.pcap", "file_size_bytes": 0,
+                "format": "PCAP (classic)", "link_type": 1,
+                "packets_parsed": 0, "total_bytes_captured": 0,
+                "protocol_distribution": {}, "packets": [], "output": "",
+            }
+        if tool == "analyze_zeek_logs":
+            return {
+                "protocol_distribution": {}, "service_distribution": {},
+                "long_connections_count": 0, "large_transfers_count": 0,
+                "sample_records": [], "output": "",
+            }
+        if tool == "analyze_suricata_alerts":
+            return {
+                "file": "mock-suricata.json", "total_events": 0,
+                "event_type_distribution": {}, "total_alerts": 0,
+                "severity_distribution": {}, "category_distribution": {},
+                "top_signatures": {}, "mitre_tactic_distribution": {},
+                "top_source_ips": {}, "top_destination_ips": {},
+                "alerts": [], "output": "",
             }
         if tool == "diec_identify":
             return {"file_type": "exe", "file_name": "mock.bin", "output": ""}
@@ -144,7 +212,7 @@ BUILTIN_CASES = [
     ("email_investigation", {"eml_path": "mock.eml"},
      {"extracted_iocs", "final_answer"}),
     ("exploit_reversing", {"sample_path": "mock.bin"},
-     {"extracted_iocs", "generated_rules", "final_answer"}),
+     {"extracted_iocs", "generated_rules", "mitre_findings", "final_answer"}),
     ("forensic_triage", {
         "host_identifier": "host-1", "remote_username": "analyst",
         "remote_key_path": "mock-key", "suspicious_file_path": "mock.bin",
