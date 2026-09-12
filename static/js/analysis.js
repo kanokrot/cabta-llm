@@ -660,6 +660,58 @@
         }
         ov += '</div></div>';
 
+        /* Fuzzy hash match details (hash values are already shown above) */
+        var fuzzyHashResult = res.fuzzy_hash_result;
+        if (fuzzyHashResult && typeof fuzzyHashResult === 'object') {
+            ov += '<div id="fuzzyHashSection" class="hash-card mt-3">';
+            ov += '<div class="d-flex align-items-center gap-2 mb-2"><i class="bi bi-fingerprint text-accent"></i><strong style="font-size:0.9rem;">Fuzzy Hash Match</strong></div>';
+
+            if (fuzzyHashResult.error) {
+                ov += '<div class="alert alert-warning mb-0" role="alert"><i class="bi bi-exclamation-triangle me-1"></i>' + escHtml(String(fuzzyHashResult.error)) + '</div>';
+            } else {
+                var fuzzyAlgorithms = Array.isArray(fuzzyHashResult.algorithms_used) ? fuzzyHashResult.algorithms_used : [];
+                var fuzzyReady = fuzzyHashResult.similarity_ready === true || fuzzyHashResult.similarity_ready === 'true';
+                var fuzzyReadyClass = fuzzyReady ? 'success' : 'secondary';
+                var fuzzyReadyLabel = fuzzyReady ? 'Ready' : 'Not ready';
+
+                ov += '<div class="mb-2"><strong>Algorithms:</strong> ';
+                if (fuzzyAlgorithms.length > 0) {
+                    ov += fuzzyAlgorithms.map(function (algorithm) {
+                        return '<span class="badge bg-info me-1">' + escHtml(String(algorithm)) + '</span>';
+                    }).join('');
+                } else {
+                    ov += '<span class="text-muted">' + escHtml('None') + '</span>';
+                }
+                ov += '</div>';
+                ov += '<div class="mb-3"><strong>Similarity status:</strong> <span class="badge bg-' + fuzzyReadyClass + '">' + escHtml(fuzzyReadyLabel) + '</span></div>';
+
+                var fuzzyFamilyMatches = Array.isArray(fuzzyHashResult.family_matches) ? fuzzyHashResult.family_matches : [];
+                if (fuzzyFamilyMatches.length > 0) {
+                    ov += '<div><strong>Known family matches</strong></div>';
+                    fuzzyFamilyMatches.forEach(function (familyMatch) {
+                        var match = familyMatch && typeof familyMatch === 'object' ? familyMatch : {};
+                        var mitreTechniques = Array.isArray(match.mitre_techniques) ? match.mitre_techniques : [];
+                        ov += '<div class="mb-2 p-2" style="background:rgba(0,0,0,0.12);border:1px solid rgba(255,255,255,0.08);border-radius:8px;">';
+                        ov += '<div><strong>Family:</strong> ' + escHtml(String(match.family || 'N/A')) + '</div>';
+                        ov += '<div><strong>Match type:</strong> ' + escHtml(String(match.match_type || 'N/A')) + '</div>';
+                        ov += '<div><strong>Confidence:</strong> ' + escHtml(String(match.confidence || 'N/A')) + '</div>';
+                        ov += '<div><strong>MITRE techniques:</strong> ';
+                        if (mitreTechniques.length > 0) {
+                            ov += mitreTechniques.map(function (technique) {
+                                return '<span class="badge bg-secondary me-1">' + escHtml(String(technique)) + '</span>';
+                            }).join('');
+                        } else {
+                            ov += '<span class="text-muted">' + escHtml('None') + '</span>';
+                        }
+                        ov += '</div></div>';
+                    });
+                } else {
+                    ov += '<div class="text-muted"><i class="bi bi-info-circle me-1"></i>' + escHtml('No known family match') + '</div>';
+                }
+            }
+            ov += '</div>';
+        }
+
         /* Summary */
         if (res.summary) ov += '<div class="alert alert-secondary mt-3" style="background:rgba(0,0,0,0.15);border-color:rgba(255,255,255,0.08);"><i class="bi bi-info-circle me-1"></i>' + escHtml(res.summary) + '</div>';
 
