@@ -54,7 +54,7 @@ async def test_check_censys_platform_response_and_bearer_auth():
         'services': 3,
         'location': 'US',
         'autonomous_system': 'EXAMPLE-AS',
-        'status': '✓',
+        'status': '➖',
     }
     session.get.assert_called_once()
     request_url = session.get.call_args.args[0]

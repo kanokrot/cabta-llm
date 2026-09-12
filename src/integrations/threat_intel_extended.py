@@ -67,7 +67,7 @@ class ThreatIntelExtended:
                             'services': len(result.get('services', [])),
                             'location': result.get('location', {}).get('country', 'Unknown'),
                             'autonomous_system': result.get('autonomous_system', {}).get('name', 'Unknown'),
-                            'status': '✓'
+                            'status': '➖'
                         }
             return {'source': 'Censys', 'status': 'Not found', 'found': False}
         except Exception as e:
