@@ -1318,8 +1318,9 @@
 
         /* ===== MITRE TAB ===== */
         var mitre = res.mitre_mapping || res.mitre_techniques || [];
+        var mt = '';
         if (Array.isArray(mitre) && mitre.length > 0) {
-            var mt = '<h6><i class="bi bi-diagram-3 me-1 text-accent"></i>MITRE ATT&amp;CK Techniques <span class="badge bg-info">' + mitre.length + '</span></h6>';
+            mt += '<h6><i class="bi bi-diagram-3 me-1 text-accent"></i>MITRE ATT&amp;CK Techniques <span class="badge bg-info">' + mitre.length + '</span></h6>';
             mt += '<table class="table table-sm" style="color:var(--bs-body-color);font-size:0.83rem;">';
             mt += '<thead><tr><th>ID</th><th>Technique</th><th>Tactic</th></tr></thead><tbody>';
             mitre.forEach(function (m) {
@@ -1330,10 +1331,102 @@
                 mt += '</tr>';
             });
             mt += '</tbody></table>';
-            output.mitre = mt;
         } else {
-            output.mitre = '<p style="color:var(--bs-secondary-color);">No MITRE ATT&amp;CK techniques mapped.</p>';
+            mt += '<p style="color:var(--bs-secondary-color);">No MITRE ATT&amp;CK techniques mapped.</p>';
         }
+
+        /* ===== THREAT ACTOR MATCHES (separate from MITRE mapping) ===== */
+        var threatActorMatch = res.threat_actor_match;
+        if (threatActorMatch && typeof threatActorMatch === 'object') {
+            mt += '<hr class="my-3">';
+            mt += '<div id="threatActorMatchSection" class="hash-card mt-3">';
+            mt += '<h6><i class="bi bi-person-badge me-1 text-accent"></i>Threat Actor Matches</h6>';
+
+            var actorMatches = Array.isArray(threatActorMatch.matches) ? threatActorMatch.matches : [];
+            var actorGroupsMatched = typeof threatActorMatch.groups_matched === 'number' ? threatActorMatch.groups_matched : null;
+            var actorGroupsChecked = typeof threatActorMatch.total_groups_checked === 'number' ? threatActorMatch.total_groups_checked : null;
+            if (actorGroupsMatched !== null && actorGroupsChecked !== null) {
+                mt += '<div class="mb-3"><strong>' + actorGroupsMatched + ' of ' + actorGroupsChecked + ' ATT&amp;CK groups matched</strong></div>';
+            }
+
+            function actorConfidenceClass(confidence) {
+                var normalized = String(confidence || '').toUpperCase();
+                if (normalized === 'HIGH') return 'success';
+                if (normalized === 'MEDIUM') return 'warning';
+                return 'secondary';
+            }
+
+            function actorBadgeList(values) {
+                var items = Array.isArray(values) ? values : [];
+                var visibleItems = items.slice(0, 5);
+                var badges = visibleItems.map(function (value) {
+                    return '<span class="badge bg-secondary me-1">' + escHtml(String(value)) + '</span>';
+                }).join('');
+                var moreCount = items.length - visibleItems.length;
+                if (typeof moreCount === 'number' && moreCount > 0) {
+                    badges += '<span class="badge bg-light text-dark">+' + moreCount + ' more</span>';
+                }
+                return badges || '<span class="text-muted">' + escHtml('None') + '</span>';
+            }
+
+            var topActorMatch = threatActorMatch.top_match;
+            if (topActorMatch && typeof topActorMatch === 'object') {
+                var topConfidence = String(topActorMatch.confidence || 'N/A');
+                var topScore = typeof topActorMatch.match_score === 'number' ? topActorMatch.match_score : 'N/A';
+                var topCoverage = typeof topActorMatch.coverage_pct === 'number' ? topActorMatch.coverage_pct + '%' : 'N/A';
+                mt += '<div class="p-3 mb-3" style="background:rgba(13,202,240,0.08);border:1px solid rgba(13,202,240,0.25);border-radius:10px;">';
+                mt += '<div class="d-flex align-items-center gap-2 flex-wrap mb-2"><strong>Top Match:</strong> <span>' + escHtml(String(topActorMatch.group || 'N/A')) + '</span>';
+                mt += '<span class="badge bg-' + actorConfidenceClass(topConfidence) + '">' + escHtml(topConfidence) + '</span></div>';
+                mt += '<div class="small mb-2"><strong>Match score:</strong> ' + topScore + ' <span class="mx-2">|</span> <strong>Coverage:</strong> ' + topCoverage + '</div>';
+                mt += '<div class="small mb-1"><strong>Known malware:</strong> ' + actorBadgeList(topActorMatch.known_malware) + '</div>';
+                mt += '<div class="small"><strong>Matched techniques:</strong> ' + actorBadgeList(topActorMatch.matched_techniques) + '</div>';
+                mt += '</div>';
+            }
+
+            if (actorMatches.length > 0) {
+                if (actorMatches.length > 1) {
+                    var remainingActorMatches = actorMatches.slice();
+                    if (topActorMatch && typeof topActorMatch === 'object') {
+                        var topMatchRemoved = false;
+                        remainingActorMatches = remainingActorMatches.filter(function (actorMatch) {
+                            if (!actorMatch || typeof actorMatch !== 'object') return true;
+                            if (actorMatch === topActorMatch) return false;
+                            if (!topMatchRemoved && actorMatch.group === topActorMatch.group) {
+                                topMatchRemoved = true;
+                                return false;
+                            }
+                            return true;
+                        });
+                    }
+
+                    if (remainingActorMatches.length > 0) {
+                        mt += '<div class="small fw-semibold mb-1">Other matched groups</div>';
+                        mt += '<div style="max-height:300px;overflow-y:auto;">';
+                        mt += '<table class="table table-sm" style="color:var(--bs-body-color);font-size:0.82rem;">';
+                        mt += '<thead><tr><th>Group</th><th>Aliases</th><th>Country</th><th>Confidence</th><th>Coverage</th></tr></thead><tbody>';
+                        remainingActorMatches.forEach(function (actorMatch) {
+                            var match = actorMatch && typeof actorMatch === 'object' ? actorMatch : {};
+                            var aliases = Array.isArray(match.aliases) ? match.aliases.join(', ') : '';
+                            var coverage = typeof match.coverage_pct === 'number' ? match.coverage_pct + '%' : 'N/A';
+                            var confidence = String(match.confidence || 'N/A');
+                            mt += '<tr>';
+                            mt += '<td>' + escHtml(String(match.group || 'N/A')) + '</td>';
+                            mt += '<td>' + escHtml(aliases || 'N/A') + '</td>';
+                            mt += '<td>' + escHtml(String(match.country || 'N/A')) + '</td>';
+                            mt += '<td><span class="badge bg-' + actorConfidenceClass(confidence) + '">' + escHtml(confidence) + '</span></td>';
+                            mt += '<td>' + coverage + '</td>';
+                            mt += '</tr>';
+                        });
+                        mt += '</tbody></table></div>';
+                    }
+                }
+            } else {
+                mt += '<div class="text-muted"><i class="bi bi-info-circle me-1"></i>' + escHtml('No threat actor group matched the detected techniques') + '</div>';
+            }
+
+            mt += '</div>';
+        }
+        output.mitre = mt;
 
         /* ===== CAPABILITIES TAB ===== */
         var caps = res.capabilities || [];
