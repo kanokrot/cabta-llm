@@ -1426,6 +1426,78 @@
 
             mt += '</div>';
         }
+
+        /* ===== KILL CHAIN ASSESSMENT (separate from MITRE mapping) ===== */
+        var killChainAssessment = res.kill_chain_assessment;
+        if (killChainAssessment && typeof killChainAssessment === 'object') {
+            mt += '<hr class="my-3">';
+            mt += '<div id="killChainSection" class="hash-card mt-3">';
+            mt += '<h6><i class="bi bi-signpost-2 me-1 text-accent"></i>Kill Chain Assessment</h6>';
+
+            /* An empty object or missing assessment means the analyzer failed. */
+            if (Object.keys(killChainAssessment).length === 0 || !killChainAssessment.assessment) {
+                mt += '<div class="text-muted"><i class="bi bi-info-circle me-1"></i>' + escHtml('Kill chain assessment unavailable') + '</div>';
+            } else {
+                var killChainSeverity = typeof killChainAssessment.max_severity === 'number' ? killChainAssessment.max_severity : null;
+                var killChainSeverityClass = killChainSeverity === null ? 'secondary' : (killChainSeverity >= 0.8 ? 'danger' : (killChainSeverity >= 0.5 ? 'warning' : 'info'));
+                var killChainCoverage = typeof killChainAssessment.coverage_ratio === 'number' ? (killChainAssessment.coverage_ratio * 100).toFixed(1) + '%' : 'N/A';
+                var killChainProgression = typeof killChainAssessment.progression_score === 'number' ? killChainAssessment.progression_score + '/100' : 'N/A';
+                var killChainLongest = typeof killChainAssessment.longest_chain === 'number' ? killChainAssessment.longest_chain + ' consecutive phases' : 'N/A';
+                var killChainPhases = [
+                    'Initial Access',
+                    'Execution',
+                    'Persistence',
+                    'Privilege Escalation',
+                    'Defense Evasion',
+                    'Credential Access',
+                    'Discovery',
+                    'Lateral Movement',
+                    'Collection',
+                    'Command and Control',
+                    'Exfiltration',
+                    'Impact'
+                ];
+                var killChainDetected = Array.isArray(killChainAssessment.phases_detected) ? killChainAssessment.phases_detected : [];
+                var killChainTechniqueMap = killChainAssessment.phase_techniques && typeof killChainAssessment.phase_techniques === 'object' ? killChainAssessment.phase_techniques : {};
+
+                mt += '<div class="mb-3 p-2" style="border:1px solid rgba(var(--bs-' + killChainSeverityClass + '-rgb,13,202,240),0.3);border-radius:8px;">';
+                mt += '<div class="mb-2"><span class="badge bg-' + killChainSeverityClass + '">' + escHtml(String(killChainAssessment.assessment)) + '</span></div>';
+                mt += '<div class="row g-2 small">';
+                mt += '<div class="col-md-4"><strong>Coverage:</strong> ' + killChainCoverage + '</div>';
+                mt += '<div class="col-md-4"><strong>Progression:</strong> ' + killChainProgression + '</div>';
+                mt += '<div class="col-md-4"><strong>Longest chain:</strong> ' + killChainLongest + '</div>';
+                mt += '</div></div>';
+
+                mt += '<div class="small fw-semibold mb-1">Kill-chain phases</div>';
+                mt += '<div class="d-flex flex-wrap gap-2 mb-3">';
+                killChainPhases.forEach(function (phase) {
+                    var phaseDetected = killChainDetected.indexOf(phase) >= 0;
+                    mt += '<span class="badge ' + (phaseDetected ? 'bg-info text-dark' : 'bg-secondary') + '">' + escHtml(phase) + '</span>';
+                });
+                mt += '</div>';
+                if (killChainDetected.length === 0) {
+                    mt += '<div class="text-muted mb-3"><i class="bi bi-info-circle me-1"></i>' + escHtml('No kill-chain phases detected') + '</div>';
+                }
+
+                killChainPhases.forEach(function (phase) {
+                    if (killChainDetected.indexOf(phase) < 0) return;
+                    var phaseTechniques = Array.isArray(killChainTechniqueMap[phase]) ? killChainTechniqueMap[phase] : [];
+                    mt += '<div class="mb-2"><div class="small fw-semibold mb-1">' + escHtml(phase) + '</div>';
+                    if (phaseTechniques.length > 0) {
+                        phaseTechniques.forEach(function (technique) {
+                            var techniqueId = technique && typeof technique === 'object' ? String(technique.id || '') : '';
+                            var techniqueName = technique && typeof technique === 'object' ? String(technique.name || '') : String(technique || '');
+                            var techniqueLabel = techniqueId && techniqueName ? techniqueId + ' ' + techniqueName : (techniqueId || techniqueName || 'N/A');
+                            mt += '<span class="badge bg-secondary me-1">' + escHtml(techniqueLabel) + '</span>';
+                        });
+                    } else {
+                        mt += '<span class="text-muted">' + escHtml('No matched techniques') + '</span>';
+                    }
+                    mt += '</div>';
+                });
+            }
+            mt += '</div>';
+        }
         output.mitre = mt;
 
         /* ===== CAPABILITIES TAB ===== */
