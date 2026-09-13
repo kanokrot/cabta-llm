@@ -399,27 +399,44 @@ class ThreatIntelligence:
                         )
 
                         qualified_pulse_count = 0
+                        unique_attributions = set()
                         if isinstance(pulses, list):
-                            qualified_pulse_count = sum(
-                                1
-                                for pulse in pulses
-                                if isinstance(pulse, dict)
-                                and (
-                                    pulse.get('malware_families')
-                                    or pulse.get('adversary')
-                                    or pulse.get('attack_ids')
-                                )
-                            )
+                            for pulse in pulses:
+                                if not isinstance(pulse, dict):
+                                    continue
+
+                                families = pulse.get('malware_families') or []
+                                adversary = pulse.get('adversary')
+                                attack_ids = pulse.get('attack_ids') or []
+
+                                if families or adversary or attack_ids:
+                                    qualified_pulse_count += 1
+
+                                for family in families:
+                                    unique_attributions.add(
+                                        ('family', str(family).lower())
+                                    )
+                                if adversary:
+                                    unique_attributions.add(
+                                        ('adversary', str(adversary).lower())
+                                    )
+                                for attack_id in attack_ids:
+                                    unique_attributions.add(
+                                        ('attack', str(attack_id).lower())
+                                    )
 
                         if has_whitelist_validation:
-                            qualified_pulse_count = 0
+                            unique_attributions.clear()
+
+                        unique_attribution_count = len(unique_attributions)
 
                         return {
-                            'status': '✓' if qualified_pulse_count > 0 else '✗',
+                            'status': '✓' if unique_attribution_count > 0 else '✗',
                             'pulses': pulse_count,
                             'total_pulses': pulse_count,
                             'qualified_pulses': qualified_pulse_count,
-                            'score': min(100, qualified_pulse_count * 10)
+                            'unique_attribution_count': unique_attribution_count,
+                            'score': min(100, unique_attribution_count * 10)
                         }
                     else:
                         return {'status': '⚠', 'error': f'HTTP {response.status}'}
