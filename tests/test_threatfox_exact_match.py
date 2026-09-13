@@ -148,7 +148,7 @@ class TestThreatFoxExactMatch(unittest.IsolatedAsyncioTestCase):
             await self.threat_intel.check_threatfox('159.65.1.67')
 
         request_kwargs = session_context.__aenter__.return_value.post.call_args.kwargs
-        self.assertTrue(request_kwargs['json']['exact_match'])
+        self.assertNotIn('exact_match', request_kwargs['json'])
 
     async def test_ip_port_malformed_returned_ioc_is_not_found(self):
         for returned_ioc in ('not-an-ip:8001', '999.999.999.999'):

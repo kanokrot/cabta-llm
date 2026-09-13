@@ -524,7 +524,7 @@ class ThreatIntelligence:
         try:
             # ThreatFox API - may require API key for authenticated access
             api_key = get_valid_key(self.api_keys, 'threatfox') or get_valid_key(self.api_keys, 'abusech')
-            data = {'query': 'search_ioc', 'search_term': ioc, 'exact_match': True}
+            data = {'query': 'search_ioc', 'search_term': ioc}
             headers = {'Content-Type': 'application/json'}
             if api_key:
                 headers['Auth-Key'] = api_key
@@ -548,7 +548,8 @@ class ThreatIntelligence:
                                 if ioc_type in ('ipv4', 'ip', 'ip:port'):
                                     comparable_ioc = _normalize_ipv4_host(returned_ioc)
 
-                                # Server-side exact_match is the primary filter; retain this client-side check as defense-in-depth.
+                                # ThreatFox exact_match=True breaks IP:port matching server-side (see investigation notes);
+                                # wildcard search + client-side exact-match comparison is the primary filter.
                                 if ioc_type == 'domain':
                                     exact_match = comparable_ioc.lower() == ioc.lower()
                                 else:
@@ -895,7 +896,7 @@ class ThreatIntelligence:
             'malwarebazaar': {'status': '➖', 'message': 'Hash only'},
             'c2_trackers': {'status': '⏳', 'message': 'Pending'},
             'tor_exit_nodes': {'status': '➖', 'message': 'IP only'},
-            'ssl_blacklist': {'status': '➖', 'message': 'Hash only'},
+            'sslblacklist': {'status': '➖', 'message': 'IPv4/SHA1 only'},
             'usom': {'status': '➖', 'message': 'Domain/IP only'},
             'greynoise': {'status': '➖', 'message': 'IP only'},
             'censys': {'status': '➖', 'message': 'IP only'},
@@ -921,6 +922,10 @@ class ThreatIntelligence:
         
         # ThreatFox (all types)
         tasks.append(('threatfox', self.check_threatfox(ioc)))
+
+        # SSL Blacklist supports IPv4 C2 entries and SHA1 certificate fingerprints.
+        if ioc_type in ('ipv4', 'sha1'):
+            tasks.append(('sslblacklist', self.threat_feeds.check_ssl_blacklist(ioc)))
         
         # IP-specific sources
         if ioc_type == 'ipv4':

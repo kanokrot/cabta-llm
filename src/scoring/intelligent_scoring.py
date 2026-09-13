@@ -150,26 +150,31 @@ class IntelligentScoring:
                 return max(0, min(100, IntelligentScoring.calculate_domain_enrichment_bonus(domain_enrichment)))
             return 0
 
-        # Weight different sources
+        # Weight different sources.
+        # รายชื่อ source ในแต่ละ tier ต้อง sync กับ investigate_ioc_comprehensive()
+        # ใน threat_intel.py เสมอ — เพิ่ม/ลบ source ใหม่ต้องอัปเดตทั้งสองที่พร้อมกัน
+        # (พบ mismatch 9 รายการเมื่อ 2026-09-13 ดู CABTA_scope_ledger.md)
         weighted_scores = []
 
         # High-confidence sources (weight: 1.5) - Critical for threat detection
         high_confidence_sources = [
             'virustotal', 'abuseipdb', 'feodotracker', 'threatfox',
-            'malwarebazaar', 'hybridanalysis'
+            'malwarebazaar'
         ]
 
         # Medium-confidence sources (weight: 1.0) - Good reputation data
         medium_confidence_sources = [
             'alienvault', 'urlhaus', 'c2_trackers', 'greynoise',
             'shodan', 'criminalip', 'ipqualityscore', 'spamhaus',
-            'pulsedive', 'censys', 'ibm_xforce', 'talos'
+            'pulsedive', 'censys', 'talos',
+            # TEMP: assigned medium tier pending empirical weight-fitting, see
+            # docs/CABTA_scope_ledger.md
+            'ip2proxy', 'threatzone', 'triage', 'usom'
         ]
 
         # Low-confidence sources (weight: 0.5) - Context sources
         low_confidence_sources = [
-            'tor_exit_nodes', 'threatcrowd', 'circl', 'phishtank',
-            'google_safebrowsing', 'sslblacklist'
+            'tor_exit_nodes', 'circl', 'phishtank', 'sslblacklist'
         ]
 
         for source_name, source_data in sources.items():
