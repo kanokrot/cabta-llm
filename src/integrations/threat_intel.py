@@ -372,12 +372,42 @@ class ThreatIntelligence:
                     if response.status == 200:
                         data = await response.json()
                         
-                        pulse_count = data.get('pulse_info', {}).get('count', 0)
-                        
+                        pulse_info = data.get('pulse_info', {}) or {}
+                        pulse_count = pulse_info.get('count', 0)
+                        pulses = pulse_info.get('pulses', [])
+
+                        validation = data.get('validation', []) or []
+                        has_whitelist_validation = any(
+                            isinstance(entry, dict)
+                            and (
+                                'whitelist' in str(entry.get('name', '')).lower()
+                                or str(entry.get('source', '')).lower() == 'whitelist'
+                            )
+                            for entry in validation
+                        )
+
+                        qualified_pulse_count = 0
+                        if isinstance(pulses, list):
+                            qualified_pulse_count = sum(
+                                1
+                                for pulse in pulses
+                                if isinstance(pulse, dict)
+                                and (
+                                    pulse.get('malware_families')
+                                    or pulse.get('adversary')
+                                    or pulse.get('attack_ids')
+                                )
+                            )
+
+                        if has_whitelist_validation:
+                            qualified_pulse_count = 0
+
                         return {
-                            'status': '✓' if pulse_count > 0 else '✗',
+                            'status': '✓' if qualified_pulse_count > 0 else '✗',
                             'pulses': pulse_count,
-                            'score': min(100, pulse_count * 10)
+                            'total_pulses': pulse_count,
+                            'qualified_pulses': qualified_pulse_count,
+                            'score': min(100, qualified_pulse_count * 10)
                         }
                     else:
                         return {'status': '⚠', 'error': f'HTTP {response.status}'}
