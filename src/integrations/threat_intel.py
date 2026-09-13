@@ -530,6 +530,21 @@ class ThreatIntelligence:
                             ioc_data = result.get('data', [])
                             if ioc_data:
                                 first = ioc_data[0]
+                                returned_ioc = first.get('ioc', '')
+                                ioc_type = first.get('ioc_type', '').lower()
+                                if ioc_type == 'domain':
+                                    exact_match = returned_ioc.lower() == ioc.lower()
+                                else:
+                                    exact_match = returned_ioc == ioc
+
+                                if not exact_match:
+                                    return {
+                                        'status': '✗',
+                                        'found': False,
+                                        'message': 'No exact match (search matched different indicator)',
+                                        'unrelated_match_found': returned_ioc
+                                    }
+
                                 return {
                                     'status': '✓',
                                     'found': True,
