@@ -3,6 +3,7 @@ Author: Ugur AtesThreat intelligence API integrations (20+ sources)."""
 
 import aiohttp
 import asyncio
+import ipaddress
 import re
 from typing import Dict, Optional, List
 from datetime import datetime
@@ -12,6 +13,17 @@ from ..cache.ioc_cache import IOCCache
 from ..utils.api_key_validator import get_valid_key
 
 logger = logging.getLogger(__name__)
+
+
+def _normalize_ipv4_host(value: str) -> str | None:
+    host = value.split(':', 1)[0]
+    try:
+        ip = ipaddress.ip_address(host)
+        return str(ip) if ip.version == 4 else None
+    except ValueError:
+        return None
+
+
 class ThreatIntelligence:
     """
     Multi-source threat intelligence aggregator.
@@ -512,7 +524,7 @@ class ThreatIntelligence:
         try:
             # ThreatFox API - may require API key for authenticated access
             api_key = get_valid_key(self.api_keys, 'threatfox') or get_valid_key(self.api_keys, 'abusech')
-            data = {'query': 'search_ioc', 'search_term': ioc}
+            data = {'query': 'search_ioc', 'search_term': ioc, 'exact_match': True}
             headers = {'Content-Type': 'application/json'}
             if api_key:
                 headers['Auth-Key'] = api_key
@@ -532,10 +544,15 @@ class ThreatIntelligence:
                                 first = ioc_data[0]
                                 returned_ioc = first.get('ioc', '')
                                 ioc_type = first.get('ioc_type', '').lower()
+                                comparable_ioc = returned_ioc
+                                if ioc_type in ('ipv4', 'ip', 'ip:port'):
+                                    comparable_ioc = _normalize_ipv4_host(returned_ioc)
+
+                                # Server-side exact_match is the primary filter; retain this client-side check as defense-in-depth.
                                 if ioc_type == 'domain':
-                                    exact_match = returned_ioc.lower() == ioc.lower()
+                                    exact_match = comparable_ioc.lower() == ioc.lower()
                                 else:
-                                    exact_match = returned_ioc == ioc
+                                    exact_match = comparable_ioc == ioc
 
                                 if not exact_match:
                                     return {
@@ -545,7 +562,7 @@ class ThreatIntelligence:
                                         'unrelated_match_found': returned_ioc
                                     }
 
-                                return {
+                                result = {
                                     'status': '✓',
                                     'found': True,
                                     'malware': first.get('malware_printable', 'Unknown'),
@@ -555,6 +572,9 @@ class ThreatIntelligence:
                                     'first_seen': first.get('first_seen', ''),
                                     'score': 90
                                 }
+                                if ioc_type in ('ipv4', 'ip', 'ip:port') and comparable_ioc != returned_ioc:
+                                    result['matched_ioc_with_port'] = returned_ioc
+                                return result
                             return {'status': '✗', 'found': False, 'message': 'Not found in ThreatFox', 'score': 0}
                         elif result.get('query_status') == 'no_result':
                             return {'status': '✗', 'found': False, 'message': 'Not listed', 'score': 0}

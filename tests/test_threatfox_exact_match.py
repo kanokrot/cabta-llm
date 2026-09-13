@@ -93,6 +93,70 @@ class TestThreatFoxExactMatch(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(result['found'])
         self.assertEqual(result['score'], 90)
 
+    async def test_ipv4_match_with_port_remains_found(self):
+        result = await self._check('159.65.1.67', '159.65.1.67:8001', 'ipv4')
+
+        self.assertEqual(result['status'], '✓')
+        self.assertTrue(result['found'])
+        self.assertEqual(result['score'], 90)
+        self.assertEqual(result['matched_ioc_with_port'], '159.65.1.67:8001')
+
+    async def test_second_ipv4_match_with_port_remains_found(self):
+        result = await self._check('46.246.4.10', '46.246.4.10:8848', 'ipv4')
+
+        self.assertEqual(result['status'], '✓')
+        self.assertTrue(result['found'])
+
+    async def test_ipv4_different_host_with_port_is_not_found(self):
+        result = await self._check('1.2.3.4', '5.6.7.8:1234', 'ipv4')
+
+        self.assertEqual(result['status'], '✗')
+        self.assertFalse(result['found'])
+        self.assertEqual(result['unrelated_match_found'], '5.6.7.8:1234')
+
+    async def test_ipv4_malformed_returned_ioc_is_not_found(self):
+        for returned_ioc in ('not-an-ip:8001', '999.999.999.999'):
+            with self.subTest(returned_ioc=returned_ioc):
+                result = await self._check('1.2.3.4', returned_ioc, 'ipv4')
+
+                self.assertEqual(result['status'], '✗')
+                self.assertFalse(result['found'])
+
+
+    async def test_ip_port_taxonomy_match_with_port_is_found(self):
+        result = await self._check('159.65.1.67', '159.65.1.67:8001', 'ip:port')
+
+        self.assertEqual(result['status'], '✓')
+        self.assertTrue(result['found'])
+        self.assertEqual(result['score'], 90)
+        self.assertEqual(result['matched_ioc_with_port'], '159.65.1.67:8001')
+
+    async def test_second_ip_port_taxonomy_match_with_port_is_found(self):
+        result = await self._check('46.246.4.10', '46.246.4.10:8848', 'ip:port')
+
+        self.assertEqual(result['status'], '✓')
+        self.assertTrue(result['found'])
+        self.assertEqual(result['score'], 90)
+        self.assertEqual(result['matched_ioc_with_port'], '46.246.4.10:8848')
+
+    async def test_request_uses_server_side_exact_match(self):
+        response_context = _mock_aiohttp_response(
+            json_data=_threatfox_payload('159.65.1.67:8001', 'ip:port')
+        )
+        session_context = _mock_session(response_context)
+        with patch('src.integrations.threat_intel.aiohttp.ClientSession', return_value=session_context):
+            await self.threat_intel.check_threatfox('159.65.1.67')
+
+        request_kwargs = session_context.__aenter__.return_value.post.call_args.kwargs
+        self.assertTrue(request_kwargs['json']['exact_match'])
+
+    async def test_ip_port_malformed_returned_ioc_is_not_found(self):
+        for returned_ioc in ('not-an-ip:8001', '999.999.999.999'):
+            with self.subTest(returned_ioc=returned_ioc):
+                result = await self._check('1.2.3.4', returned_ioc, 'ip:port')
+
+                self.assertEqual(result['status'], '✗')
+                self.assertFalse(result['found'])
 
 if __name__ == '__main__':
     unittest.main()
