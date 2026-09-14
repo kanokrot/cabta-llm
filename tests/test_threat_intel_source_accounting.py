@@ -56,7 +56,11 @@ def test_tier_sources_and_comprehensive_tasks_are_one_to_one():
 
     task_sources = _task_source_names(threat_intel_path)
 
-    assert tier_sources == task_sources
+    # Sources intentionally untiered pending the verdict/scoring algorithm redesign
+    # (uses IntelligentScoring's fallback weight 0.8). Remove this exemption once
+    # tier assignment is decided.
+    UNTIERED_SOURCES = {"smet_nrd", "hagezi_nrd", "mb_recent_sha256"}
+    assert tier_sources == task_sources - UNTIERED_SOURCES
 
 
 def _build_wire_test_intelligence():
@@ -103,6 +107,9 @@ def _build_wire_test_intelligence():
         }
     )
     intelligence.threat_feeds = SimpleNamespace(
+        check_mb_recent=AsyncMock(
+            return_value={"status": "\u2717", "found": False, "score": 0}
+        ),
         check_ssl_blacklist=AsyncMock(return_value={"status": "âœ—", "score": 0}),
         check_usom=AsyncMock(return_value={"status": "âœ—", "score": 0}),
     )
@@ -144,6 +151,11 @@ def _build_hash_intelligence(source_results):
         check_triage=AsyncMock(return_value=source_results["triage"]),
         check_threatzone=AsyncMock(return_value=source_results["threatzone"]),
     )
+    intelligence.threat_feeds = SimpleNamespace(
+        check_mb_recent=AsyncMock(
+            return_value={"status": "\u2717", "found": False, "score": 0}
+        ),
+    )
     return intelligence
 
 
@@ -164,23 +176,23 @@ async def test_hash_source_accounting_excludes_unscheduled_placeholders():
     )
     coverage = IntelligentScoring.calculate_source_coverage(result)
 
-    assert result["sources_checked"] == 6
+    assert result["sources_checked"] == 7
     # VirusTotal is Group B; only Group A contributes to the aggregate flag count.
     assert result["sources_flagged"] == 0
     assert coverage == {
         "sources_flagged": 0,
-        "sources_clean": 2,
+        "sources_clean": 3,
         "sources_unavailable": 0,
         "sources_stale": 0,
-        "total_sources_attempted": 2,
-        "sources_skipped_not_applicable": 9,
+        "total_sources_attempted": 3,
+        "sources_skipped_not_applicable": 11,
         "group_a": {
             "sources_flagged": 0,
-            "sources_clean": 2,
+            "sources_clean": 3,
             "sources_unavailable": 0,
             "sources_stale": 0,
-            "total_sources_attempted": 2,
-            "sources_skipped_not_applicable": 9,
+            "total_sources_attempted": 3,
+            "sources_skipped_not_applicable": 11,
         },
         "group_b": {
             "sources_flagged": 1,

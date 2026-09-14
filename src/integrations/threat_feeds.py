@@ -5,6 +5,8 @@ Free threat feed integrations with caching.
 Sources:
 - USOM (Turkish national CERT) - JSON API with cached lookups, text-list fallback
 - SSL Blacklist (abuse.ch) - CSV parsed into sets with TTL cache
+- Smet NRD and HaGeZi NRD - domain lists with TTL cache
+- MalwareBazaar recent SHA256 - text list with TTL cache
 
 Notes:
 - All outbound requests explicitly use certifi's CA bundle. On some Windows
@@ -100,6 +102,10 @@ class ThreatFeeds:
     SSLBL_CERT_CSV = "https://sslbl.abuse.ch/blacklist/sslblacklist.csv"
     SSLBL_IP_CSV = "https://sslbl.abuse.ch/blacklist/sslipblacklist.csv"
 
+    SMET_NRD_URL = "https://smet.cz/nrd/data/today.txt"
+    HAGEZI_NRD_URL = "https://raw.githubusercontent.com/hagezi/nrd/main/domains/nrd7.txt"
+    MB_RECENT_SHA256_URL = "https://bazaar.abuse.ch/export/txt/sha256/recent/"
+
     def __init__(self, config: Dict):
         self.config = config
         self.timeout = aiohttp.ClientTimeout(total=30)
@@ -115,6 +121,11 @@ class ThreatFeeds:
         # SSL Blacklist caches
         self._sslbl_sha1 = _FeedCache(self._cache_ttl)
         self._sslbl_ips = _FeedCache(self._cache_ttl)
+
+        # Static-list caches
+        self._smet_nrd = _FeedCache(self._cache_ttl)
+        self._hagezi_nrd = _FeedCache(self._cache_ttl)
+        self._mb_recent_sha256 = _FeedCache(self._cache_ttl)
 
     # ------------------------------------------------------------------
     # Shared HTTP helpers
@@ -325,4 +336,139 @@ class ThreatFeeds:
             logger.error(f"[SSLBlacklist] Error: {e}")
             return FeedResult(
                 status="⚠", source="SSL Blacklist", found=False, error=str(e)
+            ).to_dict()
+
+    # ------------------------------------------------------------------
+    # Smet NRD
+    # ------------------------------------------------------------------
+
+    async def _refresh_smet_cache(self) -> None:
+        """Download and cache the current Smet newly registered domains list."""
+        if not self._smet_nrd.is_stale():
+            return
+
+        logger.info("[Smet NRD] Refreshing domain-list cache")
+        async with self._session() as session:
+            text = await self._fetch_text(session, self.SMET_NRD_URL)
+            if text:
+                self._smet_nrd.data = {
+                    line.strip().lower().lstrip("\ufeff")
+                    for line in text.splitlines()
+                    if line.strip() and not line.strip().startswith(("#", "!"))
+                }
+
+        self._smet_nrd.mark_fresh()
+        logger.info("[Smet NRD] Cache refreshed: %d domains", len(self._smet_nrd.data))
+
+    async def check_smet_nrd(self, domain: str) -> Dict:
+        """Check a domain against Smet newly registered domains."""
+        try:
+            await self._refresh_smet_cache()
+            domain_lower = domain.strip().lower()
+            found = domain_lower in self._smet_nrd.data
+            return FeedResult(
+                status="\u2713" if found else "\u2717",
+                source="Smet NRD",
+                found=found,
+                score=85 if found else 0,
+                message="Domain found in Smet NRD" if found else "Not found in Smet NRD",
+            ).to_dict()
+        except Exception as e:
+            logger.error(f"[Smet NRD] Error: {e}")
+            return FeedResult(
+                status="\u26a0", source="Smet NRD", found=False, error=str(e)
+            ).to_dict()
+
+    # ------------------------------------------------------------------
+    # HaGeZi NRD
+    # ------------------------------------------------------------------
+
+    async def _refresh_hagezi_cache(self) -> None:
+        """Download and cache the current HaGeZi newly registered domains list."""
+        if not self._hagezi_nrd.is_stale():
+            return
+
+        logger.info("[HaGeZi NRD] Refreshing domain-list cache")
+        async with self._session() as session:
+            text = await self._fetch_text(session, self.HAGEZI_NRD_URL)
+            if text:
+                self._hagezi_nrd.data = {
+                    line.strip().lower().lstrip("\ufeff")
+                    for line in text.splitlines()
+                    if line.strip() and not line.strip().startswith(("#", "!"))
+                }
+
+        self._hagezi_nrd.mark_fresh()
+        logger.info("[HaGeZi NRD] Cache refreshed: %d domains", len(self._hagezi_nrd.data))
+
+    async def check_hagezi_nrd(self, domain: str) -> Dict:
+        """Check a domain against HaGeZi newly registered domains."""
+        try:
+            await self._refresh_hagezi_cache()
+            domain_lower = domain.strip().lower()
+            found = domain_lower in self._hagezi_nrd.data
+            return FeedResult(
+                status="\u2713" if found else "\u2717",
+                source="HaGeZi NRD",
+                found=found,
+                score=85 if found else 0,
+                message="Domain found in HaGeZi NRD" if found else "Not found in HaGeZi NRD",
+            ).to_dict()
+        except Exception as e:
+            logger.error(f"[HaGeZi NRD] Error: {e}")
+            return FeedResult(
+                status="\u26a0", source="HaGeZi NRD", found=False, error=str(e)
+            ).to_dict()
+
+    # ------------------------------------------------------------------
+    # MalwareBazaar recent SHA256
+    # ------------------------------------------------------------------
+
+    async def _refresh_mb_recent_cache(self) -> None:
+        """Download and cache MalwareBazaar's recent SHA256 export."""
+        if not self._mb_recent_sha256.is_stale():
+            return
+
+        logger.info("[MalwareBazaar recent SHA256] Refreshing hash-list cache")
+        async with self._session() as session:
+            text = await self._fetch_text(session, self.MB_RECENT_SHA256_URL)
+            if text:
+                self._mb_recent_sha256.data = {
+                    line.strip().lower().lstrip("\ufeff")
+                    for line in text.splitlines()
+                    if (
+                        len(line.strip()) == 64
+                        and all(c in "0123456789abcdefABCDEF" for c in line.strip())
+                    )
+                }
+
+        self._mb_recent_sha256.mark_fresh()
+        logger.info(
+            "[MalwareBazaar recent SHA256] Cache refreshed: %d hashes",
+            len(self._mb_recent_sha256.data),
+        )
+
+    async def check_mb_recent(self, hash_value: str) -> Dict:
+        """Check a hash against MalwareBazaar's recent SHA256 export."""
+        try:
+            await self._refresh_mb_recent_cache()
+            hash_lower = hash_value.strip().lower()
+            found = hash_lower in self._mb_recent_sha256.data
+            return FeedResult(
+                status="\u2713" if found else "\u2717",
+                source="MalwareBazaar recent SHA256",
+                found=found,
+                score=95 if found else 0,
+                message=(
+                    "SHA256 found in MalwareBazaar recent export"
+                    if found else "Not found in MalwareBazaar recent export"
+                ),
+            ).to_dict()
+        except Exception as e:
+            logger.error(f"[MalwareBazaar recent SHA256] Error: {e}")
+            return FeedResult(
+                status="\u26a0",
+                source="MalwareBazaar recent SHA256",
+                found=False,
+                error=str(e),
             ).to_dict()

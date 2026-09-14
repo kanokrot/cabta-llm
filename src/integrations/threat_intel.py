@@ -927,6 +927,9 @@ class ThreatIntelligence:
             'c2_trackers': {'status': '⏳', 'message': 'Pending'},
             'tor_exit_nodes': {'status': '➖', 'message': 'IP only'},
             'sslblacklist': {'status': '➖', 'message': 'IPv4/SHA1 only'},
+            'smet_nrd': {'status': '➖', 'message': 'Domain only'},
+            'hagezi_nrd': {'status': '➖', 'message': 'Domain only'},
+            'mb_recent_sha256': {'status': '➖', 'message': 'SHA256 only'},
             'usom': {'status': '➖', 'message': 'Domain/IP only'},
             'greynoise': {'status': '➖', 'message': 'IP only'},
             'censys': {'status': '➖', 'message': 'IP only'},
@@ -992,6 +995,8 @@ class ThreatIntelligence:
             # Extended domain sources
             tasks.append(('pulsedive', self.extended.check_pulsedive(ioc)))
             tasks.append(('circl', self.extended.check_circl(ioc)))
+            tasks.append(('smet_nrd', self.threat_feeds.check_smet_nrd(ioc)))
+            tasks.append(('hagezi_nrd', self.threat_feeds.check_hagezi_nrd(ioc)))
         
         # URL sources
         if ioc_type == 'url':
@@ -1006,6 +1011,7 @@ class ThreatIntelligence:
         # Hash sources
         if ioc_type in ['md5', 'sha1', 'sha256', 'hash']:
             tasks.append(('malwarebazaar', self.check_malwarebazaar(ioc)))
+            tasks.append(('mb_recent_sha256', self.threat_feeds.check_mb_recent(ioc)))
             tasks.append(('alienvault', self.check_alienvault(ioc, 'hash')))
             
           

@@ -31,6 +31,14 @@ def _build_intel(alienvault_result, cached_result=None):
         ),
         check_circl=AsyncMock(return_value={"status": "✗", "found": False}),
     )
+    intel.threat_feeds = SimpleNamespace(
+        check_smet_nrd=AsyncMock(
+            return_value={"status": "\u2717", "found": False, "score": 0}
+        ),
+        check_hagezi_nrd=AsyncMock(
+            return_value={"status": "\u2717", "found": False, "score": 0}
+        ),
+    )
     return intel
 
 
