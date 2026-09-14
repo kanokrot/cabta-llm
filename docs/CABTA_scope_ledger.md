@@ -19,7 +19,7 @@
 | 5 | ความถี่แจ้งเตือน (IOC ใหม่เข้าทุกวัน) | ⬜ | - | policy เขียนชัด: real-time (Malicious) / digest (Suspicious) / none (Clean) + throttle/dedup rule | เช็คว่ามี throttle logic อยู่แล้วหรือต้องออกแบบใหม่ |
 | 6 | Role definition + user manual ต่อ role + scope | ⬜ | - | ตาราง role × scope × ผู้เกี่ยวข้อง + manual สั้นต่อ role | เช็คว่ามี RBAC ในโค้ดหรือยัง (`rg "role" src/`) — ถ้าไม่มี ต้อง report เป็น gap ตรงๆ |
 | 7 | ทฤษฎีการคำนวณ + trust source ต้องอธิบายได้ | ⬜ | - | เอกสาร 1 หน้า: formula + ที่มาทางทฤษฎี + เหตุผล trust ranking (ต่อเนื่องจากข้อ 2+3) | รวมผลจากข้อ 2, 3 มาเขียนเป็นเอกสารเดียว |
-| 8 | Approval gate ที่ Detection Rule ทำไมต้องมี / SOC แก้ได้ไหม | ⬜ | - | คำตอบ design (ทำไมต้องมี human gate) + สถานะจริงของ edit/review endpoint ในโค้ด | เช็ค validate/review/export flow (รู้อยู่แล้วว่า gate ยัง unimplemented เต็ม — ต้องพูดตรงๆ ว่าอันไหน design อันไหน gap) |
+| 8 | Approval gate ที่ Detection Rule ทำไมต้องมี / SOC แก้ได้ไหม | ✅ | T1 | ยืนยัน 2 ประเด็น: (1) approval gate เป็น human gate เพื่อป้องกัน false positive หลุด production ตามเคส AlienVault ที่พบ และสร้าง accountability ผ่าน audit trail `approved_by/approved_at/deployed_by/deployed_at`; workflow validate → approve → deploy → export/ZIP implement ครบและบังคับผ่าน `_require_rule_export_approval()` (`src/web/routes/reports.py:107-118`) (2) SOC แก้เนื้อหา rule ได้แล้วจริงตั้งแต่ commit `f49aabc` ผ่าน `PUT /{analysis_id}/rules/{rule_type}` โดยใช้ `StrictStr`, เรียก `validate_rule()` ก่อน save และ hash-invalidation ใน `_get_rule_export_state()` (`src/web/routes/reports.py:87-104`) ทำงานอัตโนมัติเมื่อ content เปลี่ยน ยืนยันด้วย test แล้ว | ปิดแล้ว — เตรียมสไลด์ 2 ประเด็น (1) gate+audit trail (2) edit workflow ใหม่ที่ validate ก่อน save และ auto-invalidate approval เดิมเมื่อ content เปลี่ยน |
 
 ### A1. Severity mapping evidence (15 Sep 2026)
 
@@ -39,6 +39,21 @@ Correlation additive scoring แบบเต็ม:
 - Finding verdict: malicious ตั้งแต่ 2 แหล่งขึ้นไป `+20`; 1 แหล่ง `+10`
 - รวมคะแนนแล้ว map เป็น `>=60 critical`, `>=40 high`, `>=20 medium`, `>=10 low`, ต่ำกว่านั้น `info`
 
+### A2. Detection rule edit endpoint (15 Sep 2026)
+
+Commit: `f49aabc` (`feat: allow SOC to edit detection rules`)
+
+| ไฟล์ | สิ่งที่เพิ่ม/ยืนยัน | Evidence |
+|---|---|---|
+| `src/web/analysis_manager.py` | `update_detection_rule()` ทำ read-modify-write ภายใต้ `self._lock` เดียวกับ `complete_job()`, serialize result ทั้งก้อนกลับ DB และคืน `False` โดยไม่ throw เมื่อไม่พบ job, parse result ไม่ได้, ไม่มี `detection_rules` หรือไม่มี `rule_type` | `src/web/analysis_manager.py:81-128` |
+| `src/web/routes/reports.py` | เพิ่ม `PUT /{analysis_id}/rules/{rule_type}`; `RuleContentUpdateRequest` บังคับ `content: StrictStr`; validate ก่อน save; invalid ได้ 422; ไม่มี logic invalidate แยก เพราะ content hash ใน `_get_rule_export_state()` reset approval เป็น `pending_export` อัตโนมัติ | `src/web/routes/reports.py:54`, `:87-104`, `:264-301` |
+| `tests/test_rule_export.py` | ครอบคลุม edit สำเร็จและ invalidate approval, field อื่นไม่หาย, persistence ข้าม `AnalysisManager` instance, invalid syntax, rule type ไม่มีจริง, list content ถูก reject ที่ schema, และ job ที่ไม่มี `detection_rules` คืน `False` | `tests/test_rule_export.py:195-288`; ผลรัน `57 passed` |
+
+Known limitation: lock เป็นระดับ `AnalysisManager` ทั้งก้อน ไม่ใช่ต่อ job
+หรือ `analysis_id`; SOC หลายคนที่แก้คนละ analysis พร้อมกันจะรอคิวบน
+`self._lock` แต่ไม่ error อาจช้าลงตามจำนวน concurrent edits ยอมรับได้ใน
+สเกลปัจจุบัน และไม่อยู่ใน scope ที่ต้องแก้รอบนี้
+
 ---
 
 ## B. Backlog (ห้ามแทรกก่อน Section A เสร็จ เว้นแต่ blocked)
@@ -50,7 +65,7 @@ Correlation additive scoring แบบเต็ม:
 | RAG auto-seeding on startup | ⬜ | ยังไม่ยืนยันว่า `kb.seed()` รันตอน uvicorn startup |
 | Email-level RAG references (Flow B) | 📝 | prompt ส่งให้ Codex แล้ว รอผล |
 | HTML report 404 (3 playbooks) | ⬜ | pre-existing gap, ทราบ root cause แล้ว |
-| Detection Rule Export remaining gaps | ⬜ | validate/review gate, file download, ZIP, deploy — ทั้งหมด 0 matches (เชื่อมกับ comment #8) |
+| Detection Rule Export remaining gaps | ✅ | ผิด — investigate แล้วพบว่า validate/approve/deploy/download/zip ครบใน `src/web/routes/reports.py` (ดู Section A #8 และ A2) gap จริงมีแค่ edit content ซึ่งตอนนี้ implement แล้วที่ commit `f49aabc` เช่นกัน ปิดแถวนี้ |
 | Teams notification | ⬜ | paused, prompt drafted |
 | Test Case checklist (Excel) | ⬜ | not yet requested |
 | UDP visibility in netstat_collect | ⬜ | low priority unless demo needs it |
