@@ -39,6 +39,16 @@ def _build_intel(alienvault_result, cached_result=None):
             return_value={"status": "\u2717", "found": False, "score": 0}
         ),
     )
+    intel.misp_feed = SimpleNamespace(
+        check_misp=AsyncMock(
+            return_value={
+                "status": "✗",
+                "found": False,
+                "score": 0,
+                "feed_status": "unavailable",
+            }
+        ),
+    )
     return intel
 
 

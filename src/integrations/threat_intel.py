@@ -73,6 +73,9 @@ class ThreatIntelligence:
         # Initialize threat feed checker (USOM, etc.)
         from .threat_feeds import ThreatFeeds
         self.threat_feeds = ThreatFeeds(config)
+
+        from .misp_feed import MISPFeed
+        self.misp_feed = MISPFeed(config)
     
     async def check_virustotal(self, ioc: str, ioc_type: str) -> Dict:
         """
@@ -930,6 +933,7 @@ class ThreatIntelligence:
             'smet_nrd': {'status': '➖', 'message': 'Domain only'},
             'hagezi_nrd': {'status': '➖', 'message': 'Domain only'},
             'mb_recent_sha256': {'status': '➖', 'message': 'SHA256 only'},
+            'misp_circl_feed_osint': {'status': '➖', 'message': 'IP/Domain/URL/Hash'},
             'usom': {'status': '➖', 'message': 'Domain/IP only'},
             'greynoise': {'status': '➖', 'message': 'IP only'},
             'censys': {'status': '➖', 'message': 'IP only'},
@@ -962,6 +966,7 @@ class ThreatIntelligence:
         
         # IP-specific sources
         if ioc_type == 'ipv4':
+            tasks.append(('misp_circl_feed_osint', self.misp_feed.check_misp(ioc, ioc_type)))
             # Core IP sources
             tasks.append(('abuseipdb', self.check_abuseipdb(ioc)))
             tasks.append(('shodan', self.check_shodan(ioc)))
@@ -989,6 +994,7 @@ class ThreatIntelligence:
         
         # Domain sources
         if ioc_type == 'domain':
+            tasks.append(('misp_circl_feed_osint', self.misp_feed.check_misp(ioc, ioc_type)))
             tasks.append(('alienvault', self.check_alienvault(ioc, ioc_type)))
             tasks.append(('c2_trackers', self.check_c2_trackers(ioc)))
             
@@ -1000,6 +1006,7 @@ class ThreatIntelligence:
         
         # URL sources
         if ioc_type == 'url':
+            tasks.append(('misp_circl_feed_osint', self.misp_feed.check_misp(ioc, ioc_type)))
             tasks.append(('urlhaus', self.check_urlhaus(ioc)))
             tasks.append(('alienvault', self.check_alienvault(ioc, ioc_type)))
             tasks.append(('c2_trackers', self.check_c2_trackers(ioc)))
@@ -1010,6 +1017,7 @@ class ThreatIntelligence:
         
         # Hash sources
         if ioc_type in ['md5', 'sha1', 'sha256', 'hash']:
+            tasks.append(('misp_circl_feed_osint', self.misp_feed.check_misp(ioc, ioc_type)))
             tasks.append(('malwarebazaar', self.check_malwarebazaar(ioc)))
             tasks.append(('mb_recent_sha256', self.threat_feeds.check_mb_recent(ioc)))
             tasks.append(('alienvault', self.check_alienvault(ioc, 'hash')))
