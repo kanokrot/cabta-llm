@@ -1,6 +1,6 @@
 # CABTA Scope Ledger
 
-**Last updated:** 14 Sep 2026
+**Last updated:** 15 Sep 2026
 **Rule:** Section A ต้องปิดให้หมดก่อนเริ่ม Section B (backlog เดิม) เว้นแต่ Section A ข้อนั้น block อยู่จริงๆ
 
 **Status:** ⬜ Not started | 🔍 Investigating | 📝 Fix drafted | ✅ Verified | 🚫 Blocked
@@ -12,7 +12,7 @@
 
 | # | Comment | Status | Evidence Tier | Definition of Done | Next Action |
 |---|---------|--------|----------------|---------------------|-------------|
-| 1 | Severity levels: Malicious/Suspicious/Clean/Unknown vs Critical/High/Medium/Low | ⬜ | - | ตัดสินใจ: เพิ่ม severity mapping จาก score (แยกจาก verdict) พร้อม threshold ที่เขียนไว้ชัด | เขียน design decision 1 ย่อหน้า + เช็คว่ามี field severity อยู่แล้วหรือไม่ (`rg "severity" src/`) |
+| 1 | Severity levels: Malicious/Suspicious/Clean/Unknown vs Critical/High/Medium/Low | ✅ | T1 | ยืนยันว่า CABTA มี severity mapping อยู่แล้ว 3 ชั้น ไม่ใช่ gap ที่ต้องออกแบบใหม่: per-IOC (`src/utils/wazuh_severity.py:33-66`, `src/utils/helpers.py:63-95`) ใช้ score >=70 → CRITICAL, >=40 → HIGH, <40 → LOW และ verdict MALICIOUS→CRITICAL, SUSPICIOUS→HIGH, CLEAN/UNKNOWN→LOW; correlation (`src/agent/correlation.py:646-736`) รวม additive score แล้ว map >=60/40/20/10/else → critical/high/medium/low/info; external Wazuh alert (`src/utils/wazuh_severity.py:83-119`) map rule.level 14-15/12-13/7-11/0-6 → CRITICAL/HIGH/MEDIUM/LOW | ปิดแล้ว — ไม่ต้อง design ใหม่ เตรียมพูดประเด็น asymmetry ระหว่าง 3-tier (per-IOC) กับ 5-tier (correlation) เผื่ออาจารย์ถามต่อ |
 | 2 | Base score 1.3 คำนวณจากอะไร | ⬜ | - | ได้ raw code ของ formula ครบ (บรรทัด, ไฟล์, ตัวแปรทุกตัวที่เข้าสมการ) | investigation prompt: `rg "base_score" src/` แล้วดู scoring module เต็มไฟล์ |
 | 3 | Source ไหนน่าเชื่อถือที่สุด (ที่มาของ weight) | ⬜ | - | ได้ raw config/code ที่ผูก weight กับแต่ละ source + เหตุผลอ้างอิงได้ (เช่น MISP confidence, FIRST.org) | `rg "weight" src/integrations/threat_intel.py` + config.yaml |
 | 4 | ช่องทางแจ้งเตือนผูกกับ severity ระดับไหน | ⬜ | - | ตาราง severity → channel (Email/LINE/Teams) ที่ตรงกับโค้ดจริง | เช็ค `notifications.py` ว่ามี mapping logic จริงหรือ hardcode |
@@ -20,6 +20,24 @@
 | 6 | Role definition + user manual ต่อ role + scope | ⬜ | - | ตาราง role × scope × ผู้เกี่ยวข้อง + manual สั้นต่อ role | เช็คว่ามี RBAC ในโค้ดหรือยัง (`rg "role" src/`) — ถ้าไม่มี ต้อง report เป็น gap ตรงๆ |
 | 7 | ทฤษฎีการคำนวณ + trust source ต้องอธิบายได้ | ⬜ | - | เอกสาร 1 หน้า: formula + ที่มาทางทฤษฎี + เหตุผล trust ranking (ต่อเนื่องจากข้อ 2+3) | รวมผลจากข้อ 2, 3 มาเขียนเป็นเอกสารเดียว |
 | 8 | Approval gate ที่ Detection Rule ทำไมต้องมี / SOC แก้ได้ไหม | ⬜ | - | คำตอบ design (ทำไมต้องมี human gate) + สถานะจริงของ edit/review endpoint ในโค้ด | เช็ค validate/review/export flow (รู้อยู่แล้วว่า gate ยัง unimplemented เต็ม — ต้องพูดตรงๆ ว่าอันไหน design อันไหน gap) |
+
+### A1. Severity mapping evidence (15 Sep 2026)
+
+ระบบแยก severity เป็น 3 ระดับตามสิ่งที่กำลังประเมิน ไม่ใช่ scale เดียว:
+
+| ระดับ | สิ่งที่ประเมิน | Mapping ที่มีอยู่แล้ว | Evidence |
+|---|---|---|---|
+| Per-IOC severity | IOC เดี่ยว / สัญญาณเดียว | `score >=70 → CRITICAL`, `>=40 → HIGH`, `<40 → LOW`; verdict `MALICIOUS→CRITICAL`, `SUSPICIOUS→HIGH`, `CLEAN/UNKNOWN→LOW` | `src/utils/wazuh_severity.py:33-66`; threshold ต้นทาง `src/utils/helpers.py:63-95` |
+| Per-incident/correlation severity | เหตุการณ์ที่เชื่อมหลาย IOC/TTP | additive score: `>=60 critical`, `>=40 high`, `>=20 medium`, `>=10 low`, else `info`; แปลงต่อด้วย `correlation_to_wazuh_severity()` เป็น Wazuh 4-tier | `_assess_severity()` ที่ `src/agent/correlation.py:646-736`; conversion ที่ `src/utils/wazuh_severity.py:69-81` |
+| External Wazuh alert ingestion | Wazuh `rule.level` 0-15 | `14-15 → CRITICAL`, `12-13 → HIGH`, `7-11 → MEDIUM`, `0-6 → LOW`; อิง significance cutoff `email_alert_level=12` | `src/utils/wazuh_severity.py:83-119` |
+
+Correlation additive scoring แบบเต็ม:
+
+- Overlap: ถ้ามี high-overlap อย่างน้อย 3 รายการ (`overlap.count >= 3`) ให้ `+30`; มิฉะนั้นถ้ามี overlap ให้ `+10 × min(number_of_overlaps, 5)`
+- TTP tactic: `impact +25`, `credential-access +15`, `lateral-movement +15`, `command-and-control +15`
+- Tactic coverage: ถ้ามีอย่างน้อย 4 tactics ให้ `+10`
+- Finding verdict: malicious ตั้งแต่ 2 แหล่งขึ้นไป `+20`; 1 แหล่ง `+10`
+- รวมคะแนนแล้ว map เป็น `>=60 critical`, `>=40 high`, `>=20 medium`, `>=10 low`, ต่ำกว่านั้น `info`
 
 ---
 
@@ -165,7 +183,7 @@ Verification results:
 Git working tree มีการเปลี่ยนแปลงที่ตั้งใจไว้ใน source/scoring, tests, documentation
 และไฟล์ใหม่ใน `scripts/eval/`; ยังไม่มี commit รอผู้ใช้ confirm ก่อน commit
 
-### D7. Static-list fast-lane integration: Smet NRD, HaGeZi NRD, and MalwareBazaar recent SHA256
+### D7. Static-list fast-lane integration (historical pre-MISP): Smet NRD, HaGeZi NRD, and MalwareBazaar recent SHA256
 
 **Session date:** 14 Sep 2026
 
@@ -303,6 +321,127 @@ run for the live feed checks.
   non-error behavior, not a positive match for each feed.
 - Revisit feed metadata/HTTP validators, attribution/legal handling, and any
   requirement for durable snapshots before production deployment.
+
+### D8. MISP CIRCL public-feed integration (current session)
+
+**Session date:** 15 Sep 2026
+
+**Decision locked by user.** MISP is integrated as one additional source named
+`MISP` in user-facing results. The implementation uses only the CIRCL public
+OSINT feed (`manifest.json` plus `<event-uuid>.json`) and a full-feed
+in-memory cache. MISP REST API, API credentials, per-IOC MISP network lookups,
+and a user-selectable feed/API mode are explicitly out of scope.
+
+The internal source/telemetry identifier is `misp_circl_feed_osint`; it is
+intentionally separate from the existing `circl` passive-DNS integration and
+the existing `circl_misp_feed_check()` function in
+`src/mcp_servers/free_osint_tools.py`. Neither forbidden integration was
+modified.
+
+#### D8.1 Implementation and data model
+
+- New module: `src/integrations/misp_feed.py`.
+- Feed endpoints are defined at `misp_feed.py:23-24`:
+  `https://www.circl.lu/doc/misp/feed-osint/manifest.json` and the event
+  JSON URL template.
+- `MISPFeed` owns an in-memory set index for `ip`, `domain`, `url`, and
+  `hash`, plus per-event parsed values and timestamps. There is no persistent
+  disk snapshot or database cache.
+- `_parse_event()` reads both `Event.Attribute` and every
+  `Event.Object[].Attribute` (`misp_feed.py:110-135`). Attribute mapping is:
+  `ip-src/ip-dst -> ip`, `domain/hostname -> domain`, `url/uri -> url`,
+  and MD5/SHA-family types (including `sha3-*`) -> `hash`.
+- `check_misp(ioc, ioc_type)` performs local set membership only and returns
+  `status`, `found`, `score`, `feed_status`,
+  `latest_event_timestamp`, `cache_fetched_at`,
+  `last_successful_refresh`, and refresh-failure metadata
+  (`misp_feed.py:326-365`).
+- A missing match is not reported as an unqualified clean result when the feed
+  is `stale` or `unavailable`; it uses the warning status and preserves
+  freshness metadata.
+
+#### D8.2 Refresh lifecycle and FIX 1-3
+
+- The first IOC check lazily schedules a background full-feed refresh. The
+  check itself does not await network activity, so the first result may be
+  `unavailable` or `stale` while refresh is running.
+- Refresh is incremental after the initial load. `_cursor_timestamp` is the
+  global timestamp cursor (`misp_feed.py:53-57`, `:252-263`); the
+  per-event timestamp map remains the retry-safe fallback for events that
+  failed during a partial cycle.
+- **FIX 1 — partial failures:** the cycle calculates `failures / total` at
+  `misp_feed.py:293-307`. A maximum 10% failure ratio is treated as an
+  acceptable refresh; if any event succeeded, `cache_fetched_at` and
+  `latest_event_timestamp` are updated first (`:216-222`). Ratios above
+  10% retain the successful event updates but keep failure/backoff state
+  active. A manifest/session failure counts as a full refresh failure.
+- **FIX 2 — one session:** `_refresh_events()` opens one
+  `aiohttp.ClientSession` around manifest and all event requests
+  (`misp_feed.py:229-234`, `:264-274`). The same session is passed to
+  `_refresh_manifest()` and `_fetch_event()`.
+- **FIX 3 — scheduling gate:** `_schedule_refresh()` checks both
+  `_next_refresh_at` and `_circuit_open_until` before checking/creating a
+  task (`misp_feed.py:312-324`).
+- Refresh circuit settings are intentionally conservative: three consecutive
+  failed cycles open the circuit; cooldown starts at 900 seconds and uses
+  exponential backoff capped at one hour (`misp_feed.py:27-31`, `:194-205`).
+  Existing cache data remains available as stale-but-usable data.
+
+#### D8.3 Threat-intelligence wiring and classification
+
+- `ThreatIntelligence` constructs `MISPFeed` at
+  `src/integrations/threat_intel.py:77-78`.
+- `source_defaults` includes the all-four-type capability message at
+  `threat_intel.py:936`, so unrelated IOC types are marked not applicable.
+- The same source is appended once in each supported task branch:
+  IPv4 `:969`, domain `:997`, URL `:1009`, and hash `:1020`.
+- `GROUP_B_EXCLUDE` was not changed. Under the current legacy accounting,
+  sources absent from that set are Group A by default; this is separate from
+  explicit confidence-tier assignment.
+- MISP is intentionally provisional/untiered. It was added to the
+  `UNTIERED_SOURCES` test exemption with the existing fallback-weight comment
+  (`tests/test_threat_intel_source_accounting.py:59-68`).
+  `src/scoring/intelligent_scoring.py` was not modified.
+
+#### D8.4 Test changes and verified results
+
+- `tests/test_threat_intel_cache_fallback.py:42-52` adds a clean async
+  `check_misp` mock so unrelated cache/timeout tests do not perform MISP work.
+- `tests/test_threat_intel_source_accounting.py:121-132` and `:174-185`
+  provide clean MISP mocks for the wire and hash fixtures.
+- Hash accounting was updated from 7 to 8 attempted sources. The actual hash
+  task list contains eight sources because MISP is now scheduled at
+  `threat_intel.py:1019-1027`. The fixture therefore correctly expects four
+  clean Group-A attempts and four Group-A attempted sources at
+  `tests/test_threat_intel_source_accounting.py:204-220`; this is test
+  accounting, not a new score or tier decision.
+- `.venv\\Scripts\\python.exe -m py_compile` passed for all four changed or
+  created implementation/test files.
+- MISP parser smoke test passed with synthetic attributes covering all four
+  normalized IOC types from both event attribute locations.
+- Targeted cache/accounting tests: **9 passed**.
+- Full suite with workspace temp isolation: **1348 passed, 2 failed**. The two
+  failures were pre-existing live URLhaus tests blocked by socket policy
+  (`WinError 10013`), not MISP failures. Re-running with only those two tests
+  deselected produced **1348 passed, 2 deselected**.
+- No live CIRCL full-feed download was performed in this implementation
+  session, so event-count coverage, feed freshness in production, and positive
+  MISP matches remain unverified. The integration is therefore wired and
+  parser-verified, but live-feed evidence is still T2 rather than T1.
+
+#### D8.5 Commit and remaining follow-up
+
+- Implementation commit: `24b8adf` (`Integrate CIRCL MISP feed cache`). It
+  contains exactly the four approved files:
+  `misp_feed.py`, `threat_intel.py`,
+  `test_threat_intel_cache_fallback.py`, and
+  `test_threat_intel_source_accounting.py`.
+- This ledger update is a separate documentation change and is intentionally
+  not included in that implementation commit.
+- Follow-up before treating MISP as a permanent tier: run a controlled/live
+  CIRCL refresh, measure event success ratio and freshness over time, inspect
+  positive-match behavior, and then decide explicit confidence-tier placement
+  without conflating it with Group A/B execution accounting.
 
 ## Weekly ritual (กันของหล่น)
 1. ก่อนเริ่มแต่ละ session: เปิดไฟล์นี้ อัปเดต status เก่าก่อน แล้วค่อยเลือกงานถัดไป
