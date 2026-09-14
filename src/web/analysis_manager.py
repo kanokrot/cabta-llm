@@ -78,6 +78,56 @@ class AnalysisManager:
             return None
         return self._row_to_dict(cur.description, row)
 
+    def update_detection_rule(
+        self,
+        analysis_id: str,
+        rule_type: str,
+        content: str,
+    ) -> bool:
+        """Persist one detection-rule edit without replacing other result data.
+
+        The read-modify-write cycle uses the same self._lock as complete_job(),
+        and commits the complete JSON result after changing one rule key.
+        """
+        with self._lock:
+            conn = self._connect()
+            try:
+                cur = conn.execute(
+                    "SELECT result FROM analysis_jobs WHERE id = ?",
+                    (analysis_id,),
+                )
+                row = cur.fetchone()
+                if row is None or not row[0]:
+                    conn.rollback()
+                    return False
+
+                try:
+                    result = json.loads(row[0])
+                except (TypeError, json.JSONDecodeError):
+                    conn.rollback()
+                    return False
+
+                if not isinstance(result, dict):
+                    conn.rollback()
+                    return False
+                rules = result.get('detection_rules')
+                if not isinstance(rules, dict) or rule_type not in rules:
+                    conn.rollback()
+                    return False
+
+                result['detection_rules'][rule_type] = content
+                conn.execute(
+                    "UPDATE analysis_jobs SET result = ? WHERE id = ?",
+                    (json.dumps(result, default=str), analysis_id),
+                )
+                conn.commit()
+                return True
+            except Exception:
+                conn.rollback()
+                raise
+            finally:
+                conn.close()
+
     def list_jobs(
         self,
         limit: int = 50,

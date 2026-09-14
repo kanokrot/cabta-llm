@@ -15,7 +15,7 @@ from typing import Dict, Optional, Tuple
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, StrictStr
 from starlette.background import BackgroundTask
 
 from ...detection.rule_validator import validate_rule
@@ -49,6 +49,10 @@ class RuleApprovalRequest(BaseModel):
 
 class RuleDeploymentRequest(BaseModel):
     deployed_by: str = 'unknown'
+
+
+class RuleContentUpdateRequest(BaseModel):
+    content: StrictStr
 
 
 def _get_rule_content(
@@ -254,6 +258,43 @@ async def get_rule_export_status(
     """Return the in-memory review and manual-deployment state for a rule."""
     normalized_type, content = _get_rule_content(request, analysis_id, rule_type)
     return _get_rule_export_state(analysis_id, normalized_type, content)
+
+
+@router.put('/{analysis_id}/rules/{rule_type}')
+async def update_rule_content(
+    request: Request,
+    analysis_id: str,
+    rule_type: str,
+    body: RuleContentUpdateRequest,
+):
+    """Validate and persist edited detection-rule content."""
+    normalized_type = str(rule_type or '').strip().lower()
+    if normalized_type not in _RULE_EXTENSIONS:
+        raise HTTPException(404, f'Unsupported rule type: {normalized_type}')
+
+    validation = validate_rule(normalized_type, body.content)
+    if not validation['valid']:
+        raise HTTPException(
+            422,
+            detail={
+                'message': 'Rule validation failed; content was not saved',
+                'validation': validation,
+            },
+        )
+
+    updated = request.app.state.analysis_manager.update_detection_rule(
+        analysis_id,
+        normalized_type,
+        body.content,
+    )
+    if not updated:
+        raise HTTPException(404, 'Analysis or rule not found')
+
+    return {
+        'success': True,
+        'rule_type': normalized_type,
+        'validation': validation,
+    }
 
 
 @router.post('/{analysis_id}/rules/{rule_type}/approve')
