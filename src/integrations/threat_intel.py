@@ -14,6 +14,19 @@ from ..utils.api_key_validator import get_valid_key
 
 logger = logging.getLogger(__name__)
 
+# Scoring policy follows the Admiralty/NATO distinction between source reliability
+# and information credibility (FM 2-22.3; MISP Admiralty Scale): a dependency that
+# is systemically unreliable due to auth/rate-limit/timeout behavior is excluded
+# from the critical score path even when its returned content may be credible.
+# This also applies Nygard's Circuit Breaker principle (Release It!, 2007): keep
+# unreliable dependencies off the critical decision path while retaining best-effort
+# calls and raw results for supplemental reporting.
+GROUP_B_EXCLUDE = {
+    'virustotal', 'abuseipdb', 'shodan', 'alienvault', 'greynoise',
+    'censys', 'pulsedive', 'criminalip', 'ipqualityscore', 'phishtank',
+    'ip2proxy', 'triage', 'threatzone'
+}
+
 
 def _normalize_ipv4_host(value: str) -> str | None:
     host = value.split(':', 1)[0]
@@ -1059,6 +1072,8 @@ class ThreatIntelligence:
         sources_flagged = 0
         
         for source, data in results.items():
+            if source.lower() in GROUP_B_EXCLUDE:
+                continue
             if isinstance(data, dict):
                 # Count flagged sources
                 if data.get('status') == '✓':

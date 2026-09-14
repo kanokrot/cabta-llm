@@ -4,6 +4,7 @@ Author: Ugur AtesIntelligent threat scoring system."""
 
 from typing import Dict
 import logging
+from ..integrations.threat_intel import GROUP_B_EXCLUDE
 
 logger = logging.getLogger(__name__)
 class IntelligentScoring:
@@ -177,8 +178,17 @@ class IntelligentScoring:
             'tor_exit_nodes', 'circl', 'phishtank', 'sslblacklist'
         ]
 
+        group_a_sources_flagged = 0
         for source_name, source_data in sources.items():
             source_name_lower = source_name.lower()
+            if source_name_lower in GROUP_B_EXCLUDE:
+                continue
+
+            if isinstance(source_data, dict) and source_data.get('status') in [
+                '✓', '✓ FLAGGED', 'FLAGGED', 'flagged'
+            ]:
+                group_a_sources_flagged += 1
+
             score = IntelligentScoring._get_source_score(source_data)
 
             if score > 0:
@@ -200,10 +210,9 @@ class IntelligentScoring:
             base_score = sum(weighted_scores) / len(weighted_scores)
 
             # Boost score if multiple sources flagged
-            sources_flagged = intel_results.get('sources_flagged', 0)
-            if sources_flagged >= 3:
+            if group_a_sources_flagged >= 3:
                 base_score = min(100, base_score * 1.3)  # 30% boost for 3+ flagged
-            elif sources_flagged >= 2:
+            elif group_a_sources_flagged >= 2:
                 base_score = min(100, base_score * 1.15)  # 15% boost for 2 flagged
 
         # Apply domain enrichment bonus (newly registered +20, DGA +30)
@@ -223,15 +232,37 @@ class IntelligentScoring:
             "sources_stale": 0,
             "total_sources_attempted": 0,
             "sources_skipped_not_applicable": 0,
+            "group_a": {
+                "sources_flagged": 0,
+                "sources_clean": 0,
+                "sources_unavailable": 0,
+                "sources_stale": 0,
+                "total_sources_attempted": 0,
+                "sources_skipped_not_applicable": 0,
+            },
+            "group_b": {
+                "sources_flagged": 0,
+                "sources_clean": 0,
+                "sources_unavailable": 0,
+                "sources_stale": 0,
+                "total_sources_attempted": 0,
+                "sources_skipped_not_applicable": 0,
+            },
         }
 
         sources = intel_results.get('sources', {})
         if not isinstance(sources, dict):
             return coverage
 
-        for source_data in sources.values():
+        for source_name, source_data in sources.items():
             if not isinstance(source_data, dict):
                 continue
+
+            group = (
+                coverage["group_b"]
+                if source_name.lower() in GROUP_B_EXCLUDE
+                else coverage["group_a"]
+            )
 
             status = str(source_data.get('status', '')).strip()
             reason = str(
@@ -242,24 +273,31 @@ class IntelligentScoring:
                 or status == '➖'
                 or reason == 'not applicable'
             ):
-                coverage["sources_skipped_not_applicable"] += 1
+                group["sources_skipped_not_applicable"] += 1
                 continue
 
-            coverage["total_sources_attempted"] += 1
+            group["total_sources_attempted"] += 1
             is_cached = source_data.get('cached') is True
 
             if source_data.get('status') == '⚠' and not is_cached:
-                coverage["sources_unavailable"] += 1
+                group["sources_unavailable"] += 1
                 continue
 
             if is_cached:
-                coverage["sources_stale"] += 1
+                group["sources_stale"] += 1
 
             score = IntelligentScoring._get_source_score(source_data)
             if score > 0:
-                coverage["sources_flagged"] += 1
+                group["sources_flagged"] += 1
             else:
-                coverage["sources_clean"] += 1
+                group["sources_clean"] += 1
+
+        # Keep Group A/B coverage visible separately for transparent, auditable CTI
+        # reporting. Admiralty/MISP distinguishes source reliability from the
+        # credibility of the information, so Group B is not deleted as evidence;
+        # it is retained as supplemental context outside the verdict denominator.
+        for metric in coverage["group_a"]:
+            coverage[metric] = coverage["group_a"][metric]
 
         return coverage
     

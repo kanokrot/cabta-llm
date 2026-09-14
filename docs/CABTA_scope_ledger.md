@@ -47,9 +47,9 @@
 |------|--------|----------------|--------------------------|-------------|
 | Dataset และ default limit | ✅ | T1 | `eval_benchmark.py` ใช้ `benchmark_iocs_v2.json` จำนวน 894 รายการ และ `--malicious-limit=0` เพื่อรันครบชุด | ปล่อยให้ eval รันจนจบ |
 | Resume และ graceful Ctrl+C | ✅ | T1 | `load_existing_results()` ข้าม malformed JSON พร้อม warning; loop flush ผลทีละ record และจับ `KeyboardInterrupt` ก่อนปิดไฟล์ | ใช้ `--resume` ต่อหลังหยุด/เครื่องกลับมา |
-| Fit/score result path | ✅ | T1 | `fit_source_weights.py` และ `score_eval_results.py` ชี้ไป `eval_results_group_a_v2.jsonl`; ตรวจ syntax แล้ว แต่ยังไม่รันระหว่าง eval ไม่ครบ | รันหลังผลครบ 894 รายการ |
+| Fit/score result path | ✅ | T1 | `scripts/eval/fit_source_weights.py` และ `scripts/adhoc/score_eval_results.py` ชี้ไป `scripts/eval/eval_results_group_a_v2.jsonl`; ตรวจ syntax ของ fit script แล้ว แต่ยังไม่รันระหว่าง eval ไม่ครบ | รันหลังผลครบ 894 รายการ |
 | Group A eval execution | 🔍 | T1 | Snapshot เวลา 14 Sep 2026 11:41:44: เขียนแล้ว 54/894 รายการ, unique 54, invalid JSON 0, เหลือ 840 รายการ; พบ Python process ที่เกี่ยวข้อง 2 โปรเซส | เฝ้าดูผลลัพธ์และไม่รัน fit/score จนกว่าจะครบ |
-| แยก workflow ออกจาก `scripts/adhoc/` | ⬜ | T1 | สำรวจแล้ว แต่ยังไม่ได้ย้ายไฟล์; `scripts/adhoc/` และ `data/benchmark/` ยังถูก `.gitignore` ครอบอยู่ | รอ confirm โครงสร้างโฟลเดอร์ใหม่ก่อนย้าย |
+| แยก workflow ออกจาก `scripts/adhoc/` | ✅ | T1 | ย้าย `eval_benchmark.py`, `fit_source_weights.py` และ `group_b_exclusion_rationale.md` ไป `scripts/eval/`; เพิ่ม explicit unignore ที่ `.gitignore:99-100`; scratch files คงอยู่ใน `scripts/adhoc/` | ใช้ `scripts/eval/` สำหรับ repeatable evaluation/documentation; ไม่ย้าย `score_eval_results.py` |
 
 ### Group A files and evidence
 
@@ -60,6 +60,110 @@
 - Current result file is local/generated and must not be edited while eval is running.
 
 ---
+
+## D. Session handoff — ThreatFox verification, Group A/B scoring boundary, and evidence
+
+**Session date:** 14 Sep 2026
+
+**Scope rule:** งานในส่วนนี้ไม่แตะ `src/mcp_servers/**`, `mcp_client.py`,
+`src/web/websocket.py` หรือ `config.yaml` และยังไม่มี commit
+
+### D1. ThreatFox configuration and live verification
+
+- ตรวจ `config.yaml` แบบไม่พิมพ์ค่า secret: `api_keys.threatfox = True`,
+  `api_keys.abusech = False`
+- `check_threatfox()` ที่ `src/integrations/threat_intel.py:542` ใช้ key จาก
+  `threatfox` ก่อน fallback ไป `abusech`; request อยู่ที่ `:550`
+- `investigate_ioc_comprehensive()` เรียก ThreatFox แบบ unconditional ที่ `:954`
+  ดังนั้นยังมี task สำหรับ IPv4, domain, URL และ hash ที่ส่งเข้า investigation
+- Live direct-call sample จาก session เดียวกันตอบ HTTP 200 ครบ 5 รายการ:
+
+| IOC type | IOC label | Latency | Result |
+|---|---|---:|---|
+| IPv4 | `8.8.8.8` | 905.5 ms | `Not listed` |
+| Domain | `example.com` | 492.7 ms | `No exact match` |
+| URL | `https://example.com/` | 644.9 ms | `Not listed` |
+| MD5 | `44d88612fea8...` | 502.8 ms | `Not listed` |
+| SHA256 | `0123456789ab...` | 487.4 ms | `Not listed` |
+
+Summary: average **606.7 ms**, median **502.8 ms**, range **487.4-905.5 ms**;
+ไม่พบ timeout, exception หรือ HTTP error ใน sample นี้ จึงคง ThreatFox ไว้
+ใน Group A
+
+### D2. Group B exclusion design and implementation
+
+Group B ที่ถูก exclude จาก scoring/verdict มี 13 source:
+
+```text
+virustotal, abuseipdb, shodan, alienvault, greynoise, censys,
+pulsedive, criminalip, ipqualityscore, phishtank, ip2proxy,
+triage, threatzone
+```
+
+เหตุผลเป็น **dependency/source-path reliability gate** ไม่ใช่การตัดสินว่า
+information content ของ source เหล่านี้เป็นเท็จ: auth gate, rate limit และ
+timeout ที่ observe ได้ทำให้ไม่เหมาะกับ critical scoring path แต่ยังมีประโยชน์
+เป็น supplemental evidence
+
+| จุด | สถานะหลังแก้ | Evidence |
+|---|---|---|
+| Constant | ✅ | `src/integrations/threat_intel.py:24` — `GROUP_B_EXCLUDE` |
+| Raw source retention | ✅ | `threat_intel.py:1096` ยังคงคืน `sources: results` ครบทุก source |
+| Threat-intel aggregate | ✅ | `threat_intel.py:1074-1076` skip Group B ก่อนนับ flag/รวม score; `threat_score` aggregate จึงเป็น Group A |
+| IOC weighted scoring | ✅ | `src/scoring/intelligent_scoring.py:131`, `:184` skip Group B ก่อน `_get_source_score`; `:213-215` ใช้ Group A flag count สำหรับ boost |
+| Coverage transparency | ✅ | `intelligent_scoring.py:235-254` แยก `coverage.group_a` และ `coverage.group_b`; top-level historical fields mirror Group A ที่ `:299-300` |
+| Verdict coverage | ✅ | `src/utils/helpers.py:63-85` ไม่ต้องแก้เพิ่ม เพราะ `determine_verdict()` อ่าน top-level coverage ที่ถูกตั้งเป็น Group A แล้ว |
+| Informational attempted count | ✅ | `threat_intel.py:1091` `sources_checked` ยังนับทุก task ที่พยายามเรียก รวม Group B ตาม design |
+
+### D3. Timeout finding
+
+`safe_execute()` ที่ `threat_intel.py:1026-1029` ใช้ `asyncio.wait_for(coro,
+timeout=15.0)` กับทุก task โดยรันผ่าน `gather()` ที่ `:1054` แบบ concurrent ดังนั้น
+แต่ละ task มี deadline ของตัวเอง แต่ policy เป็นค่าเดียว global สำหรับทุก source
+ไม่ใช่ per-source timeout
+
+ตาม scope decision รอบนี้จึง **ยังไม่ลดเป็น 3 วินาทีและไม่ทำ per-source timeout**:
+Group B ถูกกันออกจาก scoring แล้ว แต่ยัง best-effort และอาจกินเวลารอได้ถึง 15 วินาที
+เพื่อไม่ขยาย scope โดยไม่จำเป็น
+
+### D4. Test update and verification
+
+ปรับเฉพาะ test files ที่อนุญาต:
+
+- `tests/test_censys_scoring.py` — Censys assertion ย้ายไป `coverage['group_b']`
+- `tests/test_scoring_confidence.py` — generic aggregation ใช้ synthetic source names,
+  strict expected dict เพิ่ม `group_a/group_b`, missing-key tests ตรวจ Group B
+- `tests/test_threat_intel_source_accounting.py` — hash accounting แยก Group A/B
+
+Verification results:
+
+| Check | Result | Interpretation |
+|---|---:|---|
+| `python -m py_compile` ของ test files | Pass | ไม่มี syntax error |
+| Tests ที่แก้โดยตรง | **22 passed** | ทั้ง 15 design-change failures เดิมถูกอัปเดตแล้ว |
+| Full `pytest -q` | Blocked at collection | `tests/test_remote_tools.py` import `paramiko` ไม่ได้ใน environment (`ModuleNotFoundError`) |
+| Suite excluding `test_remote_tools.py` และ network-dependent `test_mcp_threat_intel.py` | จบรัน 100% ไม่มี failure เพิ่ม | ไม่พบ unexpected regression ใน suite ที่ environment รองรับ |
+| Network-dependent MCP tests | Environment failure | URLhaus ถูก block ด้วย socket permission (`WinError 10013`) ไม่ใช่ test assertion regression |
+
+ไม่แก้ test เพิ่มนอก allowlist และไม่แก้ dependency/environment ใน session นี้
+
+### D5. Source research and documentation artifacts
+
+- รายงาน feed research อยู่ที่ `scripts/adhoc/source_research.md` ครอบคลุม domain/hash
+  non-API/no-auth sources, URL/format/cadence/license และ effort estimate
+- เอกสาร rationale ถูกย้ายไป `scripts/eval/group_b_exclusion_rationale.md`
+- `scripts/eval/eval_benchmark.py` และ `scripts/eval/fit_source_weights.py` ถูกย้ายออก
+  จาก ignored `scripts/adhoc/`; path ภายในไฟล์ถูกอัปเดตให้ชี้ `scripts/eval/`
+- `scripts/benchmark/build_benchmark_dataset.py` ไม่ย้ายและไม่แก้ เพราะ reference
+  เดิมเป็น self-reference ของไฟล์เดียวกัน ไม่ใช่ `eval_benchmark.py`
+- `scripts/adhoc/score_eval_results.py` ยังอยู่ที่เดิมตาม scope
+- `.gitignore:97` เดิมไม่ถูกลบ; เพิ่ม `!scripts/eval/` และ `!scripts/eval/**` ที่
+  `:99-100` เพื่อให้ evaluation tooling/documentation track ได้
+
+### D6. Current handoff state
+
+Git working tree มีการเปลี่ยนแปลงที่ตั้งใจไว้ใน source/scoring, tests, documentation
+และไฟล์ใหม่ใน `scripts/eval/`; ยังไม่มี commit รอผู้ใช้ confirm ก่อน commit
 
 ## Weekly ritual (กันของหล่น)
 1. ก่อนเริ่มแต่ละ session: เปิดไฟล์นี้ อัปเดต status เก่าก่อน แล้วค่อยเลือกงานถัดไป
