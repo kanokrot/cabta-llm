@@ -165,6 +165,145 @@ Verification results:
 Git working tree มีการเปลี่ยนแปลงที่ตั้งใจไว้ใน source/scoring, tests, documentation
 และไฟล์ใหม่ใน `scripts/eval/`; ยังไม่มี commit รอผู้ใช้ confirm ก่อน commit
 
+### D7. Static-list fast-lane integration: Smet NRD, HaGeZi NRD, and MalwareBazaar recent SHA256
+
+**Session date:** 14 Sep 2026
+
+**Context and scope.** These three sources were selected from
+`scripts/adhoc/source_research.md` as effort-S, public static feeds. The
+implementation follows the existing SSL Blacklist pattern in
+`src/integrations/threat_feeds.py` (`_FeedCache` plus lazy TTL refresh), not the
+uncached per-call URL pattern used by FeodoTracker and Tor exit nodes. The
+scoring tier lists were intentionally left unchanged; all three sources use
+the existing unknown-source fallback weight of `0.8`.
+
+| Source | IOC type | Feed | Research context | Implemented semantics |
+|---|---|---|---|---|
+| Smet NRD | domain | `https://smet.cz/nrd/data/today.txt` | Public TXT feed, current-day/newly observed domains, updated throughout the day; CC BY 4.0 attribution; effort S | Lowercase exact domain membership in a cached set |
+| HaGeZi NRD | domain | `https://raw.githubusercontent.com/hagezi/nrd/main/domains/nrd7.txt` | Public plain domain list, daily, GPL-3.0; NRD presence is not by itself a malicious verdict; effort S | Lowercase exact domain membership in a cached set |
+| MalwareBazaar recent SHA256 | sha256 | `https://bazaar.abuse.ch/export/txt/sha256/recent/` | Public TXT export with comments/header and recent-only window; abuse.ch Terms/Fair Use require separate legal review; effort S | Exact lowercase membership for valid 64-character hexadecimal SHA256 values |
+
+#### D7.1 Reference pattern and cache lifecycle
+
+- `_FeedCache` remains the shared holder at `threat_feeds.py:64-75`:
+  TTL, `last_update`, and an in-memory `Set[str]`.
+- The common TTL is read from `config['timeouts']['feed_cache_ttl']` at
+  `threat_feeds.py:112-114`, with the existing default of 3,600 seconds (one
+  hour). No new hardcoded TTL was introduced.
+- New cache instances are created per `ThreatFeeds` instance at
+  `threat_feeds.py:125-128`: `_smet_nrd`, `_hagezi_nrd`, and
+  `_mb_recent_sha256`.
+- Each `_refresh_*_cache()` is lazy: the first check fetches the feed because
+  the set is empty; later checks reuse it until `_FeedCache.is_stale()` says
+  the shared TTL has expired. There is no startup job, cron integration, local
+  feed snapshot, or persistent feed database.
+- Refresh uses the existing `_session()` and `_fetch_text()` helpers. A
+  successful refresh replaces the corresponding set and calls `mark_fresh()`.
+- This feed cache is separate from `IOCCache`: the latter stores per-IOC result
+  rows in `~/.blue-team-assistant/cache/ioc_cache.db` and is not the bulk feed
+  snapshot.
+
+#### D7.2 Source implementation
+
+Implemented in `src/integrations/threat_feeds.py`:
+
+- Feed constants: `:105-107`.
+- Smet refresh/check: `:345-380`.
+- HaGeZi refresh/check: `:386-421`.
+- MalwareBazaar recent refresh/check: `:427-474`.
+- Domain parsing strips whitespace/BOM, lowercases values, and skips blank,
+  `#`, and `!` comment lines. Matching is exact set membership; there is no
+  substring or regex matching.
+- Hash parsing accepts only 64-character hexadecimal lines, lowercases them,
+  and uses exact set membership. Header/comment lines are excluded by
+  validation.
+- Results use the existing `FeedResult` shape. A positive Smet/HaGeZi match
+  returns score 85; a positive MalwareBazaar recent match returns score 95;
+  clean results return `found: false` and score 0; exceptions return the
+  standard error status.
+
+The existing per-hash `check_malwarebazaar()` API lookup was not repurposed. It
+still handles the single-hash `get_info` query; `check_mb_recent()` is a
+separate bulk recent-export source.
+
+#### D7.3 Comprehensive investigator wiring
+
+Implemented in `src/integrations/threat_intel.py`:
+
+- `source_defaults` includes `smet_nrd`, `hagezi_nrd`, and
+  `mb_recent_sha256` at `:930-932`. This gives them `not_applicable: true`
+  for unrelated IOC types.
+- Domain tasks are appended under `if ioc_type == 'domain'` at `:991-999`.
+- Hash tasks are appended under
+  `if ioc_type in ['md5', 'sha1', 'sha256', 'hash']` at `:1012-1014`.
+- `attempted_source_names` accounting includes a new source only when its
+  task branch is selected, while defaults keep coverage explicit for other
+  IOC types.
+
+#### D7.4 Group A and untiered scoring decision
+
+No new source was added to `GROUP_B_EXCLUDE`. The current code has no separate
+Group A allowlist: any source not in `GROUP_B_EXCLUDE` is Group A by default
+(`threat_intel.py:24-28`, `:1074-1076`; also
+`intelligent_scoring.py:261-265`).
+
+The three source names were intentionally not added to
+`high_confidence_sources`, `medium_confidence_sources`, or
+`low_confidence_sources`. Until a future verdict/scoring redesign assigns
+explicit tiers, `IntelligentScoring` uses its unknown-source fallback weight
+`0.8`. This decision is encoded as an explicit `UNTIERED_SOURCES` exemption
+in `tests/test_threat_intel_source_accounting.py:59-63` rather than modifying
+the scoring module.
+
+NRD feeds indicate newly registered or recently observed domains, and recent
+MalwareBazaar membership indicates recent sample presence. None of these
+signals should be interpreted as an automatic standalone malicious verdict or
+hard-block policy.
+
+#### D7.5 Test fixture and accounting updates
+
+Only the explicitly allowed test files were adjusted for the new task surface:
+
+- `tests/test_threat_intel_cache_fallback.py:34-41` adds clean AsyncMocks for
+  Smet and HaGeZi so cache/timeout tests for other sources do not fail during
+  task construction.
+- `tests/test_threat_intel_source_accounting.py:109-115` adds clean
+  `check_mb_recent` to the SSL/wiring fixture.
+- The hash accounting fixture at `:154-158` also supplies `check_mb_recent`,
+  because the new source is genuinely scheduled for the hash lane.
+- Hash accounting now reflects seven attempted sources, three clean Group A
+  attempts, and 11 Group A not-applicable placeholders; Group B remains four
+  attempted sources with nine not-applicable entries.
+- The tier/task one-to-one test subtracts exactly
+  `{'smet_nrd', 'hagezi_nrd', 'mb_recent_sha256'}` with a comment documenting
+  the temporary fallback-weight decision.
+
+#### D7.6 Verification evidence
+
+| Check | Result | Evidence / interpretation |
+|---|---:|---|
+| `py_compile` | Pass | Compiled both integration files and both modified test files with `.venv\\Scripts\\python.exe`. |
+| Targeted threat-intel tests | **9 passed** | Cache fallback, source accounting, fixture wiring, and untiered exemption all pass. |
+| Full `.venv` pytest | **1350 passed, 0 failed** | `.venv\\Scripts\\python.exe -m pytest -q`; 8 subtests passed and 11 warnings remained. Runtime 66.94 seconds. |
+| Live domain investigation | Pass | `example.com` through `investigate_ioc_comprehensive()` returned `smet_nrd` and `hagezi_nrd` in `sources` as clean, with no error/timeout. |
+| Live hash investigation | Pass | Synthetic all-zero SHA256 through the same investigator returned `mb_recent_sha256` in `sources` as clean, with no error/timeout. |
+| Diff/scope audit | Pass | Changes were limited to the two integration files and the two explicitly allowed test files before this documentation update; `git diff --check` passed; no commit was created. |
+
+The first system-Python test attempt could not collect because `paramiko` was
+missing, and an earlier sandboxed live attempt had HTTPS egress denied. The
+final validation used the repository `.venv` and an approved network-enabled
+run for the live feed checks.
+
+#### D7.7 Remaining follow-up
+
+- Decide explicit confidence tiers after the verdict/scoring redesign; remove
+  the test exemption at that time.
+- Add positive-match fixtures or controlled test feed responses if deterministic
+  malicious examples are required; this session verified live wiring and clean
+  non-error behavior, not a positive match for each feed.
+- Revisit feed metadata/HTTP validators, attribution/legal handling, and any
+  requirement for durable snapshots before production deployment.
+
 ## Weekly ritual (กันของหล่น)
 1. ก่อนเริ่มแต่ละ session: เปิดไฟล์นี้ อัปเดต status เก่าก่อน แล้วค่อยเลือกงานถัดไป
 2. ก่อนเริ่มแต่ละข้อ: เขียน DoD ใน column ให้ชัดก่อนสั่ง investigation prompt
