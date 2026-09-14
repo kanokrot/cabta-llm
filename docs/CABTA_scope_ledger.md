@@ -54,9 +54,9 @@
 ### Group A files and evidence
 
 - Dataset: `data/benchmark/benchmark_iocs_v2.json` — 894 records (`MALICIOUS=709`, `CLEAN=185`)
-- Running script: `scripts/adhoc/eval_benchmark.py`
-- Incremental results: `scripts/adhoc/eval_results_group_a_v2.jsonl`
-- Analysis tools: `scripts/adhoc/fit_source_weights.py`, `scripts/adhoc/score_eval_results.py`
+- Running script: `scripts/eval/eval_benchmark.py`
+- Incremental results: `scripts/eval/eval_results_group_a_v2.jsonl`
+- Analysis tools: `scripts/eval/fit_source_weights.py`, `scripts/adhoc/score_eval_results.py`
 - Current result file is local/generated and must not be edited while eval is running.
 
 ---
