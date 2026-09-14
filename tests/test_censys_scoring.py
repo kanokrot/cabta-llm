@@ -66,4 +66,5 @@ async def test_censys_enrichment_does_not_contribute_threat_score_or_flag():
 
     coverage = IntelligentScoring.calculate_source_coverage(intel_results)
     assert coverage['sources_flagged'] == 0
-    assert coverage['sources_skipped_not_applicable'] == 1
+    # Censys remains visible as Group B informational coverage, not Group A coverage.
+    assert coverage['group_b']['sources_skipped_not_applicable'] == 1

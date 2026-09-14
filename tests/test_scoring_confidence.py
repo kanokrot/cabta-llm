@@ -6,8 +6,9 @@ from src.scoring.intelligent_scoring import IntelligentScoring
 def test_calculate_ioc_score_output_unchanged_by_new_function():
     intel_results = {
         "sources": {
-            "virustotal": {"status": "✓", "score": 15},
-            "alienvault": {"status": "✓", "score": 100},
+            "test_source_alpha": {"status": "✓", "score": 15},
+            # Synthetic sources use the unknown-source fallback weight (0.8).
+            "test_source_beta": {"status": "✓", "score": 138},
         },
         "sources_flagged": 2,
     }
@@ -24,8 +25,8 @@ def test_calculate_ioc_score_output_unchanged_by_new_function():
 def test_all_sources_flagged_high_coverage():
     coverage = IntelligentScoring.calculate_source_coverage({
         "sources": {
-            "virustotal": {"status": "✓", "score": 80},
-            "alienvault": {"status": "✓", "score": 100},
+            "test_source_alpha": {"status": "✓", "score": 80},
+            "test_source_beta": {"status": "✓", "score": 100},
         }
     })
 
@@ -36,14 +37,30 @@ def test_all_sources_flagged_high_coverage():
         "sources_stale": 0,
         "total_sources_attempted": 2,
         "sources_skipped_not_applicable": 0,
+        "group_a": {
+            "sources_flagged": 2,
+            "sources_clean": 0,
+            "sources_unavailable": 0,
+            "sources_stale": 0,
+            "total_sources_attempted": 2,
+            "sources_skipped_not_applicable": 0,
+        },
+        "group_b": {
+            "sources_flagged": 0,
+            "sources_clean": 0,
+            "sources_unavailable": 0,
+            "sources_stale": 0,
+            "total_sources_attempted": 0,
+            "sources_skipped_not_applicable": 0,
+        },
     }
 
 
 def test_mixed_clean_and_flagged_counted_separately():
     coverage = IntelligentScoring.calculate_source_coverage({
         "sources": {
-            "virustotal": {"status": "✓", "score": 15},
-            "threatfox": {"status": "✗", "found": False, "score": 0},
+            "test_source_alpha": {"status": "✓", "score": 15},
+            "test_source_beta": {"status": "✗", "found": False, "score": 0},
         }
     })
 
@@ -56,7 +73,7 @@ def test_mixed_clean_and_flagged_counted_separately():
 def test_timeout_without_cache_counted_unavailable():
     coverage = IntelligentScoring.calculate_source_coverage({
         "sources": {
-            "alienvault": {
+            "test_source_alpha": {
                 "status": "⚠",
                 "error": "Timeout",
                 "cached": False,
@@ -71,19 +88,35 @@ def test_timeout_without_cache_counted_unavailable():
         "sources_stale": 0,
         "total_sources_attempted": 1,
         "sources_skipped_not_applicable": 0,
+        "group_a": {
+            "sources_flagged": 0,
+            "sources_clean": 0,
+            "sources_unavailable": 1,
+            "sources_stale": 0,
+            "total_sources_attempted": 1,
+            "sources_skipped_not_applicable": 0,
+        },
+        "group_b": {
+            "sources_flagged": 0,
+            "sources_clean": 0,
+            "sources_unavailable": 0,
+            "sources_stale": 0,
+            "total_sources_attempted": 0,
+            "sources_skipped_not_applicable": 0,
+        },
     }
 
 
 def test_timeout_with_cache_counted_stale_and_scored():
     coverage = IntelligentScoring.calculate_source_coverage({
         "sources": {
-            "alienvault": {
+            "test_source_alpha": {
                 "status": "✓",
                 "score": 100,
                 "cached": True,
                 "cache_reason": "timeout",
             },
-            "threatfox": {
+            "test_source_beta": {
                 "status": "✗",
                 "score": 0,
                 "cached": True,
@@ -99,6 +132,22 @@ def test_timeout_with_cache_counted_stale_and_scored():
         "sources_stale": 2,
         "total_sources_attempted": 2,
         "sources_skipped_not_applicable": 0,
+        "group_a": {
+            "sources_flagged": 1,
+            "sources_clean": 1,
+            "sources_unavailable": 0,
+            "sources_stale": 2,
+            "total_sources_attempted": 2,
+            "sources_skipped_not_applicable": 0,
+        },
+        "group_b": {
+            "sources_flagged": 0,
+            "sources_clean": 0,
+            "sources_unavailable": 0,
+            "sources_stale": 0,
+            "total_sources_attempted": 0,
+            "sources_skipped_not_applicable": 0,
+        },
     }
 
 
@@ -114,8 +163,9 @@ def test_extended_integration_missing_api_key_counted_unavailable_not_clean():
         }
     })
 
-    assert coverage["sources_unavailable"] == 1
-    assert coverage["sources_clean"] == 0
+    # Group B availability is informational and must not enter Group A coverage.
+    assert coverage["group_b"]["sources_unavailable"] == 1
+    assert coverage["group_b"]["sources_clean"] == 0
 
 
 def test_core_integration_missing_api_key_counted_unavailable_control():
@@ -128,8 +178,9 @@ def test_core_integration_missing_api_key_counted_unavailable_control():
         }
     })
 
-    assert coverage["sources_unavailable"] == 1
-    assert coverage["sources_clean"] == 0
+    # Group B availability is informational and must not enter Group A coverage.
+    assert coverage["group_b"]["sources_unavailable"] == 1
+    assert coverage["group_b"]["sources_clean"] == 0
 
 
 @pytest.mark.parametrize(
@@ -157,6 +208,22 @@ def test_not_applicable_placeholder_status_is_excluded(message):
         "sources_stale": 0,
         "total_sources_attempted": 0,
         "sources_skipped_not_applicable": 1,
+        "group_a": {
+            "sources_flagged": 0,
+            "sources_clean": 0,
+            "sources_unavailable": 0,
+            "sources_stale": 0,
+            "total_sources_attempted": 0,
+            "sources_skipped_not_applicable": 1,
+        },
+        "group_b": {
+            "sources_flagged": 0,
+            "sources_clean": 0,
+            "sources_unavailable": 0,
+            "sources_stale": 0,
+            "total_sources_attempted": 0,
+            "sources_skipped_not_applicable": 0,
+        },
     }
 
 

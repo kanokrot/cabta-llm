@@ -165,14 +165,31 @@ async def test_hash_source_accounting_excludes_unscheduled_placeholders():
     coverage = IntelligentScoring.calculate_source_coverage(result)
 
     assert result["sources_checked"] == 6
-    assert result["sources_flagged"] == 1
+    # VirusTotal is Group B; only Group A contributes to the aggregate flag count.
+    assert result["sources_flagged"] == 0
     assert coverage == {
-        "sources_flagged": 1,
-        "sources_clean": 3,
-        "sources_unavailable": 2,
+        "sources_flagged": 0,
+        "sources_clean": 2,
+        "sources_unavailable": 0,
         "sources_stale": 0,
-        "total_sources_attempted": 6,
-        "sources_skipped_not_applicable": 18,
+        "total_sources_attempted": 2,
+        "sources_skipped_not_applicable": 9,
+        "group_a": {
+            "sources_flagged": 0,
+            "sources_clean": 2,
+            "sources_unavailable": 0,
+            "sources_stale": 0,
+            "total_sources_attempted": 2,
+            "sources_skipped_not_applicable": 9,
+        },
+        "group_b": {
+            "sources_flagged": 1,
+            "sources_clean": 1,
+            "sources_unavailable": 2,
+            "sources_stale": 0,
+            "total_sources_attempted": 4,
+            "sources_skipped_not_applicable": 9,
+        },
     }
     assert result["sources"]["c2_trackers"] == {
         "status": "⏳",
