@@ -564,16 +564,36 @@ Warm lookup รอบถัดไปใช้เวลาประมาณ `0.0
 - Key findings:
   - `talos`: `60/60` failures in this window and `120/120` failures including the prior invalid run. DNS SenderBase lookup timed out at approximately `5,000 ms`, matching the resolver timeout in `threat_intel_extended.py:105-106`. Evidence indicates the service is deprecated, not a CABTA code-path bug. See `evidence/reliability_sampling/invalid_runs/README.md`.
   - `tor_exit_nodes`: `0` failures in this clean window. The prior `429` responses came from duplicated concurrent load, so the prior `429` is not treated as normal source behavior.
-  - `malwarebazaar`: `1/60` failure (`5xx`); repeat in windows 2 and 3.
-- Window status: `[x]` window 1/3 of the minimum 3 time windows complete; `[ ]` window 2; `[ ]` window 3.
+  - `malwarebazaar`: `1/60` failure (`5xx`) in window1; no failures in
+    windows 2 and 3.
+- Window status: `[x]` all 3/3 minimum time windows complete (window1
+  talos-filtered, window2 clean, window3 clean).
 - No scoring or tier code was changed in this run, per the D9 gate.
 
 ### D9.3b Window 2 first run invalid (2026-09-15)
 
 - Quarantined raw telemetry: `evidence/reliability_sampling/invalid_runs/window2_2026-09-15_ENV_BLOCK_INVALID.jsonl`
 - The first window 2 run is invalid and must be rerun after host connectivity is restored. Local socket rejection (`[Access is denied]`) caused `540/1,205` executable rows to fail across `feodotracker`, `threatfox`, `circl`, `tor_exit_nodes`, `urlhaus`, and `malwarebazaar`; failures were approximately sub-millisecond to `132 ms`, with no timeout or HTTP error.
-- The quarantined run is excluded from reliability metrics. The valid window 2 collection remains incomplete.
+- The quarantined run is excluded from reliability metrics; the valid window 2
+  collection is recorded in the next bullet.
 - Window2 valid run confirmed 2026-09-15 09:45:45–09:58:08 UTC (743.3s). Root cause of earlier invalid attempts: stale Codex sandbox firewall rules (`codex_sandbox_offline_block_*`) blocking outbound HTTPS at local socket layer — removed manually, confirmed via direct curl test. One additional transient timeout to `check.torproject.org` occurred on 2nd rerun attempt (no output written, non-retry per protocol); 3rd attempt succeeded with zero failures across all 1,205 executable rows, 13 sources, no talos. Effective dataset: window1 (talos-excluded, 3,365 rows) + window2 (3,125 rows, 100% success).
+
+### D9.3c Window 3 results (2026-09-15)
+
+- Raw telemetry: `evidence/reliability_sampling/windows/window3_2026-09-15.jsonl`
+- Run: `2026-09-15T12:14:16.851Z–12:24:12.109Z` UTC (`595.3s`).
+- Result: `3,125` rows from the original 240-record sample and 13 explicit
+  sources; `1,205` executable rows and `1,920` not-applicable rows.
+- Success: `1,205/1,205` executable rows succeeded; no talos was called.
+  Expected-label breakdown: `MALICIOUS 600/600` success and `CLEAN 605/605`
+  success.
+- Error type breakdown: `401=0`, `429=0`, `5xx=0`, `timeout=0`,
+  `other=0`, `none=1,205`.
+- Sequence validation: `source_block_count=13`, source order matched the
+  locked 13-source order, timestamps were monotonic, and
+  `duplicate_timestamp_block_count=0`.
+- Reliability collection is now complete: `3/3` valid windows — window1
+  talos-filtered, window2 clean, and window3 clean.
 
 ## D9.4 ขั้นที่ 4 — สร้าง coverage matrix จากข้อมูลจริง
 
@@ -823,7 +843,7 @@ coverage as an interim result while documenting the limitation.
 - Verified: grep `talos` in both target files has no active reference; 26 tests
   passed.
 
-**2. Reliability window collection — 2 of 3 complete**
+**2. Reliability window collection — 3 of 3 complete**
 - Window1 (`12:21–12:35 UTC+7`): `3,365` rows, talos-excluded via retroactive
   filter, 13 effective sources, validated clean single-window sequence.
 - Window2 first attempt: **INVALID** — quarantined to
@@ -838,10 +858,11 @@ coverage as an interim result while documenting the limitation.
 - Window2 third attempt: **SUCCESS** — `09:45:45–09:58:08 UTC` (`743.3s`),
   `3,125` rows, 100% success across all `1,205` executable rows, 13 sources,
   no talos, zero `other(error)` failures.
-- Window3: **NOT YET RUN** — scheduled approximately `19:00–20:00` Thai time
-  (2–3 hour gap from window2 per protocol).
-- Effective valid dataset for reliability metrics: window1 (talos-filtered)
-  plus window2 (clean).
+- Window3: **SUCCESS** — `12:14:16.851–12:24:12.109 UTC` (`595.3s`),
+  `3,125` rows, `1,205/1,205` executable rows succeeded, 13 sources, no
+  talos, zero failures across all error types.
+- Effective valid dataset for reliability metrics: window1 (talos-filtered),
+  window2 (clean), and window3 (clean); `3/3` valid windows complete.
 
 **3. Group-A-only CV data collection pipeline (commit d9daa51)**
 - Problem discovered: `eval_benchmark.py` called all sources, including Group B
@@ -878,7 +899,8 @@ coverage as an interim result while documenting the limitation.
   to 3,256`).
 - **Status:** cache write is confirmed working. Ready to run the full
   `--resume` batch to fill remaining IOCs toward the 894 target; **NOT YET RUN**
-  (deferred until after window3 to avoid concurrent cache/network load).
+  (deferred until after reliability collection to avoid concurrent
+  cache/network load).
 
 **5. Unrelated discovery (not part of this session's scope, informational only)**
 - `evidence/MISP_live_feed_inspect/` contains a read-only MISP CIRCL live-feed
@@ -889,15 +911,14 @@ coverage as an interim result while documenting the limitation.
   changed by this audit.
 
 **OPEN ITEMS / NEXT STEPS**
-- Run window3 (approximately `19:00–20:00` Thai time, 2–3 hour gap from
-  window2 per protocol).
 - Run `eval_benchmark.py --group-a-only --resume` to fill remaining IOCs
   toward full 894-IOC coverage (approximately 80–90 minutes estimated).
 - After cache reaches full/near-full coverage, run `fit_source_weights.py`
   5-fold CV — this has **never successfully run**; no persisted output exists
   as of this note.
-- Build the reliability metrics table from window1 + window2 (+ window3); no
-  aggregation script exists yet and one needs to be written.
+- Build the reliability metrics table from the three valid windows (window1
+  talos-filtered + window2 + window3); no aggregation script exists yet and
+  one needs to be written.
 - `eval_results_group_a_v2.CONTAMINATED.jsonl` root cause remains unknown
   (untracked, no git history). The decision is not to reuse it; build fresh
   canonical results via `eval_benchmark.py` instead.
