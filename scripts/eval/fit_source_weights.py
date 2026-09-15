@@ -811,9 +811,11 @@ def print_limitation_output(
     print("unstable_sources_raw=")
     print(unstable[["source", "mean_coef", "std_coef", "coef_per_fold"]].to_string(index=False))
     print("unstable_source_count=" + str(len(unstable)))
+    epv_comparison = ">= 10" if minority_epv >= 10 else "< 10"
     print(
         "decision=PRELIMINARY_SIGNAL_ONLY; do_not_replace_hardcoded_weights because "
-        f"minority EPV={minority_epv:.4f} < 10 and coefficients are fold-sensitive. "
+        f"minority EPV={minority_epv:.4f} {epv_comparison}, but coefficients are "
+        "fold-sensitive and source coverage/controls remain inadequate. "
         "Expand the labelled dataset (Phase 2), then repeat with held-out validation and calibration."
     )
 
