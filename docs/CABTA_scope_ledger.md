@@ -1227,6 +1227,47 @@ coverage as an interim result while documenting the limitation.
   checks, and freeze the labelled manifest. Then perform independent holdout
   fit/calibration and shadow comparison.
 
+### 2026-09-16 Follow-up — public-data proxy holdout and overlap gate
+
+**1. Frozen public-data manifest**
+- Preparation script: `scripts/eval/prepare_independent_proxy_holdout.py`.
+- Frozen manifest: `evidence/source_weights_2026-09-16/independent_external_proxy_holdout_2026-09-16.json`.
+- The manifest contains `240` unique records with balanced labels (`120`
+  `MALICIOUS`, `120` `CLEAN`) and balanced types: IP `60/60`, domain `30/30`,
+  and SHA1 `30/30`. It passed required-field, uniqueness, and Group-A
+  disjointness checks.
+- Malicious evidence came from ThreatFox (IP) and PhishTank (domains and
+  observed TLS certificate associations). Clean records are explicitly marked
+  `label_quality=proxy`, derived from Cloudflare ranking plus public DNS/TLS
+  observations; they are not absolute clean ground truth.
+- The frozen manifest SHA-256 is recorded in the overlap artifact. Its target
+  source overlap fields were null before collection and were not used as labels.
+
+**2. Target-source overlap collection**
+- Runner: `scripts/eval/collect_holdout_source_overlap.py`.
+- Result: `evidence/source_weights_2026-09-16/independent_external_proxy_holdout_overlap_2026-09-16.json`.
+- Raw responses: `evidence/source_weights_2026-09-16/holdout_overlap_raw_2026-09-16/`.
+- FeodoTracker: HTTP `200`, `5` usable current entries, `0/120` holdout hits.
+- Tor exit nodes: HTTP `200`, `1,342` usable entries, `0/120` holdout hits.
+- SSLBL: certificate feed was available but had `0/60` holdout SHA1 hits;
+  IP feed returned HTTP `200` but is deprecated, so `120` IP checks are
+  unavailable rather than negative.
+- USOM: `180` exact-match requests, `0` hits and `1` error. Spamhaus returned
+  `18/120` hits (`17` malicious-label records, `1` clean-proxy record).
+  C2 Trackers returned `7/180` hits, all on malicious-label records; only one
+  of ten configured C2 snapshots returned HTTP `200` and nine returned `404`.
+
+**3. Gate decision**
+- Gate report: `evidence/source_weights_2026-09-16/independent_holdout_gate_report_2026-09-16.json`.
+- **Decision:** do not run a new CV fit from this holdout and do not change
+  production weights. The panel is balanced and reproducible, but its clean
+  labels are proxies and the required Feodo/Tor/SSLBL/USOM positive overlap
+  gates did not pass. The artifact is therefore a public-data coverage/proxy
+  pilot, not an adequate independent weight-validation set.
+- The raw overlap responses are retained for audit. No reliability windows,
+  full benchmark, production scoring code, or prior artifacts were rerun or
+  overwritten.
+
 ## D10.5 Phase 4 — Gmail OAuth (per-user)
 
 **วัตถุประสงค์:** ผูก Gmail ของ user แต่ละคนเข้ากับระบบแจ้งเตือน
