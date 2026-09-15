@@ -1032,6 +1032,76 @@ coverage as an interim result while documenting the limitation.
 - Keep Feodo/Tor in production tiers, but interpret their benchmark zero-match
   result as dataset non-overlap rather than integration failure.
 
+### 2026-09-15 Follow-up — targeted source recollection and six-source CV
+
+**1. Follow-up commits recorded**
+- `8475992` — persist exploratory CV results artifact.
+- `651067a` — fix CIRCL, SSLBL, and USOM feed validation.
+- `8ffe764` — remove obsolete USOM bulk feed fallback.
+- `1fed8c5` — expand the exploratory CV allowlist to six sources and mark
+  CIRCL as a permanent exclusion.
+- `ebd0218` — select the latest cache row per `(IOC, source)` across the mixed
+  collection window and distinguish unavailable/error rows from valid evidence.
+- `a33f1b2` — correct the CV adequacy limitation output so the EPV comparison
+  reflects the measured value.
+
+**2. Targeted SSLBL/USOM recollection**
+- Scope: the 894-record evaluation set; executable target was 154 IPv4 IOCs.
+- Only `sslblacklist` and `usom` made source calls. No full benchmark,
+  reliability window, or `eval_benchmark` batch was rerun.
+- Prechecks passed: ledger read, no stale cache lock/WAL/SHM, no evaluation
+  process left running, and the cache identity had Modify permission.
+- SSLBL: `154/154` rows refreshed as unavailable/deprecated warnings;
+  `0` valid matches; stale rows were explicitly overwritten as unavailable.
+- USOM: `154/154` rows refreshed, `147` not found, `7` exact matches, and
+  `0` errors. Exact matches were:
+  `104.194.159.150`, `107.189.26.194`, `213.145.86.112`,
+  `31.57.243.154`, `38.146.28.132`, `38.146.28.75`, and
+  `91.215.85.103`.
+- Cache verification after recollection: SSLBL `154` rows with status warning
+  and `found=0`; USOM `154` rows with `7` found and `147` not found.
+
+**3. CIRCL status**
+- The Passive DNS endpoint and NDJSON parsing are corrected, but the endpoint
+  returns HTTP `401` because partner authorization is required and is not
+  available in this environment.
+- CIRCL is therefore **excluded permanently**, not pending repair, with the
+  same status as GreyNoise/Pulsedive:
+  `CIRCL Passive DNS requires partner authorization not available in this
+  environment; excluded permanently, same status as GreyNoise/Pulsedive`.
+
+**4. Six-source exploratory CV**
+- Artifact: `scripts/eval/fit_source_weights_results_6source.json`.
+- Status: `preliminary_signal_only`; production scoring tiers were not changed.
+- Dataset: `894` rows (`MALICIOUS=709`, `CLEAN=185`). Cache selection mode:
+  `latest_row_per_ioc_source_mixed_window`.
+- Valid coverage: `c2_trackers=573/894 (64.09%)`,
+  `feodotracker=154/894 (17.23%)`, `spamhaus=154/894 (17.23%)`,
+  `tor_exit_nodes=153/894 (17.11%)`, `usom=154/894 (17.23%)`, and
+  `sslblacklist=0/894 valid; 154 unavailable`.
+- Mean standardized coefficients:
+  `spamhaus=1.053918`, `usom=0.395077`, `c2_trackers=0.200997`,
+  `feodotracker=0`, `tor_exit_nodes=0`, and `sslblacklist=0`.
+- Five-fold CV mean metrics: accuracy `0.269594`, precision `1.000000`,
+  recall `0.079013`; standard deviations were `0.013818`, `0`, and `0.017020`.
+- EPV: `30.833333` minority events per six source features; both 10-EPV and
+  20-EPV checks passed, but EPV alone does not establish adequacy.
+- `c2_trackers` and `usom` were fold-sensitive by the configured rule.
+  High- and low-tier refit features were constant because the selected data
+  had no usable high/low-tier score variation; tier ranking agreement was
+  `0/5` for both sum and max aggregation.
+- Interpretation: zero Feodo/Tor coefficients reflect no benchmark overlap,
+  not zero production reliability; SSLBL has no valid observation and its
+  coefficient is not evidence of low reliability. Further source-specific
+  positive controls, held-out validation, calibration, and reliability
+  aggregation are required before any production weight change.
+
+**5. Current next action**
+- Keep the six-source output as exploratory evidence only.
+- Add source-specific positive controls to the validation design, then perform
+  held-out validation/calibration and aggregate the three valid reliability
+  windows. Do not modify production scoring tiers until those gates pass.
+
 ## D10.5 Phase 4 — Gmail OAuth (per-user)
 
 **วัตถุประสงค์:** ผูก Gmail ของ user แต่ละคนเข้ากับระบบแจ้งเตือน
