@@ -1188,6 +1188,45 @@ coverage as an interim result while documenting the limitation.
   holdout, source-overlap controls, calibration, and shadow comparison remain
   required before changing production scoring tiers or weights.
 
+### 2026-09-16 Follow-up — independent labelled holdout preparation
+
+**1. Holdout design**
+- Specification: `docs/independent_labelled_holdout_spec.md`.
+- The proposed panel is `240` records with balanced labels: `120` independent
+  `MALICIOUS` and `120` documented-as-clean records.
+- Planned strata are `60/60` IPv4, `30/30` SHA1 certificate hashes, and
+  `30/30` domains. The IPv4 panel must provide overlap checks for FeodoTracker,
+  Tor exit nodes, Spamhaus, C2 Trackers, and USOM; the SHA1 panel must check
+  SSLBL certificate-feed overlap; the domain panel must check USOM and C2
+  Trackers overlap.
+- Label provenance is explicitly separate from target-source results. A
+  target source's `found=false` response is not accepted as a `CLEAN` label.
+  The final manifest must retain provider, evidence reference, confirmation
+  date, rationale, collection timestamp, and disjointness metadata.
+
+**2. Readiness audit**
+- Evidence: `evidence/source_weights_2026-09-16/independent_holdout_readiness_2026-09-16.json`.
+- Status: `not_ready_for_weight_fit`. No final holdout record set was created
+  or used for fitting.
+- The existing reliability sample is balanced but is not independent: `150/240`
+  records derive from `benchmark_iocs_v2`. The source positive controls are
+  integration controls only, and the bounded MISP audit did not persist IOC
+  values. The current `894`-record Group-A evaluation and all derived cache
+  rows remain disjoint by policy.
+- The latest observed FeodoTracker snapshot had only `5` usable IP entries,
+  so the proposed `30`-positive Feodo panel cannot be claimed from that
+  snapshot. Tor, SSLBL SHA1, USOM, Spamhaus, and C2 overlap are likewise not
+  verified until independently labelled records are acquired.
+
+**3. Decision and next gate**
+- This step prepared the design and machine-readable readiness gates only; it
+  did not authorize a new CV run or production scoring change.
+- Before weight fitting, acquire and persist independent malicious evidence
+  (event/provider references and dates), independently documented clean
+  candidates, verify disjointness against Group A, run target-source overlap
+  checks, and freeze the labelled manifest. Then perform independent holdout
+  fit/calibration and shadow comparison.
+
 ## D10.5 Phase 4 — Gmail OAuth (per-user)
 
 **วัตถุประสงค์:** ผูก Gmail ของ user แต่ละคนเข้ากับระบบแจ้งเตือน
