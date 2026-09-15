@@ -62,7 +62,6 @@ MEDIUM_CONFIDENCE_SOURCES = {
     "spamhaus",
     "pulsedive",
     "censys",
-    "talos",
     "ip2proxy",
     "threatzone",
     "triage",

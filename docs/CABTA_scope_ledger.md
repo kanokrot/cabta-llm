@@ -558,7 +558,8 @@ Warm lookup รอบถัดไปใช้เวลาประมาณ `0.0
 
 - Raw telemetry: `evidence/reliability_sampling/windows/window1_2026-09-15.jsonl`
 - Result: `3,365` rows in one clean window; validation found no duplicate block and monotonically increasing timestamps.
-- Sources covered (14): `feodotracker`, `c2_trackers`, `talos`, `spamhaus`, `usom`, `tor_exit_nodes`, `circl`, `sslblacklist`, `smet_nrd`, `hagezi_nrd`, `mb_recent_sha256`, `threatfox`, `urlhaus`, `malwarebazaar`.
+- Sources covered (13): `feodotracker`, `c2_trackers`, `spamhaus`, `usom`, `tor_exit_nodes`, `circl`, `sslblacklist`, `smet_nrd`, `hagezi_nrd`, `mb_recent_sha256`, `threatfox`, `urlhaus`, `malwarebazaar`.
+- `talos` excluded from scoring/reliability sampling — confirmed non-functional (120/120 fail across 2 runs in window1, DNS SenderBase timeout ~5s matching configured timeout, root cause: service deprecated per source code comment). Effective source count: 13 (was 14). Excluded from window1 metrics retroactively via filter at compute time; raw window1 jsonl file unmodified for evidence integrity.
 - Excluded: `misp_circl_feed_osint` (separate MISP live-feed validation step) and the 13 Group B API-key sources: `virustotal`, `abuseipdb`, `shodan`, `alienvault`, `greynoise`, `censys`, `pulsedive`, `criminalip`, `ipqualityscore`, `phishtank`, `ip2proxy`, `triage`, `threatzone`.
 - Key findings:
   - `talos`: `60/60` failures in this window and `120/120` failures including the prior invalid run. DNS SenderBase lookup timed out at approximately `5,000 ms`, matching the resolver timeout in `threat_intel_extended.py:105-106`. Evidence indicates the service is deprecated, not a CABTA code-path bug. See `evidence/reliability_sampling/invalid_runs/README.md`.

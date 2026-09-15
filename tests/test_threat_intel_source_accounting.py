@@ -64,6 +64,7 @@ def test_tier_sources_and_comprehensive_tasks_are_one_to_one():
         "hagezi_nrd",
         "mb_recent_sha256",
         "misp_circl_feed_osint",
+        "talos",
     }
     assert tier_sources == task_sources - UNTIERED_SOURCES
 

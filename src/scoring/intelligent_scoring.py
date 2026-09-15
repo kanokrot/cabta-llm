@@ -167,7 +167,7 @@ class IntelligentScoring:
         medium_confidence_sources = [
             'alienvault', 'urlhaus', 'c2_trackers', 'greynoise',
             'shodan', 'criminalip', 'ipqualityscore', 'spamhaus',
-            'pulsedive', 'censys', 'talos',
+            'pulsedive', 'censys',
             # TEMP: assigned medium tier pending empirical weight-fitting, see
             # docs/CABTA_scope_ledger.md
             'ip2proxy', 'threatzone', 'triage', 'usom'
