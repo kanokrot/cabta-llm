@@ -95,7 +95,7 @@ class ThreatFeeds:
 
     DEFAULT_CACHE_TTL = 3600  # 1 hour
 
-    USOM_API_URL = "https://siberguvenlik.gov.tr/api/address"
+    USOM_API_URL = "https://siberguvenlik.gov.tr/api/address/index"
     USOM_URL_LIST = "https://www.usom.gov.tr/url-list.txt"
     USOM_IP_LIST = "https://www.usom.gov.tr/ip-list.txt"
 
@@ -121,6 +121,7 @@ class ThreatFeeds:
         # SSL Blacklist caches
         self._sslbl_sha1 = _FeedCache(self._cache_ttl)
         self._sslbl_ips = _FeedCache(self._cache_ttl)
+        self._sslbl_ip_feed_deprecated = False
 
         # Static-list caches
         self._smet_nrd = _FeedCache(self._cache_ttl)
@@ -146,9 +147,14 @@ class ThreatFeeds:
             logger.warning(f"[fetch] {url} failed: {e}")
         return None
 
-    async def _fetch_json(self, session: aiohttp.ClientSession, url: str) -> Optional[Dict]:
+    async def _fetch_json(
+        self,
+        session: aiohttp.ClientSession,
+        url: str,
+        params: Optional[Dict[str, str]] = None,
+    ) -> Optional[Dict]:
         try:
-            async with session.get(url) as resp:
+            async with session.get(url, params=params) as resp:
                 if resp.status == 200:
                     return await resp.json()
                 logger.warning(f"[fetch] {url} returned HTTP {resp.status}")
@@ -211,36 +217,50 @@ class ThreatFeeds:
                 self._usom_domains.data.add(value)
 
     async def check_usom(self, ioc: str) -> Dict:
-        """Check IOC against USOM threat feed (cached)."""
+        """Check one IOC through USOM's queryable API."""
         try:
-            await self._refresh_usom_cache()
             ioc_lower = ioc.strip().lower()
+            if not ioc_lower:
+                raise ValueError("empty IOC")
 
-            if ioc_lower in self._usom_ips.data:
-                found_in = "IP list"
-            elif ioc_lower in self._usom_domains.data:
-                found_in = "Domain list"
-            elif ioc_lower in self._usom_urls.data:
-                found_in = "URL list"
-            elif any(ioc_lower in url for url in self._usom_urls.data):
-                found_in = "URL list (partial match)"
+            if _is_ipv4(ioc_lower):
+                ioc_type = "ip"
+            elif "://" in ioc_lower:
+                ioc_type = "url"
             else:
-                found_in = None
+                ioc_type = "domain"
 
-            if found_in:
+            async with self._session() as session:
+                data = await self._fetch_json(
+                    session,
+                    self.USOM_API_URL,
+                    params={"q": ioc_lower, "type": ioc_type, "per-page": "10"},
+                )
+
+            if not isinstance(data, dict) or not isinstance(data.get("models"), list):
+                raise RuntimeError("USOM API returned an invalid response shape")
+
+            found = any(
+                isinstance(entry, dict)
+                and str(entry.get("url") or entry.get("value") or "").strip().lower()
+                == ioc_lower
+                for entry in data["models"]
+            )
+
+            if found:
                 return FeedResult(
                     status="✓",
                     source="USOM",
                     found=True,
                     score=85,
-                    message=f"Found in USOM {found_in}",
+                    message="Found in USOM API",
                 ).to_dict()
 
             return FeedResult(
                 status="✗",
                 source="USOM",
                 found=False,
-                message="Not found in USOM feeds",
+                message="Not found in USOM API",
             ).to_dict()
 
         except Exception as e:
@@ -257,6 +277,9 @@ class ThreatFeeds:
             return
 
         logger.info("[SSLBL] Refreshing SSL Blacklist cache")
+        self._sslbl_sha1.data.clear()
+        self._sslbl_ips.data.clear()
+        self._sslbl_ip_feed_deprecated = False
         async with self._session() as session:
             cert_csv = await self._fetch_text(session, self.SSLBL_CERT_CSV)
             if cert_csv:
@@ -265,6 +288,7 @@ class ThreatFeeds:
             ip_csv = await self._fetch_text(session, self.SSLBL_IP_CSV)
             if ip_csv:
                 self._parse_sslbl_ip_csv(ip_csv)
+                self._sslbl_ip_feed_deprecated = "deprecated" in ip_csv.lower()
 
         self._sslbl_sha1.mark_fresh()
         self._sslbl_ips.mark_fresh()
@@ -292,9 +316,10 @@ class ThreatFeeds:
             line = line.strip()
             if not line or line.startswith("#"):
                 continue
-            ip = line.split(",")[0].strip()
-            if _is_ipv4(ip):
-                self._sslbl_ips.data.add(ip)
+            for value in line.split(",")[:2]:
+                ip = value.strip()
+                if _is_ipv4(ip):
+                    self._sslbl_ips.data.add(ip)
 
     async def check_ssl_blacklist(self, ioc: str) -> Dict:
         """
@@ -307,6 +332,14 @@ class ThreatFeeds:
             ioc_lower = ioc.strip().lower()
 
             is_sha1 = len(ioc_lower) == 40 and all(c in "0123456789abcdef" for c in ioc_lower)
+            if is_sha1 and not self._sslbl_sha1.data:
+                return FeedResult(
+                    status=chr(0x26A0),
+                    source="SSL Blacklist",
+                    found=False,
+                    error="SSLBL certificate feed returned no usable SHA1 entries",
+                ).to_dict()
+
             if is_sha1 and ioc_lower in self._sslbl_sha1.data:
                 return FeedResult(
                     status="✓",
@@ -314,6 +347,22 @@ class ThreatFeeds:
                     found=True,
                     score=90,
                     message="Certificate SHA1 found in SSLBL",
+                ).to_dict()
+
+            if _is_ipv4(ioc_lower) and self._sslbl_ip_feed_deprecated:
+                return FeedResult(
+                    status=chr(0x26A0),
+                    source="SSL Blacklist",
+                    found=False,
+                    error="SSLBL IP feed is deprecated; certificate SHA1 feed remains available",
+                ).to_dict()
+
+            if _is_ipv4(ioc_lower) and not self._sslbl_ips.data:
+                return FeedResult(
+                    status=chr(0x26A0),
+                    source="SSL Blacklist",
+                    found=False,
+                    error="SSLBL IP feed returned no usable IPv4 entries",
                 ).to_dict()
 
             if ioc_lower in self._sslbl_ips.data:

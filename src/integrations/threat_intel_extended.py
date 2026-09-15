@@ -3,8 +3,10 @@ Author: Ugur AtesExtended threat intelligence sources (20+ total)."""
 
 import aiohttp
 import asyncio
+import json
 from typing import Dict
 import logging
+from urllib.parse import quote
 from ..utils.api_key_validator import get_valid_key
 
 logger = logging.getLogger(__name__)
@@ -319,19 +321,32 @@ class ThreatIntelExtended:
     async def check_circl(self, ioc: str) -> Dict:
         """CIRCL - Passive DNS/SSL."""
         try:
-            url = f'https://www.circl.lu/services/passive-dns/query/{ioc}'
+            # CIRCL's current Passive DNS API is partner-restricted and
+            # returns Passive DNS Common Output as newline-delimited JSON.
+            url = f'https://www.circl.lu/pdns/query/{quote(ioc, safe="")}'
             
             async with aiohttp.ClientSession(timeout=self.timeout) as session:
                 async with session.get(url) as response:
                     if response.status == 200:
-                        data = await response.json()
+                        body = await response.text()
+                        data = []
+                        for line in body.splitlines():
+                            line = line.strip()
+                            if line:
+                                data.append(json.loads(line))
                         return {
                             'source': 'CIRCL',
                             'found': len(data) > 0,
                             'records': len(data),
                             'status': '✓' if len(data) > 0 else '✗'
                         }
-            return {'source': 'CIRCL', 'status': 'Not found', 'found': False}
+                    result = {
+                        'source': 'CIRCL',
+                        'status': chr(0x26A0),
+                        'error': f'HTTP {response.status}',
+                        'found': False,
+                    }
+                    return result
         except Exception as e:
             logger.error(f"[CIRCL] Error: {e}")
             return {'source': 'CIRCL', 'status': '⚠', 'error': str(e), 'found': False}
