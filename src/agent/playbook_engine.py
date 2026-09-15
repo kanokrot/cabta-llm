@@ -1017,6 +1017,7 @@ class PlaybookEngine:
         playbook_id: str,
         input_data: Any,
         case_id: Optional[str] = None,
+        user_id: Optional[int] = None,
     ) -> str:
         """
         Start a playbook run in the background and return immediately.
@@ -1037,7 +1038,10 @@ class PlaybookEngine:
 
         goal = f"Playbook: {pb.get('name', playbook_id)}"
         session_id = self.store.create_session(
-            goal=goal, case_id=case_id, playbook_id=playbook_id,
+            goal=goal,
+            case_id=case_id,
+            playbook_id=playbook_id,
+            user_id=user_id,
         )
 
         def _run():
@@ -1060,6 +1064,7 @@ class PlaybookEngine:
         playbook_id: str,
         input_data: Any,
         case_id: Optional[str] = None,
+        user_id: Optional[int] = None,
     ) -> str:
         """
         Execute a playbook and block until it finishes (or hits an approval
@@ -1090,7 +1095,10 @@ class PlaybookEngine:
         # Create a session
         goal = f"Playbook: {pb.get('name', playbook_id)}"
         session_id = self.store.create_session(
-            goal=goal, case_id=case_id, playbook_id=playbook_id,
+            goal=goal,
+            case_id=case_id,
+            playbook_id=playbook_id,
+            user_id=user_id,
         )
 
         return await self._execute_session(

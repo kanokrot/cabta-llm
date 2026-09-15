@@ -46,6 +46,7 @@ class AnalysisManager:
         self,
         analysis_type: str,
         params: Dict[str, Any],
+        user_id: Optional[int] = None,
     ) -> str:
         """Create a new analysis job. Returns job ID."""
         job_id = uuid.uuid4().hex[:12]
@@ -56,9 +57,9 @@ class AnalysisManager:
             conn = self._connect()
             conn.execute(
                 """INSERT INTO analysis_jobs
-                   (id, analysis_type, params, status, progress, created_at)
-                   VALUES (?, ?, ?, 'queued', 0, ?)""",
-                (job_id, analysis_type, params_json, now),
+                   (id, analysis_type, params, status, progress, created_at, user_id)
+                   VALUES (?, ?, ?, 'queued', 0, ?, ?)""",
+                (job_id, analysis_type, params_json, now, user_id),
             )
             conn.commit()
             conn.close()
@@ -66,12 +67,23 @@ class AnalysisManager:
         logger.info(f"[JOB] Created {analysis_type} job: {job_id}")
         return job_id
 
-    def get_job(self, job_id: str) -> Optional[Dict]:
+    def get_job(
+        self,
+        job_id: str,
+        user_id: Optional[int] = None,
+    ) -> Optional[Dict]:
         """Get job details."""
         conn = self._connect()
-        cur = conn.execute(
-            "SELECT * FROM analysis_jobs WHERE id = ?", (job_id,),
-        )
+        if user_id is None:
+            cur = conn.execute(
+                "SELECT * FROM analysis_jobs WHERE id = ?",
+                (job_id,),
+            )
+        else:
+            cur = conn.execute(
+                "SELECT * FROM analysis_jobs WHERE id = ? AND user_id = ?",
+                (job_id, user_id),
+            )
         row = cur.fetchone()
         conn.close()
         if row is None:
@@ -133,20 +145,25 @@ class AnalysisManager:
         limit: int = 50,
         offset: int = 0,
         status: Optional[str] = None,
+        user_id: Optional[int] = None,
     ) -> List[Dict]:
         """List analysis jobs with optional filtering."""
         conn = self._connect()
+        clauses = []
+        params = []
         if status:
-            cur = conn.execute(
-                """SELECT * FROM analysis_jobs WHERE status = ?
-                   ORDER BY created_at DESC LIMIT ? OFFSET ?""",
-                (status, limit, offset),
-            )
-        else:
-            cur = conn.execute(
-                "SELECT * FROM analysis_jobs ORDER BY created_at DESC LIMIT ? OFFSET ?",
-                (limit, offset),
-            )
+            clauses.append("status = ?")
+            params.append(status)
+        if user_id is not None:
+            clauses.append("user_id = ?")
+            params.append(user_id)
+
+        query = "SELECT * FROM analysis_jobs"
+        if clauses:
+            query += " WHERE " + " AND ".join(clauses)
+        query += " ORDER BY created_at DESC LIMIT ? OFFSET ?"
+        params.extend([limit, offset])
+        cur = conn.execute(query, params)
         rows = cur.fetchall()
         conn.close()
         return [self._row_to_dict(cur.description, r) for r in rows]
@@ -323,7 +340,8 @@ class AnalysisManager:
                 score        INTEGER,
                 result       TEXT,
                 created_at   TEXT NOT NULL,
-                completed_at TEXT
+                completed_at TEXT,
+                user_id      INTEGER
             )
         """)
         conn.execute(
@@ -331,6 +349,10 @@ class AnalysisManager:
         )
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_jobs_created ON analysis_jobs(created_at)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_jobs_user_id "
+            "ON analysis_jobs(user_id)"
         )
         conn.commit()
         conn.close()

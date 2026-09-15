@@ -344,11 +344,15 @@ class AgentLoop:
         case_id: Optional[str] = None,
         playbook_id: Optional[str] = None,
         max_steps: Optional[int] = None,
+        user_id: Optional[int] = None,
     ) -> str:
         """Start an autonomous investigation. Returns *session_id* immediately."""
 
         session_id = self.store.create_session(
-            goal=goal, case_id=case_id, playbook_id=playbook_id,
+            goal=goal,
+            case_id=case_id,
+            playbook_id=playbook_id,
+            user_id=user_id,
         )
 
         effective_max_steps = max_steps if max_steps is not None else self.max_steps
@@ -356,6 +360,7 @@ class AgentLoop:
             session_id=session_id,
             goal=goal,
             case_id=case_id,
+            user_id=user_id,
             max_steps=effective_max_steps,
         )
         self._active_sessions[session_id] = state
@@ -653,7 +658,10 @@ class AgentLoop:
                         })
                         try:
                             pb_session = await self._playbook_engine.execute(
-                                pb_id, pb_params, case_id=state.case_id,
+                                pb_id,
+                                pb_params,
+                                case_id=state.case_id,
+                                user_id=state.user_id,
                             )
                             state.add_finding({
                                 "type": "playbook_completed",

@@ -35,6 +35,7 @@ class AgentStore:
         goal: str,
         case_id: Optional[str] = None,
         playbook_id: Optional[str] = None,
+        user_id: Optional[int] = None,
     ) -> str:
         """Create a new agent session. Returns session ID."""
         session_id = uuid.uuid4().hex[:12]
@@ -44,9 +45,10 @@ class AgentStore:
             conn = self._connect()
             conn.execute(
                 """INSERT INTO agent_sessions
-                   (id, case_id, goal, status, playbook_id, created_at, findings, metadata)
-                   VALUES (?, ?, ?, 'active', ?, ?, '[]', '{}')""",
-                (session_id, case_id, goal, playbook_id, now),
+                   (id, case_id, goal, status, playbook_id, created_at,
+                    findings, metadata, user_id)
+                   VALUES (?, ?, ?, 'active', ?, ?, '[]', '{}', ?)""",
+                (session_id, case_id, goal, playbook_id, now, user_id),
             )
             conn.commit()
             conn.close()
@@ -54,12 +56,23 @@ class AgentStore:
         logger.info(f"[AGENT] Created session {session_id}: {goal[:80]}")
         return session_id
 
-    def get_session(self, session_id: str) -> Optional[Dict]:
+    def get_session(
+        self,
+        session_id: str,
+        user_id: Optional[int] = None,
+    ) -> Optional[Dict]:
         """Retrieve a single session by ID."""
         conn = self._connect()
-        cur = conn.execute(
-            "SELECT * FROM agent_sessions WHERE id = ?", (session_id,),
-        )
+        if user_id is None:
+            cur = conn.execute(
+                "SELECT * FROM agent_sessions WHERE id = ?",
+                (session_id,),
+            )
+        else:
+            cur = conn.execute(
+                "SELECT * FROM agent_sessions WHERE id = ? AND user_id = ?",
+                (session_id, user_id),
+            )
         row = cur.fetchone()
         conn.close()
         if row is None:
@@ -67,21 +80,28 @@ class AgentStore:
         return self._row_to_dict(cur.description, row)
 
     def list_sessions(
-        self, limit: int = 50, status: Optional[str] = None,
+        self,
+        limit: int = 50,
+        status: Optional[str] = None,
+        user_id: Optional[int] = None,
     ) -> List[Dict]:
         """List sessions, newest first, with optional status filter."""
         conn = self._connect()
+        clauses = []
+        params = []
         if status:
-            cur = conn.execute(
-                """SELECT * FROM agent_sessions WHERE status = ?
-                   ORDER BY created_at DESC LIMIT ?""",
-                (status, limit),
-            )
-        else:
-            cur = conn.execute(
-                "SELECT * FROM agent_sessions ORDER BY created_at DESC LIMIT ?",
-                (limit,),
-            )
+            clauses.append("status = ?")
+            params.append(status)
+        if user_id is not None:
+            clauses.append("user_id = ?")
+            params.append(user_id)
+
+        query = "SELECT * FROM agent_sessions"
+        if clauses:
+            query += " WHERE " + " AND ".join(clauses)
+        query += " ORDER BY created_at DESC LIMIT ?"
+        params.append(limit)
+        cur = conn.execute(query, params)
         rows = cur.fetchall()
         desc = cur.description
         conn.close()
@@ -474,7 +494,8 @@ class AgentStore:
                 completed_at TEXT,
                 summary      TEXT,
                 findings     TEXT DEFAULT '[]',
-                metadata     TEXT DEFAULT '{}'
+                metadata     TEXT DEFAULT '{}',
+                user_id      INTEGER
             )
         """)
 
@@ -543,6 +564,10 @@ class AgentStore:
         )
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_sessions_created ON agent_sessions(created_at)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_sessions_user_id "
+            "ON agent_sessions(user_id)"
         )
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_steps_session ON agent_steps(session_id)"

@@ -45,6 +45,7 @@ class AgentState:
     phase: AgentPhase = AgentPhase.IDLE
     goal: str = ""
     case_id: Optional[str] = None
+    user_id: Optional[int] = None
     current_tool: Optional[str] = None
     step_count: int = 0
     max_steps: int = 50
