@@ -77,22 +77,21 @@ LOW_CONFIDENCE_SOURCES = {
     "sslblacklist",
 }
 
-# CV source policy for the current Group-A evaluation dataset.  These are the
-# only Group-A integrations with evidence of a successful, usable response in
-# the completed collection.  Keep this policy local to the analysis script so
-# production scoring tiers and source integrations retain their defaults.
+# CV source policy for the current Group-A evaluation dataset. Keep this
+# policy local to the analysis script so production scoring tiers and source
+# integrations retain their defaults.
 CV_SOURCE_ALLOWLIST = frozenset(
     {
         "feodotracker",
         "tor_exit_nodes",
         "spamhaus",
         "c2_trackers",
+        "sslblacklist",
+        "usom",
     }
 )
 CV_SOURCE_EXCLUSION_REASONS = {
-    "circl": "endpoint returned 404/401; current Passive DNS access is partner-restricted",
-    "sslblacklist": "SSLBL IP feed is deprecated; no usable IP entries were returned",
-    "usom": "API response is paginated and the fallback IP-list URL returned HTML; content validation is incomplete",
+    "circl": "CIRCL Passive DNS requires partner authorization not available in this environment; excluded permanently, same status as GreyNoise/Pulsedive",
 }
 
 

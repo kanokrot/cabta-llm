@@ -28,11 +28,24 @@ def test_select_cv_sources_keeps_only_validated_group_a_sources():
 
     selected, excluded = fit_source_weights.select_cv_sources(rows)
 
-    assert selected == ["c2_trackers", "feodotracker", "spamhaus", "tor_exit_nodes"]
-    assert set(excluded) == {"alienvault", "circl", "sslblacklist", "usom"}
-    assert "404/401" in excluded["circl"]
-    assert "deprecated" in excluded["sslblacklist"]
-    assert "paginated" in excluded["usom"]
+    assert selected == [
+        "c2_trackers",
+        "feodotracker",
+        "spamhaus",
+        "sslblacklist",
+        "tor_exit_nodes",
+        "usom",
+    ]
+    assert set(excluded) == {"alienvault", "circl"}
+    assert "excluded permanently" in excluded["circl"]
+    assert set(fit_source_weights.CV_SOURCE_ALLOWLIST) == {
+        "c2_trackers",
+        "feodotracker",
+        "spamhaus",
+        "sslblacklist",
+        "tor_exit_nodes",
+        "usom",
+    }
 
 
 def test_build_feature_matrix_can_use_explicit_source_policy():
