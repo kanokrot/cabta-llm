@@ -13,16 +13,26 @@ import zipfile
 from datetime import datetime, timezone
 from typing import Dict, Optional, Tuple
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from pydantic import BaseModel, StrictStr
 from starlette.background import BackgroundTask
 
 from ...detection.rule_validator import validate_rule
 from ...reporting.ioc_pdf import generate_ioc_pdf
+from ..auth import require_role
 
 logger = logging.getLogger(__name__)
-router = APIRouter()
+REPORT_ROLES = [
+    'SOC Analyst Tier 1-2',
+    'Incident Responder',
+    'Threat Hunter',
+    'admin',
+]
+
+router = APIRouter(
+    dependencies=[Depends(require_role(REPORT_ROLES))]
+)
 
 _RULE_EXTENSIONS = {
     'kql': '.kql',
@@ -266,6 +276,9 @@ async def update_rule_content(
     analysis_id: str,
     rule_type: str,
     body: RuleContentUpdateRequest,
+    _current_user: dict = Depends(
+        require_role(['Threat Hunter', 'admin'])
+    ),
 ):
     """Validate and persist edited detection-rule content."""
     normalized_type = str(rule_type or '').strip().lower()
@@ -303,6 +316,9 @@ async def approve_rule_export(
     analysis_id: str,
     rule_type: str,
     body: Optional[RuleApprovalRequest] = None,
+    _current_user: dict = Depends(
+        require_role(['Incident Responder', 'admin'])
+    ),
 ):
     """Validate a rule and record explicit human approval for its export."""
     normalized_type, content = _get_rule_content(request, analysis_id, rule_type)
@@ -338,6 +354,9 @@ async def mark_rule_deployed(
     analysis_id: str,
     rule_type: str,
     body: Optional[RuleDeploymentRequest] = None,
+    _current_user: dict = Depends(
+        require_role(['Incident Responder', 'admin'])
+    ),
 ):
     """Record a human-reported manual deployment without calling external systems."""
     normalized_type, content = _get_rule_content(request, analysis_id, rule_type)

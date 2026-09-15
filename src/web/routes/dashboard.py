@@ -4,10 +4,25 @@ Dashboard API endpoints.
 """
 import json
 import logging
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
+
+from ..auth import get_current_user, require_role
 
 logger = logging.getLogger(__name__)
-router = APIRouter()
+router = APIRouter(
+    dependencies=[
+        Depends(require_role([
+            'SOC Analyst Tier 1-2',
+            'Incident Responder',
+            'Threat Hunter',
+            'admin',
+        ]))
+    ]
+)
+
+
+def _owner_scope(current_user: dict):
+    return None if current_user.get('role') == 'admin' else current_user['id']
 
 
 def _flatten_job(job: dict) -> dict:
@@ -44,14 +59,21 @@ async def get_stats(request: Request):
 
 
 @router.get('/recent')
-async def get_recent(request: Request, limit: int = 10):
+async def get_recent(
+    request: Request,
+    limit: int = 10,
+    current_user: dict = Depends(get_current_user),
+):
     """Get recent analyses.
 
     Returns both ``analyses`` (flattened, frontend-ready shape) and the
     raw ``items`` for callers that want the untouched job rows.
     """
     mgr = request.app.state.analysis_manager
-    jobs = mgr.list_jobs(limit=limit)
+    jobs = mgr.list_jobs(
+        limit=limit,
+        user_id=_owner_scope(current_user),
+    )
     analyses = [_flatten_job(j) for j in jobs]
     return {'analyses': analyses, 'items': jobs}
 

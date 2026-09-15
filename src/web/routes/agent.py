@@ -10,12 +10,16 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from ..auth import require_role
+from ..auth import get_current_user, require_role
 
 logger = logging.getLogger(__name__)
 router = APIRouter(
     dependencies=[Depends(require_role(["Threat Hunter", "admin"]))]
 )
+
+
+def _owner_scope(current_user: dict) -> Optional[int]:
+    return None if current_user.get("role") == "admin" else current_user["id"]
 
 
 class InvestigateRequest(BaseModel):
@@ -46,11 +50,19 @@ def _require_agent_store(request: Request):
 
 
 @router.post('/investigate')
-async def start_investigation(request: Request, body: InvestigateRequest):
+async def start_investigation(
+    request: Request,
+    body: InvestigateRequest,
+    current_user: dict = Depends(get_current_user),
+):
     """Start a new agent investigation."""
     agent_loop = _require_agent_loop(request)
     session_id = await agent_loop.investigate(
-        body.goal, body.case_id, body.playbook_id, max_steps=body.max_steps
+        body.goal,
+        body.case_id,
+        body.playbook_id,
+        max_steps=body.max_steps,
+        user_id=current_user["id"],
     )
     return {"session_id": session_id, "status": "active", "goal": body.goal}
 
@@ -119,12 +131,22 @@ async def sandbox_status(request: Request):
 
 
 @router.get('/correlation/{session_id}')
-async def get_session_correlation(request: Request, session_id: str):
+async def get_session_correlation(
+    request: Request,
+    session_id: str,
+    current_user: dict = Depends(get_current_user),
+):
     """Get correlation analysis for a session's findings."""
     store = _require_agent_store(request)
-    session = store.get_session(session_id)
-    if not session:
-        raise HTTPException(404, "Session not found")
+    session = store.get_session(
+        session_id,
+        user_id=_owner_scope(current_user),
+    )
+    if session is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Session not found",
+        )
 
     correlation_engine = request.app.state.correlation_engine
     if correlation_engine is None:
@@ -144,20 +166,39 @@ async def get_session_correlation(request: Request, session_id: str):
 
 
 @router.get('/sessions')
-async def list_sessions(request: Request, limit: int = 50, status: Optional[str] = None):
+async def list_sessions(
+    request: Request,
+    limit: int = 50,
+    status: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
     """List agent investigation sessions."""
     store = _require_agent_store(request)
-    sessions = store.list_sessions(limit=limit, status=status)
+    sessions = store.list_sessions(
+        limit=limit,
+        status=status,
+        user_id=_owner_scope(current_user),
+    )
     return {"sessions": sessions}
 
 
 @router.get('/sessions/{session_id}')
-async def get_session(request: Request, session_id: str):
+async def get_session(
+    request: Request,
+    session_id: str,
+    current_user: dict = Depends(get_current_user),
+):
     """Get session details with all steps."""
     store = _require_agent_store(request)
-    session = store.get_session(session_id)
-    if not session:
-        raise HTTPException(404, "Session not found")
+    session = store.get_session(
+        session_id,
+        user_id=_owner_scope(current_user),
+    )
+    if session is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Session not found",
+        )
     steps = store.get_steps(session_id)
     session['steps'] = steps
     # Include live state if available
@@ -170,12 +211,23 @@ async def get_session(request: Request, session_id: str):
 
 
 @router.post('/sessions/{session_id}/approve')
-async def approve_action(request: Request, session_id: str, body: ApprovalRequest):
+async def approve_action(
+    request: Request,
+    session_id: str,
+    body: ApprovalRequest,
+    current_user: dict = Depends(get_current_user),
+):
     """Approve or reject a pending action."""
     store = _require_agent_store(request)
-    session = store.get_session(session_id)
-    if not session:
-        raise HTTPException(404, "Session not found")
+    session = store.get_session(
+        session_id,
+        user_id=_owner_scope(current_user),
+    )
+    if session is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Session not found",
+        )
 
     metadata = session.get('metadata', {})
     if isinstance(metadata, dict) and 'pending_step_name' in metadata:
@@ -199,19 +251,44 @@ async def approve_action(request: Request, session_id: str, body: ApprovalReques
 
 
 @router.post('/sessions/{session_id}/cancel')
-async def cancel_session(request: Request, session_id: str):
+async def cancel_session(
+    request: Request,
+    session_id: str,
+    current_user: dict = Depends(get_current_user),
+):
     """Cancel an active investigation."""
+    store = _require_agent_store(request)
+    session = store.get_session(
+        session_id,
+        user_id=_owner_scope(current_user),
+    )
+    if session is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Session not found",
+        )
+
     agent_loop = _require_agent_loop(request)
     await agent_loop.cancel_session(session_id)
     return {"status": "cancelled"}
 
 @router.delete('/sessions/{session_id}')
-async def delete_session(request: Request, session_id: str):
+async def delete_session(
+    request: Request,
+    session_id: str,
+    current_user: dict = Depends(get_current_user),
+):
     """Delete an investigation session and its steps."""
     store = _require_agent_store(request)
-    session = store.get_session(session_id)
-    if not session:
-        raise HTTPException(404, "Session not found")
+    session = store.get_session(
+        session_id,
+        user_id=_owner_scope(current_user),
+    )
+    if session is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Session not found",
+        )
 
     # กันลบ session ที่ agent loop ยังทำงานอยู่ (แค่มีอยู่ใน _active_sessions ก็ถือว่า active)
     agent_loop = request.app.state.agent_loop
@@ -223,7 +300,11 @@ async def delete_session(request: Request, session_id: str):
         raise HTTPException(500, "Failed to delete session")
     return {"status": "deleted", "session_id": session_id}
 @router.get('/sessions/{session_id}/audit')
-async def get_session_audit_trail(session_id: str, request: Request):
+async def get_session_audit_trail(
+    session_id: str,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
     """Return the full audit trail for one session, newest first.
 
     Each entry includes actor ('human' / 'agent' / 'system'), action,
@@ -237,10 +318,14 @@ async def get_session_audit_trail(session_id: str, request: Request):
             {"error": "AgentStore not available"}, status_code=503,
         )
 
-    session = agent_store.get_session(session_id)
+    session = agent_store.get_session(
+        session_id,
+        user_id=_owner_scope(current_user),
+    )
     if session is None:
-        return JSONResponse(
-            {"error": f"Session not found: {session_id}"}, status_code=404,
+        raise HTTPException(
+            status_code=404,
+            detail="Session not found",
         )
 
     entries = agent_store.get_audit_log(session_id=session_id, limit=200)

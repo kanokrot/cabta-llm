@@ -11,7 +11,7 @@ import threading
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse
 
 from ..models import (
@@ -20,9 +20,14 @@ from ..models import (
     FileUploadResponse,
     IOCRequest,
 )
+from ..auth import get_current_user, require_role
 
 logger = logging.getLogger(__name__)
-router = APIRouter()
+router = APIRouter(
+    dependencies=[
+        Depends(require_role(["SOC Analyst Tier 1-2", "admin"]))
+    ]
+)
 
 
 def _load_config():
@@ -142,15 +147,23 @@ def _run_ioc_analysis_bg(mgr, job_id: str, value: str, ioc_type: str, case_store
 
 
 @router.post('/ioc')
-async def analyze_ioc(request: Request, payload: IOCRequest):
+async def analyze_ioc(
+    request: Request,
+    payload: IOCRequest,
+    current_user: dict = Depends(get_current_user),
+):
     """Start IOC investigation."""
     mgr = request.app.state.analysis_manager
     case_store = request.app.state.case_store
     ioc_type = payload.ioc_type.value if payload.ioc_type else 'auto'
-    job_id = mgr.create_job('ioc', {
-        'value': payload.value,
-        'ioc_type': ioc_type,
-    })
+    job_id = mgr.create_job(
+        'ioc',
+        {
+            'value': payload.value,
+            'ioc_type': ioc_type,
+        },
+        user_id=current_user['id'],
+    )
 
     # Launch background analysis
     t = threading.Thread(
@@ -168,7 +181,11 @@ async def analyze_ioc(request: Request, payload: IOCRequest):
 
 
 @router.post('/file')
-async def analyze_file(request: Request, file: UploadFile = File(...)):
+async def analyze_file(
+    request: Request,
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user),
+):
     """Upload and analyze a file."""
     mgr = request.app.state.analysis_manager
 
@@ -182,12 +199,16 @@ async def analyze_file(request: Request, file: UploadFile = File(...)):
         tmp.write(content)
         tmp_path = tmp.name
 
-    job_id = mgr.create_job('file', {
-        'filename': file.filename,
-        'sha256': sha256,
-        'size': len(content),
-        'temp_path': tmp_path,
-    })
+    job_id = mgr.create_job(
+        'file',
+        {
+            'filename': file.filename,
+            'sha256': sha256,
+            'size': len(content),
+            'temp_path': tmp_path,
+        },
+        user_id=current_user['id'],
+    )
 
     # Launch background analysis
     t = threading.Thread(
@@ -205,7 +226,11 @@ async def analyze_file(request: Request, file: UploadFile = File(...)):
 
 
 @router.post('/email')
-async def analyze_email(request: Request, file: UploadFile = File(...)):
+async def analyze_email(
+    request: Request,
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user),
+):
     """Upload and analyze an email (.eml)."""
     mgr = request.app.state.analysis_manager
 
@@ -216,11 +241,15 @@ async def analyze_email(request: Request, file: UploadFile = File(...)):
         tmp.write(content)
         tmp_path = tmp.name
 
-    job_id = mgr.create_job('email', {
-        'filename': file.filename,
-        'sha256': sha256,
-        'temp_path': tmp_path,
-    })
+    job_id = mgr.create_job(
+        'email',
+        {
+            'filename': file.filename,
+            'sha256': sha256,
+            'temp_path': tmp_path,
+        },
+        user_id=current_user['id'],
+    )
 
     # Launch background email analysis
     t = threading.Thread(

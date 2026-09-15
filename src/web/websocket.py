@@ -61,12 +61,19 @@ async def analysis_ws(websocket: WebSocket, analysis_id: str):
         {"type": "failed", "error": "Timeout"}
     """
     authenticated_user = await _authenticate_websocket(
-        websocket, ["SOC Analyst Tier 1-2", "admin"]
+        websocket,
+        [
+            "SOC Analyst Tier 1-2",
+            "Incident Responder",
+            "Threat Hunter",
+            "admin",
+        ],
     )
     if authenticated_user is None:
         return
 
-    # Phase 2.5 gap: analysis ownership is not yet represented in storage.
+    # Analysis jobs are shared cross-role workflow artifacts.
+    # Ownership is intentionally not checked here.
 
     mgr = websocket.app.state.analysis_manager
     queue = mgr.subscribe(analysis_id)
@@ -126,8 +133,6 @@ async def agent_ws(websocket: WebSocket, session_id: str):
     if authenticated_user is None:
         return
 
-    # Phase 2.5 gap: agent session ownership is not yet represented in storage.
-
     store = websocket.app.state.agent_store
     agent_loop = websocket.app.state.agent_loop
     if not store:
@@ -141,6 +146,12 @@ async def agent_ws(websocket: WebSocket, session_id: str):
         await websocket.send_json({'type': 'error', 'error': 'Session not found'})
         await websocket.close()
         return
+
+    if authenticated_user.get('role') != 'admin':
+        owner_id = session.get('user_id')
+        if owner_id is None or str(owner_id) != str(authenticated_user.get('id')):
+            await websocket.close(code=1008)
+            return
 
     steps = store.get_steps(session_id)
     await websocket.send_json({
@@ -182,7 +193,14 @@ async def agent_ws(websocket: WebSocket, session_id: str):
             last_step_count = len(steps)
             while True:
                 await asyncio.sleep(2)
-                session = store.get_session(session_id)
+                session = store.get_session(
+                    session_id,
+                    user_id=(
+                        None
+                        if authenticated_user.get('role') == 'admin'
+                        else authenticated_user.get('id')
+                    ),
+                )
                 if not session:
                     break
 

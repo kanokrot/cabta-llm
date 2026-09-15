@@ -14,12 +14,16 @@ from pydantic import BaseModel
 
 from ...agent.playbook_engine import PlaybookValidationError
 from ...reporting.html_report_generator import HTMLReportGenerator
-from ..auth import require_role
+from ..auth import get_current_user, require_role
 
 logger = logging.getLogger(__name__)
 router = APIRouter(
     dependencies=[Depends(require_role(["Incident Responder", "admin"]))]
 )
+
+
+def _owner_scope(current_user: dict) -> Optional[int]:
+    return None if current_user.get("role") == "admin" else current_user["id"]
 
 
 class PlaybookRunRequest(BaseModel):
@@ -56,13 +60,23 @@ async def get_playbook(request: Request, playbook_id: str):
 
 
 @router.post('/{playbook_id}/run')
-async def run_playbook(request: Request, playbook_id: str, body: PlaybookRunRequest = PlaybookRunRequest()):
+async def run_playbook(
+    request: Request,
+    playbook_id: str,
+    body: PlaybookRunRequest = PlaybookRunRequest(),
+    current_user: dict = Depends(get_current_user),
+):
     """Execute a playbook."""
     engine = request.app.state.playbook_engine
     if engine is None:
         raise HTTPException(503, "Playbook engine not initialized")
     try:
-        session_id = await engine.start(playbook_id, body.params, body.case_id)
+        session_id = await engine.start(
+            playbook_id,
+            body.params,
+            body.case_id,
+            user_id=current_user["id"],
+        )
         return {"session_id": session_id, "status": "running"}
     except PlaybookValidationError as e:
         raise HTTPException(400, str(e))
@@ -78,8 +92,29 @@ class PlaybookApprovalRequest(BaseModel):
 
 
 @router.post('/sessions/{session_id}/approve')
-async def approve_playbook_step(request: Request, session_id: str, body: PlaybookApprovalRequest):
+async def approve_playbook_step(
+    request: Request,
+    session_id: str,
+    body: PlaybookApprovalRequest,
+    current_user: dict = Depends(get_current_user),
+):
     """Approve or reject a pending playbook approval checkpoint."""
+    store = request.app.state.agent_store
+    if store is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Agent store not initialized",
+        )
+    session = store.get_session(
+        session_id,
+        user_id=_owner_scope(current_user),
+    )
+    if session is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Session not found",
+        )
+
     engine = request.app.state.playbook_engine
     if engine is None:
         raise HTTPException(503, "Playbook engine not initialized")
@@ -93,14 +128,24 @@ async def approve_playbook_step(request: Request, session_id: str, body: Playboo
 
 
 @router.get('/sessions/{session_id}/report')
-async def get_playbook_report(request: Request, session_id: str):
+async def get_playbook_report(
+    request: Request,
+    session_id: str,
+    current_user: dict = Depends(get_current_user),
+):
     """Generate and serve an HTML report for a completed playbook session."""
     store = request.app.state.agent_store
     if store is None:
         raise HTTPException(503, "Agent store not initialized")
-    session = store.get_session(session_id)
+    session = store.get_session(
+        session_id,
+        user_id=_owner_scope(current_user),
+    )
     if session is None:
-        raise HTTPException(404, "Session not found")
+        raise HTTPException(
+            status_code=404,
+            detail="Session not found",
+        )
     metadata = session.get('metadata') or {}
     if not isinstance(metadata, dict):
         metadata = {}

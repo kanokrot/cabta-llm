@@ -16,6 +16,10 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _owner_scope(current_user: dict) -> Optional[int]:
+    return None if current_user.get("role") == "admin" else current_user["id"]
+
+
 class ChatMessage(BaseModel):
     message: str = Field(..., min_length=1)
     session_id: Optional[str] = None
@@ -77,7 +81,10 @@ async def send_message(
             if structured:
                 input_data.update(structured)
             session_id = await engine.start(
-                body.playbook_id, input_data, case_id=None,
+                body.playbook_id,
+                input_data,
+                case_id=None,
+                user_id=current_user["id"],
             )
             return {
                 "session_id": session_id,
@@ -98,9 +105,15 @@ async def send_message(
         if store is None:
             raise HTTPException(503, "Agent store not initialized")
 
-        session = store.get_session(body.session_id)
-        if not session:
-            raise HTTPException(404, "Session not found")
+        session = store.get_session(
+            body.session_id,
+            user_id=_owner_scope(current_user),
+        )
+        if session is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Session not found",
+            )
 
         # If session is still active, return status
         if session.get('status') == 'active':
@@ -113,7 +126,9 @@ async def send_message(
         # If session is completed/failed, start a new investigation with context
         context = f"(Follow-up to previous investigation: {session.get('goal', '')})\n{body.message}"
         session_id = await agent_loop.investigate(
-            context, case_id=session.get('case_id')
+            context,
+            case_id=session.get('case_id'),
+            user_id=current_user["id"],
         )
         return {
             "session_id": session_id,
@@ -122,7 +137,10 @@ async def send_message(
         }
     else:
         # New investigation - LLM will see available playbooks and may auto-select one
-        session_id = await agent_loop.investigate(body.message)
+        session_id = await agent_loop.investigate(
+            body.message,
+            user_id=current_user["id"],
+        )
         return {
             "session_id": session_id,
             "status": "processing",
@@ -134,13 +152,16 @@ async def send_message(
 async def list_chat_sessions(
     request: Request,
     limit: int = 20,
-    current_user: dict = Depends(require_role(["admin"])),
+    current_user: dict = Depends(get_current_user),
 ):
     """List recent chat sessions."""
     store = request.app.state.agent_store
     if store is None:
         return {"sessions": []}
-    sessions = store.list_sessions(limit=limit)
+    sessions = store.list_sessions(
+        limit=limit,
+        user_id=_owner_scope(current_user),
+    )
     return {"sessions": sessions}
 
 
@@ -148,15 +169,21 @@ async def list_chat_sessions(
 async def get_chat_session(
     request: Request,
     session_id: str,
-    current_user: dict = Depends(require_role(["admin"])),
+    current_user: dict = Depends(get_current_user),
 ):
     """Get a chat session with steps."""
     store = request.app.state.agent_store
     if store is None:
         raise HTTPException(503, "Agent store not initialized")
-    session = store.get_session(session_id)
-    if not session:
-        raise HTTPException(404, "Session not found")
+    session = store.get_session(
+        session_id,
+        user_id=_owner_scope(current_user),
+    )
+    if session is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Session not found",
+        )
     steps = store.get_steps(session_id)
     session['steps'] = steps
     # Include live state if available
