@@ -705,6 +705,18 @@ Phase 1 และ Phase 1.5 เสร็จแล้ว; RBAC enforcement, per-f
 
 **Design decision:** ไม่มี teams table แยก ใช้ทีมเดียวโดย implicit; admin เพิ่มสมาชิกโดยตรงผ่าน email; ผู้ใช้ไม่มี self-select role; มี 4 role ได้แก่ 3 target-user role และ `admin`
 
+## D10.2.5 Phase 2.5 — Session ownership (known gap from Phase 2)
+
+**วัตถุประสงค์:** ปิดช่องว่างด้าน session ownership ที่พบระหว่างทำ Phase 2 โดยเป็น sub-task ค้างของ Phase 2 ไม่ใช่ phase ใหม่ที่แยกอิสระ
+
+**ช่องว่างที่พบ:** `AgentStore.get_session()` และ `AgentStore.list_sessions()` ยังไม่มี `user_id` parameter และ `chat.py` ยังไม่ได้ส่ง user scope เข้าไป ทำให้ session read ยังไม่ owner-scoped
+
+**สถานะ:** `[ ]` ยังไม่เริ่ม
+
+**Mitigation ชั่วคราว:** จำกัด `GET /api/chat/sessions` และ `GET /api/chat/sessions/{id}` ให้ `admin` เท่านั้นจนกว่าจะทำ ownership เสร็จ
+
+**ขอบเขตที่ต้องทำ:** ทำ schema migration เพิ่ม `user_id`, ตัดสินใจแนวทาง backfill สำหรับ session เก่า, แก้ `AgentStore` methods ให้รับและใช้ filter, และแก้ `chat.py` ให้ส่ง `current_user` เข้าไป
+
 ## D10.3 Phase 2 — RBAC middleware
 
 **วัตถุประสงค์:** บังคับสิทธิ์ตาม role กับ route และ flow ที่มีอยู่
@@ -715,9 +727,17 @@ Phase 1 และ Phase 1.5 เสร็จแล้ว; RBAC enforcement, per-f
 
 **ผลลัพธ์ที่ต้องได้:** route ที่เกี่ยวข้องมี role enforcement และ unauthorized access ได้ response ที่ถูกต้อง
 
-**สถานะ:** `[ ]` ยังไม่เริ่ม
+**สถานะ:** `[x]` เสร็จแล้ว
 
-**ขอบเขตที่ต้องปลดล็อก:** ต้อง lift forbidden-file scope สำหรับ `src/web/websocket.py` เฉพาะรอบนี้ เพราะ Flow B วิ่งผ่าน WebSocket
+**หลักฐาน:** commit `2220a60 Add Phase 2: RBAC middleware for Flow A/B/C routes and WebSockets`
+
+**สรุป route → role:** `agent.py` ใช้ `Threat Hunter`/`admin`; `playbooks.py` ใช้ `Incident Responder`/`admin`; `chat.py` ใช้ `Incident Responder`/`admin` เมื่อมี `playbook_id` และ `Threat Hunter`/`admin` เมื่อไม่มี `playbook_id`; `websocket.py` ใช้ `SOC Analyst Tier 1-2`/`admin` สำหรับ `/ws/analysis/*` และ `Threat Hunter`/`admin` สำหรับ `/ws/agent/*`
+
+**Known gap:** `GET /api/chat/sessions` และ `GET /api/chat/sessions/{id}` เป็น `admin-only` ชั่วคราว เพราะยังไม่มี session ownership (`user_id`) โดยติดตามแยกเป็น Phase 2.5 และไม่ใช่ blocker ของ Phase 2 นี้
+
+**หลักฐานการทดสอบ:** `tests/test_rbac_middleware.py` จำนวน 107 cases และ regression suite รวม 119 passed
+
+**ขอบเขตที่ดำเนินการ:** รวม `src/web/websocket.py` ในการบังคับ JWT และ role ผ่าน WebSocket ตามขอบเขตของ Phase 2
 
 ## D10.4 Phase 3 — Per-flow filtering
 
@@ -759,10 +779,11 @@ Phase 1 และ Phase 1.5 เสร็จแล้ว; RBAC enforcement, per-f
 
 ## D10.7 ลำดับงานที่ควรทำต่อ
 
-1. `[ ]` Phase 2 — RBAC middleware (ถัดไป)
-2. `[ ]` Phase 3 — Per-flow filtering
-3. `[ ]` Phase 4 — Gmail OAuth
-4. `[ ]` Phase 5 — Notification routing by role
+1. `[x]` Phase 2 — RBAC middleware (เสร็จแล้ว)
+2. `[ ]` Phase 2.5 — Session ownership (known gap จาก Phase 2, แนะนำทำก่อน Phase 3 เพราะเป็น security gap ที่เปิดอยู่)
+3. `[ ]` Phase 3 — Per-flow filtering
+4. `[ ]` Phase 4 — Gmail OAuth
+5. `[ ]` Phase 5 — Notification routing by role
 
 ## Weekly ritual (กันของหล่น)
 1. ก่อนเริ่มแต่ละ session: เปิดไฟล์นี้ อัปเดต status เก่าก่อน แล้วค่อยเลือกงานถัดไป
