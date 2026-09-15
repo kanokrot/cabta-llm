@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import inspect
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -13,10 +12,11 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
-from src.agent.agent_store import AgentStore
 from src.web.auth import get_current_user, require_role
 from src.web.routes import agent as agent_routes
 from src.web.routes import chat as chat_routes
+from src.web.routes import dashboard as dashboard_routes
+from src.web.routes import reports as reports_routes
 from src.web.routes import playbooks as playbooks_routes
 from src.web import websocket as websocket_routes
 
@@ -45,6 +45,7 @@ def _with_user(app: FastAPI, role: str) -> FastAPI:
 
 def _agent_app(role: str) -> FastAPI:
     app = _with_user(FastAPI(), role)
+    owner_id = _user(role)["id"]
     app.state.agent_loop = SimpleNamespace(
         investigate=AsyncMock(return_value="session-1"),
         approve_action=AsyncMock(return_value=True),
@@ -54,15 +55,20 @@ def _agent_app(role: str) -> FastAPI:
     )
     app.state.agent_store = SimpleNamespace(
         get_agent_stats=lambda: {"total": 1},
-        get_session=lambda session_id: {
-            "id": session_id,
-            "status": "completed",
-            "findings": [],
-            "metadata": {},
-            "goal": "test goal",
-        },
+        get_session=lambda session_id, user_id=None: (
+            {
+                "id": session_id,
+                "status": "completed",
+                "findings": [],
+                "metadata": {},
+                "goal": "test goal",
+                "user_id": owner_id,
+            }
+            if user_id is None or user_id == owner_id
+            else None
+        ),
         get_steps=lambda _session_id: [],
-        list_sessions=lambda **_kwargs: [{"id": "session-1"}],
+        list_sessions=lambda **_kwargs: [{"id": "session-1", "user_id": owner_id}],
         delete_session=lambda _session_id: True,
         get_audit_log=lambda **_kwargs: [],
     )
@@ -122,6 +128,7 @@ def _playbooks_app(role: str, monkeypatch) -> FastAPI:
 
     monkeypatch.setattr(playbooks_routes, "HTMLReportGenerator", FakeReportGenerator)
     app = _with_user(FastAPI(), role)
+    owner_id = _user(role)["id"]
     app.state.playbook_engine = SimpleNamespace(
         list_playbooks=lambda: [{"id": "playbook-1"}],
         get_playbook=lambda _playbook_id: {"id": "playbook-1"},
@@ -129,12 +136,17 @@ def _playbooks_app(role: str, monkeypatch) -> FastAPI:
         execute_from_step=AsyncMock(return_value="session-1"),
     )
     app.state.agent_store = SimpleNamespace(
-        get_session=lambda _session_id: {
-            "metadata": {
-                "ioc_investigation_result": {"verdict": "CLEAN"},
-                "ioc": "example.test",
+        get_session=lambda _session_id, user_id=None: (
+            {
+                "user_id": owner_id,
+                "metadata": {
+                    "ioc_investigation_result": {"verdict": "CLEAN"},
+                    "ioc": "example.test",
+                },
             }
-        }
+            if user_id is None or user_id == owner_id
+            else None
+        )
     )
     app.include_router(playbooks_routes.router, prefix="/api/playbooks")
     return app
@@ -164,19 +176,25 @@ def test_playbook_routes_require_incident_responder_or_admin(
 
 def _chat_app(role: str) -> FastAPI:
     app = _with_user(FastAPI(), role)
+    owner_id = _user(role)["id"]
     app.state.agent_loop = SimpleNamespace(
         investigate=AsyncMock(return_value="session-1"),
         get_state=lambda _session_id: None,
     )
     app.state.playbook_engine = SimpleNamespace(start=AsyncMock(return_value="session-1"))
     app.state.agent_store = SimpleNamespace(
-        get_session=lambda session_id: {
-            "id": session_id,
-            "status": "completed",
-            "goal": "test goal",
-        },
+        get_session=lambda session_id, user_id=None: (
+            {
+                "id": session_id,
+                "status": "completed",
+                "goal": "test goal",
+                "user_id": owner_id,
+            }
+            if user_id is None or user_id == owner_id
+            else None
+        ),
         get_steps=lambda _session_id: [],
-        list_sessions=lambda **_kwargs: [{"id": "session-1"}],
+        list_sessions=lambda **_kwargs: [{"id": "session-1", "user_id": owner_id}],
     )
     app.include_router(chat_routes.router, prefix="/api/chat")
     return app
@@ -207,7 +225,7 @@ def test_chat_session_reads_are_admin_only_until_phase_25(role, path):
     with TestClient(_chat_app(role)) as client:
         response = client.get(path)
 
-    expected_status = 200 if role == ADMIN else 403
+    expected_status = 200
     assert response.status_code == expected_status
 
 
@@ -245,7 +263,7 @@ def test_require_role_rejects_empty_or_unknown_roles(roles):
         require_role(roles)
 
 
-def _websocket_app() -> FastAPI:
+def _websocket_app(agent_user_id=_user(THREAT_HUNTER)["id"]) -> FastAPI:
     app = FastAPI()
     app.state.analysis_manager = SimpleNamespace(
         subscribe=lambda _analysis_id: asyncio.Queue(),
@@ -253,7 +271,11 @@ def _websocket_app() -> FastAPI:
         get_job=lambda _analysis_id: {"status": "completed", "progress": 100},
     )
     app.state.agent_store = SimpleNamespace(
-        get_session=lambda session_id: {"id": session_id, "status": "completed"},
+        get_session=lambda session_id, user_id=None: {
+            "id": session_id,
+            "status": "completed",
+            "user_id": agent_user_id,
+        },
         get_steps=lambda _session_id: [],
     )
     app.state.agent_loop = None
@@ -283,7 +305,7 @@ def _assert_websocket_closed(client, path: str, first_message: dict | None) -> i
 @pytest.mark.parametrize(
     "path,allowed_roles",
     (
-        ("/ws/analysis/analysis-1", {SOC_ANALYST, ADMIN}),
+        ("/ws/analysis/analysis-1", set(ALL_ROLES)),
         ("/ws/agent/session-1", {THREAT_HUNTER, ADMIN}),
     ),
 )
@@ -332,15 +354,131 @@ def test_websocket_rejects_first_message_timeout_with_1008(monkeypatch):
         assert _assert_websocket_closed(client, "/ws/agent/session-1", None) == 1008
 
 
-def test_phase_25_known_gap_get_session_is_not_owner_scoped():
-    """Phase 2.5 known gap: this passes until user_id ownership is added."""
-    # Deliberately passing: current storage API accepts only session_id, so it
-    # cannot enforce that a same-role requester owns the returned session yet.
-    assert "user_id" not in inspect.signature(AgentStore.get_session).parameters
+def test_agent_websocket_rejects_wrong_owner_with_1008(monkeypatch):
+    owner_id = _user(THREAT_HUNTER)["id"]
+    monkeypatch.setattr(
+        websocket_routes,
+        "get_current_user",
+        lambda _token: {**_user(THREAT_HUNTER), "id": owner_id + 1000},
+    )
+    with TestClient(_websocket_app(agent_user_id=owner_id)) as client:
+        assert _assert_websocket_closed(
+            client,
+            "/ws/agent/session-1",
+            {"type": "auth", "token": "valid-token"},
+        ) == 1008
 
 
-def test_phase_25_known_gap_list_sessions_is_not_owner_scoped():
-    """Phase 2.5 known gap: this passes until list_sessions gains owner scope."""
-    # Do not xfail/skip: a future Phase 2.5 user_id parameter should make this
-    # assertion fail and require this test to be rewritten for owner filtering.
-    assert "user_id" not in inspect.signature(AgentStore.list_sessions).parameters
+def test_agent_websocket_rejects_legacy_null_owner_for_non_admin_with_1008(monkeypatch):
+    _patch_websocket_user(monkeypatch, THREAT_HUNTER)
+    with TestClient(_websocket_app(agent_user_id=None)) as client:
+        assert _assert_websocket_closed(
+            client,
+            "/ws/agent/session-1",
+            {"type": "auth", "token": "valid-token"},
+        ) == 1008
+
+
+def test_agent_websocket_allows_legacy_null_owner_for_admin(monkeypatch):
+    _patch_websocket_user(monkeypatch, ADMIN)
+    with TestClient(_websocket_app(agent_user_id=None)) as client:
+        with client.websocket_connect("/ws/agent/session-1") as websocket:
+            websocket.send_json({"type": "auth", "token": "valid-token"})
+            assert websocket.receive_json()["type"] == "session_state"
+
+
+def _dashboard_app(role: str, calls: list) -> FastAPI:
+    app = _with_user(FastAPI(), role)
+    owner_id = _user(role)["id"]
+    app.state.analysis_manager = SimpleNamespace(
+        get_stats=lambda: {"total_analyses": 1},
+        list_jobs=lambda **kwargs: calls.append(kwargs) or [{"id": "job-1"}],
+    )
+    app.include_router(dashboard_routes.router, prefix="/api/dashboard")
+    return app
+
+
+@pytest.mark.parametrize("role", ALL_ROLES)
+def test_dashboard_stats_and_sources_require_login_for_all_roles(role):
+    calls = []
+    with TestClient(_dashboard_app(role, calls)) as client:
+        assert client.get("/api/dashboard/stats").status_code == 200
+        assert client.get("/api/dashboard/sources").status_code == 200
+
+
+@pytest.mark.parametrize("role", ALL_ROLES)
+def test_dashboard_recent_filters_non_admin_and_leaves_admin_unscoped(role):
+    calls = []
+    with TestClient(_dashboard_app(role, calls)) as client:
+        response = client.get("/api/dashboard/recent")
+
+    assert response.status_code == 200
+    assert calls == [
+        {
+            "limit": 10,
+            "user_id": None if role == ADMIN else _user(role)["id"],
+        }
+    ]
+
+
+def _reports_app(role: str, monkeypatch) -> FastAPI:
+    app = _with_user(FastAPI(), role)
+    app.state.analysis_manager = SimpleNamespace(
+        get_job=lambda _analysis_id: {
+            "id": "analysis-1",
+            "result": {"detection_rules": {"kql": "DeviceProcessEvents"}},
+        },
+        update_detection_rule=lambda *_args: True,
+    )
+    app.state.templates = SimpleNamespace(
+        TemplateResponse=lambda *args, **kwargs: {"ok": True}
+    )
+    monkeypatch.setattr(
+        reports_routes,
+        "validate_rule",
+        lambda *_args: {"valid": True},
+    )
+    app.include_router(reports_routes.router, prefix="/api/reports")
+    return app
+
+
+@pytest.mark.parametrize("role", ALL_ROLES)
+def test_reports_read_is_shared_across_authenticated_roles(role, monkeypatch):
+    with TestClient(_reports_app(role, monkeypatch)) as client:
+        response = client.get("/api/reports/analysis-1/json")
+
+    assert response.status_code == 200
+
+
+REPORT_MUTATION_CASES = (
+    ("put", "/api/reports/analysis-1/rules/kql", THREAT_HUNTER, 200),
+    ("put", "/api/reports/analysis-1/rules/kql", ADMIN, 200),
+    ("put", "/api/reports/analysis-1/rules/kql", SOC_ANALYST, 403),
+    ("put", "/api/reports/analysis-1/rules/kql", INCIDENT_RESPONDER, 403),
+    ("post", "/api/reports/analysis-1/rules/kql/approve", INCIDENT_RESPONDER, 200),
+    ("post", "/api/reports/analysis-1/rules/kql/approve", ADMIN, 200),
+    ("post", "/api/reports/analysis-1/rules/kql/approve", SOC_ANALYST, 403),
+    ("post", "/api/reports/analysis-1/rules/kql/approve", THREAT_HUNTER, 403),
+    ("post", "/api/reports/analysis-1/rules/kql/mark-deployed", INCIDENT_RESPONDER, 200),
+    ("post", "/api/reports/analysis-1/rules/kql/mark-deployed", ADMIN, 200),
+    ("post", "/api/reports/analysis-1/rules/kql/mark-deployed", SOC_ANALYST, 403),
+    ("post", "/api/reports/analysis-1/rules/kql/mark-deployed", THREAT_HUNTER, 403),
+)
+
+
+@pytest.mark.parametrize("method,path,role,expected_status", REPORT_MUTATION_CASES)
+def test_reports_rule_mutations_enforce_role_matrix(
+    method, path, role, expected_status, monkeypatch
+):
+    with TestClient(_reports_app(role, monkeypatch)) as client:
+        if path.endswith("/mark-deployed") and expected_status == 200:
+            approval = client.post(
+                "/api/reports/analysis-1/rules/kql/approve",
+                json={},
+            )
+            assert approval.status_code == 200
+
+        payload = {"content": "DeviceProcessEvents"} if method == "put" else {}
+        response = getattr(client, method)(path, json=payload)
+
+    assert response.status_code == expected_status

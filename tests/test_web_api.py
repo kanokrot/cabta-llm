@@ -8,6 +8,7 @@ import pytest
 from pathlib import Path
 
 from src.web.analysis_manager import AnalysisManager
+from src.web.auth import get_current_user
 from src.web.case_store import CaseStore
 from src.web.models import (
     IOCRequest, IOCType, AnalysisState, Verdict,
@@ -231,6 +232,13 @@ class TestFastAPIEndpoints:
         from src.web.app import create_app
 
         self.app = create_app()
+        self.app.dependency_overrides[get_current_user] = lambda: {
+            "id": 101,
+            "email": "analyst@example.test",
+            "username": "analyst",
+            "role": "SOC Analyst Tier 1-2",
+            "is_active": 1,
+        }
         # Override with temp DBs
         self.app.state.analysis_manager = AnalysisManager(
             db_path=str(tmp_path / 'jobs.db')
