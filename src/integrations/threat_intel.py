@@ -528,13 +528,14 @@ class ThreatIntelligence:
                             if entry.get('ip_address') == ip:
                                 return {
                                     'status': '✓',
+                                    'found': True,
                                     'botnet': entry.get('malware', 'Unknown'),
                                     'first_seen': entry.get('first_seen', 'N/A'),
                                     'last_seen': entry.get('last_online', 'N/A'),
                                     'score': 95
                                 }
                         
-                        return {'status': '✗', 'message': 'Not found'}
+                        return {'status': '✗', 'found': False, 'message': 'Not found', 'score': 0}
                     else:
                         return {'status': '⚠', 'error': f'HTTP {response.status}'}
         
@@ -681,10 +682,16 @@ class ThreatIntelligence:
                 async with session.get('https://check.torproject.org/torbulkexitlist') as response:
                     if response.status == 200:
                         text = await response.text()
-                        is_tor = ip in text
+                        feed_ips = {
+                            line.strip()
+                            for line in text.splitlines()
+                            if line.strip() and not line.strip().startswith('#')
+                        }
+                        is_tor = ip.strip() in feed_ips
                         
                         return {
                             'status': '✓' if is_tor else '✗',
+                            'found': is_tor,
                             'is_tor': is_tor,
                             'score': 30 if is_tor else 0
                         }

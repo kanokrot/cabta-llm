@@ -1,0 +1,20 @@
+[
+  {
+    "ip_address": "198.51.100.10",
+    "port": 443,
+    "status": "online",
+    "hostname": "example-c2.invalid",
+    "first_seen": "2026-09-15 00:00:00",
+    "last_online": "2026-09-15 12:00:00",
+    "malware": "TestBot"
+  },
+  {
+    "ip_address": "203.0.113.42",
+    "port": 8080,
+    "status": "offline",
+    "hostname": null,
+    "first_seen": "2026-09-14 00:00:00",
+    "last_online": "2026-09-14 01:00:00",
+    "malware": "TestLoader"
+  }
+]

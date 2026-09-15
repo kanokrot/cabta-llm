@@ -1,0 +1,52 @@
+{
+  "generated_at_utc": "2026-09-15T14:46:38.5993334Z",
+  "dataset": {
+    "path": "scripts/eval/eval_results_group_a_v2.jsonl",
+    "row_count": 894,
+    "ioc_type_counts": {
+      "ip": 154,
+      "domain": 422,
+      "url": 97,
+      "md5": 108,
+      "sha256": 113
+    }
+  },
+  "method": {
+    "cache_db": "C:\\Users\\ACER\\.blue-team-assistant\\cache\\ioc_cache.db",
+    "cache_query_mode": "sqlite read-only URI",
+    "scope": "Only benchmark IOC values; live positive-control IPs are excluded",
+    "applicable_ioc_type": "ip/ipv4"
+  },
+  "sources": {
+    "feodotracker": {
+      "supported_type": "ip/ipv4",
+      "ip": {
+        "benchmark_count": 154,
+        "cache_rows": 154,
+        "coverage_pct": 100.0,
+        "found_true": 0,
+        "score_gt_0": 0,
+        "missing_applicable": 0
+      },
+      "non_applicable_types": ["domain", "url", "md5", "sha256"]
+    },
+    "tor_exit_nodes": {
+      "supported_type": "ip/ipv4",
+      "ip": {
+        "benchmark_count": 154,
+        "cache_rows": 153,
+        "coverage_pct": 99.35,
+        "found_true": 0,
+        "score_gt_0": 0,
+        "missing_applicable": 1
+      },
+      "non_applicable_types": ["domain", "url", "md5", "sha256"]
+    }
+  },
+  "interpretation": [
+    "Zero matches are limited to the applicable benchmark IP population; neither source was expected to query domain, URL, MD5, or SHA256 records.",
+    "FeodoTracker and Tor positive-control tests passed against current live feeds, so zero benchmark matches are not evidence that either integration is broken.",
+    "Do not convert no-match or missing cache rows into a CLEAN verdict or production weight of zero.",
+    "Do not rerun CV for these sources until a source-specific positive-control dataset is available."
+  ]
+}

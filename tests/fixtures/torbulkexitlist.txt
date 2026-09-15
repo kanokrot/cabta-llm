@@ -1,0 +1,4 @@
+# Tor bulk exit list fixture
+198.51.100.10
+203.0.113.42
+
