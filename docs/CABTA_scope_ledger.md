@@ -758,6 +758,57 @@ Phase 1 และ Phase 1.5 เสร็จแล้ว; RBAC enforcement, per-f
 
 **สถานะ:** `[ ]` ยังไม่เริ่ม รอ Phase 2 เสร็จก่อน
 
+## CV Readiness Investigation (2026-09-15)
+
+**Status:** CV has never successfully run. Code exists as a 5-fold
+`StratifiedKFold` implementation at `scripts/eval/fit_source_weights.py:219`,
+but no persisted CV output artifact was found.
+
+- **Tier assignment:** the hardcoded scoring tiers are present in
+  `src/scoring/intelligent_scoring.py`: high `=1.5` (5 sources), medium
+  `=1.0` (14 sources), and low `=0.5` (4 sources). The cache currently contains
+  26 distinct source names; the explicit tier lists contain 23 sources. The
+  assignment has not yet been empirically validated by CV. `ip2proxy`,
+  `threatzone`, `triage`, and `usom` are marked temporary pending weight-fitting.
+- **`eval_results_group_a_v2.CONTAMINATED.jsonl`:** the root cause of the
+  `CONTAMINATED` label was not found in repository history or commit messages.
+  The file is untracked, gitignored, and has no file history. Its contents are
+  structurally clean (408 unique IOCs, no duplicates, no errors, all matching
+  the benchmark), but it must not be used as canonical CV input without knowing
+  why it was flagged. Do not re-investigate that label; the recorded decision
+  is to build a fresh canonical result via `scripts/eval/eval_benchmark.py`.
+- **Benchmark dataset:** `data/benchmark/benchmark_iocs_v2.json` was confirmed
+  at 894 records (`MALICIOUS=709`, `CLEAN=185`). Its schema is a JSON array,
+  not JSONL.
+- **Cache coverage:** 459/894 IOCs (51%) currently have telemetry in
+  `C:\Users\ACER\.blue-team-assistant\cache\ioc_cache.db`; 435 IOCs are
+  missing. The estimated additional calls to fill the current applicable
+  26-source cache universe are approximately 4,168:
+
+  | IOC type | Missing IOCs | Additional source-calls |
+  |---|---:|---:|
+  | domain | 207 | 1,863 |
+  | ip | 65 | 1,040 |
+  | md5 | 66 | 528 |
+  | sha256 | 58 | 464 |
+  | url | 39 | 273 |
+  | **Total** | **435** | **4,168** |
+
+  Missing provenance counts are `threatfox=161`, `circl_misp_feed_osint=124`,
+  `tranco_top_sites=95`, `malwarebazaar_recent_detections=51`, and
+  `manual_known_good=4`.
+- **Conversion path:** `scripts/eval/eval_benchmark.py` converts the benchmark
+  JSON into the eval JSONL format expected by `fit_source_weights.py` and
+  supports `--resume`.
+- **Partial-cache behavior:** `fit_source_weights.py` can run with partial
+  cache coverage because missing source rows become score `0` in
+  `build_feature_matrix()`. This introduces missingness bias and is not a
+  full-coverage CV result.
+
+**OPEN DECISION (not yet made):** whether to (a) fill the 435 missing IOCs via
+`eval_benchmark.py` before running CV, or (b) run CV now on partial 459-IOC
+coverage as an interim result while documenting the limitation.
+
 ## D10.5 Phase 4 — Gmail OAuth (per-user)
 
 **วัตถุประสงค์:** ผูก Gmail ของ user แต่ละคนเข้ากับระบบแจ้งเตือน
