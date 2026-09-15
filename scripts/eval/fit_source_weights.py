@@ -13,6 +13,8 @@ raw data provenance fact before any model output.
 from __future__ import annotations
 
 import json
+import argparse
+import math
 import sqlite3
 import sys
 from datetime import datetime, timedelta, timezone
@@ -36,6 +38,7 @@ from src.scoring.intelligent_scoring import IntelligentScoring  # read-only
 
 EVAL_RESULTS_PATH = REPO_ROOT / "scripts" / "eval" / "eval_results_group_a_v2.jsonl"
 CACHE_DB_PATH = Path(r"C:\Users\ACER\.blue-team-assistant\cache\ioc_cache.db")
+CV_OUTPUT_PATH = REPO_ROOT / "scripts" / "eval" / "fit_source_weights_results.json"
 ROUND_GAP_MINUTES = 5.0
 N_SPLITS = 5
 RANDOM_STATE = 42
@@ -254,6 +257,111 @@ def build_feature_matrix(
     presence_df = pd.DataFrame(presence_records, index=index)
     presence_df.index.name = "ioc"
     return feature_df, presence_df, list(sources)
+
+
+def build_cache_coverage(
+    feature_df: pd.DataFrame, presence_df: pd.DataFrame, sources: Sequence[str]
+) -> pd.DataFrame:
+    """Build the per-source cache coverage table used in console and artifact output."""
+
+    return pd.DataFrame(
+        {
+            "cache_entry_count": presence_df.loc[:, list(sources)].sum(axis=0).astype(int),
+            "missing_value_count": (~presence_df.loc[:, list(sources)]).sum(axis=0).astype(int),
+            "coverage_pct": presence_df.loc[:, list(sources)].mean(axis=0).mul(100),
+            "flagged_score_gt_0_count": (feature_df.loc[:, list(sources)] > 0).sum(axis=0).astype(int),
+        }
+    ).sort_values(["coverage_pct", "flagged_score_gt_0_count"], ascending=[True, False])
+
+
+def json_safe(value: Any) -> Any:
+    """Convert pandas/NumPy values, including NaN, into JSON-compatible values."""
+
+    if isinstance(value, dict):
+        return {str(key): json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [json_safe(item) for item in value]
+    if isinstance(value, np.generic):
+        return json_safe(value.item())
+    if isinstance(value, float) and math.isnan(value):
+        return None
+    return value
+
+
+def build_cv_artifact(
+    *,
+    created_at_utc: str,
+    eval_rows: Sequence[Mapping[str, Any]],
+    eval_path: Path,
+    cache_path: Path,
+    matching_cache_min: datetime,
+    latest_round_start: datetime,
+    latest_round_end: datetime,
+    cache_rows_all_count: int,
+    latest_rows: Sequence[Mapping[str, Any]],
+    feature_df: pd.DataFrame,
+    presence_df: pd.DataFrame,
+    sources: Sequence[str],
+    excluded_sources: Mapping[str, str],
+    coefficient_df: pd.DataFrame,
+    metric_df: pd.DataFrame,
+) -> Dict[str, Any]:
+    """Create the reproducible structured record for one successful CV run."""
+
+    coverage_df = build_cache_coverage(feature_df, presence_df, sources)
+    labels = pd.Series([row["expected_verdict"] for row in eval_rows]).value_counts().to_dict()
+    n = len(feature_df)
+    p = len(sources)
+    n_clean = int((feature_df["is_malicious"] == 0).sum())
+    n_malicious = int((feature_df["is_malicious"] == 1).sum())
+    minority_events = min(n_clean, n_malicious)
+
+    limitations = [
+        "PRELIMINARY_SIGNAL_ONLY: coefficients must not replace hardcoded production weights without held-out validation and calibration.",
+        "CV source policy is restricted to the validated Group-A allowlist; excluded sources are not evidence of zero reliability.",
+        "Missing cache rows are represented as score=0 in the feature matrix; source coverage must be considered when interpreting coefficients.",
+        f"Minority-class EPV is {minority_events / p:.6f} for {p} source features; EPV alone is not proof of model adequacy.",
+    ]
+
+    artifact = {
+        "artifact_version": 1,
+        "status": "preliminary_signal_only",
+        "created_at_utc": created_at_utc,
+        "script": "scripts/eval/fit_source_weights.py",
+        "dataset": {
+            "eval_results_path": str(eval_path),
+            "cache_db_path": str(cache_path),
+            "eval_rows": n,
+            "label_counts": labels,
+            "matching_cache_timestamp_min_utc": matching_cache_min.isoformat(),
+            "latest_round_start_utc": latest_round_start.isoformat(),
+            "latest_round_end_utc": latest_round_end.isoformat(),
+            "cache_rows_all_history": cache_rows_all_count,
+            "selected_latest_round_rows": len(latest_rows),
+            "selected_latest_round_ioc_count": len({str(row["ioc"]) for row in latest_rows}),
+            "eval_ioc_without_selected_cache_rows": n - len({str(row["ioc"]) for row in latest_rows}),
+        },
+        "source_policy": {
+            "allowlist": sorted(CV_SOURCE_ALLOWLIST),
+            "selected_sources": list(sources),
+            "excluded_sources": dict(excluded_sources),
+        },
+        "cache_coverage": coverage_df.reset_index(names="source").to_dict(orient="records"),
+        "coefficients": coefficient_df.to_dict(orient="records"),
+        "fold_metrics": metric_df.to_dict(orient="records"),
+        "limitations": limitations,
+    }
+    return json_safe(artifact)
+
+
+def write_cv_artifact(artifact: Mapping[str, Any], output_path: Path) -> None:
+    """Write a completed CV artifact, creating only the requested output path."""
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(
+        json.dumps(artifact, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
 
 
 def current_hardcoded_weight(source: str) -> float:
@@ -577,14 +685,7 @@ def print_feature_output(feature_df: pd.DataFrame, presence_df: pd.DataFrame, so
     print("\n--- pandas NaN count per column ---")
     print(feature_df.isna().sum().to_string())
     print("\n--- structural missing-value count per source (no cache row; score=0 is retained) ---")
-    coverage = pd.DataFrame(
-        {
-            "cache_entry_count": presence_df.loc[:, list(sources)].sum(axis=0).astype(int),
-            "missing_value_count": (~presence_df.loc[:, list(sources)]).sum(axis=0).astype(int),
-            "coverage_pct": presence_df.loc[:, list(sources)].mean(axis=0).mul(100),
-            "flagged_score_gt_0_count": (feature_df.loc[:, list(sources)] > 0).sum(axis=0).astype(int),
-        }
-    ).sort_values(["coverage_pct", "flagged_score_gt_0_count"], ascending=[True, False])
+    coverage = build_cache_coverage(feature_df, presence_df, sources)
     print(coverage.to_string(float_format=lambda value: f"{value:.2f}"))
 
 
@@ -630,7 +731,18 @@ def print_limitation_output(
     )
 
 
-def main() -> None:
+def main(argv: Sequence[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(
+        description="Fit exploratory source weights with 5-fold CV and persist a JSON artifact"
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=CV_OUTPUT_PATH,
+        help=f"JSON artifact path (default: {CV_OUTPUT_PATH})",
+    )
+    args = parser.parse_args(argv)
+
     eval_rows = load_eval_rows(EVAL_RESULTS_PATH)
     cache_rows_all = load_cache_rows(CACHE_DB_PATH, [row["ioc"] for row in eval_rows])
     start, end, matching_min, eval_mtime = infer_latest_round_window(cache_rows_all, EVAL_RESULTS_PATH)
@@ -672,6 +784,24 @@ def main() -> None:
     print("\n=== STEP 2: RAW COEFFICIENT TABLE ===")
     print(coefficient_df.to_string(index=False))
 
+    artifact = build_cv_artifact(
+        created_at_utc=datetime.now(timezone.utc).isoformat(),
+        eval_rows=eval_rows,
+        eval_path=EVAL_RESULTS_PATH,
+        cache_path=CACHE_DB_PATH,
+        matching_cache_min=matching_min,
+        latest_round_start=start,
+        latest_round_end=end,
+        cache_rows_all_count=len(cache_rows_all),
+        latest_rows=latest_rows,
+        feature_df=feature_df,
+        presence_df=presence_df,
+        sources=sources,
+        excluded_sources=excluded_sources,
+        coefficient_df=coefficient_df,
+        metric_df=metric_df,
+    )
+
     comparison_df = build_comparison_table(coefficient_df, sources)
     print("\n=== STEP 3: RAW NORMALIZATION AND COMPARISON TABLE ===")
     print(
@@ -701,6 +831,8 @@ def main() -> None:
 
     print_limitation_output(feature_df, coefficient_df, metric_df)
     print_tier_level_refit(feature_df, sources, coefficient_df, metric_df)
+    write_cv_artifact(artifact, args.output)
+    print(f"cv_artifact_path={args.output}")
 
 
 if __name__ == "__main__":
