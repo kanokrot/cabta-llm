@@ -1268,6 +1268,43 @@ coverage as an interim result while documenting the limitation.
   full benchmark, production scoring code, or prior artifacts were rerun or
   overwritten.
 
+### 2026-09-16 Follow-up — deadline tier policy freeze
+
+**1. Decision scope**
+- Policy document: `docs/source_tier_policy_decision_2026-09-16.md`.
+- Machine-readable decision: `evidence/source_weights_2026-09-16/source_tier_policy_decision_2026-09-16.json`.
+- The decision freezes the existing nominal production multipliers without
+  changing `src/scoring/intelligent_scoring.py`: High `1.5`, Medium `1.0`,
+  Low `0.5`, and unknown/untiered fallback `0.8`.
+- The existing Group-B exclusion boundary is unchanged. A source may retain a
+  nominal legacy tier for backward compatibility while remaining supplemental
+  or excluded from the critical aggregate.
+
+**2. Tier assignment retained**
+- High: `virustotal`, `abuseipdb`, `feodotracker`, `threatfox`,
+  `malwarebazaar`.
+- Medium: `alienvault`, `urlhaus`, `c2_trackers`, `greynoise`, `shodan`,
+  `criminalip`, `ipqualityscore`, `spamhaus`, `pulsedive`, `censys`,
+  `ip2proxy`, `threatzone`, `triage`, `usom`.
+- Low/context: `tor_exit_nodes`, `circl`, `phishtank`, `sslblacklist`.
+- Untiered fallback: `smet_nrd`, `hagezi_nrd`, `mb_recent_sha256`,
+  `misp_circl_feed_osint`, `talos`, and unknown sources.
+- CIRCL remains permanently excluded from CV eligibility due unavailable
+  partner authorization; its nominal legacy Low mapping remains unchanged to
+  preserve production behavior.
+
+**3. Verification and final status**
+- Targeted regression tests: `22 passed`, one existing pytest cache-path
+  warning from the environment.
+- `git diff --quiet -- src/scoring/intelligent_scoring.py`: pass; production
+  scoring code is unchanged.
+- Learned coefficients remain `preliminary_signal_only`; no coefficient was
+  promoted into a production multiplier.
+- **Decision:** tier policy is complete and frozen for the deadline deliverable.
+  Future weight learning is a separate gate requiring source-specific variance
+  and adequate independent labels; it is not a prerequisite for documenting
+  the current tier policy.
+
 ## D10.5 Phase 4 — Gmail OAuth (per-user)
 
 **วัตถุประสงค์:** ผูก Gmail ของ user แต่ละคนเข้ากับระบบแจ้งเตือน
