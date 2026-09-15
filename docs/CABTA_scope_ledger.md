@@ -568,6 +568,13 @@ Warm lookup รอบถัดไปใช้เวลาประมาณ `0.0
 - Window status: `[x]` window 1/3 of the minimum 3 time windows complete; `[ ]` window 2; `[ ]` window 3.
 - No scoring or tier code was changed in this run, per the D9 gate.
 
+### D9.3b Window 2 first run invalid (2026-09-15)
+
+- Quarantined raw telemetry: `evidence/reliability_sampling/invalid_runs/window2_2026-09-15_ENV_BLOCK_INVALID.jsonl`
+- The first window 2 run is invalid and must be rerun after host connectivity is restored. Local socket rejection (`[Access is denied]`) caused `540/1,205` executable rows to fail across `feodotracker`, `threatfox`, `circl`, `tor_exit_nodes`, `urlhaus`, and `malwarebazaar`; failures were approximately sub-millisecond to `132 ms`, with no timeout or HTTP error.
+- The quarantined run is excluded from reliability metrics. The valid window 2 collection remains incomplete.
+- Window2 valid run confirmed 2026-09-15 09:45:45–09:58:08 UTC (743.3s). Root cause of earlier invalid attempts: stale Codex sandbox firewall rules (`codex_sandbox_offline_block_*`) blocking outbound HTTPS at local socket layer — removed manually, confirmed via direct curl test. One additional transient timeout to `check.torproject.org` occurred on 2nd rerun attempt (no output written, non-retry per protocol); 3rd attempt succeeded with zero failures across all 1,205 executable rows, 13 sources, no talos. Effective dataset: window1 (talos-excluded, 3,365 rows) + window2 (3,125 rows, 100% success).
+
 ## D9.4 ขั้นที่ 4 — สร้าง coverage matrix จากข้อมูลจริง
 
 **วัตถุประสงค์:** แยกคำว่า “รองรับ type” ออกจาก “มีข้อมูลไม่ว่าง” และ “มี match ใน sample” ซึ่งเป็นคนละข้อเท็จจริง
