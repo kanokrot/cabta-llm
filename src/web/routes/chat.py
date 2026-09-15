@@ -6,10 +6,11 @@ Chat API routes - Interactive agent conversation.
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from ...agent.playbook_engine import PlaybookValidationError
+from ..auth import authorize_role, get_current_user, require_role
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -44,13 +45,22 @@ def _parse_structured_params(message: str) -> dict | None:
 
 
 @router.post('')
-async def send_message(request: Request, body: ChatMessage):
+async def send_message(
+    request: Request,
+    body: ChatMessage,
+    current_user: dict = Depends(get_current_user),
+):
     """Send a message to the agent.
 
     If session_id is provided, this is a follow-up message.
     If playbook_id is provided, execute the playbook directly.
     Otherwise, a new investigation is started (LLM may auto-select a playbook).
     """
+    if body.playbook_id:
+        authorize_role(current_user, ["Incident Responder", "admin"])
+    else:
+        authorize_role(current_user, ["Threat Hunter", "admin"])
+
     agent_loop = request.app.state.agent_loop
     if agent_loop is None:
         raise HTTPException(503, "Agent loop not initialized. Check LLM configuration.")
@@ -121,7 +131,11 @@ async def send_message(request: Request, body: ChatMessage):
 
 
 @router.get('/sessions')
-async def list_chat_sessions(request: Request, limit: int = 20):
+async def list_chat_sessions(
+    request: Request,
+    limit: int = 20,
+    current_user: dict = Depends(require_role(["admin"])),
+):
     """List recent chat sessions."""
     store = request.app.state.agent_store
     if store is None:
@@ -131,7 +145,11 @@ async def list_chat_sessions(request: Request, limit: int = 20):
 
 
 @router.get('/sessions/{session_id}')
-async def get_chat_session(request: Request, session_id: str):
+async def get_chat_session(
+    request: Request,
+    session_id: str,
+    current_user: dict = Depends(require_role(["admin"])),
+):
     """Get a chat session with steps."""
     store = request.app.state.agent_store
     if store is None:

@@ -11,7 +11,7 @@ import secrets
 import sqlite3
 import time
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Sequence
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
@@ -172,16 +172,28 @@ def get_current_user(token: str = Depends(oauth2_scheme)) -> Dict[str, Any]:
     return dict(row)
 
 
-def require_role(role: str):
-    if role not in VALID_ROLES:
-        raise ValueError(f"Unsupported role: {role}")
+def _normalize_roles(roles: str | Sequence[str]) -> frozenset[str]:
+    allowed_roles = frozenset((roles,) if isinstance(roles, str) else roles)
+    if not allowed_roles or not allowed_roles.issubset(VALID_ROLES):
+        raise ValueError("Unsupported role")
+    return allowed_roles
+
+
+def authorize_role(
+    current_user: Dict[str, Any], roles: str | Sequence[str]
+) -> None:
+    if current_user.get("role") not in _normalize_roles(roles):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Insufficient permissions",
+        )
+
+
+def require_role(roles: str | Sequence[str]):
+    allowed_roles = _normalize_roles(roles)
 
     def dependency(current_user: Dict[str, Any] = Depends(get_current_user)):
-        if current_user.get("role") != role:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Insufficient role",
-            )
+        authorize_role(current_user, allowed_roles)
         return current_user
 
     return dependency

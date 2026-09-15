@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from src.web.auth import get_current_user
 from src.web.routes.chat import router as chat_router
 
 
@@ -14,6 +15,11 @@ def _post_playbook_message(message):
     app = FastAPI()
     app.state.agent_loop = MagicMock()
     app.state.playbook_engine = engine
+    app.dependency_overrides[get_current_user] = lambda: {
+        "id": 1,
+        "email": "responder@example.test",
+        "role": "Incident Responder",
+    }
     app.include_router(chat_router, prefix="/api/chat")
 
     response = TestClient(app).post(

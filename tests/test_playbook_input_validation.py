@@ -12,6 +12,7 @@ from src.agent.playbook_engine import (
     PlaybookStep,
     PlaybookValidationError,
 )
+from src.web.auth import get_current_user
 from src.web.routes.chat import router as chat_router
 from src.web.routes.playbooks import router as playbooks_router
 
@@ -135,6 +136,11 @@ def test_playbook_run_route_maps_validation_error_to_http_400():
     )
     app = FastAPI()
     app.state.playbook_engine = engine
+    app.dependency_overrides[get_current_user] = lambda: {
+        "id": 1,
+        "email": "responder@example.test",
+        "role": "Incident Responder",
+    }
     app.include_router(playbooks_router, prefix="/api/playbooks")
 
     response = TestClient(app).post(
@@ -153,6 +159,11 @@ def test_chat_route_maps_validation_error_to_http_400():
     app = FastAPI()
     app.state.agent_loop = MagicMock()
     app.state.playbook_engine = engine
+    app.dependency_overrides[get_current_user] = lambda: {
+        "id": 1,
+        "email": "responder@example.test",
+        "role": "Incident Responder",
+    }
     app.include_router(chat_router, prefix="/api/chat")
 
     response = TestClient(app).post(

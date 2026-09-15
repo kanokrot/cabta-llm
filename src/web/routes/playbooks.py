@@ -8,15 +8,18 @@ import os
 import tempfile
 from typing import Dict, Optional
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
 from ...agent.playbook_engine import PlaybookValidationError
 from ...reporting.html_report_generator import HTMLReportGenerator
+from ..auth import require_role
 
 logger = logging.getLogger(__name__)
-router = APIRouter()
+router = APIRouter(
+    dependencies=[Depends(require_role(["Incident Responder", "admin"]))]
+)
 
 
 class PlaybookRunRequest(BaseModel):

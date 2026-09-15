@@ -6,12 +6,16 @@ Agent API routes - Investigation management.
 import logging
 from typing import Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+from ..auth import require_role
+
 logger = logging.getLogger(__name__)
-router = APIRouter()
+router = APIRouter(
+    dependencies=[Depends(require_role(["Threat Hunter", "admin"]))]
+)
 
 
 class InvestigateRequest(BaseModel):

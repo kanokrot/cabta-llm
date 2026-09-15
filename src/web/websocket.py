@@ -6,11 +6,48 @@ WebSocket handler for real-time analysis progress.
 import asyncio
 import json
 import logging
+from typing import Sequence
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
+
+from .auth import authorize_role, get_current_user
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+async def _authenticate_websocket(
+    websocket: WebSocket, roles: Sequence[str]
+) -> dict | None:
+    """Accept, then require a first JSON auth message within five seconds."""
+    await websocket.accept()
+    try:
+        message = await asyncio.wait_for(websocket.receive_json(), timeout=5.0)
+    except (
+        asyncio.TimeoutError,
+        WebSocketDisconnect,
+        json.JSONDecodeError,
+        TypeError,
+    ):
+        await websocket.close(code=1008)
+        return None
+
+    if not isinstance(message, dict) or message.get("type") != "auth":
+        await websocket.close(code=1008)
+        return None
+
+    token = message.get("token")
+    if not isinstance(token, str) or not token:
+        await websocket.close(code=1008)
+        return None
+
+    try:
+        user = get_current_user(token)
+        authorize_role(user, roles)
+    except (HTTPException, ValueError):
+        await websocket.close(code=1008)
+        return None
+    return user
 
 
 @router.websocket('/ws/analysis/{analysis_id}')
@@ -23,7 +60,13 @@ async def analysis_ws(websocket: WebSocket, analysis_id: str):
         {"type": "completed", "verdict": "MALICIOUS", "score": 85}
         {"type": "failed", "error": "Timeout"}
     """
-    await websocket.accept()
+    authenticated_user = await _authenticate_websocket(
+        websocket, ["SOC Analyst Tier 1-2", "admin"]
+    )
+    if authenticated_user is None:
+        return
+
+    # Phase 2.5 gap: analysis ownership is not yet represented in storage.
 
     mgr = websocket.app.state.analysis_manager
     queue = mgr.subscribe(analysis_id)
@@ -77,7 +120,13 @@ async def agent_ws(websocket: WebSocket, session_id: str):
     Uses AgentLoop's pub/sub system for efficient event-driven updates
     instead of polling.
     """
-    await websocket.accept()
+    authenticated_user = await _authenticate_websocket(
+        websocket, ["Threat Hunter", "admin"]
+    )
+    if authenticated_user is None:
+        return
+
+    # Phase 2.5 gap: agent session ownership is not yet represented in storage.
 
     store = websocket.app.state.agent_store
     agent_loop = websocket.app.state.agent_loop
