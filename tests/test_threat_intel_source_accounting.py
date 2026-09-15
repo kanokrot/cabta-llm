@@ -146,6 +146,43 @@ async def test_sslblacklist_is_called_for_supported_ioc_types(ioc, ioc_type):
     assert "sslblacklist" in result["sources"]
 
 
+@pytest.mark.asyncio
+async def test_allowed_sources_filter_task_construction_before_calls():
+    intelligence = _build_wire_test_intelligence()
+    allowed_sources = {
+        "feodotracker",
+        "tor_exit_nodes",
+        "c2_trackers",
+        "usom",
+        "sslblacklist",
+        "spamhaus",
+        "circl",
+    }
+
+    result = await intelligence.investigate_ioc_comprehensive(
+        "192.0.2.1",
+        "ipv4",
+        allowed_sources=allowed_sources,
+    )
+
+    assert result["sources_checked"] == 6
+    intelligence.threat_feeds.check_ssl_blacklist.assert_awaited_once_with("192.0.2.1")
+    intelligence.check_feodotracker.assert_awaited_once_with("192.0.2.1")
+    intelligence.check_tor_exit_nodes.assert_awaited_once_with("192.0.2.1")
+    intelligence.check_c2_trackers.assert_awaited_once_with("192.0.2.1")
+    intelligence.threat_feeds.check_usom.assert_awaited_once_with("192.0.2.1")
+    intelligence.extended.check_spamhaus.assert_awaited_once_with("192.0.2.1")
+
+    intelligence.check_virustotal.assert_not_awaited()
+    intelligence.check_threatfox.assert_not_awaited()
+    intelligence.check_abuseipdb.assert_not_awaited()
+    intelligence.check_shodan.assert_not_awaited()
+    intelligence.extended.check_greynoise.assert_not_awaited()
+    intelligence.extended.check_censys.assert_not_awaited()
+    intelligence.extended.check_talos.assert_not_awaited()
+    intelligence.check_alienvault.assert_not_awaited()
+
+
 def _build_hash_intelligence(source_results):
     intelligence = ThreatIntelligence.__new__(ThreatIntelligence)
     intelligence._ioc_cache = Mock()

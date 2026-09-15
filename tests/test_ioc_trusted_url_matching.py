@@ -139,3 +139,48 @@ async def test_bypass_url_reaches_threat_intelligence():
     assert result.get('note') != (
         'Trusted infrastructure (Certificate Authority / CDN / Major vendor)'
     )
+
+
+@pytest.mark.asyncio
+async def test_investigate_forwards_allowed_sources():
+    investigator = IOCInvestigator.__new__(IOCInvestigator)
+    investigator.config = {'analysis': {'enable_llm': False}}
+    investigator.rag_kb = None
+    investigator.llm_analyzer = MagicMock()
+    investigator.threat_intel = MagicMock()
+    investigator.threat_intel.investigate_ioc_comprehensive = AsyncMock(
+        return_value={
+            'sources': {},
+            'sources_checked': 0,
+            'sources_flagged': 0,
+        }
+    )
+    investigator._enrich_domain = AsyncMock(return_value={})
+    allowed_sources = {'c2_trackers', 'circl'}
+    url = 'https://evil.example/steal?ref=microsoft.com'
+
+    with (
+        patch(
+            'src.tools.ioc_investigator.IntelligentScoring.calculate_ioc_score',
+            return_value=0,
+        ),
+        patch(
+            'src.tools.ioc_investigator.IntelligentScoring.calculate_source_coverage',
+            return_value={
+                'total_sources_attempted': 1,
+                'sources_flagged': 0,
+                'sources_clean': 1,
+            },
+        ),
+        patch(
+            'src.tools.ioc_investigator.RuleGenerator.generate_ioc_rules',
+            return_value={},
+        ),
+    ):
+        await investigator.investigate(url, allowed_sources=allowed_sources)
+
+    investigator.threat_intel.investigate_ioc_comprehensive.assert_awaited_once_with(
+        url,
+        'url',
+        allowed_sources=allowed_sources,
+    )

@@ -5,7 +5,7 @@ import aiohttp
 import asyncio
 import ipaddress
 import re
-from typing import Dict, Optional, List
+from typing import Dict, Optional, List, Set
 from datetime import datetime
 import logging
 import json
@@ -902,13 +902,20 @@ class ThreatIntelligence:
             logger.error(f"[C2Tracker] Error: {e}")
             return {'status': '⚠', 'error': str(e), 'found': False}
     
-    async def investigate_ioc_comprehensive(self, ioc: str, ioc_type: str) -> Dict:
+    async def investigate_ioc_comprehensive(
+        self,
+        ioc: str,
+        ioc_type: str,
+        allowed_sources: Optional[Set[str]] = None,
+    ) -> Dict:
         """
         Comprehensive IOC investigation across all 22 sources.
         
         Args:
             ioc: Indicator to investigate
             ioc_type: Type (ipv4, domain, url, hash)
+            allowed_sources: Optional case-insensitive source allowlist. When
+                omitted, all sources retain the historical behavior.
         
         Returns:
             Aggregated results from all sources with proper error handling
@@ -953,78 +960,125 @@ class ThreatIntelligence:
         
         # Create task list based on IOC type
         tasks = []
+        normalized_allowed_sources = (
+            None
+            if allowed_sources is None
+            else {str(source).lower() for source in allowed_sources}
+        )
+
+        def source_allowed(source_name: str) -> bool:
+            return (
+                normalized_allowed_sources is None
+                or source_name.lower() in normalized_allowed_sources
+            )
         
         # VirusTotal (all types)
-        tasks.append(('virustotal', self.check_virustotal(ioc, ioc_type)))
+        if source_allowed('virustotal'):
+            tasks.append(('virustotal', self.check_virustotal(ioc, ioc_type)))
         
         # ThreatFox (all types)
-        tasks.append(('threatfox', self.check_threatfox(ioc)))
+        if source_allowed('threatfox'):
+            tasks.append(('threatfox', self.check_threatfox(ioc)))
 
         # SSL Blacklist supports IPv4 C2 entries and SHA1 certificate fingerprints.
-        if ioc_type in ('ipv4', 'sha1'):
+        if ioc_type in ('ipv4', 'sha1') and source_allowed('sslblacklist'):
             tasks.append(('sslblacklist', self.threat_feeds.check_ssl_blacklist(ioc)))
         
         # IP-specific sources
         if ioc_type == 'ipv4':
-            tasks.append(('misp_circl_feed_osint', self.misp_feed.check_misp(ioc, ioc_type)))
+            if source_allowed('misp_circl_feed_osint'):
+                tasks.append(('misp_circl_feed_osint', self.misp_feed.check_misp(ioc, ioc_type)))
             # Core IP sources
-            tasks.append(('abuseipdb', self.check_abuseipdb(ioc)))
-            tasks.append(('shodan', self.check_shodan(ioc)))
-            tasks.append(('feodotracker', self.check_feodotracker(ioc)))
-            tasks.append(('tor_exit_nodes', self.check_tor_exit_nodes(ioc)))
-            tasks.append(('c2_trackers', self.check_c2_trackers(ioc)))
+            if source_allowed('abuseipdb'):
+                tasks.append(('abuseipdb', self.check_abuseipdb(ioc)))
+            if source_allowed('shodan'):
+                tasks.append(('shodan', self.check_shodan(ioc)))
+            if source_allowed('feodotracker'):
+                tasks.append(('feodotracker', self.check_feodotracker(ioc)))
+            if source_allowed('tor_exit_nodes'):
+                tasks.append(('tor_exit_nodes', self.check_tor_exit_nodes(ioc)))
+            if source_allowed('c2_trackers'):
+                tasks.append(('c2_trackers', self.check_c2_trackers(ioc)))
             
             # Extended IP sources
-            tasks.append(('greynoise', self.extended.check_greynoise(ioc)))
-            tasks.append(('censys', self.extended.check_censys(ioc, ioc_type)))
-            tasks.append(('talos', self.extended.check_talos(ioc)))
-            tasks.append(('criminalip', self.extended.check_criminalip(ioc)))
-            tasks.append(('ipqualityscore', self.extended.check_ipqualityscore(ioc)))
-            tasks.append(('spamhaus', self.extended.check_spamhaus(ioc)))
+            if source_allowed('greynoise'):
+                tasks.append(('greynoise', self.extended.check_greynoise(ioc)))
+            if source_allowed('censys'):
+                tasks.append(('censys', self.extended.check_censys(ioc, ioc_type)))
+            if source_allowed('talos'):
+                tasks.append(('talos', self.extended.check_talos(ioc)))
+            if source_allowed('criminalip'):
+                tasks.append(('criminalip', self.extended.check_criminalip(ioc)))
+            if source_allowed('ipqualityscore'):
+                tasks.append(('ipqualityscore', self.extended.check_ipqualityscore(ioc)))
+            if source_allowed('spamhaus'):
+                tasks.append(('spamhaus', self.extended.check_spamhaus(ioc)))
             
           
-            tasks.append(('ip2proxy', self.extended.check_ip2proxy(ioc)))
+            if source_allowed('ip2proxy'):
+                tasks.append(('ip2proxy', self.extended.check_ip2proxy(ioc)))
 
             # USOM threat feed (supports IP)
-            tasks.append(('usom', self.threat_feeds.check_usom(ioc)))
+            if source_allowed('usom'):
+                tasks.append(('usom', self.threat_feeds.check_usom(ioc)))
 
     
             # Also check AlienVault for IPs
-            tasks.append(('alienvault', self.check_alienvault(ioc, ioc_type)))
+            if source_allowed('alienvault'):
+                tasks.append(('alienvault', self.check_alienvault(ioc, ioc_type)))
         
         # Domain sources
         if ioc_type == 'domain':
-            tasks.append(('misp_circl_feed_osint', self.misp_feed.check_misp(ioc, ioc_type)))
-            tasks.append(('alienvault', self.check_alienvault(ioc, ioc_type)))
-            tasks.append(('c2_trackers', self.check_c2_trackers(ioc)))
+            if source_allowed('misp_circl_feed_osint'):
+                tasks.append(('misp_circl_feed_osint', self.misp_feed.check_misp(ioc, ioc_type)))
+            if source_allowed('alienvault'):
+                tasks.append(('alienvault', self.check_alienvault(ioc, ioc_type)))
+            if source_allowed('c2_trackers'):
+                tasks.append(('c2_trackers', self.check_c2_trackers(ioc)))
             
             # Extended domain sources
-            tasks.append(('pulsedive', self.extended.check_pulsedive(ioc)))
-            tasks.append(('circl', self.extended.check_circl(ioc)))
-            tasks.append(('smet_nrd', self.threat_feeds.check_smet_nrd(ioc)))
-            tasks.append(('hagezi_nrd', self.threat_feeds.check_hagezi_nrd(ioc)))
+            if source_allowed('pulsedive'):
+                tasks.append(('pulsedive', self.extended.check_pulsedive(ioc)))
+            if source_allowed('circl'):
+                tasks.append(('circl', self.extended.check_circl(ioc)))
+            if source_allowed('smet_nrd'):
+                tasks.append(('smet_nrd', self.threat_feeds.check_smet_nrd(ioc)))
+            if source_allowed('hagezi_nrd'):
+                tasks.append(('hagezi_nrd', self.threat_feeds.check_hagezi_nrd(ioc)))
         
         # URL sources
         if ioc_type == 'url':
-            tasks.append(('misp_circl_feed_osint', self.misp_feed.check_misp(ioc, ioc_type)))
-            tasks.append(('urlhaus', self.check_urlhaus(ioc)))
-            tasks.append(('alienvault', self.check_alienvault(ioc, ioc_type)))
-            tasks.append(('c2_trackers', self.check_c2_trackers(ioc)))
+            if source_allowed('misp_circl_feed_osint'):
+                tasks.append(('misp_circl_feed_osint', self.misp_feed.check_misp(ioc, ioc_type)))
+            if source_allowed('urlhaus'):
+                tasks.append(('urlhaus', self.check_urlhaus(ioc)))
+            if source_allowed('alienvault'):
+                tasks.append(('alienvault', self.check_alienvault(ioc, ioc_type)))
+            if source_allowed('c2_trackers'):
+                tasks.append(('c2_trackers', self.check_c2_trackers(ioc)))
             
             # Extended URL sources
-            tasks.append(('phishtank', self.extended.check_phishtank(ioc)))
-            tasks.append(('pulsedive', self.extended.check_pulsedive(ioc)))
+            if source_allowed('phishtank'):
+                tasks.append(('phishtank', self.extended.check_phishtank(ioc)))
+            if source_allowed('pulsedive'):
+                tasks.append(('pulsedive', self.extended.check_pulsedive(ioc)))
         
         # Hash sources
         if ioc_type in ['md5', 'sha1', 'sha256', 'hash']:
-            tasks.append(('misp_circl_feed_osint', self.misp_feed.check_misp(ioc, ioc_type)))
-            tasks.append(('malwarebazaar', self.check_malwarebazaar(ioc)))
-            tasks.append(('mb_recent_sha256', self.threat_feeds.check_mb_recent(ioc)))
-            tasks.append(('alienvault', self.check_alienvault(ioc, 'hash')))
+            if source_allowed('misp_circl_feed_osint'):
+                tasks.append(('misp_circl_feed_osint', self.misp_feed.check_misp(ioc, ioc_type)))
+            if source_allowed('malwarebazaar'):
+                tasks.append(('malwarebazaar', self.check_malwarebazaar(ioc)))
+            if source_allowed('mb_recent_sha256'):
+                tasks.append(('mb_recent_sha256', self.threat_feeds.check_mb_recent(ioc)))
+            if source_allowed('alienvault'):
+                tasks.append(('alienvault', self.check_alienvault(ioc, 'hash')))
             
           
-            tasks.append(('triage', self.extended.check_triage(ioc)))
-            tasks.append(('threatzone', self.extended.check_threatzone(ioc)))
+            if source_allowed('triage'):
+                tasks.append(('triage', self.extended.check_triage(ioc)))
+            if source_allowed('threatzone'):
+                tasks.append(('threatzone', self.extended.check_threatzone(ioc)))
 
         # A source is attempted only when a task was created for this IOC type.
         # Mark every untouched placeholder explicitly so downstream coverage

@@ -29,6 +29,17 @@ from src.utils.config import load_config
 
 BENCHMARK_PATH = REPO_ROOT / "data" / "benchmark" / "benchmark_iocs_v2.json"
 RESULTS_PATH = REPO_ROOT / "scripts" / "eval" / "eval_results_group_a_v2.jsonl"
+GROUP_A_EVAL_SOURCES = frozenset(
+    {
+        "feodotracker",
+        "tor_exit_nodes",
+        "c2_trackers",
+        "usom",
+        "sslblacklist",
+        "spamhaus",
+        "circl",
+    }
+)
 
 
 def load_benchmark_stratified(malicious_limit, seed):
@@ -83,7 +94,7 @@ def load_existing_results():
     return done
 
 
-async def evaluate(records, delay_seconds, resume):
+async def evaluate(records, delay_seconds, resume, allowed_sources=None):
     config = load_config()
     investigator = IOCInvestigator(config)
 
@@ -101,7 +112,12 @@ async def evaluate(records, delay_seconds, resume):
                     continue
                 print(f"[{i}/{len(records)}] investigating ({rec['expected_verdict']}): {ioc}")
                 try:
-                    result = await investigator.investigate(ioc)
+                    if allowed_sources is None:
+                        result = await investigator.investigate(ioc)
+                    else:
+                        result = await investigator.investigate(
+                            ioc, allowed_sources=allowed_sources
+                        )
                 except Exception as exc:
                     result = {"error": str(exc)}
 
@@ -141,11 +157,20 @@ def main():
                          help="วินาทีหน่วงระหว่าง IOC (default 16 = ~4/min, ตาม VT free tier)")
     parser.add_argument("--resume", action="store_true",
                          help="ข้าม IOC ที่ทำไปแล้วใน eval_results.jsonl")
+    parser.add_argument(
+        "--group-a-only",
+        action="store_true",
+        help="เรียกเฉพาะ locked Group A source allowlist (ไม่เรียก Group B หรือตาลอส)",
+    )
     args = parser.parse_args()
 
     records = load_benchmark_stratified(args.malicious_limit or None, args.seed)
-    print(f"Evaluating {len(records)} IOC(s) total, delay={args.delay}s, resume={args.resume}")
-    asyncio.run(evaluate(records, args.delay, args.resume))
+    allowed_sources = GROUP_A_EVAL_SOURCES if args.group_a_only else None
+    print(
+        f"Evaluating {len(records)} IOC(s) total, delay={args.delay}s, "
+        f"resume={args.resume}, group_a_only={args.group_a_only}"
+    )
+    asyncio.run(evaluate(records, args.delay, args.resume, allowed_sources))
     print(f"\nDone. Raw results: {RESULTS_PATH}")
 
 

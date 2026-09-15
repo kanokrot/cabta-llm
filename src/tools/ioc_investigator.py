@@ -7,7 +7,7 @@ ioc_investigator.py
 """
 
 import asyncio
-from typing import Dict
+from typing import Dict, Optional, Set
 import logging
 from ..integrations.threat_intel import ThreatIntelligence
 from ..integrations.llm_analyzer import LLMAnalyzer
@@ -218,12 +218,19 @@ class IOCInvestigator:
 
         return first_seen, last_seen
 
-    async def investigate(self, ioc: str, analysis_id: str = None) -> Dict:
+    async def investigate(
+        self,
+        ioc: str,
+        analysis_id: str = None,
+        allowed_sources: Optional[Set[str]] = None,
+    ) -> Dict:
         """
         Investigate IOC.
 
         Args:
             ioc: Indicator to investigate
+            allowed_sources: Optional case-insensitive source allowlist passed to
+                the threat-intelligence integration.
 
         Returns:
             Investigation results
@@ -260,8 +267,17 @@ class IOCInvestigator:
                 'recommendations': ['No action required - legitimate infrastructure'],
             }
 
-        # Run threat intelligence checks
-        intel_results = await self.threat_intel.investigate_ioc_comprehensive(ioc, ioc_type)
+        # Run threat intelligence checks. Preserve the historical call shape
+        # when no allowlist is supplied so existing integrations remain
+        # backward compatible.
+        if allowed_sources is None:
+            intel_results = await self.threat_intel.investigate_ioc_comprehensive(
+                ioc, ioc_type
+            )
+        else:
+            intel_results = await self.threat_intel.investigate_ioc_comprehensive(
+                ioc, ioc_type, allowed_sources=allowed_sources
+            )
 
         # Calculate base threat score
         threat_score = IntelligentScoring.calculate_ioc_score(intel_results)
