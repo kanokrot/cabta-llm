@@ -21,6 +21,15 @@ from passlib.context import CryptContext
 AUTH_DB_ENV = "AUTH_DB_PATH"
 JWT_SECRET_ENV = "AUTH_JWT_SECRET"
 ACCESS_TOKEN_TTL_SECONDS = 60 * 60
+INVITE_TOKEN_TTL_SECONDS = 48 * 60 * 60
+VALID_ROLES = frozenset(
+    {
+        "SOC Analyst Tier 1-2",
+        "Incident Responder",
+        "Threat Hunter",
+        "admin",
+    }
+)
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
@@ -90,7 +99,7 @@ def verify_password(password: str, password_hash: str) -> bool:
 def authenticate_user(email: str, password: str) -> Optional[Dict[str, Any]]:
     with _connect() as connection:
         row = connection.execute(
-            "SELECT id, email, password_hash, role, is_active "
+            "SELECT id, email, username, password_hash, role, is_active "
             "FROM users WHERE lower(email) = lower(?)",
             (email.strip(),),
         ).fetchone()
@@ -154,13 +163,124 @@ def get_current_user(token: str = Depends(oauth2_scheme)) -> Dict[str, Any]:
         if not _session_is_active(connection, jti):
             raise credentials_error
         row = connection.execute(
-            "SELECT id, email, role, is_active FROM users WHERE id = ?",
+            "SELECT id, email, username, role, is_active FROM users WHERE id = ?",
             (user_id,),
         ).fetchone()
 
     if row is None or not row["is_active"]:
         raise credentials_error
     return dict(row)
+
+
+def require_role(role: str):
+    if role not in VALID_ROLES:
+        raise ValueError(f"Unsupported role: {role}")
+
+    def dependency(current_user: Dict[str, Any] = Depends(get_current_user)):
+        if current_user.get("role") != role:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Insufficient role",
+            )
+        return current_user
+
+    return dependency
+
+
+def create_invite_token(
+    email: str,
+    role: str,
+    invited_by: int,
+    ttl_seconds: int = INVITE_TOKEN_TTL_SECONDS,
+) -> str:
+    normalized_email = email.strip().lower()
+    if role not in VALID_ROLES:
+        raise ValueError(f"Unsupported role: {role}")
+    if not normalized_email or "@" not in normalized_email:
+        raise ValueError("Invalid email")
+
+    token = secrets.token_urlsafe(32)
+    expires_at = int(time.time()) + ttl_seconds
+    placeholder_hash = hash_password(secrets.token_urlsafe(32))
+
+    with _connect() as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        existing = connection.execute(
+            "SELECT id FROM users WHERE lower(email) = lower(?)",
+            (normalized_email,),
+        ).fetchone()
+        if existing is not None:
+            raise ValueError("Email is already registered or invited")
+
+        connection.execute(
+            "INSERT INTO users "
+            "(email, password_hash, role, is_active) VALUES (?, ?, ?, 0)",
+            (normalized_email, placeholder_hash, role),
+        )
+        connection.execute(
+            "INSERT INTO invite_tokens "
+            "(token, email, role, invited_by, expires_at) VALUES (?, ?, ?, ?, ?)",
+            (token, normalized_email, role, int(invited_by), expires_at),
+        )
+        connection.commit()
+    return token
+
+
+def consume_invite_token(token: str, username: str, password: str) -> Dict[str, Any]:
+    token = token.strip()
+    username = username.strip()
+    if not token:
+        raise ValueError("Invalid invite token")
+    if not username:
+        raise ValueError("Username is required")
+
+    password_hash = hash_password(password)
+    now = int(time.time())
+
+    with _connect() as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        invite = connection.execute(
+            "SELECT token, email, role, expires_at, used_at "
+            "FROM invite_tokens WHERE token = ?",
+            (token,),
+        ).fetchone()
+        if invite is None:
+            raise ValueError("Invalid invite token")
+        if invite["used_at"] is not None:
+            raise ValueError("Invite token already used")
+        if int(invite["expires_at"]) <= now:
+            raise ValueError("Invite token expired")
+
+        user = connection.execute(
+            "SELECT id, email, username, is_active FROM users "
+            "WHERE lower(email) = lower(?)",
+            (invite["email"],),
+        ).fetchone()
+        if user is None or user["is_active"]:
+            raise ValueError("Invite has already been accepted")
+
+        duplicate_username = connection.execute(
+            "SELECT id FROM users WHERE lower(username) = lower(?) AND id != ?",
+            (username, user["id"]),
+        ).fetchone()
+        if duplicate_username is not None:
+            raise ValueError("Username is already taken")
+
+        connection.execute(
+            "UPDATE users SET username = ?, password_hash = ?, "
+            "role = ?, is_active = 1 WHERE id = ?",
+            (username, password_hash, invite["role"], user["id"]),
+        )
+        connection.execute(
+            "UPDATE invite_tokens SET used_at = ? WHERE token = ?",
+            (now, token),
+        )
+        activated = connection.execute(
+            "SELECT id, email, username, role, is_active FROM users WHERE id = ?",
+            (user["id"],),
+        ).fetchone()
+        connection.commit()
+    return dict(activated)
 
 
 def revoke_token(token: str) -> None:
@@ -177,5 +297,6 @@ def public_user(user: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "id": user["id"],
         "email": user["email"],
+        "username": user.get("username"),
         "role": user["role"],
     }
