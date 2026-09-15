@@ -78,6 +78,75 @@ def test_build_feature_matrix_can_use_explicit_source_policy():
     assert not bool(presence.loc["198.51.100.1", "c2_trackers"])
 
 
+def test_select_latest_source_rows_merges_mixed_collection_windows():
+    rows = [
+        {
+            "ioc": "198.51.100.1",
+            "source": "spamhaus",
+            "queried_at_dt": datetime(2026, 9, 14, tzinfo=timezone.utc),
+        },
+        {
+            "ioc": "198.51.100.1",
+            "source": "spamhaus",
+            "queried_at_dt": datetime(2026, 9, 15, tzinfo=timezone.utc),
+        },
+        {
+            "ioc": "198.51.100.1",
+            "source": "usom",
+            "queried_at_dt": datetime(2026, 9, 15, 1, tzinfo=timezone.utc),
+        },
+        {
+            "ioc": "example.org",
+            "source": "spamhaus",
+            "queried_at_dt": datetime(2026, 9, 14, tzinfo=timezone.utc),
+        },
+    ]
+
+    selected = fit_source_weights.select_latest_source_rows(rows)
+
+    assert {(row["ioc"], row["source"]) for row in selected} == {
+        ("198.51.100.1", "spamhaus"),
+        ("198.51.100.1", "usom"),
+        ("example.org", "spamhaus"),
+    }
+    spamhaus = next(
+        row for row in selected if row["ioc"] == "198.51.100.1" and row["source"] == "spamhaus"
+    )
+    assert spamhaus["queried_at_dt"] == datetime(2026, 9, 15, tzinfo=timezone.utc)
+
+
+def test_unavailable_rows_are_not_valid_presence_or_clean_evidence():
+    eval_rows = [{"ioc": "198.51.100.1", "expected_verdict": "MALICIOUS"}]
+    cache_rows = [
+        {
+            "ioc": "198.51.100.1",
+            "source": "sslblacklist",
+            "result": {
+                "status": "\u26a0",
+                "error": "SSLBL IP feed is deprecated; certificate SHA1 feed remains available",
+                "found": False,
+            },
+        }
+    ]
+
+    features, presence, sources = fit_source_weights.build_feature_matrix(
+        eval_rows, cache_rows, sources=["sslblacklist"]
+    )
+    unavailable = fit_source_weights.build_unavailable_matrix(
+        eval_rows, cache_rows, sources
+    )
+    coverage = fit_source_weights.build_cache_coverage(
+        features, presence, sources, unavailable
+    )
+
+    assert features.loc["198.51.100.1", "sslblacklist"] == 0
+    assert not bool(presence.loc["198.51.100.1", "sslblacklist"])
+    assert bool(unavailable.loc["198.51.100.1", "sslblacklist"])
+    assert int(coverage.loc["sslblacklist", "cache_entry_count"]) == 0
+    assert int(coverage.loc["sslblacklist", "unavailable_count"]) == 1
+    assert int(coverage.loc["sslblacklist", "missing_value_count"]) == 0
+
+
 def test_cv_artifact_contains_provenance_policy_coverage_and_metrics():
     sources = ["feodotracker", "spamhaus"]
     feature_df = pd.DataFrame(
@@ -143,6 +212,7 @@ def test_cv_artifact_contains_provenance_policy_coverage_and_metrics():
     assert loaded["artifact_version"] == 1
     assert loaded["source_policy"]["selected_sources"] == sources
     assert loaded["source_policy"]["excluded_sources"] == {"circl": "restricted"}
+    assert loaded["source_policy"]["permanent_exclusions"] == fit_source_weights.CV_SOURCE_EXCLUSION_REASONS
     assert {row["source"] for row in loaded["cache_coverage"]} == set(sources)
     assert loaded["coefficients"][1]["mean_coef"] == 1.25
     assert len(loaded["fold_metrics"]) == 2

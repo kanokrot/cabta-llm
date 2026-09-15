@@ -5,9 +5,10 @@ cache, and never writes to either data source or to production scoring code.
 
 The cache stores one row per (IOC, IOC type, source), and ``queried_at`` is the
 time that row was written/refreshed.  ``eval_results.jsonl`` does not contain a
-timestamp field, so the latest evaluation window is inferred from the latest
-contiguous cache burst ending near the JSONL file mtime.  This is printed as a
-raw data provenance fact before any model output.
+timestamp field.  The fit therefore selects the newest row independently for
+each (IOC, source), allowing a targeted source refresh to be merged with the
+older validated collection.  The inferred latest contiguous burst is retained
+as provenance, but is not used as the sole selection window.
 """
 
 from __future__ import annotations
@@ -192,6 +193,29 @@ def select_latest_round_rows(
     return [dict(row) for row in latest_by_key.values()]
 
 
+def select_latest_source_rows(
+    cache_rows: Sequence[Mapping[str, Any]],
+) -> List[Dict[str, Any]]:
+    """Select the newest available cache row independently per IOC and source.
+
+    Targeted recollection creates a mixed collection window: refreshed sources
+    are newer than sources collected in the prior benchmark pass.  Selecting a
+    single global burst would silently drop the older sources.  This selector
+    preserves one deterministic latest row for every IOC/source pair.
+    """
+
+    latest_by_key: Dict[Tuple[str, str], Mapping[str, Any]] = {}
+    for row in cache_rows:
+        key = (str(row["ioc"]), str(row["source"]).lower())
+        old = latest_by_key.get(key)
+        if old is None or row["queried_at_dt"] >= old["queried_at_dt"]:
+            latest_by_key[key] = row
+    return sorted(
+        (dict(row) for row in latest_by_key.values()),
+        key=lambda row: (str(row["ioc"]), str(row["source"]).lower()),
+    )
+
+
 def select_cv_sources(cache_rows: Sequence[Mapping[str, Any]]) -> Tuple[List[str], Dict[str, str]]:
     """Select the validated Group-A sources and explain excluded observations.
 
@@ -229,7 +253,9 @@ def build_feature_matrix(
         sources = sorted({str(row["source"]) for row in cache_rows})
     else:
         sources = list(sources)
-    cache_by_ioc_source = {(str(row["ioc"]), str(row["source"])): row for row in cache_rows}
+    cache_by_ioc_source = {
+        (str(row["ioc"]), str(row["source"]).lower()): row for row in cache_rows
+    }
 
     feature_records: List[Dict[str, Any]] = []
     presence_records: List[Dict[str, bool]] = []
@@ -240,11 +266,11 @@ def build_feature_matrix(
         values: Dict[str, Any] = {}
         presence: Dict[str, bool] = {}
         for source in sources:
-            cached = cache_by_ioc_source.get((ioc, source))
-            presence[source] = cached is not None
+            cached = cache_by_ioc_source.get((ioc, source.lower()))
+            presence[source] = cached is not None and is_valid_cache_observation(cached)
             values[source] = (
                 int(IntelligentScoring._get_source_score(cached["result"]))
-                if cached is not None
+                if cached is not None and is_valid_cache_observation(cached)
                 else 0
             )
         values["is_malicious"] = int(eval_row["expected_verdict"] == "MALICIOUS")
@@ -258,15 +284,69 @@ def build_feature_matrix(
     return feature_df, presence_df, list(sources)
 
 
+def is_valid_cache_observation(row: Mapping[str, Any]) -> bool:
+    """Return whether a cache row is usable as positive or negative evidence."""
+
+    result = row.get("result")
+    if not isinstance(result, Mapping):
+        return False
+    if result.get("error"):
+        return False
+    status = str(result.get("status", "")).strip().lower()
+    return not any(
+        marker in status
+        for marker in ("\u26a0", "warning", "unavailable", "deprecated", "error")
+    )
+
+
+def build_unavailable_matrix(
+    eval_rows: Sequence[Mapping[str, Any]],
+    cache_rows: Sequence[Mapping[str, Any]],
+    sources: Sequence[str],
+) -> pd.DataFrame:
+    """Mark rows that exist but cannot be treated as source evidence."""
+
+    cache_by_ioc_source = {
+        (str(row["ioc"]), str(row["source"]).lower()): row for row in cache_rows
+    }
+    records: List[Dict[str, bool]] = []
+    index: List[str] = []
+    for eval_row in eval_rows:
+        ioc = str(eval_row["ioc"])
+        index.append(ioc)
+        records.append(
+            {
+                source: (
+                    cached is not None and not is_valid_cache_observation(cached)
+                )
+                for source in sources
+                for cached in [cache_by_ioc_source.get((ioc, source.lower()))]
+            }
+        )
+    unavailable_df = pd.DataFrame(records, index=index)
+    unavailable_df.index.name = "ioc"
+    return unavailable_df
+
+
 def build_cache_coverage(
-    feature_df: pd.DataFrame, presence_df: pd.DataFrame, sources: Sequence[str]
+    feature_df: pd.DataFrame,
+    presence_df: pd.DataFrame,
+    sources: Sequence[str],
+    unavailable_df: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     """Build the per-source cache coverage table used in console and artifact output."""
 
+    if unavailable_df is None:
+        unavailable_df = pd.DataFrame(False, index=presence_df.index, columns=list(sources))
     return pd.DataFrame(
         {
             "cache_entry_count": presence_df.loc[:, list(sources)].sum(axis=0).astype(int),
-            "missing_value_count": (~presence_df.loc[:, list(sources)]).sum(axis=0).astype(int),
+            "unavailable_count": unavailable_df.loc[:, list(sources)].sum(axis=0).astype(int),
+            "missing_value_count": (
+                len(presence_df.index)
+                - presence_df.loc[:, list(sources)].sum(axis=0)
+                - unavailable_df.loc[:, list(sources)].sum(axis=0)
+            ).astype(int),
             "coverage_pct": presence_df.loc[:, list(sources)].mean(axis=0).mul(100),
             "flagged_score_gt_0_count": (feature_df.loc[:, list(sources)] > 0).sum(axis=0).astype(int),
         }
@@ -304,10 +384,11 @@ def build_cv_artifact(
     excluded_sources: Mapping[str, str],
     coefficient_df: pd.DataFrame,
     metric_df: pd.DataFrame,
+    unavailable_df: pd.DataFrame | None = None,
 ) -> Dict[str, Any]:
     """Create the reproducible structured record for one successful CV run."""
 
-    coverage_df = build_cache_coverage(feature_df, presence_df, sources)
+    coverage_df = build_cache_coverage(feature_df, presence_df, sources, unavailable_df)
     labels = pd.Series([row["expected_verdict"] for row in eval_rows]).value_counts().to_dict()
     n = len(feature_df)
     p = len(sources)
@@ -318,7 +399,7 @@ def build_cv_artifact(
     limitations = [
         "PRELIMINARY_SIGNAL_ONLY: coefficients must not replace hardcoded production weights without held-out validation and calibration.",
         "CV source policy is restricted to the validated Group-A allowlist; excluded sources are not evidence of zero reliability.",
-        "Missing cache rows are represented as score=0 in the feature matrix; source coverage must be considered when interpreting coefficients.",
+        "Missing and unavailable cache rows are represented as score=0; unavailable rows are excluded from valid source coverage and must not be interpreted as clean results.",
         f"Minority-class EPV is {minority_events / p:.6f} for {p} source features; EPV alone is not proof of model adequacy.",
     ]
 
@@ -336,14 +417,16 @@ def build_cv_artifact(
             "latest_round_start_utc": latest_round_start.isoformat(),
             "latest_round_end_utc": latest_round_end.isoformat(),
             "cache_rows_all_history": cache_rows_all_count,
-            "selected_latest_round_rows": len(latest_rows),
-            "selected_latest_round_ioc_count": len({str(row["ioc"]) for row in latest_rows}),
+            "selected_cache_rows": len(latest_rows),
+            "selected_cache_ioc_count": len({str(row["ioc"]) for row in latest_rows}),
             "eval_ioc_without_selected_cache_rows": n - len({str(row["ioc"]) for row in latest_rows}),
+            "selection_mode": "latest_row_per_ioc_source_mixed_window",
         },
         "source_policy": {
             "allowlist": sorted(CV_SOURCE_ALLOWLIST),
             "selected_sources": list(sources),
             "excluded_sources": dict(excluded_sources),
+            "permanent_exclusions": dict(CV_SOURCE_EXCLUSION_REASONS),
         },
         "cache_coverage": coverage_df.reset_index(names="source").to_dict(orient="records"),
         "coefficients": coefficient_df.to_dict(orient="records"),
@@ -674,7 +757,12 @@ def build_comparison_table(coefficient_df: pd.DataFrame, sources: Sequence[str])
     ].sort_values("fitted_rank")
 
 
-def print_feature_output(feature_df: pd.DataFrame, presence_df: pd.DataFrame, sources: Sequence[str]) -> None:
+def print_feature_output(
+    feature_df: pd.DataFrame,
+    presence_df: pd.DataFrame,
+    sources: Sequence[str],
+    unavailable_df: pd.DataFrame | None = None,
+) -> None:
     print("\n=== STEP 1: RAW FEATURE MATRIX OUTPUT ===")
     print(f"shape={feature_df.shape}; rows=IOC; source_columns={len(sources)}; label_column=is_malicious")
     print("\n--- raw DataFrame.describe() ---")
@@ -683,8 +771,8 @@ def print_feature_output(feature_df: pd.DataFrame, presence_df: pd.DataFrame, so
     print(feature_df.head(10).to_string())
     print("\n--- pandas NaN count per column ---")
     print(feature_df.isna().sum().to_string())
-    print("\n--- structural missing-value count per source (no cache row; score=0 is retained) ---")
-    coverage = build_cache_coverage(feature_df, presence_df, sources)
+    print("\n--- cache coverage (valid observations; unavailable rows are not clean) ---")
+    coverage = build_cache_coverage(feature_df, presence_df, sources, unavailable_df)
     print(coverage.to_string(float_format=lambda value: f"{value:.2f}"))
 
 
@@ -745,7 +833,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     eval_rows = load_eval_rows(EVAL_RESULTS_PATH)
     cache_rows_all = load_cache_rows(CACHE_DB_PATH, [row["ioc"] for row in eval_rows])
     start, end, matching_min, eval_mtime = infer_latest_round_window(cache_rows_all, EVAL_RESULTS_PATH)
-    latest_rows = select_latest_round_rows(cache_rows_all, start, end)
+    latest_rows = select_latest_source_rows(cache_rows_all)
 
     print("=== DATA PROVENANCE ===")
     print(f"eval_results_path={EVAL_RESULTS_PATH}")
@@ -757,8 +845,9 @@ def main(argv: Sequence[str] | None = None) -> None:
     print(f"inferred_latest_round_start_utc={start.isoformat()}")
     print(f"inferred_latest_round_end_utc={end.isoformat()}")
     print(f"round_gap_threshold_minutes={ROUND_GAP_MINUTES}")
-    print(f"matching_cache_rows_all_history={len(cache_rows_all)}; selected_latest_round_rows={len(latest_rows)}")
-    print(f"selected_latest_round_ioc_count={len({row['ioc'] for row in latest_rows})}; eval_ioc_without_selected_cache_rows={len(eval_rows) - len({row['ioc'] for row in latest_rows})}")
+    print(f"matching_cache_rows_all_history={len(cache_rows_all)}; selected_latest_per_ioc_source_rows={len(latest_rows)}")
+    print(f"selected_latest_per_ioc_source_ioc_count={len({row['ioc'] for row in latest_rows})}; eval_ioc_without_selected_cache_rows={len(eval_rows) - len({row['ioc'] for row in latest_rows})}")
+    print("cache_selection_mode=latest_row_per_ioc_source_mixed_window")
     print(
         "current_weight_source_note=production intelligent_scoring.py uses explicit low tier=0.5; "
         "unknown-source fallback=0.8 (high=1.5, medium=1.0)"
@@ -777,7 +866,8 @@ def main(argv: Sequence[str] | None = None) -> None:
     feature_df, presence_df, sources = build_feature_matrix(
         eval_rows, latest_rows, sources=sources
     )
-    print_feature_output(feature_df, presence_df, sources)
+    unavailable_df = build_unavailable_matrix(eval_rows, latest_rows, sources)
+    print_feature_output(feature_df, presence_df, sources, unavailable_df)
 
     coefficient_df, metric_df = fit_cross_validated(feature_df, sources)
     print("\n=== STEP 2: RAW COEFFICIENT TABLE ===")
@@ -799,6 +889,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         excluded_sources=excluded_sources,
         coefficient_df=coefficient_df,
         metric_df=metric_df,
+        unavailable_df=unavailable_df,
     )
 
     comparison_df = build_comparison_table(coefficient_df, sources)
