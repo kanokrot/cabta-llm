@@ -458,6 +458,311 @@ modified.
   positive-match behavior, and then decide explicit confidence-tier placement
   without conflating it with Group A/B execution accounting.
 
+## D9. Evidence-based source tiering and resilient execution redesign
+
+### หัวข้อใหญ่
+
+งานชุดนี้คือการเปลี่ยนจากการจัด tier ของ source จากโครงสร้างโค้ดหรือการคาดเดา ไปเป็นการจัดลำดับความสำคัญจากหลักฐานการทำงานจริงของแต่ละ source โดยแยกประเด็นที่มักถูกปนกันออกเป็นคนละแกน:
+
+- **Execution tier**: ควรเรียก source ใดก่อนเพื่อประหยัดเวลา ลดการพึ่งพา network และลดโอกาสชน API quota
+- **Evidence reliability**: source ทำงานสำเร็จ สม่ำเสมอ สด และมี latency อยู่ในระดับใด
+- **Content credibility**: เนื้อหาที่ source รายงานมีความน่าเชื่อถือเชิงภัยคุกคามเพียงใด
+- **Group A/B**: ขอบเขตที่ระบบ scoring ปัจจุบันอนุญาตให้นำ source ไปใช้
+
+การแยกสี่เรื่องนี้มีเป้าหมายไม่ให้ source ที่เรียกง่ายหรือเร็วถูกตีความว่าเนื้อหาถูกต้องกว่าโดยอัตโนมัติ และไม่ให้ source ที่ใช้ API ถูกตัดสินว่าไม่น่าเชื่อถือเพียงเพราะมี quota สำหรับ execution tier นี้ CABTA ให้ความสำคัญกับ non-API, local/cache lookup และ coverage ที่กว้าง เพราะตรงกับเป้าหมายการประหยัดเวลาและลด dependency ภายนอก
+
+### สถานะรวม
+
+**กำลังเก็บหลักฐาน — ยังไม่พร้อมล็อก tier หรือแก้ scoring logic**
+
+MISP มีสถานะ wired/parser-verified แล้ว แต่ยังไม่มี empirical production evidence จากการ refresh full feed จริงเพียงพอสำหรับตัดสิน tier ถาวร แผนด้านล่างจึงกำหนดลำดับตั้งแต่การตรวจ feed, เก็บ telemetry, ตรวจความพร้อมของ dataset, คำนวณ metrics, ทำ tier report, ไปจนถึงการแก้ scoring หลังได้รับ approval เท่านั้น
+
+### เกณฑ์สถานะ
+
+- `[x]` ทำตามขอบเขตของขั้นตอนนั้นแล้ว
+- `[ ]` ยังไม่เสร็จ หรือทำได้เพียงบางส่วนและยังใช้เป็นหลักฐานตัดสิน tier ไม่ได้
+
+## D9.1 ขั้นที่ 1 — ตรวจ MISP live feed แบบ read-only
+
+**วัตถุประสงค์:** ยืนยันพฤติกรรมของ CIRCL public MISP feed จากการทำงานจริง ไม่สรุปจาก parser หรือจำนวน type ที่รองรับในโค้ดเพียงอย่างเดียว
+
+**วิธีทำ:** fetch `manifest.json` แบบ read-only และบันทึกจำนวน event; fetch event ตาม manifest แล้วนับ success/failure; parse ทั้ง `Event.Attribute` และ `Event.Object[].Attribute`; normalize เป็น `ip`, `domain`, `url`, `hash`; บันทึก `latest_event_timestamp`, เวลา refresh และระยะเวลารวม; จากนั้นทดสอบ partial failure และ stale-cache เพื่อยืนยันว่า event ที่สำเร็จยังใช้ได้ และ `found=false` จาก feed ที่ stale/unavailable ไม่ถูกตีความว่า clean
+
+**ทำเพื่ออะไร:** แยกให้เห็นว่า feed มีข้อมูลอะไร, refresh เชื่อถือได้เพียงใด และผลไม่พบ IOC มีความหมายเป็น clean หรือเป็นเพียง feed stale/unavailable
+
+**ผลลัพธ์ที่ต้องได้:** หลักฐาน live ที่ระบุ event count, success/failure count, IOC coverage, freshness, refresh latency และพฤติกรรม partial-failure/stale-cache ได้ครบ
+
+**สถานะ:** `[ ]` ยังไม่เสร็จ
+
+**หลักฐานปัจจุบัน:** MISP ถูก wire และตรวจ parser แล้ว แต่ ledger เดิมระบุว่ายังไม่มีการรัน full-feed live ที่ใช้เป็น empirical production evidence จึงยังไม่มีตัวเลข CIRCL จริงสำหรับ event count, refresh duration และ failure ratio ที่จะใช้ล็อก tier
+
+**ข้อสรุปชั่วคราว:** MISP คงสถานะ `provisional/untiered` ไม่ใช่ Tier A จากการมีโค้ดหรือ coverage ที่ออกแบบไว้
+
+## D9.2 ขั้นที่ 2 — สร้าง telemetry collector
+
+**วัตถุประสงค์:** สร้างวิธีวัด behavior ของ source ให้เป็นรูปแบบเดียวกันต่อ `source × IOC type` และเก็บ raw result เพื่อวิเคราะห์ซ้ำได้
+
+**วิธีทำ:** collector เก็บ `source`, `ioc_type`, `timestamp`, `success/fail`, `latency_ms`, `error_type`, `cache_hit`, `feed_status` และ `found` โดยแยก latency เป็น `cold_refresh_latency`, `warm_cached_lookup_latency` และ `api_request_latency` เพราะ static feed ที่ query จาก memory ไม่ควรถูกเปรียบเทียบกับ API call ที่มี network และ quota แบบเดียวกัน
+
+**คำสั่งที่ใช้:**
+
+```powershell
+.venv\Scripts\python.exe scripts\adhoc\collect_source_telemetry.py `
+    --source smet_nrd `
+    --ioc example.com `
+    --ioc-type domain `
+    --repeat 3 `
+    --output evidence\source_telemetry.jsonl
+```
+
+**ตัวอย่างผลลัพธ์:**
+
+```json
+{
+  "source": "smet_nrd",
+  "ioc_type": "domain",
+  "success": true,
+  "fail": false,
+  "latency_ms": 611.6,
+  "latency_class": "cold_refresh",
+  "cache_hit": false,
+  "found": false
+}
+```
+
+Warm lookup รอบถัดไปใช้เวลาประมาณ `0.0 ms` และมี `cache_hit=true`
+
+**ทำเพื่ออะไร:** สร้างหลักฐานเชิงตัวเลขสำหรับ access mode, latency, cache behavior และ error behavior โดยไม่เหมารวม static/cache source กับ API source
+
+**ผลลัพธ์:** มี collector ที่รันได้ มีการตรวจ `py_compile` และ source inventory แล้ว และยังไม่ได้ใช้ `--all-sources` เพื่อป้องกันการเรียก API quota โดยไม่ตั้งใจ
+
+**สถานะ:** `[x]` สร้าง collector และทดสอบตัวอย่างแล้ว; `[ ]` การเก็บระยะยาวและการเก็บครบทุก source ยังไม่เสร็จ
+
+**หลักฐาน:** `scripts/adhoc/collect_source_telemetry.py` และ output ที่บันทึกไว้ใน `evidence/` ตามคำสั่งข้างต้น
+
+## D9.3 ขั้นที่ 3 — กำหนด sample และ protocol ให้ตายตัวก่อนรันจริง
+
+**วัตถุประสงค์:** ป้องกันการจัด tier จาก sample เล็กหรือชุดข้อมูลที่เอนเอียง และทำให้ผลจากคนละช่วงเวลาทำซ้ำและเปรียบเทียบกันได้
+
+**วิธีทำ:** เก็บอย่างน้อย 30 samples ต่อ `source × IOC type`; แยก `known-malicious` และ `known-clean` พร้อม provenance/วันที่ยืนยัน; ไม่เรียก source กับ IOC type ที่ไม่รองรับ; เก็บผลดิบทุก call; รันซ้ำหลายช่วงเวลาเพราะ latency, rate-limit, freshness และ availability เปลี่ยนตามเวลา; แยก cold refresh, warm lookup และ API request ตาม schema ข้อ 2
+
+**ทำเพื่ออะไร:** ทำให้ `n`, success rate, error rate, p95 และ cache stability สะท้อนพฤติกรรมจริง ไม่ใช่ผลจากการทดลองครั้งเดียวหรือ IOC ชนิดเดียว
+
+**ผลลัพธ์ที่ต้องได้:** sampling manifest ที่ระบุ source/type, รายการ IOC, label malicious/clean, ช่วงเวลารัน และ raw telemetry ที่ครบ minimum sample
+
+**สถานะ:** `[x]` หลักเกณฑ์และ protocol ถูกกำหนดแล้ว; `[ ]` ยังเก็บ sample ครบตาม minimum และหลาย time window ไม่เสร็จ
+
+**หลักฐาน:** `evidence/source_telemetry_2026-09-15/source_telemetry_report.md:34-37` กำหนด minimum known-malicious/known-clean และ readiness validation; รายงานเดียวกันระบุ dataset ปัจจุบันยังไม่พร้อมในบาง IOC type ที่ `:56-58`
+
+### D9.3a Window 1 results (2026-09-15)
+
+- Raw telemetry: `evidence/reliability_sampling/windows/window1_2026-09-15.jsonl`
+- Result: `3,365` rows in one clean window; validation found no duplicate block and monotonically increasing timestamps.
+- Sources covered (14): `feodotracker`, `c2_trackers`, `talos`, `spamhaus`, `usom`, `tor_exit_nodes`, `circl`, `sslblacklist`, `smet_nrd`, `hagezi_nrd`, `mb_recent_sha256`, `threatfox`, `urlhaus`, `malwarebazaar`.
+- Excluded: `misp_circl_feed_osint` (separate MISP live-feed validation step) and the 13 Group B API-key sources: `virustotal`, `abuseipdb`, `shodan`, `alienvault`, `greynoise`, `censys`, `pulsedive`, `criminalip`, `ipqualityscore`, `phishtank`, `ip2proxy`, `triage`, `threatzone`.
+- Key findings:
+  - `talos`: `60/60` failures in this window and `120/120` failures including the prior invalid run. DNS SenderBase lookup timed out at approximately `5,000 ms`, matching the resolver timeout in `threat_intel_extended.py:105-106`. Evidence indicates the service is deprecated, not a CABTA code-path bug. See `evidence/reliability_sampling/invalid_runs/README.md`.
+  - `tor_exit_nodes`: `0` failures in this clean window. The prior `429` responses came from duplicated concurrent load, so the prior `429` is not treated as normal source behavior.
+  - `malwarebazaar`: `1/60` failure (`5xx`); repeat in windows 2 and 3.
+- Window status: `[x]` window 1/3 of the minimum 3 time windows complete; `[ ]` window 2; `[ ]` window 3.
+- No scoring or tier code was changed in this run, per the D9 gate.
+
+## D9.4 ขั้นที่ 4 — สร้าง coverage matrix จากข้อมูลจริง
+
+**วัตถุประสงค์:** แยกคำว่า “รองรับ type” ออกจาก “มีข้อมูลไม่ว่าง” และ “มี match ใน sample” ซึ่งเป็นคนละข้อเท็จจริง
+
+**วิธีทำ:** ทำตารางแยก source และ IOC type โดยตรวจสี่มิติ: รองรับตามโครงสร้าง feed/check function; มีข้อมูล non-empty ใน feed/index จริง; มี match ใน known-malicious หรือ sample จริง; และมี error/timeout/schema failure ใน type นั้นหรือไม่
+
+ห้ามใช้ `match_rate > 0` เป็น coverage เพียงอย่างเดียว เพราะ sample อาจไม่มี malicious IOC ที่ source นั้นรู้จัก การไม่มี matchจึงไม่เท่ากับ source ไม่มีข้อมูลหรือไม่มีความครอบคลุม
+
+**ทำเพื่ออะไร:** ป้องกันการให้คะแนน coverage สูง/ต่ำผิดจากการเลือก sample และทำให้เห็นช่องว่างระหว่าง capability ตามโค้ดกับข้อมูลที่ source มีจริง
+
+**ผลลัพธ์ที่ต้องได้:** coverage matrix พร้อม denominator, sample count, non-empty evidence, match count และ error count ต่อ cell
+
+**สถานะ:** `[ ]` ยังไม่เสร็จ เพราะยังไม่มี matrix ที่คำนวณจาก telemetry และ live feed ครบทุก source/type
+
+## D9.5 ขั้นที่ 5 — คำนวณ reliability และ execution metrics
+
+**วัตถุประสงค์:** เปลี่ยน raw telemetry ให้เป็น metrics ที่ reproducible ก่อนนำไปจัด tier
+
+**วิธีทำ:** คำนวณแยก source/type และบันทึกสูตร/threshold คู่กับผลลัพธ์ ได้แก่ Access Mode Score, Coverage Score จาก feed/data จริง, Wilson lower bound ของ success rate ที่ confidence 95%, p95 latency แยกตาม latency class, rolling error rate, cache stability และ refresh freshness จาก `latest_event_timestamp`, `cache_fetched_at` และ feed status
+
+ต้องล็อก threshold ก่อนเห็นผล aggregate เพื่อไม่ให้เปลี่ยนเกณฑ์ย้อนหลังให้เข้ากับ source ที่ต้องการ
+
+**ทำเพื่ออะไร:** ทำให้การตัดสินใจตรวจสอบซ้ำได้ และแยก execution priority ออกจาก content credibility และ verdict weight
+
+**ผลลัพธ์ที่ต้องได้:** metrics artifact ที่มีสูตร, threshold, sample size, confidence method และผลต่อ source/type ครบถ้วน
+
+**สถานะ:** `[ ]` ยังไม่เสร็จ; ตอนนี้มีแนวทางและสูตรระดับ design แต่ยังไม่มีผลคำนวณจาก telemetry ที่ครบและ threshold artifact ที่ผ่าน approval
+
+## D9.6 ขั้นที่ 6 — จัด tier เป็นรายงานก่อนแก้ scoring
+
+**วัตถุประสงค์:** ให้คนตรวจหลักฐานและอนุมัติการจัด tier ก่อนเปลี่ยน behavior ของ production scoring
+
+**วิธีทำ:** สร้างตาราง `source | access mode | coverage | n | Wilson lower bound | p95 latency | error rate | cache stability | provisional/tier` พร้อม raw evidence links, assumptions และ unresolved gaps แล้วแสดงแยกกันระหว่าง Execution tier, Evidence reliability, Content credibility และ Group A/B
+
+MISP ต้องคง `provisional/untiered` จนกว่าจะมีหลักฐาน live และ sample เพียงพอ ไม่ใช่ยกระดับเพราะเป็น MISP หรือเพราะ index รองรับสี่ IOC type ตาม design
+
+**ทำเพื่ออะไร:** ทำให้การจัด tier เป็น decision record ที่ตรวจสอบได้ และลดความเสี่ยงที่การเปลี่ยน tier จะไปเปลี่ยน verdict โดยไม่มีหลักฐานรองรับ
+
+**ผลลัพธ์ที่ต้องได้:** tier recommendation report พร้อม evidence, assumptions, gaps และ approval record
+
+**สถานะ:** `[ ]` ยังไม่เสร็จ เพราะยังไม่มีตาราง metrics/tier จากข้อมูลจริงและยังไม่มี approval ให้แก้ scoring
+
+## D9.7 ขั้นที่ 7 — ออกแบบ Circuit Breaker ให้ครบ source ที่จำเป็น
+
+**วัตถุประสงค์:** ป้องกัน source ที่กำลังล้มเหลวหรือช้าผิดปกติทำให้ investigation ทั้งชุดช้า/พัง และควบคุม retry ไม่ให้เพิ่มปัญหา rate limit
+
+**สถานะปัจจุบัน:** MISP มี circuit breaker เฉพาะ refresh และ fallback ไปใช้ stale cache ได้ แต่ยังไม่ใช่ policy กลางที่ใช้กับทุก source
+
+**วิธีทำที่ต้องตัดสินใจก่อน implement:** เลือกว่าจะทำ breaker ในแต่ละ integration หรือ wrapper กลางใน investigator; กำหนด `closed`, `open`, `half-open`; ล็อก failure window, threshold, cooldown/backoff และ probe count; แยก refresh failure, quota/401, timeout, schema error และ stale-cache semantics; และกำหนดการบันทึก failure โดยไม่ทำให้ `sources_checked` หรือ verdict บิดเบือน
+
+**ทำเพื่ออะไร:** ทำให้ resilience behavior สม่ำเสมอและควบคุม unstable dependency โดยไม่ปะปนกับ reliability/content score
+
+**ผลลัพธ์ที่ต้องได้:** design ที่ได้รับ approval และ state machine/policy ที่ทดสอบได้สำหรับ source ใน scope
+
+**สถานะ:** `[ ]` ยังไม่เสร็จ; มีเพียง MISP-specific implementation ยังไม่มีการตัดสินใจหรือ implementation แบบกลางสำหรับทุก source
+
+## D9.8 ขั้นที่ 8 — แก้ scoring/tier logic หลัง approval
+
+**วัตถุประสงค์:** นำ tier recommendation ที่มีหลักฐานไปใช้จริงโดยไม่แก้ scoring ก่อนข้อมูลพร้อม
+
+**วิธีทำหลังได้รับ approval เท่านั้น:** เพิ่ม explicit source-to-tier mapping; ลบหรือปรับ `UNTIERED_SOURCES`; ตัดสินใจว่าจะคง fallback weight `0.8` หรือเปลี่ยนจากผล evidence; เพิ่ม tests สำหรับ threshold, Wilson bound, provisional gate และ circuit state; ตรวจว่า execution tier, Group A/B และ confidence/content weight ยังเป็นคนละแนวคิด
+
+**ทำเพื่ออะไร:** ลดความเสี่ยงของการ lock-in design จากข้อมูลไม่พอ และทำให้ทุกการเปลี่ยน scoring มีเหตุผลกับหลักฐานที่ตรวจย้อนหลังได้
+
+**ผลลัพธ์ที่ต้องได้:** code change ที่ผ่าน approval, tests และ ledger decision record ที่ชี้ว่า source ใดเปลี่ยน tier ด้วยเหตุผลใด
+
+**สถานะ:** `[ ]` ยังไม่เริ่ม เพราะยังรอ live evidence, metrics report และ approval
+
+## D9.9 ขั้นที่ 9 — Regression และ operational behavior
+
+**วัตถุประสงค์:** ตรวจว่าการจัด tier/resilience ใหม่ไม่ทำให้ investigation เดิมเสียหาย และ behavior ตอนใช้งานจริงสอดคล้องกับ design
+
+**วิธีทำ:** ตรวจ cache หลัง restart; ทำให้ feed stale แล้วตรวจ `feed_status` และความหมายของ `found=false`; ทำให้ source ล้มเหลว/timeout แล้วตรวจว่า investigation อื่นยังทำงานต่อ; ตรวจ `sources_checked`, coverage และ attempted/clean accounting; ตรวจว่า Group A/B ไม่ปนกับ confidence tier; และรัน unit/integration/regression tests เทียบ baseline
+
+**ทำเพื่ออะไร:** ยืนยัน correctness, failure isolation และความหมายของข้อมูลที่ผู้ใช้เห็น ไม่ใช่ตรวจเฉพาะสูตรคำนวณ
+
+**ผลลัพธ์ที่ต้องได้:** regression report, operational test evidence และ known limitations ที่ยังต้องติดตาม
+
+**สถานะ:** `[ ]` ยังไม่เสร็จ; จะทำหลัง design และ tier report ได้รับ approval
+
+## D9.10 ลำดับงานที่ควรทำต่อ
+
+1. `[ ]` Live-validate MISP full feed แบบ read-only และเก็บหลักฐาน raw/summary
+2. `[x]` ใช้ telemetry collector ที่สร้างแล้วเพื่อกำหนด schema และทดลองเก็บ behavior
+3. `[ ]` เก็บ sample ให้ครบตาม minimum ต่อ source/type และหลายช่วงเวลา
+4. `[ ]` คำนวณ coverage matrix และ reliability/execution metrics จาก raw evidence
+5. `[ ]` ออกรายงาน tier ให้ตรวจและอนุมัติก่อนแก้ scoring; หลังจากนั้นจึงออกแบบ circuit breaker กลางและทำ regression
+
+**ข้อสรุป:** ทิศทาง MCDA + Wilson lower bound + Circuit Breaker เป็นกรอบการทำงานที่เหมาะกับโจทย์นี้ในระดับ design แต่ tier ที่น่าเชื่อถือยังต้องรอหลักฐานจากการรันจริง ไม่ควรสรุปจากชื่อ source, การมี/ไม่มี API key หรือ parser coverage เพียงอย่างเดียว
+
+## D10. Role-based login and RBAC (advisor requirement)
+
+### หัวข้อใหญ่
+
+นี่คือ requirement จากอาจารย์: ระบบต้องมี login แบ่ง 3 role ตาม Target User ได้แก่ `SOC Analyst Tier 1-2`, `Incident Responder` และ `Threat Hunter` โดยแต่ละ role เห็นข้อมูลและ flow ต่างกัน และต้องสามารถผูก Gmail ของ user แต่ละคนเข้ากับระบบแจ้งเตือนได้
+
+### สถานะรวม
+
+Phase 1 และ Phase 1.5 เสร็จแล้ว; RBAC enforcement, per-flow filtering, Gmail OAuth และ notification routing ราย user ยังไม่เริ่ม
+
+### เกณฑ์สถานะ
+
+- `[x]` ทำตามขอบเขตของขั้นตอนนั้นแล้ว
+- `[ ]` ยังไม่เสร็จ หรือรอ phase ก่อนหน้า/approval ที่เกี่ยวข้อง
+
+## D10.1 Phase 1 — Auth core (login/logout, JWT session)
+
+**วัตถุประสงค์:** เพิ่ม authentication core สำหรับ login/logout, password hashing, JWT session issuance/verification และ session revocation
+
+**วิธีทำ:** ใช้ bcrypt password hashing, HMAC-SHA256 JWT และ `get_current_user()` FastAPI dependency พร้อม `auth_sessions` สำหรับ revoke session
+
+**ทำเพื่ออะไร:** ให้ระบบมีตัวตนของ user และ session ที่ตรวจสอบได้ก่อนเพิ่ม authorization
+
+**ผลลัพธ์ที่ต้องได้:** endpoint login/logout และ current-user dependency ที่ใช้งานได้
+
+**สถานะ:** `[x]` เสร็จแล้ว
+
+**หลักฐาน:** `git log --oneline -- src/web/auth.py src/web/routes/auth.py` ยืนยัน commit `5b07b86 Add Phase 1 auth core: login/logout with JWT sessions`
+
+## D10.2 Phase 1.5 — Admin invite-only registration
+
+**วัตถุประสงค์:** ให้ admin เพิ่มสมาชิกใหม่แบบ invite-only โดยผู้ใช้ไม่สามารถสมัครหรือเลือก role ด้วยตัวเอง
+
+**วิธีทำ:** ใช้ `POST /api/admin/users/invite` สำหรับ admin และ `POST /api/auth/accept-invite` สำหรับรับ invite, token ใช้ครั้งเดียวและหมดอายุใน 48 ชั่วโมง
+
+**ทำเพื่ออะไร:** ควบคุมการเพิ่ม user และ role จากฝั่ง admin โดยตรง
+
+**ผลลัพธ์ที่ต้องได้:** user ใหม่ถูกสร้างเป็น inactive ก่อน แล้วจึง activate พร้อม username/password จาก invite
+
+**สถานะ:** `[x]` เสร็จแล้ว
+
+**หลักฐาน:** commit `76670cd Add Phase 1.5: admin invite-only registration`
+
+**Endpoint ที่มี:** `POST /api/admin/users/invite`, `POST /api/auth/accept-invite`
+
+**Design decision:** ไม่มี teams table แยก ใช้ทีมเดียวโดย implicit; admin เพิ่มสมาชิกโดยตรงผ่าน email; ผู้ใช้ไม่มี self-select role; มี 4 role ได้แก่ 3 target-user role และ `admin`
+
+## D10.3 Phase 2 — RBAC middleware
+
+**วัตถุประสงค์:** บังคับสิทธิ์ตาม role กับ route และ flow ที่มีอยู่
+
+**วิธีทำ:** ใช้ `require_role()` dependency ที่มีแล้วจาก Phase 1.5 ซึ่งถูกใช้กับ admin-only endpoint แล้ว และนำไป apply กับ route ของ Flow A/B/C ได้แก่ `agent.py`, `playbooks.py`, `chat.py` และ `websocket.py` ตาม 3 target-user role
+
+**ทำเพื่ออะไร:** แยกสิทธิ์การเข้าถึงข้อมูลและ action ระหว่าง role อย่างเป็นระบบ
+
+**ผลลัพธ์ที่ต้องได้:** route ที่เกี่ยวข้องมี role enforcement และ unauthorized access ได้ response ที่ถูกต้อง
+
+**สถานะ:** `[ ]` ยังไม่เริ่ม
+
+**ขอบเขตที่ต้องปลดล็อก:** ต้อง lift forbidden-file scope สำหรับ `src/web/websocket.py` เฉพาะรอบนี้ เพราะ Flow B วิ่งผ่าน WebSocket
+
+## D10.4 Phase 3 — Per-flow filtering
+
+**วัตถุประสงค์:** ทำให้ข้อมูลและ flow ที่แต่ละ role เห็นแตกต่างกันตาม requirement
+
+**วิธีทำ:** กำหนด field/data visibility ต่อ role และใช้ filtering ในแต่ละ flow หลัง RBAC middleware พร้อมใช้งาน
+
+**ทำเพื่ออะไร:** ให้ role ไม่ได้เพียง login ได้/ไม่ได้ แต่เห็นข้อมูลตามหน้าที่จริง
+
+**ผลลัพธ์ที่ต้องได้:** SOC Analyst เห็น Flow A แบบ trim raw source field; Incident Responder ผูกกับ playbook approval gate; Threat Hunter เห็น Flow B เต็ม
+
+**สถานะ:** `[ ]` ยังไม่เริ่ม รอ Phase 2 เสร็จก่อน
+
+## D10.5 Phase 4 — Gmail OAuth (per-user)
+
+**วัตถุประสงค์:** ผูก Gmail ของ user แต่ละคนเข้ากับระบบแจ้งเตือน
+
+**วิธีทำ:** ใช้ OAuth2 Authorization Code flow ต่อ user และเก็บ refresh token แบบ encrypted
+
+**ทำเพื่ออะไร:** ให้ระบบส่ง notification โดยอ้างอิง Gmail ที่ user คนนั้นอนุญาต แทนการมี recipient เดียวแบบ static
+
+**ผลลัพธ์ที่ต้องได้:** user แต่ละคนสามารถ authorize Gmail ของตนเอง และระบบใช้ credential ต่อ user ได้
+
+**สถานะ:** `[ ]` ยังไม่เริ่ม
+
+**ขอบเขตที่ต้องปลดล็อก:** ต้อง lift config scope สำหรับ `config.yaml` เฉพาะ section ใหม่ ห้ามแตะ `smtp_*` เดิม
+
+## D10.6 Phase 5 — Notification routing by role
+
+**วัตถุประสงค์:** route notification ตาม role และ Gmail ที่ผูกไว้ต่อ user
+
+**วิธีทำ:** ขยาย `NotificationManager.notify()` ให้ route ตาม role + Gmail ที่ผูกไว้จาก Phase 4 โดยเพิ่มจาก `to_addrs` static เดิม ไม่ใช่แทนที่
+
+**ทำเพื่ออะไร:** ให้ notification ไปถึงผู้รับที่เกี่ยวข้องกับ role และ flow โดยยังคงรองรับ static recipient เดิม
+
+**ผลลัพธ์ที่ต้องได้:** notification routing แยกตาม role/user ได้ และมี fallback/behavior ของ static `to_addrs` เดิมที่ตรวจสอบได้
+
+**สถานะ:** `[ ]` ยังไม่เริ่ม
+
+## D10.7 ลำดับงานที่ควรทำต่อ
+
+1. `[ ]` Phase 2 — RBAC middleware (ถัดไป)
+2. `[ ]` Phase 3 — Per-flow filtering
+3. `[ ]` Phase 4 — Gmail OAuth
+4. `[ ]` Phase 5 — Notification routing by role
+
 ## Weekly ritual (กันของหล่น)
 1. ก่อนเริ่มแต่ละ session: เปิดไฟล์นี้ อัปเดต status เก่าก่อน แล้วค่อยเลือกงานถัดไป
 2. ก่อนเริ่มแต่ละข้อ: เขียน DoD ใน column ให้ชัดก่อนสั่ง investigation prompt
