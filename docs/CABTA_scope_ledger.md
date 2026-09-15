@@ -923,6 +923,98 @@ coverage as an interim result while documenting the limitation.
   (untracked, no git history). The decision is not to reuse it; build fresh
   canonical results via `eval_benchmark.py` instead.
 
+### 2026-09-15 Follow-up — CV artifact and Feodo/Tor integration validation
+
+**1. CV source policy committed (commit `af7812a`)**
+- `scripts/eval/fit_source_weights.py` now applies a validated Group-A CV
+  allowlist: `feodotracker`, `tor_exit_nodes`, `spamhaus`, and `c2_trackers`.
+- Group-B sources and the currently unvalidated/problematic Group-A sources are
+  excluded from the exploratory fit. Excluded sources are reported with reasons:
+  `circl` (endpoint returned 404/401 and Passive DNS access is restricted),
+  `sslblacklist` (IP feed deprecated), and `usom` (pagination/content
+  validation incomplete).
+- This policy is local to the analysis script; production scoring tiers and
+  source defaults were not changed.
+
+**2. CV artifact output and first 5-fold run**
+- `fit_source_weights.py` was extended to write a structured JSON artifact at
+  `scripts/eval/fit_source_weights_results.json`, including UTC timestamp,
+  dataset/cache provenance, selected/excluded sources, per-source coverage,
+  coefficients, fold metrics, and limitations. It supports `--output` for a
+  custom artifact path.
+- CV completed successfully with exit code `0` on all `894` IOC records
+  (`MALICIOUS=709`, `CLEAN=185`). The artifact status is explicitly
+  `preliminary_signal_only`; it must not replace production weights.
+- Selected source coverage in the inferred latest cache round:
+  `c2_trackers=487/894 (54.47%)`, `feodotracker=151/894 (16.89%)`,
+  `spamhaus=151/894 (16.89%)`, and `tor_exit_nodes=150/894 (16.78%)`.
+  The low coverage is partly source applicability (the latter three are
+  IPv4-oriented), and missing rows are still represented as score `0`.
+- Mean coefficients: `spamhaus=1.0571`, `c2_trackers=0.2049`,
+  `feodotracker=0.0`, `tor_exit_nodes=0.0`. Mean 5-fold metrics were
+  accuracy `0.2629`, precision `1.0000`, recall `0.0705`. These results show
+  a weak/imbalanced preliminary signal, not deployable weights.
+- The artifact-writer changes and the generated CV artifact were intentionally
+  left uncommitted at this ledger update; only the prior CV policy commit is
+  committed. Existing eval JSONL and unrelated evidence remain untouched.
+
+**3. FeodoTracker/Tor positive-control validation (commit `875cb8e`)**
+- Current live feeds responded successfully: Feodo `ipblocklist.json` HTTP
+  `200` with `5` IPv4 entries; Tor `torbulkexitlist` HTTP `200` with `1,344`
+  IPv4 entries at validation time.
+- Direct integration positive controls passed:
+  - Feodo `162.243.103.246`: `found=True`, flagged, score `95`.
+  - Tor `171.25.193.25`: `found=True`, flagged, score `30`.
+- Negative control `198.18.0.1` returned `found=False`, score `0` for both.
+- The integration now returns an explicit `found` field for these sources, and
+  Tor matching uses exact feed lines instead of substring matching. Fixtures
+  and unit tests were added; the relevant test set passed (`31 passed`).
+- Benchmark-only coverage report:
+  `evidence/source_telemetry_2026-09-15/feodo_tor_benchmark_coverage_2026-09-15.json`.
+  It records Feodo `154/154` applicable IP cache rows with `0` matches and
+  Tor `153/154` with `0` matches. Domain, URL, MD5, and SHA256 are
+  non-applicable and were excluded from the denominator.
+- Conclusion: both integrations are functioning, but the benchmark has no
+  overlap with the current Feodo/Tor feeds. Do not set their production
+  weights to zero or treat no-match as CLEAN. Do not rerun CV for these two
+  sources until source-specific positive-control data is included.
+
+**4. Cache write investigation during live validation**
+- A normal sandbox-process probe could read
+  `C:\Users\ACER\.blue-team-assistant\cache\ioc_cache.db` but failed to write
+  with `OperationalError: attempt to write a readonly database`.
+- No `.db-wal` or `.db-shm` files were present; the database file was not
+  marked read-only. The failure is an execution-environment/ACL boundary,
+  not a Feodo/Tor parser failure and not a SQLite stale-lock condition.
+- The same live comprehensive calls were rerun with the required write
+  permission: cache rows increased `3901 -> 3903`, and both Feodo/Tor rows
+  were verified with current `queried_at` timestamps and flagged results.
+- Future cache collection must run under an identity with Modify permission
+  on the cache directory/database; a read-only sandbox process is not a valid
+  cache-write validation environment.
+
+**5. vLLM virtual-key issue (informational; no fallback added)**
+- During eval, vLLM returned HTTP `403` with `virtual_key_blocked` / `Virtual
+  key is inactive`. The call path is `LLMAnalyzer._call_vllm_api()`; each IOC
+  can produce two non-retry calls (IOC analysis and FortiGate translation).
+- The eval JSONL records only scoring fields and remained structurally valid;
+  the LLM enrichment failure was non-fatal and did not affect verdict,
+  threat score, or source accounting.
+- `/v1/models` exposed `12` model IDs, but changing models with the same
+  inactive key is not a fix. No fallback model was added; key activation or
+  disabling LLM enrichment for eval is the correct next decision.
+
+**OPEN ITEMS / NEXT STEPS**
+- Commit or review the currently uncommitted CV artifact-writer changes and
+  generated artifact policy before treating the CV result as reproducible.
+- Fix and validate `circl`, `sslblacklist`, and `usom` separately; collect
+  source-specific positive controls before including them in a future CV run.
+- Build the reliability aggregation table from the three valid windows
+  (window1 talos-filtered + window2 + window3); no aggregation script exists
+  yet.
+- Keep Feodo/Tor in production tiers, but interpret their benchmark zero-match
+  result as dataset non-overlap rather than integration failure.
+
 ## D10.5 Phase 4 — Gmail OAuth (per-user)
 
 **วัตถุประสงค์:** ผูก Gmail ของ user แต่ละคนเข้ากับระบบแจ้งเตือน
