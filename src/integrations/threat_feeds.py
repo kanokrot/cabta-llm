@@ -3,7 +3,7 @@ Author: Ugur Ates
 Free threat feed integrations with caching.
 
 Sources:
-- USOM (Turkish national CERT) - JSON API with cached lookups, text-list fallback
+- USOM (Turkish national CERT) - queryable JSON API
 - SSL Blacklist (abuse.ch) - CSV parsed into sets with TTL cache
 - Smet NRD and HaGeZi NRD - domain lists with TTL cache
 - MalwareBazaar recent SHA256 - text list with TTL cache
@@ -89,16 +89,13 @@ class ThreatFeeds:
     """
     Free threat feed aggregator with in-memory caching.
 
-    Feeds are downloaded once and cached for ``cache_ttl_seconds`` (default 1h).
-    Subsequent lookups use the cached sets for fast O(1) membership testing.
+    Static feeds are downloaded once and cached for ``cache_ttl_seconds``
+    (default 1h). USOM lookups use its queryable API per IOC.
     """
 
     DEFAULT_CACHE_TTL = 3600  # 1 hour
 
     USOM_API_URL = "https://siberguvenlik.gov.tr/api/address/index"
-    USOM_URL_LIST = "https://www.usom.gov.tr/url-list.txt"
-    USOM_IP_LIST = "https://www.usom.gov.tr/ip-list.txt"
-
     SSLBL_CERT_CSV = "https://sslbl.abuse.ch/blacklist/sslblacklist.csv"
     SSLBL_IP_CSV = "https://sslbl.abuse.ch/blacklist/sslipblacklist.csv"
 
@@ -112,11 +109,6 @@ class ThreatFeeds:
         self._cache_ttl = config.get("timeouts", {}).get(
             "feed_cache_ttl", self.DEFAULT_CACHE_TTL
         )
-
-        # USOM caches (URLs / IPs / domains kept separate since USOM tags them)
-        self._usom_urls = _FeedCache(self._cache_ttl)
-        self._usom_ips = _FeedCache(self._cache_ttl)
-        self._usom_domains = _FeedCache(self._cache_ttl)
 
         # SSL Blacklist caches
         self._sslbl_sha1 = _FeedCache(self._cache_ttl)
@@ -165,56 +157,6 @@ class ThreatFeeds:
     # ------------------------------------------------------------------
     # USOM
     # ------------------------------------------------------------------
-
-    async def _refresh_usom_cache(self) -> None:
-        """Download and parse USOM feed lists into sets (JSON API, then text-list fallback)."""
-        if not self._usom_ips.is_stale():
-            return
-
-        logger.info("[USOM] Refreshing threat feed cache")
-        async with self._session() as session:
-            data = await self._fetch_json(session, self.USOM_API_URL)
-            if data:
-                self._parse_usom_json(data)
-            else:
-                logger.info("[USOM] JSON API unavailable, falling back to text lists")
-
-            # Fallback / supplement: plain text lists
-            for list_url, cache in (
-                (self.USOM_URL_LIST, self._usom_urls),
-                (self.USOM_IP_LIST, self._usom_ips),
-            ):
-                text = await self._fetch_text(session, list_url)
-                if text:
-                    for line in text.splitlines():
-                        line = line.strip().lower()
-                        if line and not line.startswith("#"):
-                            cache.data.add(line)
-
-        for cache in (self._usom_urls, self._usom_ips, self._usom_domains):
-            cache.mark_fresh()
-
-        total = len(self._usom_urls.data) + len(self._usom_ips.data) + len(self._usom_domains.data)
-        logger.info(f"[USOM] Cache refreshed: {total} indicators loaded")
-
-    def _parse_usom_json(self, data: Dict) -> None:
-        models = data.get("models", []) if isinstance(data, dict) else []
-        for entry in models:
-            value = (entry.get("url") or entry.get("value") or "").strip().lower()
-            if not value:
-                continue
-            ioc_type = entry.get("type", "")
-
-            if ioc_type == "url" or "://" in value:
-                self._usom_urls.data.add(value)
-            elif ioc_type == "ip":
-                self._usom_ips.data.add(value)
-            elif ioc_type == "domain":
-                self._usom_domains.data.add(value)
-            else:
-                # Unknown type: index under both IP and domain to be safe.
-                self._usom_ips.data.add(value)
-                self._usom_domains.data.add(value)
 
     async def check_usom(self, ioc: str) -> Dict:
         """Check one IOC through USOM's queryable API."""
