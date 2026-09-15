@@ -693,7 +693,7 @@ MISP ต้องคง `provisional/untiered` จนกว่าจะมีห
 
 ### สถานะรวม
 
-Phase 1 และ Phase 1.5 เสร็จแล้ว; RBAC enforcement, per-flow filtering, Gmail OAuth และ notification routing ราย user ยังไม่เริ่ม
+Phase 1, Phase 1.5, Phase 2 และ Phase 2.5 เสร็จแล้ว; per-flow filtering, Gmail OAuth และ notification routing ราย user ยังไม่เริ่ม
 
 ### เกณฑ์สถานะ
 
@@ -736,13 +736,30 @@ Phase 1 และ Phase 1.5 เสร็จแล้ว; RBAC enforcement, per-f
 
 **วัตถุประสงค์:** ปิดช่องว่างด้าน session ownership ที่พบระหว่างทำ Phase 2 โดยเป็น sub-task ค้างของ Phase 2 ไม่ใช่ phase ใหม่ที่แยกอิสระ
 
-**ช่องว่างที่พบ:** `AgentStore.get_session()` และ `AgentStore.list_sessions()` ยังไม่มี `user_id` parameter และ `chat.py` ยังไม่ได้ส่ง user scope เข้าไป ทำให้ session read ยังไม่ owner-scoped
+**ช่องว่างที่พบ:** `AgentStore.get_session()` และ `AgentStore.list_sessions()` เดิมไม่มี `user_id` parameter และ `chat.py` ไม่ได้ส่ง user scope เข้าไป ทำให้ session read ยังไม่ owner-scoped; การตรวจสอบเพิ่มเติมพบว่า `analysis.py` ไม่มี RBAC และ `reports.py`/`dashboard.py` มี endpoint ที่ยังไม่ป้องกันด้วย auth ด้วย
 
-**สถานะ:** `[ ]` ยังไม่เริ่ม
+**สถานะ:** `[x]` เสร็จแล้ว
 
-**Mitigation ชั่วคราว:** จำกัด `GET /api/chat/sessions` และ `GET /api/chat/sessions/{id}` ให้ `admin` เท่านั้นจนกว่าจะทำ ownership เสร็จ
+**หลักฐานการดำเนินการ:**
 
-**ขอบเขตที่ต้องทำ:** ทำ schema migration เพิ่ม `user_id`, ตัดสินใจแนวทาง backfill สำหรับ session เก่า, แก้ `AgentStore` methods ให้รับและใช้ filter, และแก้ `chat.py` ให้ส่ง `current_user` เข้าไป
+- `22de643 Add Phase 2.5 session ownership storage layer` — migration เพิ่ม nullable `user_id` ใน `agent_sessions` และ `analysis_jobs`, backup/transaction/restore เมื่อ migration ตัวที่สองล้มเหลว, และส่ง owner scope ผ่าน AgentStore, AnalysisManager, AgentLoop และ PlaybookEngine
+- `853cd7e Add Phase 2.5 RBAC routes and WebSocket ownership controls` — owner filter สำหรับ chat/agent/dashboard recent และ owner check สำหรับ `/ws/agent`; shared role-based access สำหรับ analysis/reports/dashboard aggregate และ `/ws/analysis`
+- `6db8514 Add Phase 2.5 ownership and RBAC test coverage` — migration rollback, owner filtering, NULL-owner policy, route role matrix และ WebSocket coverage
+
+**Access model ที่เสร็จแล้ว:**
+
+- Private/owner-scoped: chat sessions, agent session REST endpoints, `/ws/agent/{session_id}` และ `GET /api/dashboard/recent`; `admin` เห็นทั้งหมด ส่วน role อื่นเห็นเฉพาะ `user_id` ของตนเอง
+- Shared/role-based: `/api/analysis/*` เฉพาะ `SOC Analyst Tier 1-2`/`admin`; reports read ทุก authenticated role, rule update เฉพาะ `Threat Hunter`/`admin`, approve/mark-deployed เฉพาะ `Incident Responder`/`admin`; dashboard stats/sources และ `/ws/analysis/{analysis_id}` ทุก authenticated role
+
+**Legacy records:** `agent_sessions` 4 rows และ `analysis_jobs` 104 rows เดิมไม่มีหลักฐานระบุ owner จึงคง `user_id = NULL`; endpoint ที่ owner-filter จะ exclude แถวเหล่านี้สำหรับ non-admin โดยธรรมชาติ และ admin เห็นได้ทั้งหมด ส่วน reports/shared workflow ไม่ใช้ owner filter
+
+**Testing evidence:** migration failure scenario restore กลับแบบ byte-exact และ migration จริง exit code 0; `tests/test_rbac_middleware.py` ล่าสุด `132 passed`, ownership/RBAC/API suite `176 passed`, regression suite `12 passed`, `py_compile` 13 ไฟล์ผ่าน และ `git diff --check` ผ่าน
+
+**Response contract:** owner resource ที่ไม่มีอยู่หรือไม่ใช่ของ current user คืน `404` เหมือนกันเพื่อป้องกัน ID enumeration; role mismatch คืน `403`; collection ว่างคืน `200` พร้อม `[]`
+
+**สถานะเดิมที่แก้แล้ว:** เดิมจำกัด `GET /api/chat/sessions` และ `GET /api/chat/sessions/{id}` ให้ `admin` เท่านั้นเป็น mitigation ชั่วคราว; ปัจจุบันใช้ owner filter แล้ว
+
+**ขอบเขตที่ดำเนินการแล้ว:** ทำ schema migration เพิ่ม nullable `user_id` พร้อม backup/transaction/restore, คง legacy records เป็น `NULL` ตามหลักฐานที่มี, แก้ AgentStore/AnalysisManager ให้รับและใช้ owner filter, ส่ง `current_user["id"]` ผ่าน AgentLoop/PlaybookEngine และ routes, เพิ่ม role/ownership enforcement ใน REST และ WebSocket, และเพิ่ม regression/rollback tests
 
 ## D10.3 Phase 2 — RBAC middleware
 
@@ -758,11 +775,11 @@ Phase 1 และ Phase 1.5 เสร็จแล้ว; RBAC enforcement, per-f
 
 **หลักฐาน:** commit `2220a60 Add Phase 2: RBAC middleware for Flow A/B/C routes and WebSockets`
 
-**สรุป route → role:** `agent.py` ใช้ `Threat Hunter`/`admin`; `playbooks.py` ใช้ `Incident Responder`/`admin`; `chat.py` ใช้ `Incident Responder`/`admin` เมื่อมี `playbook_id` และ `Threat Hunter`/`admin` เมื่อไม่มี `playbook_id`; `websocket.py` ใช้ `SOC Analyst Tier 1-2`/`admin` สำหรับ `/ws/analysis/*` และ `Threat Hunter`/`admin` สำหรับ `/ws/agent/*`
+**สรุป route → role (Phase 2 baseline และการขยายใน Phase 2.5):** `agent.py` ใช้ `Threat Hunter`/`admin`; `playbooks.py` ใช้ `Incident Responder`/`admin`; `chat.py` ใช้ `Incident Responder`/`admin` เมื่อมี `playbook_id` และ `Threat Hunter`/`admin` เมื่อไม่มี `playbook_id`; ใน Phase 2 เดิม `websocket.py` จำกัด `/ws/analysis/*` เป็น `SOC Analyst Tier 1-2`/`admin` และ `/ws/agent/*` เป็น `Threat Hunter`/`admin`, จากนั้น Phase 2.5 ขยาย `/ws/analysis/*` เป็นทุก authenticated role และคง `/ws/agent/*` ตามเดิมพร้อม owner check
 
-**Known gap:** `GET /api/chat/sessions` และ `GET /api/chat/sessions/{id}` เป็น `admin-only` ชั่วคราว เพราะยังไม่มี session ownership (`user_id`) โดยติดตามแยกเป็น Phase 2.5 และไม่ใช่ blocker ของ Phase 2 นี้
+**Known gap ที่ปิดแล้วใน Phase 2.5:** `GET /api/chat/sessions` และ `GET /api/chat/sessions/{id}` ไม่เป็น `admin-only` อีกต่อไป แต่ใช้ owner filter; `/ws/agent/{session_id}` ใช้ owner check เช่นเดียวกัน ส่วน legacy records ที่ `user_id = NULL` ให้ admin เห็นได้เท่านั้นใน owner-scoped paths
 
-**หลักฐานการทดสอบ:** `tests/test_rbac_middleware.py` จำนวน 107 cases และ regression suite รวม 119 passed
+**หลักฐานการทดสอบ:** Phase 2 เดิมมี `tests/test_rbac_middleware.py` จำนวน 107 cases และ regression suite รวม 119 passed; coverage และ known gap ที่เหลือถูกปิด/ขยายใน Phase 2.5
 
 **ขอบเขตที่ดำเนินการ:** รวม `src/web/websocket.py` ในการบังคับ JWT และ role ผ่าน WebSocket ตามขอบเขตของ Phase 2
 
@@ -776,7 +793,7 @@ Phase 1 และ Phase 1.5 เสร็จแล้ว; RBAC enforcement, per-f
 
 **ผลลัพธ์ที่ต้องได้:** SOC Analyst เห็น Flow A แบบ trim raw source field; Incident Responder ผูกกับ playbook approval gate; Threat Hunter เห็น Flow B เต็ม
 
-**สถานะ:** `[ ]` ยังไม่เริ่ม รอ Phase 2 เสร็จก่อน
+**สถานะ:** `[ ]` ยังไม่เริ่ม รอ Phase 2.5 เสร็จก่อน
 
 ## CV Readiness Investigation (2026-09-15)
 
@@ -1044,7 +1061,7 @@ coverage as an interim result while documenting the limitation.
 ## D10.7 ลำดับงานที่ควรทำต่อ
 
 1. `[x]` Phase 2 — RBAC middleware (เสร็จแล้ว)
-2. `[ ]` Phase 2.5 — Session ownership (known gap จาก Phase 2, แนะนำทำก่อน Phase 3 เพราะเป็น security gap ที่เปิดอยู่)
+2. `[x]` Phase 2.5 — Session ownership + analysis/report/dashboard auth (เสร็จแล้ว; legacy `NULL user_id` ใช้ admin-only policy เฉพาะ owner-scoped paths)
 3. `[ ]` Phase 3 — Per-flow filtering
 4. `[ ]` Phase 4 — Gmail OAuth
 5. `[ ]` Phase 5 — Notification routing by role
