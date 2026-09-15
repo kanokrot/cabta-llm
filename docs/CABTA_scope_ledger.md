@@ -1145,6 +1145,49 @@ coverage as an interim result while documenting the limitation.
   including Feodo/Tor positives and SSLBL SHA1-compatible records, then repeat
   fit, calibration, and shadow comparison before any production change.
 
+### 2026-09-16 Follow-up — three-window reliability aggregation
+
+**1. Reproducible aggregation**
+- Script and tests: `scripts/eval/aggregate_reliability_windows.py` and
+  `tests/test_aggregate_reliability_windows.py` (commit `a1edabf`).
+- Artifact: `evidence/reliability_sampling/reliability_aggregation_2026-09-15.json`.
+- The script read only the preserved valid window files; it made no network
+  calls and did not modify the raw JSONL windows.
+- Regression result: `3 passed`; the only warning was the existing pytest
+  cache-path warning from the execution environment.
+
+**2. Aggregate result**
+- Window1: `3,365` raw rows; `1,205` executable rows after excluding Talos.
+- Window2: `3,125` raw rows; `1,205` executable rows.
+- Window3: `3,125` raw rows; `1,205` executable rows.
+- Historical aggregate after Talos exclusion: `9,375` rows,
+  `3,615` executable, `3,614` success, `1` failure, success rate
+  `99.972337%`, failure rate `0.027663%`.
+- The one failure was `malwarebazaar` with error type `5xx` in window1;
+  windows2 and 3 had no executable failures.
+- Overall latency was retained by class rather than ranked across classes:
+  `api_request` n=`2,160`, `cold_refresh` n=`15`,
+  `uncached_feed_request` n=`360`, and `warm_cached_lookup` n=`1,080`.
+
+**3. Source consistency and policy interpretation**
+- All non-Talos sources had `100%` executable-count consistency across the
+  three windows. `malwarebazaar` was the only source with a failure:
+  `179/180` successes (`99.444444%`).
+- Talos raw historical metrics remain visible (`60` executable failures) but
+  are excluded from the aggregate under commit `060e9a6`.
+- CIRCL historical rows show successful completion in these older windows,
+  but are retained for audit only and excluded from the current eligible set
+  because current Passive DNS access requires unavailable partner authorization.
+- Operational success means the call completed; it does not establish source
+  detection correctness. Found counts are not ground truth and must not be
+  converted directly into production weights.
+
+**4. Current status**
+- The three-window aggregation is complete as historical operational evidence,
+  but it is not the locked seven-day/21-window protocol. Independent labelled
+  holdout, source-overlap controls, calibration, and shadow comparison remain
+  required before changing production scoring tiers or weights.
+
 ## D10.5 Phase 4 — Gmail OAuth (per-user)
 
 **วัตถุประสงค์:** ผูก Gmail ของ user แต่ละคนเข้ากับระบบแจ้งเตือน
