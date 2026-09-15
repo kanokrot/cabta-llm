@@ -809,6 +809,99 @@ but no persisted CV output artifact was found.
 `eval_benchmark.py` before running CV, or (b) run CV now on partial 459-IOC
 coverage as an interim result while documenting the limitation.
 
+### 2026-09-15 Session Summary — Talos exclusion, reliability windows,
+### Group A CV pipeline prep
+
+**1. Talos excluded from scoring (commit 060e9a6)**
+- Root cause: `120/120` fail across window1 (`60/60`) — DNS SenderBase timeout
+  approximately `5s`, matching the configured timeout; service deprecated per
+  source code comment.
+- Removed from: `intelligent_scoring.py` `medium_confidence_sources` and
+  `scripts/eval/fit_source_weights.py` source list.
+- Test updated: `test_threat_intel_source_accounting.py` — `talos` added to
+  `UNTIERED_SOURCES` (integration code retained, scoring tier removed).
+- Verified: grep `talos` in both target files has no active reference; 26 tests
+  passed.
+
+**2. Reliability window collection — 2 of 3 complete**
+- Window1 (`12:21–12:35 UTC+7`): `3,365` rows, talos-excluded via retroactive
+  filter, 13 effective sources, validated clean single-window sequence.
+- Window2 first attempt: **INVALID** — quarantined to
+  `evidence/reliability_sampling/invalid_runs/window2_2026-09-15_ENV_BLOCK_INVALID.jsonl`.
+  Root cause: stale Codex sandbox firewall rules
+  (`codex_sandbox_offline_block_*`) blocking outbound HTTPS at the local socket
+  layer. Manually removed via `Remove-NetFirewallRule`; confirmed fixed via
+  direct curl test (`200 OK`).
+- Window2 second attempt: crashed on `tor_exit_nodes` transient timeout
+  ("semaphore timeout period expired") before writing output — non-retry per
+  protocol, no data produced; connectivity was re-confirmed healthy afterward.
+- Window2 third attempt: **SUCCESS** — `09:45:45–09:58:08 UTC` (`743.3s`),
+  `3,125` rows, 100% success across all `1,205` executable rows, 13 sources,
+  no talos, zero `other(error)` failures.
+- Window3: **NOT YET RUN** — scheduled approximately `19:00–20:00` Thai time
+  (2–3 hour gap from window2 per protocol).
+- Effective valid dataset for reliability metrics: window1 (talos-filtered)
+  plus window2 (clean).
+
+**3. Group-A-only CV data collection pipeline (commit d9daa51)**
+- Problem discovered: `eval_benchmark.py` called all sources, including Group B
+  (`alienvault`, `virustotal`, `shodan`, etc.) and talos; no allowlist mechanism
+  existed.
+- Fix: threaded optional `allowed_sources` through three layers:
+  - `ThreatIntelligence.investigate_ioc_comprehensive()` filters before task
+    creation, so disallowed sources make no network call and are not merely
+    filtered post-hoc.
+  - `IOCInvestigator.investigate()` forwards the allowlist.
+  - `eval_benchmark.py` adds `--group-a-only`, using the locked 7-source
+    allowlist: `feodotracker`, `tor_exit_nodes`, `c2_trackers`, `usom`,
+    `sslblacklist`, `spamhaus`, `circl`.
+- Default behavior (`allowed_sources=None`) is unchanged and backward
+  compatible; production scoring is unaffected.
+- New tests confirm Group B sources receive `assert_not_awaited()` when the
+  allowlist is active; 66 tests passed in total.
+
+**4. CV readiness — dry run complete, cache write bug found and fixed**
+- Dry run: `eval_benchmark.py --group-a-only --malicious-limit 1 --delay 0`
+  processed all 186 CLEAN-included IOCs (`--malicious-limit` does not limit
+  CLEAN count — known script limitation) in `1,289.7s` (`6.934s/IOC` average),
+  exit 0, 0 errors, and 0 malformed rows. Output:
+  `scripts/eval/eval_results_group_a_v2.jsonl` (`186` rows).
+- **Bug found:** cache writes silently failed (`attempt to write a readonly
+  database`) during the dry run. The cache remained at `3,256` rows, so the
+  dry run produced label data but did not populate `ioc_cache.db`.
+- Root cause: ACL on
+  `C:\Users\ACER\.blue-team-assistant\cache` — `CodexSandboxUsers` had
+  Read/Execute only, not Modify. This was not a code bug, not a file
+  read-only attribute, and not a stale lock.
+- **Fixed:** granted Modify ACL to `CodexSandboxUsers` on the cache directory
+  and `ioc_cache.db`. Verified with a probe write (`3,256 → 3,257 → cleanup
+  to 3,256`).
+- **Status:** cache write is confirmed working. Ready to run the full
+  `--resume` batch to fill remaining IOCs toward the 894 target; **NOT YET RUN**
+  (deferred until after window3 to avoid concurrent cache/network load).
+
+**5. Unrelated discovery (not part of this session's scope, informational only)**
+- `evidence/MISP_live_feed_inspect/` contains a read-only MISP CIRCL live-feed
+  audit (manifest plus 29-event bounded sample, 100% success, all 4 IOC types
+  present). Status is explicitly provisional/untiered — not a scoring decision.
+  Origin appears to be an earlier/parallel session working the
+  "MISP/CIRCL implementation not yet started" backlog item. No code was
+  changed by this audit.
+
+**OPEN ITEMS / NEXT STEPS**
+- Run window3 (approximately `19:00–20:00` Thai time, 2–3 hour gap from
+  window2 per protocol).
+- Run `eval_benchmark.py --group-a-only --resume` to fill remaining IOCs
+  toward full 894-IOC coverage (approximately 80–90 minutes estimated).
+- After cache reaches full/near-full coverage, run `fit_source_weights.py`
+  5-fold CV — this has **never successfully run**; no persisted output exists
+  as of this note.
+- Build the reliability metrics table from window1 + window2 (+ window3); no
+  aggregation script exists yet and one needs to be written.
+- `eval_results_group_a_v2.CONTAMINATED.jsonl` root cause remains unknown
+  (untracked, no git history). The decision is not to reuse it; build fresh
+  canonical results via `eval_benchmark.py` instead.
+
 ## D10.5 Phase 4 — Gmail OAuth (per-user)
 
 **วัตถุประสงค์:** ผูก Gmail ของ user แต่ละคนเข้ากับระบบแจ้งเตือน
