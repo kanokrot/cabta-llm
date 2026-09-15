@@ -1102,6 +1102,49 @@ coverage as an interim result while documenting the limitation.
   held-out validation/calibration and aggregate the three valid reliability
   windows. Do not modify production scoring tiers until those gates pass.
 
+### 2026-09-15 Follow-up — source-specific controls and internal holdout validation
+
+**1. Source-specific live controls**
+- Evidence: `evidence/source_telemetry_2026-09-15/source_positive_controls_2026-09-15.json`.
+- Controls were run separately from the 894-record benchmark and did not write
+  to `ioc_cache.db`.
+- FeodoTracker feed: HTTP `200`, `5` entries / `5` usable IPs. Positive
+  `162.243.103.246` returned `found=true`, botnet `Emotet`, score `95`;
+  negative `198.18.0.1` returned `found=false`, score `0`.
+- Tor exit feed: HTTP `200`, `1,343` usable IPs. Positive `171.25.193.25`
+  returned `found=true`, `is_tor=true`, score `30`; negative `198.18.0.1`
+  returned `found=false`, `is_tor=false`, score `0`.
+- SSLBL certificate feed: `10,715` SHA1 entries; IP feed has `0` entries and
+  is marked deprecated. Positive SHA1
+  `00095e3cd5dfc929d16036132665d7e3e9ef7cd6` returned `found=true`, score
+  `90`; all-zero SHA1 negative returned `found=false`, score `0`.
+- All six positive/negative control assertions passed. These controls validate
+  integration behavior and are not added as benchmark labels for model fitting.
+
+**2. Internal held-out validation and calibration**
+- Evidence: `evidence/source_telemetry_2026-09-15/source_weights_holdout_6source_2026-09-15.json`.
+- Split: train `536` (`111` clean, `425` malicious), calibration `179`
+  (`37` clean, `142` malicious), untouched test `179` (`37` clean,
+  `142` malicious), random state `20260915`.
+- Raw logistic test metrics: accuracy `0.312849`, precision `1.000000`,
+  recall `0.133803`, ROC-AUC `0.566901`, Brier `0.232308`, log loss
+  `0.638464`, predicted positives `19/179`.
+- Platt-calibrated test metrics: accuracy `0.793296`, precision `0.793296`,
+  recall `1.000000`, ROC-AUC `0.566901`, Brier `0.162226`, log loss
+  `0.503777`, predicted positives `179/179`.
+- Calibration did not improve discrimination and produced an all-positive
+  threshold decision. This is an internal holdout from the same labelled
+  dataset, not an independent external validation set.
+- **Decision:** source-specific controls pass, but held-out/calibration gate
+  does not pass for production use. Keep all CV coefficients and calibration
+  results as exploratory evidence only; do not change production weights or
+  scoring tiers.
+
+**3. Next validation requirement**
+- Obtain an independent labelled holdout with sufficient source overlap,
+  including Feodo/Tor positives and SSLBL SHA1-compatible records, then repeat
+  fit, calibration, and shadow comparison before any production change.
+
 ## D10.5 Phase 4 — Gmail OAuth (per-user)
 
 **วัตถุประสงค์:** ผูก Gmail ของ user แต่ละคนเข้ากับระบบแจ้งเตือน
