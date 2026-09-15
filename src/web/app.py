@@ -22,6 +22,7 @@ from starlette.responses import Response
 
 from .routes import analysis, dashboard, reports, config_api, cases, tickets
 from .routes import agent as agent_routes
+from .routes import auth as auth_routes
 from .routes import chat as chat_routes
 from .routes import playbooks as playbook_routes
 from .routes import mcp_management as mcp_routes
@@ -320,6 +321,7 @@ def create_app() -> FastAPI:
     app.include_router(playbook_routes.router, prefix='/api/playbooks', tags=['Playbooks'])
     app.include_router(mcp_routes.router, prefix='/api/mcp', tags=['MCP'])
     app.include_router(tickets.router, prefix='/api', tags=['Tickets'])
+    app.include_router(auth_routes.router, prefix='/api/auth', tags=['Auth'])
     app.include_router(websocket.router)
 
     # Page routes (HTML templates)
