@@ -74,6 +74,24 @@ LOW_CONFIDENCE_SOURCES = {
     "sslblacklist",
 }
 
+# CV source policy for the current Group-A evaluation dataset.  These are the
+# only Group-A integrations with evidence of a successful, usable response in
+# the completed collection.  Keep this policy local to the analysis script so
+# production scoring tiers and source integrations retain their defaults.
+CV_SOURCE_ALLOWLIST = frozenset(
+    {
+        "feodotracker",
+        "tor_exit_nodes",
+        "spamhaus",
+        "c2_trackers",
+    }
+)
+CV_SOURCE_EXCLUSION_REASONS = {
+    "circl": "endpoint returned 404/401; current Passive DNS access is partner-restricted",
+    "sslblacklist": "SSLBL IP feed is deprecated; no usable IP entries were returned",
+    "usom": "API response is paginated and the fallback IP-list URL returned HTML; content validation is incomplete",
+}
+
 
 def parse_timestamp(value: str) -> datetime:
     """Parse an ISO timestamp and make timezone-naive values explicitly UTC."""
@@ -172,10 +190,43 @@ def select_latest_round_rows(
     return [dict(row) for row in latest_by_key.values()]
 
 
+def select_cv_sources(cache_rows: Sequence[Mapping[str, Any]]) -> Tuple[List[str], Dict[str, str]]:
+    """Select the validated Group-A sources and explain excluded observations.
+
+    Source names are matched case-insensitively, while the spelling from the
+    cache is preserved for feature lookup.  Sources outside the validated
+    allowlist are excluded from this CV run, including Group-B sources that
+    may exist in the shared cache from other workflows.
+    """
+
+    observed: Dict[str, str] = {}
+    for row in cache_rows:
+        source = str(row["source"])
+        observed.setdefault(source.lower(), source)
+
+    selected = sorted(
+        (observed[name] for name in CV_SOURCE_ALLOWLIST if name in observed),
+        key=str.lower,
+    )
+    excluded: Dict[str, str] = {}
+    for normalized, source in sorted(observed.items()):
+        if normalized not in CV_SOURCE_ALLOWLIST:
+            excluded[source] = CV_SOURCE_EXCLUSION_REASONS.get(
+                normalized,
+                "outside the validated Group-A CV allowlist (including Group-B or unvalidated sources)",
+            )
+    return selected, excluded
+
+
 def build_feature_matrix(
-    eval_rows: Sequence[Mapping[str, Any]], cache_rows: Sequence[Mapping[str, Any]]
+    eval_rows: Sequence[Mapping[str, Any]],
+    cache_rows: Sequence[Mapping[str, Any]],
+    sources: Sequence[str] | None = None,
 ) -> Tuple[pd.DataFrame, pd.DataFrame, List[str]]:
-    sources = sorted({str(row["source"]) for row in cache_rows})
+    if sources is None:
+        sources = sorted({str(row["source"]) for row in cache_rows})
+    else:
+        sources = list(sources)
     cache_by_ioc_source = {(str(row["ioc"]), str(row["source"])): row for row in cache_rows}
 
     feature_records: List[Dict[str, Any]] = []
@@ -202,7 +253,7 @@ def build_feature_matrix(
     feature_df.index.name = "ioc"
     presence_df = pd.DataFrame(presence_records, index=index)
     presence_df.index.name = "ioc"
-    return feature_df, presence_df, sources
+    return feature_df, presence_df, list(sources)
 
 
 def current_hardcoded_weight(source: str) -> float:
@@ -602,7 +653,19 @@ def main() -> None:
         "unknown-source fallback=0.8 (high=1.5, medium=1.0)"
     )
 
-    feature_df, presence_df, sources = build_feature_matrix(eval_rows, latest_rows)
+    sources, excluded_sources = select_cv_sources(latest_rows)
+    if not sources:
+        raise ValueError("No validated Group-A source rows are present in the inferred latest cache round")
+    print("cv_source_policy=validated_group_a_only")
+    print("cv_source_allowlist=" + str(sorted(CV_SOURCE_ALLOWLIST)))
+    print("cv_sources_selected=" + str(sources))
+    print("cv_sources_excluded=")
+    for source, reason in excluded_sources.items():
+        print(f"  {source}: {reason}")
+
+    feature_df, presence_df, sources = build_feature_matrix(
+        eval_rows, latest_rows, sources=sources
+    )
     print_feature_output(feature_df, presence_df, sources)
 
     coefficient_df, metric_df = fit_cross_validated(feature_df, sources)
