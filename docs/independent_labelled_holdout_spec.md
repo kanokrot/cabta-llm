@@ -12,9 +12,9 @@ The first practical panel is 240 records with balanced labels:
 
 | IOC stratum | MALICIOUS | CLEAN | Required source overlap |
 |---|---:|---:|---|
-| IPv4 | 60 | 60 | FeodoTracker, Tor, Spamhaus, C2 Trackers, USOM |
+| IPv4 | 60 | 60 | FeodoTracker, Tor, Spamhaus, C2 Trackers |
 | SHA1 certificate hash | 30 | 30 | SSLBL certificate feed |
-| Domain | 30 | 30 | USOM and C2 Trackers |
+| Domain | 30 | 30 | C2 Trackers |
 | **Total** | **120** | **120** | |
 
 The same independently labelled malicious IOC may satisfy overlap requirements
@@ -62,7 +62,6 @@ Each final record must contain:
     "feodotracker": false,
     "tor_exit_nodes": false,
     "sslblacklist": false,
-    "usom": false,
     "spamhaus": false,
     "c2_trackers": false
   }
