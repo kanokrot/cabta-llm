@@ -34,7 +34,10 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from src.scoring.intelligent_scoring import IntelligentScoring  # read-only
+from src.scoring.intelligent_scoring import (
+    IntelligentScoring,
+    SOURCE_SCORING_MULTIPLIERS,
+)  # read-only
 
 
 EVAL_RESULTS_PATH = REPO_ROOT / "scripts" / "eval" / "eval_results_group_a_v2.jsonl"
@@ -44,43 +47,27 @@ ROUND_GAP_MINUTES = 5.0
 N_SPLITS = 5
 RANDOM_STATE = 42
 
-# These are the values in intelligent_scoring.py as inspected for this run.
-# Note that the production file uses 0.5 for its explicit low-confidence list;
-# 0.8 is the fallback for an unknown source.  The distinction is printed below
-# because it differs from the shorthand 1.5/1.0/0.8 description in the task.
+# These source groups are retained for compatibility with the evaluation
+# output.  Arithmetic uses the AHP-derived source-specific multipliers below;
+# the legacy tier constants are no longer used.
 HIGH_CONFIDENCE_SOURCES = {
-    "virustotal",
-    "abuseipdb",
     "feodotracker",
-    "threatfox",
-    "malwarebazaar",
 }
 MEDIUM_CONFIDENCE_SOURCES = {
-    "alienvault",
-    "urlhaus",
     "c2_trackers",
-    "greynoise",
-    "shodan",
-    "criminalip",
-    "ipqualityscore",
     "spamhaus",
-    "pulsedive",
-    "censys",
-    "ip2proxy",
-    "threatzone",
-    "triage",
-    "usom",
-}
-LOW_CONFIDENCE_SOURCES = {
     "tor_exit_nodes",
-    "circl",
-    "phishtank",
     "sslblacklist",
 }
+LOW_CONFIDENCE_SOURCES = {
+    "threatfox",
+}
 
-# CV source policy for the current Group-A evaluation dataset. Keep this
-# policy local to the analysis script so production scoring tiers and source
-# integrations retain their defaults.
+AHP_SOURCE_MULTIPLIERS = dict(SOURCE_SCORING_MULTIPLIERS)
+
+# CV source policy for the admitted six-source scoring design. VirusTotal is
+# intentionally kept outside this allowlist: its AHP priority is documented,
+# but it has not passed the separate availability/evidence admission gate.
 CV_SOURCE_ALLOWLIST = frozenset(
     {
         "feodotracker",
@@ -88,11 +75,13 @@ CV_SOURCE_ALLOWLIST = frozenset(
         "spamhaus",
         "c2_trackers",
         "sslblacklist",
-        "usom",
+        "threatfox",
     }
 )
 CV_SOURCE_EXCLUSION_REASONS = {
     "circl": "CIRCL Passive DNS requires partner authorization not available in this environment; excluded permanently, same status as GreyNoise/Pulsedive",
+    "usom": "USOM is a query API; excluded from feed-only scoring and CV, retained only for supplemental reporting",
+    "virustotal": "AHP priority documented, but no local reliability telemetry and free Public API limits (4 requests/minute, 500 requests/day) prevent production admission pending telemetry",
 }
 
 
@@ -446,15 +435,10 @@ def write_cv_artifact(artifact: Mapping[str, Any], output_path: Path) -> None:
     )
 
 
-def current_hardcoded_weight(source: str) -> float:
-    source_lower = source.lower()
-    if source_lower in HIGH_CONFIDENCE_SOURCES:
-        return 1.5
-    if source_lower in MEDIUM_CONFIDENCE_SOURCES:
-        return 1.0
-    if source_lower in LOW_CONFIDENCE_SOURCES:
-        return 0.5
-    return 0.8
+def current_scoring_weight(source: str) -> float:
+    """Return the current AHP-derived multiplier, or zero for report-only."""
+
+    return AHP_SOURCE_MULTIPLIERS.get(source.lower(), 0.0)
 
 
 def fit_cross_validated(
@@ -679,7 +663,7 @@ def print_tier_level_refit(
                     "comparison_source": "already-fit result in STEP 4; no refit",
                 },
                 {
-                    "model": "current_hardcoded_weight_baseline",
+                    "model": "current_ahp_multiplier_baseline",
                     "parameters": np.nan,
                     "accuracy": np.nan,
                     "precision": 1.00,
@@ -710,7 +694,7 @@ def print_tier_level_refit(
 
 
 def pairwise_agreement(source: str, coefficient_df: pd.DataFrame, sources: Sequence[str]) -> Tuple[float, str]:
-    weights = {row["source"]: current_hardcoded_weight(row["source"]) for _, row in coefficient_df.iterrows()}
+    weights = {row["source"]: current_scoring_weight(row["source"]) for _, row in coefficient_df.iterrows()}
     means = dict(zip(coefficient_df["source"], coefficient_df["mean_coef"]))
     agree = 0
     comparable = 0
@@ -726,7 +710,7 @@ def pairwise_agreement(source: str, coefficient_df: pd.DataFrame, sources: Seque
 
 def build_comparison_table(coefficient_df: pd.DataFrame, sources: Sequence[str]) -> pd.DataFrame:
     comparison = coefficient_df.copy()
-    comparison["current_hardcoded_weight"] = comparison["source"].map(current_hardcoded_weight)
+    comparison["current_ahp_multiplier"] = comparison["source"].map(current_scoring_weight)
     value_range = comparison["mean_coef"].max() - comparison["mean_coef"].min()
     if value_range > 0:
         comparison["heuristic_minmax_weight_0.5_1.5"] = (
@@ -735,7 +719,7 @@ def build_comparison_table(coefficient_df: pd.DataFrame, sources: Sequence[str])
     else:
         comparison["heuristic_minmax_weight_0.5_1.5"] = 1.0
 
-    comparison["current_rank"] = comparison["current_hardcoded_weight"].rank(
+    comparison["current_rank"] = comparison["current_ahp_multiplier"].rank(
         ascending=False, method="dense"
     ).astype(int)
     comparison["fitted_rank"] = comparison["mean_coef"].rank(ascending=False, method="min").astype(int)
@@ -745,7 +729,7 @@ def build_comparison_table(coefficient_df: pd.DataFrame, sources: Sequence[str])
     return comparison[
         [
             "source",
-            "current_hardcoded_weight",
+            "current_ahp_multiplier",
             "heuristic_minmax_weight_0.5_1.5",
             "fitted_rank",
             "current_rank",
@@ -851,8 +835,8 @@ def main(argv: Sequence[str] | None = None) -> None:
     print(f"selected_latest_per_ioc_source_ioc_count={len({row['ioc'] for row in latest_rows})}; eval_ioc_without_selected_cache_rows={len(eval_rows) - len({row['ioc'] for row in latest_rows})}")
     print("cache_selection_mode=latest_row_per_ioc_source_mixed_window")
     print(
-        "current_weight_source_note=production intelligent_scoring.py uses explicit low tier=0.5; "
-        "unknown-source fallback=0.8 (high=1.5, medium=1.0)"
+        "current_weight_source_note=AHP-derived source-specific multipliers; "
+        "VirusTotal/API/query/untiered/unknown sources are report-only"
     )
 
     sources, excluded_sources = select_cv_sources(latest_rows)
@@ -910,7 +894,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     baseline_df = pd.DataFrame(
         [
             {
-                "model": "current_hardcoded_weight_baseline",
+                "model": "current_ahp_multiplier_baseline",
                 "accuracy": np.nan,
                 "precision": 1.00,
                 "recall": 0.66,
