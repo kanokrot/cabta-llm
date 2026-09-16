@@ -1145,7 +1145,9 @@ MISP ต้องคง `provisional/untiered` จนกว่าจะมีห
 
 ### สถานะรวม
 
-Phase 1, Phase 1.5, Phase 2 และ Phase 2.5 เสร็จแล้ว; per-flow filtering, Gmail OAuth และ notification routing ราย user ยังไม่เริ่ม
+Phase 1, Phase 1.5, Phase 2 และ Phase 2.5 เสร็จแล้ว; Team Lead Phase 1–3
+เสร็จแล้วตาม D10.8; generic per-flow filtering, Gmail OAuth และ notification
+routing ราย user ยังไม่เริ่ม
 
 ### เกณฑ์สถานะ
 
@@ -1817,7 +1819,23 @@ audit-log gap สำหรับ cross-user read และ serializer/visibility
 implementation; รายละเอียดเต็มอยู่ในผล investigation เดิม ไม่ใช่การอนุมัติให้
 แก้ schema หรือ code ในรอบนี้
 
-**สถานะ:** `[ ]` ยังไม่เริ่ม implementation; รอ decision เพิ่มเติมใน 3 ข้อต่อไปนี้:
+**สถานะ:** `[x]` Team Lead Phase 1–3 เสร็จแล้ว
+
+**Implementation evidence:** commit `e6c72d6 Implement Team Lead oversight and case operations`
+
+- Phase 1: เพิ่ม `Team Lead` role, additive role migration และ negative RBAC tests
+- Phase 2: เพิ่ม cross-user audit fields/logging, trimmed serializer และ implicit
+  single-team read access สำหรับ Analysis/Dashboard
+- Phase 3: เพิ่ม `assignee`/`priority` migration, Team Lead case reassignment/
+  escalation และ rule approval โดยคง raw rule edit, dangerous tools, Flow B และ
+  Admin endpoints ไว้ในขอบเขตเดิม
+- Verification: full test suite บนเครื่องจริง `1,573 passed`, ไม่มี error/failure
+
+**Scope note:** งานนี้ปิดเฉพาะ Team Lead Phase 1–3; generic D10.4 per-flow
+filtering, Gmail OAuth และ notification routing by role ยังไม่ถือว่าปิด
+
+**สถานะเดิมที่ถูกแทนที่:** ข้อความด้านล่างเป็น investigation note ก่อนเริ่ม
+implementation และไม่ใช่ blocker อีกต่อไป:
 
 1. SOC ควรเห็นเฉพาะข้อมูลของตัวเอง หรือคง shared behavior เดิมตามที่
    `docs/CABTA_scope_ledger.md:1164` ระบุอยู่ปัจจุบัน เพราะการเพิ่ม Team Lead กระทบ
@@ -1845,9 +1863,8 @@ implementation; รายละเอียดเต็มอยู่ในผ�
 1. `[x]` Phase 2 — RBAC middleware (เสร็จแล้ว)
 2. `[x]` Phase 2.5 — Session ownership + analysis/report/dashboard auth (เสร็จแล้ว; legacy `NULL user_id` ใช้ admin-only policy เฉพาะ owner-scoped paths)
 3. `[ ]` Phase 3 — Per-flow filtering
-4. `[ ]` D10.8 / Phase 6 — Team Lead role addition; ทำหลัง Phase 3 เสร็จ
-   เพราะต้องพึ่ง serializer/visibility policy ที่ Phase 3 สร้าง ห้ามทำคู่ขนาน
-   เพื่อไม่ให้ชนกันเรื่อง serializer design
+4. `[x]` D10.8 / Phase 6 — Team Lead role addition (Team Lead Phase 1–3 เสร็จแล้ว;
+   implementation commit `e6c72d6`)
 5. `[ ]` Phase 4 — Gmail OAuth
 6. `[ ]` Phase 5 — Notification routing by role
 
