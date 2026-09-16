@@ -269,23 +269,43 @@ Local LLM integration via Ollama.
 #### `intelligent_scoring.py`
 Multi-signal threat scoring algorithm.
 
+Current IOC source scoring uses an explicit admission policy with AHP-derived
+source-specific multipliers. `feodotracker`, `c2_trackers`, `spamhaus`,
+`tor_exit_nodes`, `sslblacklist`, and `threatfox` can contribute source points.
+VirusTotal and other API/query sources remain report-only. Source availability
+(`clean`, `unavailable`, and `stale`) is tracked separately and unavailable
+must not be interpreted as clean. The derivation is documented in
+`docs/source_weight_ahp_derivation_2026-09-16.md`.
+
 ```python
+# Current production admission and source-specific multipliers.  This is an
+# abridged excerpt; the complete AHP derivation is documented in
+# docs/source_weight_ahp_derivation_2026-09-16.md.
+from src.scoring.intelligent_scoring import (
+    NON_API_SCORING_SOURCES,
+    SOURCE_SCORING_MULTIPLIERS,
+)
+
 class IntelligentScoring:
-    SOURCE_WEIGHTS = {
-        'virustotal': 25,
-        'abuseipdb': 20,
-        'hybrid_analysis': 20,
-        'malwarebazaar': 15,
-        # ... more weights
-    }
-    
     @staticmethod
     def calculate_ioc_score(intel_results: Dict) -> int:
-        score = 0
-        for source, result in intel_results.items():
-            if result.get('flagged'):
-                score += SOURCE_WEIGHTS.get(source, 10)
-        return min(100, score)
+        sources = intel_results.get('sources', {})
+        weighted_scores = []
+        for source, result in sources.items():
+            source_name = source.lower()
+            if source_name not in NON_API_SCORING_SOURCES:
+                continue
+            if not isinstance(result, dict) or result.get('unavailable'):
+                continue
+            source_score = IntelligentScoring._get_source_score(result)
+            if source_score > 0:
+                weighted_scores.append(
+                    source_score * SOURCE_SCORING_MULTIPLIERS[source_name]
+                )
+        # The production implementation applies the documented multi-source
+        # boost before clamping 0-100. Domain-age/DGA enrichment remains
+        # analyst-facing metadata/recommendation context, not score input.
+        return max(0, min(100, int(sum(weighted_scores) / len(weighted_scores))))
 ```
 
 #### `false_positive_filter.py`
@@ -389,13 +409,14 @@ async def check_new_source(self, ioc: str) -> Dict:
     }
 ```
 
-2. Add weight in `intelligent_scoring.py`:
+2. Complete the admission and AHP review before adding a source to production
+   scoring. The source must be added to the explicit
+   `SOURCE_SCORING_MULTIPLIERS`/`NON_API_SCORING_SOURCES` policy with a
+   documented derivation; do not assign an arbitrary integer weight:
 
 ```python
-SOURCE_WEIGHTS = {
-    'new_source': 15,
-    # ...
-}
+# See docs/source_weight_ahp_derivation_2026-09-16.md for the required
+# evidence, pairwise comparison, priority vector, and multiplier mapping.
 ```
 
 ---
@@ -415,10 +436,11 @@ Future enhancement: Add caching layer for:
 - Analysis results
 
 ### Rate Limiting
-Built-in rate limit awareness:
-- Respects API rate limits
-- Exponential backoff on errors
-- Timeout handling
+Built-in availability handling:
+- Source-specific API/query limits remain constraints for report-only sources
+- ThreatFox uses the 15-second production deadline; timeout means unavailable,
+  no retry, no pipeline block, and exclusion from that round's score
+- Unavailable results are never interpreted as clean
 
 ---
 
