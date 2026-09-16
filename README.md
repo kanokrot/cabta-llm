@@ -241,7 +241,7 @@ Raw network output retains LISTEN and other states; `remote_ips` contains only n
 
 **Email:** SPF/DKIM/DMARC/ARC assessment, BEC and impersonation detection, relay analysis, URLs, attachments, tracking pixels, forms, shorteners, and callback phishing.
 
-**IOC:** IPv4/IPv6, domains, URLs, hashes, email, and CVEs with configured reputation, DGA, domain-age, ASN/geolocation, and threat-actor context.
+**IOC:** IPv4/IPv6, domains, URLs, hashes, email, and CVEs with configured reputation, ASN/geolocation, and threat-actor context. DGA and domain-age are collected as analyst-facing context/metadata and do not directly affect the numeric threat score.
 
 **Scoring and reporting:** tool-based, source-aware, adaptive, enhanced, and false-positive-filter layers; JSON, HTML, PDF, SOC output, MITRE Navigator, STIX, and detection rules. Common verdicts include `MALICIOUS`, `SUSPICIOUS`, `CLEAN`, and `UNKNOWN`.
 
