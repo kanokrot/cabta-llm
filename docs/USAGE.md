@@ -301,7 +301,7 @@ python -m src.soc_agent email phishing.eml --report email_report.html
 │  └── https://legitimate-link.com (CLEAN)
 │
 │  Domains (2):
-│  ├── evil-site.com (newly registered, no reputation)
+│  ├── evil-site.com (newly registered; no reputation — age alone does not raise the score)
 │  └── tracking.malware.com (known malware host)
 │
 │  IPs (1):
