@@ -1239,6 +1239,21 @@ routing ราย user ยังไม่เริ่ม
 
 ## D10.4 Phase 3 — Per-flow filtering
 
+**Current implementation status (2026-09-17):** `[x]` D10.4 implemented in
+commit `21225e9`; this entry is the documentation follow-up commit.
+
+**Implementation evidence:** Centralized fail-closed allowlist policy and
+serializers are in `src/web/visibility.py`. Response-boundary filtering is
+wired into Analysis, Dashboard, Reports, Chat, Agent, Playbooks, Cases, and
+WebSocket frames. Threat Hunter direct Playbook routes remain denied and are
+available only through Flow B. Cases now require authentication/RBAC, with
+Team Lead limited to read plus priority/assignee operations. MCP management
+routes and MCP server code/configuration were intentionally excluded.
+
+**Verification:** `.venv\\Scripts\\python.exe -m pytest -q --tb=short
+--basetemp .pytest-tmp-d10-4-final` → `1,587 passed, 12 warnings, 8
+subtests passed`.
+
 **วัตถุประสงค์:** ทำให้ข้อมูลและ flow ที่แต่ละ role เห็นแตกต่างกันตาม requirement
 
 **วิธีทำ:** กำหนด field/data visibility ต่อ role และใช้ filtering ในแต่ละ flow หลัง RBAC middleware พร้อมใช้งาน
@@ -1247,7 +1262,8 @@ routing ราย user ยังไม่เริ่ม
 
 **ผลลัพธ์ที่ต้องได้:** SOC Analyst เห็น Flow A แบบ trim raw source field; Incident Responder ผูกกับ playbook approval gate; Threat Hunter เห็น Flow B เต็ม
 
-**สถานะ:** `[ ]` ยังไม่เริ่ม รอ Phase 2.5 เสร็จก่อน
+**สถานะ:** `[x]` เสร็จแล้วใน commit `21225e9`; implementation และ tests
+อยู่ใน commit ชุดแรก และ entry นี้เป็น documentation follow-up.
 
 ## CV Readiness Investigation (2026-09-15; historical snapshot, superseded)
 
