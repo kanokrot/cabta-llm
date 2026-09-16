@@ -6,7 +6,8 @@ import json
 import logging
 from fastapi import APIRouter, Depends, Request
 
-from ..auth import get_current_user, require_role
+from ..auth import TEAM_LEAD, get_current_user, get_user_ids_by_role, require_role
+from ..oversight import record_cross_user_read
 
 logger = logging.getLogger(__name__)
 router = APIRouter(
@@ -15,6 +16,7 @@ router = APIRouter(
             'SOC Analyst Tier 1-2',
             'Incident Responder',
             'Threat Hunter',
+            TEAM_LEAD,
             'admin',
         ]))
     ]
@@ -66,16 +68,31 @@ async def get_recent(
 ):
     """Get recent analyses.
 
-    Returns both ``analyses`` (flattened, frontend-ready shape) and the
-    raw ``items`` for callers that want the untouched job rows.
+    Returns the same trimmed representation for SOC Analysts and Team Leads.
     """
     mgr = request.app.state.analysis_manager
-    jobs = mgr.list_jobs(
-        limit=limit,
-        user_id=_owner_scope(current_user),
-    )
+    if current_user.get('role') == TEAM_LEAD:
+        jobs = mgr.list_jobs(
+            limit=limit,
+            user_ids=get_user_ids_by_role('SOC Analyst Tier 1-2'),
+        )
+        for job in jobs:
+            if job.get('user_id') != current_user['id']:
+                record_cross_user_read(
+                    request,
+                    actor_user_id=current_user['id'],
+                    actor_role=TEAM_LEAD,
+                    target_user_id=job['user_id'],
+                    resource_type='dashboard',
+                    resource_id=job['id'],
+                )
+    else:
+        jobs = mgr.list_jobs(
+            limit=limit,
+            user_id=_owner_scope(current_user),
+        )
     analyses = [_flatten_job(j) for j in jobs]
-    return {'analyses': analyses, 'items': jobs}
+    return {'analyses': analyses, 'items': analyses}
 
 
 @router.get('/sources')

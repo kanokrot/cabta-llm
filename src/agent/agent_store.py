@@ -18,6 +18,74 @@ logger = logging.getLogger(__name__)
 _DEFAULT_DB = Path.home() / '.blue-team-assistant' / 'cache' / 'agent.db'
 
 
+def ensure_audit_schema(conn: sqlite3.Connection) -> None:
+    """Upgrade legacy ``audit_log`` tables in place.
+
+    Cross-user reads are not tied to an autonomous-agent session, so
+    ``session_id`` must be nullable.  Rebuilding the table is required for
+    SQLite to change that constraint while preserving existing audit rows.
+    The operation is idempotent and intentionally keeps the original audit
+    columns intact.
+    """
+    table_info = conn.execute("PRAGMA table_info(audit_log)").fetchall()
+    if not table_info:
+        return
+
+    columns = {row[1]: row for row in table_info}
+    required = {"actor_role", "target_user_id", "resource_type", "resource_id"}
+    session_id_is_required = columns.get("session_id", (None, None, None, 0))[3] == 1
+    if not required.difference(columns) and not session_id_is_required:
+        return
+
+    conn.commit()
+    previous_foreign_keys = conn.execute("PRAGMA foreign_keys").fetchone()[0]
+    conn.execute("PRAGMA foreign_keys = OFF")
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        conn.execute("""
+            CREATE TABLE audit_log_new (
+                id                 TEXT PRIMARY KEY,
+                session_id         TEXT,
+                actor              TEXT NOT NULL DEFAULT 'system',
+                actor_role         TEXT,
+                target_user_id     INTEGER,
+                resource_type      TEXT,
+                resource_id        TEXT,
+                action             TEXT NOT NULL,
+                action_type        TEXT NOT NULL DEFAULT 'tool_call',
+                requires_approval  INTEGER NOT NULL DEFAULT 0,
+                verdict            TEXT,
+                before_state       TEXT,
+                after_state        TEXT,
+                approved_by        TEXT,
+                status             TEXT NOT NULL DEFAULT 'success',
+                timestamp          TEXT NOT NULL,
+                FOREIGN KEY (session_id) REFERENCES agent_sessions(id)
+            )
+        """)
+
+        conn.execute("""
+            INSERT INTO audit_log_new
+                (id, session_id, actor, action, action_type, requires_approval,
+                 verdict, before_state, after_state, approved_by, status, timestamp,
+                 actor_role, target_user_id, resource_type, resource_id)
+            SELECT id, session_id, actor, action, action_type, requires_approval,
+                   verdict, before_state, after_state, approved_by, status, timestamp,
+                   NULL, NULL, NULL, NULL
+            FROM audit_log
+        """)
+        conn.execute("DROP TABLE audit_log")
+        conn.execute("ALTER TABLE audit_log_new RENAME TO audit_log")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_session ON audit_log(session_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_log(timestamp)")
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.execute(f"PRAGMA foreign_keys = {'ON' if previous_foreign_keys else 'OFF'}")
+
+
 class AgentStore:
     """SQLite-backed persistence for the autonomous agent."""
 
@@ -379,7 +447,7 @@ class AgentStore:
 
     def add_audit_entry(
         self,
-        session_id: str,
+        session_id: Optional[str],
         action: str,
         action_type: str = 'tool_call',
         actor: str = 'system',
@@ -389,6 +457,10 @@ class AgentStore:
         after_state: Optional[Dict] = None,
         approved_by: Optional[str] = None,
         status: str = 'success',
+        actor_role: Optional[str] = None,
+        target_user_id: Optional[int] = None,
+        resource_type: Optional[str] = None,
+        resource_id: Optional[str] = None,
     ) -> str:
         """Record an audit trail entry. Returns the entry ID.
 
@@ -406,10 +478,13 @@ class AgentStore:
             conn = self._connect()
             conn.execute(
                 """INSERT INTO audit_log
-                   (id, session_id, actor, action, action_type, requires_approval,
-                    verdict, before_state, after_state, approved_by, status, timestamp)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (entry_id, session_id, actor, action, action_type,
+                   (id, session_id, actor, actor_role, target_user_id,
+                    resource_type, resource_id, action, action_type,
+                    requires_approval, verdict, before_state, after_state,
+                    approved_by, status, timestamp)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (entry_id, session_id, actor, actor_role, target_user_id,
+                 resource_type, resource_id, action, action_type,
                  1 if requires_approval else 0, verdict, before_json, after_json,
                  approved_by, status, now),
             )
@@ -418,6 +493,26 @@ class AgentStore:
 
         logger.info(f"[AUDIT] {session_id}: {action_type}/{action} by {actor} -> {status}")
         return entry_id
+
+    def add_cross_user_read_audit(
+        self,
+        actor_user_id: int,
+        actor_role: str,
+        target_user_id: int,
+        resource_type: str,
+        resource_id: str,
+    ) -> str:
+        """Record a Team Lead read of another user's resource."""
+        return self.add_audit_entry(
+            session_id=None,
+            action='cross_user_read',
+            action_type='cross_user_read',
+            actor=f'user:{actor_user_id}',
+            actor_role=actor_role,
+            target_user_id=target_user_id,
+            resource_type=resource_type,
+            resource_id=resource_id,
+        )
 
     def get_audit_log(
         self, session_id: Optional[str] = None, limit: int = 100,
@@ -543,8 +638,12 @@ class AgentStore:
         conn.execute("""
             CREATE TABLE IF NOT EXISTS audit_log (
                 id                 TEXT PRIMARY KEY,
-                session_id         TEXT NOT NULL,
+                session_id         TEXT,
                 actor              TEXT NOT NULL DEFAULT 'system',
+                actor_role         TEXT,
+                target_user_id     INTEGER,
+                resource_type      TEXT,
+                resource_id        TEXT,
                 action             TEXT NOT NULL,
                 action_type        TEXT NOT NULL DEFAULT 'tool_call',
                 requires_approval  INTEGER NOT NULL DEFAULT 0,
@@ -557,6 +656,8 @@ class AgentStore:
                 FOREIGN KEY (session_id) REFERENCES agent_sessions(id)
             )
         """)
+
+        ensure_audit_schema(conn)
 
         # Indexes
         conn.execute(

@@ -20,12 +20,14 @@ from ..models import (
     FileUploadResponse,
     IOCRequest,
 )
-from ..auth import get_current_user, require_role
+from ..auth import TEAM_LEAD, get_current_user, get_user_ids_by_role, require_role
+from ..oversight import record_cross_user_read
+from ..visibility import serialize_analysis_job
 
 logger = logging.getLogger(__name__)
 router = APIRouter(
     dependencies=[
-        Depends(require_role(["SOC Analyst Tier 1-2", "admin"]))
+        Depends(require_role(["SOC Analyst Tier 1-2", TEAM_LEAD, "admin"]))
     ]
 )
 
@@ -37,6 +39,30 @@ def _load_config():
         return load_config()
     except Exception:
         return {}
+
+
+def _get_readable_job(request: Request, analysis_id: str, current_user: dict):
+    """Apply owner/admin scope and Team Lead's implicit single-team scope."""
+    mgr = request.app.state.analysis_manager
+    role = current_user.get("role")
+    if role == "admin":
+        return mgr.get_job(analysis_id)
+    if role != TEAM_LEAD:
+        return mgr.get_job(analysis_id, user_id=current_user["id"])
+
+    job = mgr.get_job(analysis_id)
+    if job is None or job.get("user_id") not in get_user_ids_by_role("SOC Analyst Tier 1-2"):
+        return None
+    if job.get("user_id") != current_user["id"]:
+        record_cross_user_read(
+            request,
+            actor_user_id=current_user["id"],
+            actor_role=TEAM_LEAD,
+            target_user_id=job["user_id"],
+            resource_type="analysis",
+            resource_id=analysis_id,
+        )
+    return job
 
 
 # ------------------------------------------------------------------
@@ -151,6 +177,9 @@ async def analyze_ioc(
     request: Request,
     payload: IOCRequest,
     current_user: dict = Depends(get_current_user),
+    _write_access: dict = Depends(
+        require_role(["SOC Analyst Tier 1-2", "admin"])
+    ),
 ):
     """Start IOC investigation."""
     mgr = request.app.state.analysis_manager
@@ -185,6 +214,9 @@ async def analyze_file(
     request: Request,
     file: UploadFile = File(...),
     current_user: dict = Depends(get_current_user),
+    _write_access: dict = Depends(
+        require_role(["SOC Analyst Tier 1-2", "admin"])
+    ),
 ):
     """Upload and analyze a file."""
     mgr = request.app.state.analysis_manager
@@ -230,6 +262,9 @@ async def analyze_email(
     request: Request,
     file: UploadFile = File(...),
     current_user: dict = Depends(get_current_user),
+    _write_access: dict = Depends(
+        require_role(["SOC Analyst Tier 1-2", "admin"])
+    ),
 ):
     """Upload and analyze an email (.eml)."""
     mgr = request.app.state.analysis_manager
@@ -267,20 +302,26 @@ async def analyze_email(
 
 
 @router.get('/{analysis_id}')
-async def get_analysis(request: Request, analysis_id: str):
-    """Get analysis result."""
-    mgr = request.app.state.analysis_manager
-    job = mgr.get_job(analysis_id)
+async def get_analysis(
+    request: Request,
+    analysis_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """Get the role-scoped, sanitized analysis result."""
+    job = _get_readable_job(request, analysis_id, current_user)
     if job is None:
         raise HTTPException(status_code=404, detail='Analysis not found')
-    return job
+    return serialize_analysis_job(job)
 
 
 @router.get('/{analysis_id}/status')
-async def get_analysis_status(request: Request, analysis_id: str):
+async def get_analysis_status(
+    request: Request,
+    analysis_id: str,
+    current_user: dict = Depends(get_current_user),
+):
     """Get analysis progress."""
-    mgr = request.app.state.analysis_manager
-    job = mgr.get_job(analysis_id)
+    job = _get_readable_job(request, analysis_id, current_user)
     if job is None:
         raise HTTPException(status_code=404, detail='Analysis not found')
     return {
@@ -299,8 +340,39 @@ async def get_history(
     limit: int = 50,
     offset: int = 0,
     status: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
 ):
     """Get analysis history."""
     mgr = request.app.state.analysis_manager
-    jobs = mgr.list_jobs(limit=limit, offset=offset, status=status)
-    return {'items': jobs, 'limit': limit, 'offset': offset}
+    role = current_user.get("role")
+    if role == "admin":
+        jobs = mgr.list_jobs(limit=limit, offset=offset, status=status)
+    elif role == TEAM_LEAD:
+        jobs = mgr.list_jobs(
+            limit=limit,
+            offset=offset,
+            status=status,
+            user_ids=get_user_ids_by_role("SOC Analyst Tier 1-2"),
+        )
+        for job in jobs:
+            if job.get("user_id") != current_user["id"]:
+                record_cross_user_read(
+                    request,
+                    actor_user_id=current_user["id"],
+                    actor_role=TEAM_LEAD,
+                    target_user_id=job["user_id"],
+                    resource_type="analysis",
+                    resource_id=job["id"],
+                )
+    else:
+        jobs = mgr.list_jobs(
+            limit=limit,
+            offset=offset,
+            status=status,
+            user_id=current_user["id"],
+        )
+    return {
+        'items': [serialize_analysis_job(job) for job in jobs],
+        'limit': limit,
+        'offset': offset,
+    }

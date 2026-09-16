@@ -137,6 +137,13 @@ class CaseStatusUpdate(BaseModel):
     status: CaseStatus
 
 
+class CaseOperationsUpdate(BaseModel):
+    priority: Optional[str] = Field(
+        None, pattern='^(low|medium|high|critical)$'
+    )
+    assignee: Optional[int] = Field(None, ge=1)
+
+
 class IncidentReportCreate(BaseModel):
     threat_type: Optional[str] = None
     threat_description: Optional[str] = None

@@ -13,7 +13,7 @@ import threading
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Sequence
 
 logger = logging.getLogger(__name__)
 
@@ -146,6 +146,7 @@ class AnalysisManager:
         offset: int = 0,
         status: Optional[str] = None,
         user_id: Optional[int] = None,
+        user_ids: Optional[Sequence[int]] = None,
     ) -> List[Dict]:
         """List analysis jobs with optional filtering."""
         conn = self._connect()
@@ -157,6 +158,12 @@ class AnalysisManager:
         if user_id is not None:
             clauses.append("user_id = ?")
             params.append(user_id)
+        if user_ids is not None:
+            if not user_ids:
+                return []
+            placeholders = ", ".join("?" for _ in user_ids)
+            clauses.append(f"user_id IN ({placeholders})")
+            params.extend(user_ids)
 
         query = "SELECT * FROM analysis_jobs"
         if clauses:

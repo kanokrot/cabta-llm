@@ -10,6 +10,14 @@ from src.web.routes import reports
 
 def _build_report_app(tmp_path):
     app = FastAPI()
+    from src.web.auth import get_current_user
+    app.dependency_overrides[get_current_user] = lambda: {
+        "id": 1,
+        "email": "admin@example.test",
+        "username": "admin",
+        "role": "admin",
+        "is_active": 1,
+    }
     app.state.analysis_manager = AnalysisManager(
         db_path=str(tmp_path / "analysis_jobs.db")
     )

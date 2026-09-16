@@ -9,14 +9,16 @@ import sqlite3
 import tempfile
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse
 from starlette.background import BackgroundTask
 
 from ...reporting.incident_report_pdf import generate_incident_report_pdf
+from ..auth import TEAM_LEAD, get_active_user, require_role
 from ..case_store import _severity_to_4tier
 from ..models import (
     CaseCreate,
+    CaseOperationsUpdate,
     CaseNote,
     CaseStatusUpdate,
     IncidentReport,
@@ -119,6 +121,44 @@ async def get_incident_report_pdf(
         background=BackgroundTask(os.unlink, report_path),
         content_disposition_type=disposition_type,
     )
+
+
+@router.patch('/{case_id}')
+async def update_case_operations(
+    request: Request,
+    case_id: str,
+    payload: CaseOperationsUpdate,
+    _current_user: dict = Depends(require_role([TEAM_LEAD, 'admin'])),
+):
+    """Update only the case routing fields available to Team Lead/admin."""
+    if 'priority' not in payload.model_fields_set and 'assignee' not in payload.model_fields_set:
+        raise HTTPException(400, 'At least one operation field is required')
+
+    assignee = payload.assignee
+    if 'assignee' in payload.model_fields_set and assignee is not None:
+        assigned_user = get_active_user(assignee)
+        if assigned_user is None or assigned_user.get('role') not in {
+            'Incident Responder',
+            'Threat Hunter',
+        }:
+            raise HTTPException(
+                422,
+                'Case assignee must be an active Incident Responder or Threat Hunter',
+            )
+
+    store = request.app.state.case_store
+    try:
+        updated = store.update_case_operations(
+            case_id,
+            priority=payload.priority,
+            assignee=assignee,
+            update_assignee='assignee' in payload.model_fields_set,
+        )
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    if not updated:
+        raise HTTPException(404, 'Case not found')
+    return store.get_case(case_id)
 
 
 @router.patch('/{case_id}/incident-report', response_model=IncidentReport)

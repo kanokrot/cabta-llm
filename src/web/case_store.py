@@ -20,6 +20,7 @@ from typing import Dict, List, Optional
 logger = logging.getLogger(__name__)
 
 _DEFAULT_DB = Path.home() / '.blue-team-assistant' / 'cache' / 'cases.db'
+CASE_PRIORITIES = frozenset({'low', 'medium', 'high', 'critical'})
 
 _INCIDENT_REPORT_FIELDS = (
     'threat_type',
@@ -41,6 +42,26 @@ _INCIDENT_REPORT_FIELDS = (
 _INCIDENT_REPORT_JSON_FIELDS = {
     'findings', 'analysis', 'impact', 'remediation', 'reference'
 }
+
+
+def ensure_cases_schema(conn: sqlite3.Connection) -> None:
+    """Add Phase 3 case-operation columns to a legacy database."""
+    columns = {
+        row[1]
+        for row in conn.execute("PRAGMA table_info(cases)").fetchall()
+    }
+    if 'assignee' not in columns:
+        conn.execute("ALTER TABLE cases ADD COLUMN assignee INTEGER")
+    if 'priority' not in columns:
+        conn.execute(
+            "ALTER TABLE cases ADD COLUMN priority TEXT NOT NULL DEFAULT 'medium'"
+        )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_cases_assignee ON cases(assignee)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_cases_priority ON cases(priority)"
+    )
 
 
 def _severity_to_4tier(case_severity: str) -> str:
@@ -76,8 +97,10 @@ class CaseStore:
         with self._lock:
             conn = self._connect()
             conn.execute(
-                """INSERT INTO cases (id, title, description, severity, status, created_at, updated_at)
-                   VALUES (?, ?, ?, ?, 'Open', ?, ?)""",
+                """INSERT INTO cases
+                   (id, title, description, severity, assignee, priority,
+                    status, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, NULL, 'medium', 'Open', ?, ?)""",
                 (case_id, title, description, severity, now, now),
             )
             conn.commit()
@@ -151,6 +174,47 @@ class CaseStore:
             cur = conn.execute(
                 "UPDATE cases SET status = ?, updated_at = ? WHERE id = ?",
                 (status, now, case_id),
+            )
+            conn.commit()
+            updated = cur.rowcount > 0
+            conn.close()
+        return updated
+
+    def update_case_operations(
+        self,
+        case_id: str,
+        *,
+        priority: Optional[str] = None,
+        assignee: Optional[int] = None,
+        update_assignee: bool = False,
+    ) -> bool:
+        """Update case priority and/or assignee atomically.
+
+        ``update_assignee`` distinguishes an omitted assignee from an
+        explicit ``null`` used to unassign a case.
+        """
+        if priority is not None and priority not in CASE_PRIORITIES:
+            raise ValueError(f"Unsupported priority: {priority}")
+        if priority is None and not update_assignee:
+            raise ValueError("At least one case operation field is required")
+
+        assignments = []
+        parameters = []
+        if priority is not None:
+            assignments.append('priority = ?')
+            parameters.append(priority)
+        if update_assignee:
+            assignments.append('assignee = ?')
+            parameters.append(assignee)
+        now = datetime.now(timezone.utc).isoformat()
+        assignments.append('updated_at = ?')
+        parameters.extend([now, case_id])
+
+        with self._lock:
+            conn = self._connect()
+            cur = conn.execute(
+                f"UPDATE cases SET {', '.join(assignments)} WHERE id = ?",
+                parameters,
             )
             conn.commit()
             updated = cur.rowcount > 0
@@ -304,6 +368,7 @@ class CaseStore:
                 created_at TEXT NOT NULL
             )
         """)
+        ensure_cases_schema(conn)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS case_incident_reports (
                 case_id             TEXT PRIMARY KEY,

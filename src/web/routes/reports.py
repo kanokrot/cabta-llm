@@ -20,13 +20,14 @@ from starlette.background import BackgroundTask
 
 from ...detection.rule_validator import validate_rule
 from ...reporting.ioc_pdf import generate_ioc_pdf
-from ..auth import require_role
+from ..auth import TEAM_LEAD, require_role
 
 logger = logging.getLogger(__name__)
 REPORT_ROLES = [
     'SOC Analyst Tier 1-2',
     'Incident Responder',
     'Threat Hunter',
+    TEAM_LEAD,
     'admin',
 ]
 
@@ -317,7 +318,7 @@ async def approve_rule_export(
     rule_type: str,
     body: Optional[RuleApprovalRequest] = None,
     _current_user: dict = Depends(
-        require_role(['Incident Responder', 'admin'])
+        require_role(['Incident Responder', TEAM_LEAD, 'admin'])
     ),
 ):
     """Validate a rule and record explicit human approval for its export."""

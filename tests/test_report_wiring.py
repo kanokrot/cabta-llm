@@ -160,6 +160,14 @@ def test_report_endpoint_returns_500_on_generation_failure(tmp_path):
     })
 
     app = FastAPI()
+    from src.web.auth import get_current_user
+    app.dependency_overrides[get_current_user] = lambda: {
+        "id": 1,
+        "email": "admin@example.test",
+        "username": "admin",
+        "role": "admin",
+        "is_active": 1,
+    }
     app.state.agent_store = store
     app.include_router(playbook_routes.router, prefix="/api/playbooks")
     client = TestClient(app, raise_server_exceptions=False)

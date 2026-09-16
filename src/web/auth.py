@@ -22,12 +22,15 @@ AUTH_DB_ENV = "AUTH_DB_PATH"
 JWT_SECRET_ENV = "AUTH_JWT_SECRET"
 ACCESS_TOKEN_TTL_SECONDS = 60 * 60
 INVITE_TOKEN_TTL_SECONDS = 48 * 60 * 60
+TEAM_LEAD = "Team Lead"
+
 VALID_ROLES = frozenset(
     {
         "SOC Analyst Tier 1-2",
         "Incident Responder",
         "Threat Hunter",
         "admin",
+        TEAM_LEAD,
     }
 )
 
@@ -41,6 +44,29 @@ def _connect() -> sqlite3.Connection:
     connection = sqlite3.connect(str(db_path))
     connection.row_factory = sqlite3.Row
     return connection
+
+
+def get_user_ids_by_role(role: str) -> list[int]:
+    """Return active user IDs for an application role."""
+    if role not in VALID_ROLES:
+        raise ValueError("Unsupported role")
+    with _connect() as connection:
+        rows = connection.execute(
+            "SELECT id FROM users WHERE role = ? AND is_active = 1 ORDER BY id",
+            (role,),
+        ).fetchall()
+    return [int(row["id"]) for row in rows]
+
+
+def get_active_user(user_id: int) -> Optional[Dict[str, Any]]:
+    """Return an active user's identity and role by database ID."""
+    with _connect() as connection:
+        row = connection.execute(
+            "SELECT id, email, username, role, is_active "
+            "FROM users WHERE id = ? AND is_active = 1",
+            (user_id,),
+        ).fetchone()
+    return dict(row) if row is not None else None
 
 
 def _jwt_secret() -> bytes:

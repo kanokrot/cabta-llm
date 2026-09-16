@@ -11,7 +11,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import aiohttp
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Depends, Query, Request
+
+from ..auth import require_role
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -82,7 +84,10 @@ async def tool_status():
 
 
 @router.get('/settings')
-async def get_settings(request: Request):
+async def get_settings(
+    request: Request,
+    _admin_user: dict = Depends(require_role("admin")),
+):
     """Return current application settings."""
     import json
 
@@ -114,7 +119,10 @@ async def get_settings(request: Request):
 
 
 @router.post('/settings')
-async def save_settings(request: Request):
+async def save_settings(
+    request: Request,
+    _admin_user: dict = Depends(require_role("admin")),
+):
     """Save application settings to config.yaml."""
     config_file = _resolve_config_path()
 
