@@ -1,6 +1,111 @@
 # CABTA Scope Ledger
 
-**Last updated:** 15 Sep 2026
+**Last updated:** 16 Sep 2026
+
+## Current session — AHP-derived production scoring amendment
+
+This section is the current policy snapshot for the deadline deliverable.
+Older sections below remain as audit history; where they describe the former
+legacy tier constants, they are superseded by this section.
+
+### Current production admission and multipliers
+
+Production IOC scoring admits six explicitly approved sources. The multiplier
+is source-specific and comes from the seven-source AHP model, not from the
+legacy nominal tier constants and not from the exploratory CV coefficients.
+
+| Source | Current multiplier | Production status | Current tier group |
+|---|---:|---|---|
+| `feodotracker` | `1.500000` | active scoring | high |
+| `sslblacklist` | `0.878018` | active scoring; certificate-SHA1 feed only | medium |
+| `spamhaus` | `0.695930` | active scoring | medium |
+| `tor_exit_nodes` | `0.542480` | active scoring | medium |
+| `c2_trackers` | `0.442818` | active scoring | medium |
+| `threatfox` | `0.339610` | active scoring with timeout fallback | low |
+| `virustotal` | `0.417347` | report-only; not admitted | AHP-only |
+
+The authoritative derivation is
+`docs/source_weight_ahp_derivation_2026-09-16.md`. It includes the 7x7
+verification-rigor, specificity-of-scope, and maintenance/delisting matrices,
+the evidence reference for every non-equal pairwise judgment, the priority
+vectors, and the scale mapping. All three criteria have equal weight.
+
+### Admission boundary and source handling
+
+- `NON_API_SCORING_SOURCES` is the scoring admission allowlist in
+  `src/scoring/intelligent_scoring.py`; it contains exactly the six active
+  sources in the table above.
+- `GROUP_B_EXCLUDE` remains the integration/coverage classification for
+  supplemental API/query sources. It does not override the explicit scoring
+  allowlist. ThreatFox is intentionally absent from Group B so its available
+  result can contribute to scoring.
+- VirusTotal remains in the AHP comparison for auditability, but remains
+  report-only because local reliability telemetry is absent and the documented
+  public limits are restrictive (`4 requests/minute`, `500 requests/day`).
+- USOM remains report-only because it is a per-IOC query API. CIRCL is a
+  permanent exclusion because Passive DNS requires partner authorization not
+  available in this environment. SSLBL's deprecated IP feed is unavailable;
+  only valid certificate-SHA1 observations can contribute.
+- There is no unknown-source fallback multiplier. Unknown, untiered, stale, or
+  unavailable sources do not become clean evidence.
+
+### ThreatFox admission and timeout limitation
+
+ThreatFox passed the separate admission gate, which is distinct from its lower
+relative AHP weight:
+
+- reliability telemetry: `720/720` successful rows across three windows;
+- documented confirmed/vetted submission process and six-month expiry policy;
+- latency limitation: `2/720` rows (`0.277778%`) exceeded the current 15-second
+  production deadline, and both were URL records;
+- the telemetry collector used a 30-second HTTP client timeout, so those two
+  rows were successful in collection but would exceed the production deadline.
+
+Production behavior for a ThreatFox timeout is deterministic: mark the source
+`unavailable`, do not retry, do not block the pipeline, do not use stale cache
+as a substitute, exclude it from the round's score/aggregate, and never
+interpret it as clean. The behavior is covered by regression tests.
+
+### AHP and validation status
+
+The accepted AHP consistency ratios are:
+
+| Criterion | CR | Gate |
+|---|---:|---|
+| Verification rigor | `0.024949` | pass (`<0.1`) |
+| Specificity of scope | `0.061105` | pass (`<0.1`) |
+| Maintenance/delisting policy | `0.017639` | pass (`<0.1`) |
+
+The AHP values are documented judgments, not calibrated probabilities or
+statistically fitted production weights. The earlier CV artifacts remain
+`preliminary_signal_only`; the proxy holdout did not pass the independent
+positive-overlap gates and was not used to fit or replace these values.
+
+AHP replaces the source-specific legacy multipliers only. The separate
+multi-source aggregation boosts remain unchanged in this session: the code
+applies `base_score * 1.3` when at least three admitted sources are flagged and
+`base_score * 1.15` when at least two are flagged. These boost factors are
+legacy heuristics and are not derived by the AHP model.
+
+### Session commits and files
+
+The session incorporated the prior commits `8475992`, `651067a`, and
+`8ffe764`, covering the exploratory CV artifact, SSLBL/USOM validation fixes,
+and removal of the obsolete USOM bulk fallback. The current implementation
+also updates the AHP derivation, source-tier policy, API-source and architecture
+documentation, scoring code, evaluation-policy constants, and regression tests.
+No evidence or pre-existing untracked evaluation artifact was overwritten or
+included in this ledger update.
+
+### Verification for this session
+
+- Targeted regression suite: `51 passed, 1 warning, 4 subtests passed`.
+- Python syntax compilation passed for the modified production and test files.
+- `git diff --check` passed; remaining messages are Git's LF/CRLF conversion
+  warnings only.
+- No reliability window, full 894-record benchmark, or CV batch was rerun in
+  this implementation session.
+
 **Rule:** Section A ต้องปิดให้หมดก่อนเริ่ม Section B (backlog เดิม) เว้นแต่ Section A ข้อนั้น block อยู่จริงๆ
 
 **Status:** ⬜ Not started | 🔍 Investigating | 📝 Fix drafted | ✅ Verified | 🚫 Blocked
@@ -13,12 +118,12 @@
 | # | Comment | Status | Evidence Tier | Definition of Done | Next Action |
 |---|---------|--------|----------------|---------------------|-------------|
 | 1 | Severity levels: Malicious/Suspicious/Clean/Unknown vs Critical/High/Medium/Low | ✅ | T1 | ยืนยันว่า CABTA มี severity mapping อยู่แล้ว 3 ชั้น ไม่ใช่ gap ที่ต้องออกแบบใหม่: per-IOC (`src/utils/wazuh_severity.py:33-66`, `src/utils/helpers.py:63-95`) ใช้ score >=70 → CRITICAL, >=40 → HIGH, <40 → LOW และ verdict MALICIOUS→CRITICAL, SUSPICIOUS→HIGH, CLEAN/UNKNOWN→LOW; correlation (`src/agent/correlation.py:646-736`) รวม additive score แล้ว map >=60/40/20/10/else → critical/high/medium/low/info; external Wazuh alert (`src/utils/wazuh_severity.py:83-119`) map rule.level 14-15/12-13/7-11/0-6 → CRITICAL/HIGH/MEDIUM/LOW | ปิดแล้ว — ไม่ต้อง design ใหม่ เตรียมพูดประเด็น asymmetry ระหว่าง 3-tier (per-IOC) กับ 5-tier (correlation) เผื่ออาจารย์ถามต่อ |
-| 2 | Base score 1.3 คำนวณจากอะไร | ⬜ | - | ได้ raw code ของ formula ครบ (บรรทัด, ไฟล์, ตัวแปรทุกตัวที่เข้าสมการ) | investigation prompt: `rg "base_score" src/` แล้วดู scoring module เต็มไฟล์ |
-| 3 | Source ไหนน่าเชื่อถือที่สุด (ที่มาของ weight) | ⬜ | - | ได้ raw config/code ที่ผูก weight กับแต่ละ source + เหตุผลอ้างอิงได้ (เช่น MISP confidence, FIRST.org) | `rg "weight" src/integrations/threat_intel.py` + config.yaml |
+| 2 | ทำไมต้องคูณ `base_score` ด้วย `1.3` และเลข `1.3` มาจากไหน | 🔍 | T3 | ตรวจพบจาก `src/scoring/intelligent_scoring.py:237` ว่า `1.3` ถูกใช้หลังคำนวณ weighted average เมื่อมี admitted Group-A sources flagged ตั้งแต่ 3 แหล่งขึ้นไป จึงเป็น 30% multi-source boost ไม่ใช่ base score; `git blame` ชี้กลับไปที่ commit `e12e768` แต่ commit message เป็นเพียง broad scoring improvement และยังไม่พบ derivation จากทฤษฎี, สถิติ, calibration, หรือเอกสารอ้างอิงใด ๆ ใน repository | ยังไม่ปิด: ตอบอาจารย์ว่า provenance ของ code พบแล้ว แต่เหตุผลเชิงทฤษฎี/สถิติของ `1.3` ยังไม่พบ; ห้ามอ้างว่าเป็น evidence-based factor และห้ามเปลี่ยน factor โดยไม่มี decision แยกพร้อมหลักฐาน/approval |
+| 3 | Source ไหนน่าเชื่อถือที่สุด (ที่มาของ weight) | ✅ | T1 | ใช้ AHP (Saaty's pairwise comparison) บน 7 sources: `feodotracker`, `c2_trackers`, `spamhaus`, `tor_exit_nodes`, `sslblacklist`, `threatfox`, `virustotal`; เปรียบเทียบ verification rigor, specificity of scope และ maintenance/delisting policy โดยอ้างอิงเอกสารของแต่ละ feed ทุกคู่ที่ไม่เท่ากัน; priority vector รวมแบบ equal criteria แล้ว scale ให้ Feodo สูงสุด = `1.5`; VT ได้ multiplier สำหรับ audit เท่านั้นและยัง report-only | เตรียมอธิบายจาก `docs/source_weight_ahp_derivation_2026-09-16.md`: matrix → priority vector → CR → multiplier และแยก admission gate ออกจาก ranking |
 | 4 | ช่องทางแจ้งเตือนผูกกับ severity ระดับไหน | ⬜ | - | ตาราง severity → channel (Email/LINE/Teams) ที่ตรงกับโค้ดจริง | เช็ค `notifications.py` ว่ามี mapping logic จริงหรือ hardcode |
 | 5 | ความถี่แจ้งเตือน (IOC ใหม่เข้าทุกวัน) | ⬜ | - | policy เขียนชัด: real-time (Malicious) / digest (Suspicious) / none (Clean) + throttle/dedup rule | เช็คว่ามี throttle logic อยู่แล้วหรือต้องออกแบบใหม่ |
 | 6 | Role definition + user manual ต่อ role + scope | ⬜ | - | ตาราง role × scope × ผู้เกี่ยวข้อง + manual สั้นต่อ role | เช็คว่ามี RBAC ในโค้ดหรือยัง (`rg "role" src/`) — ถ้าไม่มี ต้อง report เป็น gap ตรงๆ |
-| 7 | ทฤษฎีการคำนวณ + trust source ต้องอธิบายได้ | ⬜ | - | เอกสาร 1 หน้า: formula + ที่มาทางทฤษฎี + เหตุผล trust ranking (ต่อเนื่องจากข้อ 2+3) | รวมผลจากข้อ 2, 3 มาเขียนเป็นเอกสารเดียว |
+| 7 | ทฤษฎีการคำนวณ + trust source ต้องอธิบายได้ | ✅ | T1 | AHP derivation document อธิบาย Saaty's 1–9 scale, pairwise matrices, priority vectors, equal criterion aggregation, CR และการ scale เป็น multiplier; production scorer ใช้เฉพาะ `SOURCE_SCORING_MULTIPLIERS` ของ 6 active sources, ไม่มี unknown fallback, และไม่ตีความ AHP multiplier เป็น probability หรือ statistically-fitted coefficient | ใช้เอกสาร AHP เป็น handoff หลักในการตอบอาจารย์; ข้อ 2 เรื่อง base-score formula ยังเป็นงานแยกและยังไม่ปิด |
 | 8 | Approval gate ที่ Detection Rule ทำไมต้องมี / SOC แก้ได้ไหม | ✅ | T1 | ยืนยัน 2 ประเด็น: (1) approval gate เป็น human gate เพื่อป้องกัน false positive หลุด production ตามเคส AlienVault ที่พบ และสร้าง accountability ผ่าน audit trail `approved_by/approved_at/deployed_by/deployed_at`; workflow validate → approve → deploy → export/ZIP implement ครบและบังคับผ่าน `_require_rule_export_approval()` (`src/web/routes/reports.py:107-118`) (2) SOC แก้เนื้อหา rule ได้แล้วจริงตั้งแต่ commit `f49aabc` ผ่าน `PUT /{analysis_id}/rules/{rule_type}` โดยใช้ `StrictStr`, เรียก `validate_rule()` ก่อน save และ hash-invalidation ใน `_get_rule_export_state()` (`src/web/routes/reports.py:87-104`) ทำงานอัตโนมัติเมื่อ content เปลี่ยน ยืนยันด้วย test แล้ว | ปิดแล้ว — เตรียมสไลด์ 2 ประเด็น (1) gate+audit trail (2) edit workflow ใหม่ที่ validate ก่อน save และ auto-invalidate approval เดิมเมื่อ content เปลี่ยน |
 
 ### A1. Severity mapping evidence (15 Sep 2026)
@@ -54,6 +159,294 @@ Known limitation: lock เป็นระดับ `AnalysisManager` ทั้�
 `self._lock` แต่ไม่ error อาจช้าลงตามจำนวน concurrent edits ยอมรับได้ใน
 สเกลปัจจุบัน และไม่อยู่ใน scope ที่ต้องแก้รอบนี้
 
+### A3. Source trust and weight derivation (16 Sep 2026)
+
+คำตอบที่ล็อกสำหรับคำถามว่า source ไหนน่าเชื่อถือที่สุด ไม่ใช่การอ้างว่า
+source ใดมีชื่อเสียงที่สุดหรือใช้ API ได้ง่ายที่สุด แต่ใช้ AHP เพื่อจัดอันดับ
+เชิงเปรียบเทียบจาก evidence ที่ตรวจสอบได้:
+
+| ขั้น | วิธีตัดสิน | ผลที่ได้ |
+|---|---|---|
+| 1 | กำหนด source universe 7 ตัว รวม VirusTotal เพื่อให้เปรียบเทียบและ audit ได้ | FeodoTracker, C2 Trackers, Spamhaus, Tor Exit Nodes, SSLBL, ThreatFox, VirusTotal |
+| 2 | กำหนด 3 criteria ที่มีเหตุผลเชิง operational/content แยกจาก availability | verification rigor, specificity of scope, maintenance/delisting policy |
+| 3 | ให้ pairwise value ด้วย Saaty scale `1–9`; ทุกคู่ที่ไม่ใช่ 1 มี source reference ใน derivation doc | ได้ 3 matrices ขนาด `7×7` |
+| 4 | คำนวณ priority vector และตรวจ Consistency Ratio | CR = `0.024949`, `0.061105`, `0.017639`; ผ่านทุก matrix (`<0.1`) |
+| 5 | เฉลี่ย priority vector ของ 3 criteria ด้วยน้ำหนักเท่ากัน `1/3` | FeodoTracker มี priority สูงสุด `0.3114486393` |
+| 6 | scale ด้วย `1.5 / 0.3114486393` เพื่อรักษาเพดานเดิม | ได้ multiplier ราย source ที่อยู่ใน current production table |
+
+ผลลัพธ์นี้เป็น **AHP-derived judgment** ไม่ใช่ trained model coefficient,
+calibrated probability หรือหลักฐานว่า source ที่ได้คะแนนต่ำเป็น source ที่
+ผิดพลาดเสมอ การ admit เข้า production เป็น gate แยกจากอันดับ AHP: ThreatFox
+ผ่าน evidence/availability gate จึง active ได้ แม้มี multiplier ต่ำสุด ส่วน
+VirusTotal มี AHP candidate multiplier แต่ยังไม่ผ่าน local telemetry และ
+availability gate จึงคง report-only.
+
+Evidence และตัวเลขเต็มอยู่ใน
+`docs/source_weight_ahp_derivation_2026-09-16.md`; policy ที่ sync แล้วอยู่ใน
+`docs/source_tier_policy_decision_2026-09-16.md`, `docs/API_SOURCES.md`,
+และ `docs/ARCHITECTURE.md`.
+
+### A7. Scoring theory and source trust explanation (16 Sep 2026)
+
+สูตรที่ตอบคำถาม trust/weight ใน session นี้มีสองชั้น และต้องแยกจาก legacy
+aggregation boost ให้ชัดเจน:
+
+1. **Source contribution:** ถ้า source อยู่ใน `NON_API_SCORING_SOURCES`, มีผล
+   สำเร็จ/flagged และไม่ใช่ `unavailable`, คะแนน source จะถูกคูณด้วย
+   `SOURCE_SCORING_MULTIPLIERS[source]`; source อื่นเป็น report-only และไม่มี
+   unknown fallback multiplier.
+2. **AHP derivation:** multiplier มาจาก priority vector ที่รวม 3 criteria
+   ด้วยน้ำหนักเท่ากันและ scale ตาม Feodo = `1.5`; ไม่ได้ fit จาก label ใน
+   exploratory CV.
+3. **Legacy multi-source boost:** หลัง weighted average โค้ดยังคูณ `1.3`
+   เมื่อมีอย่างน้อย 3 admitted sources flagged และคูณ `1.15` เมื่อมีอย่างน้อย
+   2 แหล่ง ค่าเหล่านี้เป็น heuristic เดิม ไม่มี derivation ที่พบใน repository
+   และไม่ได้มาจาก AHP.
+4. **Availability separation:** ThreatFox timeout ที่เกิน 15 วินาทีเป็น
+   `unavailable`, ไม่ retry, ไม่ block, ไม่ใช้ stale cache แทน และถูกตัดจาก
+   score/aggregate; จึงไม่ถูกนับเป็น clean.
+
+Advisor Comment #2 ยังไม่ปิด แม้จะพบ provenance ของ code แล้ว เพราะยังตอบไม่ได้
+ว่าเหตุใดจึงเลือก `1.3` ในเชิงทฤษฎีหรือสถิติ ผลที่ยืนยันได้ตอนนี้คือ `1.3`
+เป็น legacy heuristic ที่ไม่มีที่มาที่ตรวจสอบได้ ไม่ใช่ตัวเลขที่พิสูจน์แล้วหรือ
+AHP-derived factor. หากจะเปลี่ยน ต้องเปิด decision แยกและเพิ่มหลักฐาน/approval
+ไม่ควรเปลี่ยนโดยอัตโนมัติจากงาน AHP.
+
+### DGA and domain-age scoring provenance (16 Sep 2026)
+
+This is recorded as a system-provenance finding, not as a newly designed
+scoring policy. The current implementation inherited these values from the
+original CABTA v2.0 implementation in commit `e12e768`:
+
+| Signal | Current calculation | Current numeric value | Provenance/status |
+|---|---|---:|---|
+| DGA confidence | Sum of heuristic components: normalized Shannon entropy (maximum 25), consonant ratio (15), common-bigram scarcity (20), common-trigram scarcity (10), digit ratio (10), dictionary-word coverage (15), and unusual SLD length (5) | Maximum `100`; `confidence >= 50` means `is_dga=true` for detection/metadata | Implemented in `src/utils/dga_detector.py:402-479, 583`; retained as pattern detection and analyst context; confidence/component weights remain heuristic |
+| DGA enrichment | If `is_dga=true`, retain the finding in enrichment and recommendations | No numeric score contribution (`0`) | Numeric bonus removed by commit `bb16056`; DGA metadata remains available to analysts |
+| Newly registered domain | WHOIS `creation_date` is parsed, then `age_days = (now_UTC - creation_date).days`; set `is_newly_registered=true` when age is below the cutoff | `<30` days for detection/metadata; no numeric score contribution (`0`) | Age logic in `src/utils/domain_age_checker.py:207-264`; numeric bonus removed by commit `bb16056`; domain-age metadata remains available to analysts |
+| Domain-age risk labels | Compare integer `age_days` with fixed thresholds | `<7` critical, `<30` high, `<90` medium, `<365` low, otherwise none | Implemented in `src/utils/domain_age_checker.py:47-67`; operational labels, not a validated probability model |
+
+**Why the system retains these signals:** newly registered and algorithmically
+generated domains remain useful contextual/pattern-detection signals for
+analysts. They are retained in enrichment and recommendations, but no longer
+contribute numeric points to `threat_score` or determine the verdict.
+
+**WHOIS behavior:** `check_domain_age()` first tries `python-whois`, then falls
+back to raw socket WHOIS with a default 10-second timeout. It accepts several
+date formats, uses the first date when a registrar returns a list, normalizes
+naive timestamps to UTC, caches results in memory, and returns
+`is_newly_registered=false` when no creation date is available. The age is
+therefore an integer full-day difference, not an exact elapsed-hour measure.
+
+**Pipeline path:** the main IOC investigation calls
+`IntelligentScoring.calculate_ioc_score(intel_results)` for the numeric score.
+Domain enrichment is collected separately and returned for analyst-facing
+metadata/recommendations; it does not alter `threat_score` or the verdict
+(`src/tools/ioc_investigator.py`).
+
+**Decision status:** the former `+20` and `+30` magnitudes had no defensible
+statistical justification from the available data, so both numeric bonuses
+were removed. The detection cutoffs remain implementation heuristics and are
+not presented as calibrated probabilities. This is separate
+from Advisor Comment #2: that comment about the multi-source `base_score * 1.3`
+factor also remains open (`🔍`).
+
+### Historical domain-age bonus (+20) empirical calibration attempt (superseded)
+
+**Historical motivation.** This investigation attempted to calibrate the former
+domain-age bonus `+20` using observed labelled data. The results are retained
+for provenance only; they do not describe current production scoring.
+
+#### Test 1 — Static benchmark (422 domain records)
+
+The benchmark contained `240` `MALICIOUS` and `182` `CLEAN` domain records.
+`381/422` WHOIS lookups succeeded; `41` records were excluded from analysis with
+error type `NoWhoisCreationDate`.
+
+| WHOIS age group | MALICIOUS | CLEAN | Total | Malicious rate |
+|---|---:|---:|---:|---:|
+| Newly registered (`<30d`) | 5 | 0 | 5 | `5/5 = 1.0` (100%) |
+| `>=30d` | 194 | 182 | 376 | `194/376 = 0.5159574468085106` (51.6%) |
+
+The standard two-sided Fisher exact test returned `p=0.06210071192843707`
+(approximately `0.062`), which was not significant at `alpha=0.05`. The
+zero-cell table and the very small newly-registered group make that test weakly
+powered. The one-sided exact binomial test against the mature-domain baseline
+rate returned `p=0.0366`, significant at `alpha=0.05`, and supports the intended
+direction. However, the newly-registered sample size was only `n=5`, so it is
+not sufficient to derive a stable point value.
+
+#### Test 2 — Live NRD feed sample (250 domains, `smet_nrd` + `hagezi_nrd`)
+
+The run drew `250` domains from the current live newly registered domain feeds.
+Live NRD membership was used only to define the newly-registered sample (without
+WHOIS); it was not used as the label. Labels were produced by the existing verdict
+pipeline through an adhoc wrapper that removed domain-age enrichment, the `+20`
+bonus, and `is_newly_registered` from verdict computation. NRD-feed hits were also
+excluded from the label sources. The label used only the DGA detector plus
+ThreatFox/C2-tracker evidence, preserving the existing verdict logic while
+avoiding circular reasoning.
+
+The combined analysis had `5/255` newly-registered domains labelled malicious
+(`5/255 = 0.0196078431372549`, 1.96%), compared with the `194/376` mature-domain
+baseline (`0.5159574468085106`, 51.6%). The two-sided Fisher exact test was
+significant, `p=3.5907886347686414e-48`, but in the opposite direction. The
+one-sided exact binomial test for the required alternative
+(`newly registered` malicious rate greater than baseline) returned `p=1.0`, so
+there was no significance in the direction needed to support a positive bonus.
+
+This result does **not** mean that newly registered domains are genuinely safer.
+It reflects label-starvation bias: ThreatFox and C2-tracker feeds tend to flag a
+domain after it has been used in a real attack and reported. Freshly registered
+domains, including some only a few days old, have often not had time to enter
+those feeds, so the two-source automated pipeline systematically returns
+`CLEAN`. These labels are therefore not verified ground truth. This is a known
+limitation of the rapid, two-source automated labelling approach used within one
+day, not evidence that the `+20` signal is wrong.
+
+#### Combined conclusion
+
+- The `<30 days` cutoff remains consistent with the cited industry practice in
+  the preceding section: Netskope uses a 30-day window and Palo Alto Networks
+  Unit 42 reports a 32-day early-life window. Those references support the
+  cutoff and signal direction, not CABTA's exact numeric bonus.
+- The static-benchmark test gave the correct direction and a significant
+  one-sided result (`p=0.0366`), but `n=5` is too small for a stable point-scale
+  derivation.
+- The live-feed expansion reached `255` newly-registered observations, but its
+  automated labels exposed label-starvation bias. The result is not evidence
+  that `+20` is incorrect; it is evidence that this labelling design cannot
+  calibrate the weight reliably.
+- At the time, no change to the `+20` value was proposed in code. The live
+  calibration output recorded no defensible replacement point value. This
+  historical proposal was superseded by the final decision in commit
+  `bb16056`, which removed the numeric domain-age/DGA bonuses entirely.
+- The direction of the signal (`newly registered = riskier`) remains supported
+  by the cited external literature and by Static Test 1. The unresolved item is
+  the exact numeric weight, not the intended direction.
+
+**Reproducibility files.** The investigation used
+`scripts/adhoc/domain_age_calibration.py`,
+`scripts/adhoc/domain_age_calibration_input.json`,
+`scripts/adhoc/domain_age_calibration_results.jsonl`,
+`scripts/adhoc/domain_age_calibration_summary.json`,
+`scripts/adhoc/nrd_live_sample.json`,
+`scripts/adhoc/nrd_live_labeled.jsonl`, and
+`scripts/adhoc/nrd_live_calibration_summary.json`. These files are gitignored
+according to the repository's existing adhoc convention.
+
+### External references for DGA/domain-age feature choice (16 Sep 2026)
+
+The following external literature and industry references support the direction
+of the signals and the choice of features/cutoff. They do not replace the
+implementation provenance recorded in the preceding section.
+
+#### Newly registered domain cutoff
+
+| Reference | Relevant finding | Relationship to CABTA |
+|---|---|---|
+| Netskope Community, [Best Practices - Newly Registered Domains (NRDs)](https://community.netskope.com/real-time-protection-key-policies-72/best-practices-newly-registered-domains-ndrs-7668) | Uses a default 30-day classification window for newly registered domains. | Supports CABTA's `<30 days` cutoff as being consistent with an industry practice. |
+| Palo Alto Networks Unit 42, [Newly Registered Domains: Malicious Abuse by Bad Actors](https://unit42.paloaltonetworks.com/newly-registered-domains-malicious-abuse-by-bad-actors/) | Reports that more than 70% of observed NRDs were malicious, suspicious, or NSFW. | Supports the direction that newly registered domains are a higher-risk contextual signal, not that every NRD is malicious. |
+| Palo Alto Networks Unit 42, [Detecting Emerging Network Threats From Newly Observed Domains](https://unit42.paloaltonetworks.com/malicious-newly-observed-domains/) | Uses a 32-day NRD window; reports that 37.11% of suspicious newly observed domains were confirmed malicious within the following 30 days, and identifies the first 32 days as the optimal timeframe for detecting malicious NRDs. | Supports a short early-life window near CABTA's 30 days; the 32-day finding is not a direct derivation of CABTA's exact cutoff. |
+
+These references support the direction of the signal (`newly registered` means
+contextually riskier) and indicate that a 30-day cutoff is close to industry
+practice. They do **not** establish a numeric CABTA score contribution; the
+former `+20` domain-age bonus is no longer used.
+
+#### DGA feature selection
+
+| Reference | Relevant finding | Relationship to CABTA |
+|---|---|---|
+| Atlantis Press, [A Detection Scheme for DGA Domain Names Based on SVM](https://www.atlantis-press.com/article/25894313.pdf) | An SVM-based detector uses domain length, Shannon entropy, vowel ratio, consecutive-consonant ratio, and digit ratio; it reports TPR above 87% and precision above 88%. | Supports CABTA's use of length, entropy, consonant/vowel composition, and digit ratio as plausible DGA features. The reported metrics belong to that study's dataset/model, not CABTA. |
+| Splunk, [Machine Learning in Security: Deep Learning Based DGA Detection with a Pre-trained Model](https://www.splunk.com/en_us/blog/security/machine-learning-in-security-deep-learning-based-dga-detection-with-a-pre-trained-model.html) | Describes entropy, vowel/consonant/digit ratios, and n-gram similarity to dictionary words as standard features that correlate with DGA labels. | Supports CABTA's feature direction, including dictionary coverage and n-gram/bigram/trigram signals. |
+| Exp0se DGA Detector, referenced by [Gravity Falls: A Comparative Analysis of DGA Detection Methods for Mobile Device Spearphishing](https://arxiv.org/pdf/2603.03270) | A traditional heuristic/string-analysis detector uses entropy, consonant count, and string-length thresholds. | Supports the general heuristic design pattern used by CABTA; it is not evidence that CABTA's exact points or thresholds are optimal. |
+
+These references support the direction that entropy, consonant/vowel ratio,
+digit ratio, length, dictionary coverage, and n-gram features can help separate
+DGA-like domains from ordinary domains. They **do not** validate CABTA's exact
+component weights (`25/15/20/10/10/15/5`) or confidence threshold (`50`). The
+former `+30` DGA bonus was an implementation-specific legacy heuristic and is
+no longer used for numeric scoring.
+
+#### Explicit evidence boundary
+
+The references validate **feature choice and signal direction**, not the exact
+numeric scoring policy. In particular:
+
+- `newly registered = riskier` is supported directionally, and the 30-day
+  cutoff is close to documented industry windows (30 and 32 days).
+- entropy, consonant/vowel ratio, digit ratio, length, dictionary coverage,
+  and n-gram features are supported as literature/industry feature choices for
+  DGA detection.
+- CABTA's exact detector component weights `25/15/20/10/10/15/5` and
+  confidence threshold `50` remain unvalidated legacy heuristics. The former
+  DGA `+30` and domain-age `+20` numeric bonuses were removed and are not
+  current scoring factors. No cited reference directly proves those historical
+  numbers.
+
+This distinction must be preserved in the advisor handoff: external references
+support the rationale for the signals, while independent labelled validation
+and calibration are still required before presenting CABTA's exact numbers as
+evidence-based or statistically validated.
+
+### Turkish-language code audit (16 Sep 2026)
+
+**วัตถุประสงค์:** ตรวจว่ามีข้อความภาษาตุรกีที่ปะปนใน source code จาก code เดิม
+หรือไม่ เพื่อวางแผนทำให้ comments, docstrings และข้อความประกอบโค้ดเป็นภาษา
+อังกฤษสม่ำเสมอสำหรับการ review, maintenance และการตอบอาจารย์
+
+**วิธีตรวจ:** ใช้ `rg` scan ใน `src/`, `scripts/`, `tests/`, `docs/`,
+`templates/`, `README.md` และ `config.yaml.example` โดยค้นหาอักขระ Turkish
+ที่มี diacritic (`ç ğ ı ö ş ü` และตัวพิมพ์ใหญ่) และคำ Turkish ที่พบบ่อย;
+ไม่นับ `evidence/`, `evidence_raw/`, JSON/JSONL และฐานข้อมูลเป็น source code
+สำหรับงานนี้
+
+**ผลการตรวจ source code:** character scan รอบแรกพบ `75` matching lines ใน `src/`
+จำนวน `18` ไฟล์จากอักขระ Turkish ที่มี diacritic. จากนั้น supplemental scan
+สำหรับคำ Turkish แบบ ASCII/คำผสม Turkish-English พบข้อความเพิ่มเติมใน analyzer,
+adaptive scoring และ kill-chain utility รวมเป็น source files ที่ต้อง cleanup
+ทั้งหมด `21` ไฟล์. จุดที่พบทั้งหมดเป็น module/class docstring, function
+docstring, documentation comment หรือ version note ไม่ใช่ runtime decision
+logic และไม่พบ user-facing runtime string ที่ต้องเปลี่ยนความหมาย.
+
+| กลุ่ม | ไฟล์ที่พบ | ตัวอย่างจุดที่ต้องเปลี่ยนเป็น English |
+|---|---|---|
+| Analyzer modules | `src/analyzers/apk_analyzer.py`, `capability_analyzer.py`, `elf_analyzer.py`, `file_type_router.py`, `firmware_analyzer.py`, `macho_analyzer.py`, `obfuscated_string_analyzer.py`, `office_analyzer.py`, `pdf_analyzer.py`, `script_analyzer.py`, `text_analyzer.py` | module/class docstrings และ comments เช่น `Kapsamlı`, `Dosya`, `Yüksek`, `Çıkarılan`, `Geçerli`, `kategorize` |
+| Threat intelligence | `src/integrations/threat_intel.py` | `:556` docstring note `İyileştirildi - hata yönetimi`; ต้องเปลี่ยนเป็น English โดยไม่เปลี่ยน API behavior |
+| Scoring | `src/scoring/intelligent_scoring.py`, `src/scoring/tool_based_scoring.py` | `intelligent_scoring.py:475,491,529` และ tool-weight comments/docstrings เช่น `ağırlık`, `yüksek`; ต้องไม่เปลี่ยนสูตรหรือ multiplier ระหว่าง language cleanup |
+| Reporting/tools | `src/reporting/tool_output_formatter.py`, `src/tools/email_analyzer.py`, `src/tools/external_tool_runner.py` | formatter/analyzer/runner docstrings และ comments ที่เป็น `Türkçe` |
+| Utility | `src/utils/ioc_extractor.py` | `:172, :320, :323, :326` เช่น `İyileştirildi`, `Sondaki`, `Başındaki`, `Geçerli` |
+
+**สถานะ:** `[x]` technical-debt cleanup เสร็จแล้วใน session ปัจจุบัน. แปลข้อความ
+ใน source code ที่ตรวจพบเป็น English โดยแก้เฉพาะ comments/docstrings/version
+notes; ไม่แก้ identifier, constant, formula, threshold, control flow หรือ
+scoring behavior. รายการในตารางด้านบนคือจุดที่พบจาก initial character scan;
+มี supplemental cleanup เพิ่มเติมใน `src/analyzers/pe_analyzer.py`,
+`src/scoring/adaptive_scoring.py` และ `src/utils/mitre_kill_chain.py` ซึ่งเป็น
+ข้อความ Turkish แบบไม่มี diacritic.
+
+**Verification evidence (16 Sep 2026):**
+
+- `rg -n "[çğıöşüÇĞİÖŞÜ]" src` ให้ผล `NO_TURKISH_DIACRITICS_IN_SRC`.
+- supplemental Turkish-stem scan ใน `src/**/*.py` ให้ผล
+  `NO_TURKISH_STEMS_IN_SRC`.
+- `python -m compileall -q src` ผ่านสำหรับ source tree ที่แก้ (`PY_COMPILEALL_PASS`).
+- targeted regression tests ผ่าน: `pytest -q tests/test_scoring_confidence.py
+  tests/test_threat_intel_source_accounting.py tests/test_threat_intel_cache_fallback.py
+  tests/test_fit_source_weights_policy.py` → `39 passed`, 1 existing
+  `PytestCacheWarning` เรื่อง cache path.
+- `git diff --check` ผ่านสำหรับไฟล์ที่แก้.
+- diff ตรวจแล้วเป็น documentation-language-only ใน source files; Advisor
+  Comment #2 เรื่องที่มาของ `base_score * 1.3` ยังคงเป็น `🔍` และไม่ได้ถูกปิด
+  หรือเปลี่ยนแปลงจากงานแปลภาษา.
+
+**Definition of done:** แปล comments/docstrings เป็น English, ตรวจแยก
+user-facing/runtime strings, เพิ่ม regression check ว่าไม่มี Turkish text ใน
+ไฟล์ที่อยู่ใน production review scope และยืนยันว่า diff ไม่เปลี่ยน logic,
+formula, threshold หรือ scoring result. งานนี้เป็น code/documentation hygiene
+แยกจากการหาที่มาของ factor `1.3` และไม่สามารถใช้แทน theoretical/statistical
+derivation ของ `1.3` ได้.
+
 ---
 
 ## B. Backlog (ห้ามแทรกก่อน Section A เสร็จ เว้นแต่ blocked)
@@ -74,14 +467,19 @@ Known limitation: lock เป็นระดับ `AnalysisManager` ทั้�
 
 ---
 
-## C. Group A Eval (สถานะปัจจุบัน)
+## C. Group A Eval (exploratory evidence; current policy is AHP above)
+
+ส่วนนี้เป็นสถานะของการเก็บผล Group-A และ CV เชิงสำรวจ ไม่ใช่ source of truth
+ของ production multiplier ปัจจุบัน ตัวเลข legacy tier และข้อความที่ระบุว่า
+ยังรันไม่ครบด้านล่างเป็น execution snapshot ของช่วงก่อน AHP และต้องอ่านคู่กับ
+current session section ด้านบนเท่านั้น
 
 | Item | Status | Evidence Tier | Evidence / Current State | Next Action |
 |------|--------|----------------|--------------------------|-------------|
-| Dataset และ default limit | ✅ | T1 | `eval_benchmark.py` ใช้ `benchmark_iocs_v2.json` จำนวน 894 รายการ และ `--malicious-limit=0` เพื่อรันครบชุด | ปล่อยให้ eval รันจนจบ |
+| Dataset และ default limit | ✅ | T1 | `eval_benchmark.py` ใช้ `benchmark_iocs_v2.json` จำนวน 894 รายการ (`MALICIOUS=709`, `CLEAN=185`) และผล canonical JSONL มี 894 rows | ไม่ต้อง rerun สำหรับ current AHP policy |
 | Resume และ graceful Ctrl+C | ✅ | T1 | `load_existing_results()` ข้าม malformed JSON พร้อม warning; loop flush ผลทีละ record และจับ `KeyboardInterrupt` ก่อนปิดไฟล์ | ใช้ `--resume` ต่อหลังหยุด/เครื่องกลับมา |
-| Fit/score result path | ✅ | T1 | `scripts/eval/fit_source_weights.py` และ `scripts/adhoc/score_eval_results.py` ชี้ไป `scripts/eval/eval_results_group_a_v2.jsonl`; ตรวจ syntax ของ fit script แล้ว แต่ยังไม่รันระหว่าง eval ไม่ครบ | รันหลังผลครบ 894 รายการ |
-| Group A eval execution | 🔍 | T1 | Snapshot เวลา 14 Sep 2026 11:41:44: เขียนแล้ว 54/894 รายการ, unique 54, invalid JSON 0, เหลือ 840 รายการ; พบ Python process ที่เกี่ยวข้อง 2 โปรเซส | เฝ้าดูผลลัพธ์และไม่รัน fit/score จนกว่าจะครบ |
+| Fit/score result path | ✅ | T1 | `scripts/eval/fit_source_weights.py` ใช้ `scripts/eval/eval_results_group_a_v2.jsonl`; exploratory artifact คือ `scripts/eval/fit_source_weights_results_6source.json` และสถานะ `preliminary_signal_only` | ห้ามนำ CV coefficient ไปแทน AHP multiplier โดยตรง |
+| Group A eval execution | ✅ | T1 | Canonical result file ตรวจพบ 894 rows; exploratory six-source artifact ใช้ dataset 894 rows แต่ cache coverage/missingness จำกัดการตีความ | ไม่ต้อง rerun full benchmark ใน current session |
 | แยก workflow ออกจาก `scripts/adhoc/` | ✅ | T1 | ย้าย `eval_benchmark.py`, `fit_source_weights.py` และ `group_b_exclusion_rationale.md` ไป `scripts/eval/`; เพิ่ม explicit unignore ที่ `.gitignore:99-100`; scratch files คงอยู่ใน `scripts/adhoc/` | ใช้ `scripts/eval/` สำหรับ repeatable evaluation/documentation; ไม่ย้าย `score_eval_results.py` |
 
 ### Group A files and evidence
@@ -90,11 +488,18 @@ Known limitation: lock เป็นระดับ `AnalysisManager` ทั้�
 - Running script: `scripts/eval/eval_benchmark.py`
 - Incremental results: `scripts/eval/eval_results_group_a_v2.jsonl`
 - Analysis tools: `scripts/eval/fit_source_weights.py`, `scripts/adhoc/score_eval_results.py`
-- Current result file is local/generated and must not be edited while eval is running.
+- Exploratory artifact: `scripts/eval/fit_source_weights_results_6source.json`
+- These are local/generated evidence files; do not overwrite them or interpret
+  their coefficients as the current production weights.
 
 ---
 
-## D. Session handoff — ThreatFox verification, Group A/B scoring boundary, and evidence
+## D. Session handoff — ThreatFox verification, Group A/B scoring boundary, and evidence (historical record)
+
+The D sections preserve dated investigation history. Their former tier
+assignments, CV readiness statements, and proposed next steps are not the
+current production policy; consult the current-session section at the top for
+the authoritative AHP/admission state.
 
 **Session date:** 14 Sep 2026
 
@@ -459,6 +864,7 @@ modified.
   without conflating it with Group A/B execution accounting.
 
 ## D9. Evidence-based source tiering and resilient execution redesign
+   (historical pre-AHP plan, superseded for production scoring)
 
 ### หัวข้อใหญ่
 
@@ -471,9 +877,16 @@ modified.
 
 การแยกสี่เรื่องนี้มีเป้าหมายไม่ให้ source ที่เรียกง่ายหรือเร็วถูกตีความว่าเนื้อหาถูกต้องกว่าโดยอัตโนมัติ และไม่ให้ source ที่ใช้ API ถูกตัดสินว่าไม่น่าเชื่อถือเพียงเพราะมี quota สำหรับ execution tier นี้ CABTA ให้ความสำคัญกับ non-API, local/cache lookup และ coverage ที่กว้าง เพราะตรงกับเป้าหมายการประหยัดเวลาและลด dependency ภายนอก
 
-### สถานะรวม
+### สถานะรวม (historical snapshot)
 
-**กำลังเก็บหลักฐาน — ยังไม่พร้อมล็อก tier หรือแก้ scoring logic**
+**สถานะเดิม:** กำลังเก็บหลักฐาน — ยังไม่พร้อมล็อก tier หรือแก้ scoring logic
+
+แผน D9 นี้ถูกเขียนก่อนการตัดสินใจ AHP และยังคงไว้เพื่อ audit trail เท่านั้น
+ขั้นตอน D9.4–D9.10 ที่ระบุให้ทำ tier report แล้วจึงแก้ scoring ไม่ใช่ blocker
+ของ production policy ปัจจุบันอีกต่อไป เพราะ current session ได้ล็อก AHP
+matrices, CR, admission boundary และ multipliers ไว้ใน section ด้านบนแล้ว
+งานที่ยังเปิดใน D9 ให้ตีความเป็น future validation/resilience work ไม่ใช่
+คำสั่งให้ย้อนกลับไปใช้ legacy `1.5/1.0/0.5/0.8` mapping
 
 MISP มีสถานะ wired/parser-verified แล้ว แต่ยังไม่มี empirical production evidence จากการ refresh full feed จริงเพียงพอสำหรับตัดสิน tier ถาวร แผนด้านล่างจึงกำหนดลำดับตั้งแต่การตรวจ feed, เก็บ telemetry, ตรวจความพร้อมของ dataset, คำนวณ metrics, ทำ tier report, ไปจนถึงการแก้ scoring หลังได้รับ approval เท่านั้น
 
@@ -675,7 +1088,7 @@ MISP ต้องคง `provisional/untiered` จนกว่าจะมีห
 
 **สถานะ:** `[ ]` ยังไม่เสร็จ; จะทำหลัง design และ tier report ได้รับ approval
 
-## D9.10 ลำดับงานที่ควรทำต่อ
+## D9.10 ลำดับงานที่ควรทำต่อ (historical pre-AHP sequence)
 
 1. `[ ]` Live-validate MISP full feed แบบ read-only และเก็บหลักฐาน raw/summary
 2. `[x]` ใช้ telemetry collector ที่สร้างแล้วเพื่อกำหนด schema และทดลองเก็บ behavior
@@ -690,6 +1103,8 @@ MISP ต้องคง `provisional/untiered` จนกว่าจะมีห
 ### หัวข้อใหญ่
 
 นี่คือ requirement จากอาจารย์: ระบบต้องมี login แบ่ง 3 role ตาม Target User ได้แก่ `SOC Analyst Tier 1-2`, `Incident Responder` และ `Threat Hunter` โดยแต่ละ role เห็นข้อมูลและ flow ต่างกัน และต้องสามารถผูก Gmail ของ user แต่ละคนเข้ากับระบบแจ้งเตือนได้
+
+**Amendment (ยังไม่มี verbatim quote; session date ยังไม่ได้บันทึก):** อาจารย์สั่งเพิ่ม role ที่ 4 คือ `Team Lead` เข้าไปในระบบ ต้องขอคำสั่งฉบับเต็มแบบคำต่อคำจากอาจารย์มาบันทึกแทนที่ข้อความ amendment นี้ภายหลัง
 
 ### สถานะรวม
 
@@ -795,9 +1210,16 @@ Phase 1, Phase 1.5, Phase 2 และ Phase 2.5 เสร็จแล้ว; per
 
 **สถานะ:** `[ ]` ยังไม่เริ่ม รอ Phase 2.5 เสร็จก่อน
 
-## CV Readiness Investigation (2026-09-15)
+## CV Readiness Investigation (2026-09-15; historical snapshot, superseded)
 
-**Status:** CV has never successfully run. Code exists as a 5-fold
+**Current-state note:** The investigation below records the pre-AHP readiness
+state. It is preserved for provenance, but its legacy tier counts and open
+decision do not describe the current production implementation. The current
+production source admission and multipliers are defined in the current-session
+section at the top; the later exploratory artifact remains
+`preliminary_signal_only`.
+
+**Historical status:** At the time of this note, CV had never successfully run. Code existed as a 5-fold
 `StratifiedKFold` implementation at `scripts/eval/fit_source_weights.py:219`,
 but no persisted CV output artifact was found.
 
@@ -842,9 +1264,10 @@ but no persisted CV output artifact was found.
   `build_feature_matrix()`. This introduces missingness bias and is not a
   full-coverage CV result.
 
-**OPEN DECISION (not yet made):** whether to (a) fill the 435 missing IOCs via
-`eval_benchmark.py` before running CV, or (b) run CV now on partial 459-IOC
-coverage as an interim result while documenting the limitation.
+**Historical open decision:** whether to fill the then-missing IOCs or run CV
+on partial coverage. This was later resolved by producing the persisted
+exploratory six-source artifact; it remains non-production evidence and does
+not supersede the accepted AHP derivation.
 
 ### 2026-09-15 Session Summary — Talos exclusion, reliability windows,
 ### Group A CV pipeline prep
@@ -1268,14 +1691,16 @@ coverage as an interim result while documenting the limitation.
   full benchmark, production scoring code, or prior artifacts were rerun or
   overwritten.
 
-### 2026-09-16 Follow-up — deadline tier policy freeze
+### 2026-09-16 Follow-up — deadline tier policy freeze (historical, superseded)
 
 **1. Decision scope**
 - Policy document: `docs/source_tier_policy_decision_2026-09-16.md`.
 - Machine-readable decision: `evidence/source_weights_2026-09-16/source_tier_policy_decision_2026-09-16.json`.
-- The decision freezes the existing nominal production multipliers without
-  changing `src/scoring/intelligent_scoring.py`: High `1.5`, Medium `1.0`,
-  Low `0.5`, and unknown/untiered fallback `0.8`.
+- This section records the pre-AHP deadline snapshot. At that point the
+  decision froze the existing nominal production multipliers without changing
+  `src/scoring/intelligent_scoring.py`: High `1.5`, Medium `1.0`, Low `0.5`,
+  and unknown/untiered fallback `0.8`. It is superseded by the current-session
+  AHP amendment at the top of this ledger.
 - The existing Group-B exclusion boundary is unchanged. A source may retain a
   nominal legacy tier for backward compatibility while remaining supplemental
   or excluded from the critical aggregate.
@@ -1300,10 +1725,10 @@ coverage as an interim result while documenting the limitation.
   scoring code is unchanged.
 - Learned coefficients remain `preliminary_signal_only`; no coefficient was
   promoted into a production multiplier.
-- **Decision:** tier policy is complete and frozen for the deadline deliverable.
-  Future weight learning is a separate gate requiring source-specific variance
-  and adequate independent labels; it is not a prerequisite for documenting
-  the current tier policy.
+- **Historical decision:** tier policy was considered complete and frozen for
+  the deadline deliverable at that snapshot. The current AHP-derived
+  multipliers and six-source admission policy are recorded in the current
+  session section at the top of this ledger.
 
 ## D10.5 Phase 4 — Gmail OAuth (per-user)
 
@@ -1318,6 +1743,53 @@ coverage as an interim result while documenting the limitation.
 **สถานะ:** `[ ]` ยังไม่เริ่ม
 
 **ขอบเขตที่ต้องปลดล็อก:** ต้อง lift config scope สำหรับ `config.yaml` เฉพาะ section ใหม่ ห้ามแตะ `smtp_*` เดิม
+
+## D10.8 Phase 6 — Team Lead role addition
+
+**หลักการออกแบบ:** `Team Lead` แยกจาก `admin` โดยเด็ดขาด และออกแบบเป็น
+SOC scope เดิมบวก explicit allowlist เพิ่มเติม ไม่ใช่ admin ที่ถูกตัดสิทธิ์บางส่วน
+เพื่อป้องกัน privilege leak และทำให้สิทธิ์ที่เพิ่มตรวจสอบได้เป็นรายการ
+
+**สิทธิ์ที่เพิ่มจาก SOC Analyst Tier 1-2:**
+
+- อ่าน Flow A analysis ของ SOC analyst ทุกคนแบบ cross-user ผ่าน serializer/trim
+  level เดียวกับ SOC ไม่ใช่ raw result
+- เห็น dashboard recent ของทุกทีม
+- อ่าน sanitized reports ในระดับเดียวกับ SOC/Incident Responder
+- escalate/reassign case และเปลี่ยน priority
+- approve detection rule เพิ่มเติมจาก (ไม่แทนที่) สิทธิ์ของ Incident Responder/admin
+
+**สิทธิ์ที่ไม่ได้รับ:**
+
+- ไม่ใช่ admin เต็มรูปแบบ: ห้าม invite user, แก้ system/notification config หรือดู
+  system-level audit log
+- ไม่เข้าถึง `/api/chat` (Flow B) ด้วยเหตุผลเดียวกับ SOC
+- ไม่ได้ raw data มากกว่า SOC serializer
+- ไม่เรียก dangerous tools เช่น sandbox, isolate, block หรือ quarantine
+
+**Audit และ migration constraints:**
+
+- ทุก cross-user read ต้องมี audit log แยกจาก normal owner-read
+- Role นี้ต้องใช้ additive migration ใหม่เท่านั้น ห้ามแก้ migration เดิม
+- ไม่มี user ได้ role `Team Lead` โดยอัตโนมัติ
+- Test negative case (Team Lead เรียก admin-only endpoint → `403`) ต้องมาก่อน
+  positive-case tests
+
+**Evidence จาก investigation ก่อนหน้า:** มี schema/migration impact จากการเพิ่ม role,
+audit-log gap สำหรับ cross-user read และ serializer/visibility gap ที่ต้องปิดก่อน
+implementation; รายละเอียดเต็มอยู่ในผล investigation เดิม ไม่ใช่การอนุมัติให้
+แก้ schema หรือ code ในรอบนี้
+
+**สถานะ:** `[ ]` ยังไม่เริ่ม implementation; รอ decision เพิ่มเติมใน 3 ข้อต่อไปนี้:
+
+1. SOC ควรเห็นเฉพาะข้อมูลของตัวเอง หรือคง shared behavior เดิมตามที่
+   `docs/CABTA_scope_ledger.md:1164` ระบุอยู่ปัจจุบัน เพราะการเพิ่ม Team Lead กระทบ
+   พฤติกรรมเดิมของ SOC role โดยตรง
+2. คำว่า “SOC ในทีม” หมายถึงผู้ใช้ทุกคนที่มี role SOC ในระบบทั้งหมด หรือจะมี
+   `team membership` concept แยกในอนาคต ปัจจุบันไม่มี `team_id` ใน DB
+3. Endpoint ที่ยังไม่มี auth ตอนนี้ ได้แก่ `config_api.py`, `mcp_management.py` และ
+   `cases.py` ควรแก้พร้อมกันหรือไม่ เพราะถ้าไม่แก้ ข้อกำหนดว่า Team Lead ไม่มี
+   system access จะไม่เป็นจริงในทางปฏิบัติ
 
 ## D10.6 Phase 5 — Notification routing by role
 
@@ -1336,11 +1808,108 @@ coverage as an interim result while documenting the limitation.
 1. `[x]` Phase 2 — RBAC middleware (เสร็จแล้ว)
 2. `[x]` Phase 2.5 — Session ownership + analysis/report/dashboard auth (เสร็จแล้ว; legacy `NULL user_id` ใช้ admin-only policy เฉพาะ owner-scoped paths)
 3. `[ ]` Phase 3 — Per-flow filtering
-4. `[ ]` Phase 4 — Gmail OAuth
-5. `[ ]` Phase 5 — Notification routing by role
+4. `[ ]` D10.8 / Phase 6 — Team Lead role addition; ทำหลัง Phase 3 เสร็จ
+   เพราะต้องพึ่ง serializer/visibility policy ที่ Phase 3 สร้าง ห้ามทำคู่ขนาน
+   เพื่อไม่ให้ชนกันเรื่อง serializer design
+5. `[ ]` Phase 4 — Gmail OAuth
+6. `[ ]` Phase 5 — Notification routing by role
 
 ## Weekly ritual (กันของหล่น)
 1. ก่อนเริ่มแต่ละ session: เปิดไฟล์นี้ อัปเดต status เก่าก่อน แล้วค่อยเลือกงานถัดไป
 2. ก่อนเริ่มแต่ละข้อ: เขียน DoD ใน column ให้ชัดก่อนสั่ง investigation prompt
 3. จบแต่ละ session: อัปเดต status ทุกแถวที่แตะวันนี้ ห้ามปล่อยค้างเป็น 🔍 ข้ามคืนโดยไม่มี note
 4. ก่อนพรีเซนต์: Section A ต้องไม่มีแถวไหนเป็น ⬜ — อย่างน้อยต้องเป็น 🔍 พร้อมคำตอบชั่วคราวที่มี evidence tier กำกับ
+
+## Final domain-age/DGA scoring decision (16 Sep 2026)
+
+**Decision log — commit `bb16056` (`Remove unjustified domain-age/DGA score bonuses from threat_score`).**
+
+1. Multiple attempts were made to find a defensible magnitude, including a
+   ThreatFox-based analysis and a Cisco Umbrella popularity cross-reference.
+2. Both attempts exposed systematic selection bias, so the available data could
+   not support a reliable estimate of the numeric magnitude.
+3. The final decision was to remove all domain-age/DGA numeric bonuses. WHOIS
+   domain-age and DGA pattern detection remain available as analyst-facing
+   metadata, recommendations, and detection context only; they do not affect
+   `threat_score` or `verdict`.
+4. This decision is implemented in commit `bb16056`.
+
+The detailed material below is retained as historical provenance and must not
+be read as current production scoring behavior.
+
+### Historical calibration evidence (not current scoring)
+
+The expanded case-control set used all `4,737` unique ThreatFox domain IOCs
+available after deduplication and static-benchmark overlap exclusion, plus a
+`5,000`-domain Tranco clean proxy sample. The new WHOIS run wrote `9,737`
+records. Of these, `8,513` lookups succeeded and `1,224` (`12.571%`) were
+excluded because no usable creation date was returned or the lookup timed out.
+The analysis therefore uses only successful WHOIS records: `3,949` malicious
+and `4,564` clean.
+
+| WHOIS age group | Malicious | Clean | Total | Malicious rate |
+|---|---:|---:|---:|---:|
+| Newly registered (`<30d`) | 79 | 6 | 85 | `0.9294117647058824` |
+| Mature (`>=30d`) | 3,870 | 4,558 | 8,428 | `0.45918367346938777` |
+
+The contingency table has no zero cell, so the reported odds ratio is the raw
+cross-product ratio rather than a Haldane–Anscombe correction:
+
+`OR = (79 * 4558) / (6 * 3870) = 15.507407407407408`.
+
+The two-sided Fisher exact test gives
+`p = 5.3127051808514964e-20`, which is significant at `alpha = 0.05` and
+supports the intended direction: the newly-registered group has higher
+malicious-label odds. The exact 95% confidence interval for its malicious rate
+is `[0.8526665411514625, 0.973656069653473]`.
+
+Compared with the previous case-control run, the newly-registered sample grew
+from `n=6` to `n=85` (`+79`, or `14.166666666666666x`). The Fisher p-value
+changed from `0.10975406052189701` to `5.3127051808514964e-20`. The exact
+malicious-rate CI width narrowed from
+`0.6370238344829999` to `0.1209895285020105`, a reduction of
+`0.5160343059809894` (`81.0070641077026%`).
+
+### Guard-free point-scale proposal
+
+The previous adhoc guard that refused to propose a value when `OR > 10` was
+disabled for this final calibration calculation. The mapping is unchanged:
+
+1. Compute `log(OR)`; here `log(15.507407407407408) =
+   2.7413178070207684`.
+2. Normalize it as `100 * log(OR) / log(10)`, producing
+   `119.05391967322431`.
+3. Clamp the normalized value to `[0, 100]` and map linearly to the existing
+   domain-enrichment budget `[0, 30]`.
+
+The resulting historical proposed replacement was **`+30`**. The Wald 95% CI for the odds
+ratio is `[6.754548482980063, 35.60262911803336]`; applying the same bounded
+mapping gives a proposed-point 95% CI of
+`[24.887889699613, 30.0]`. The upper endpoint saturates at `+30` because the
+mapping is explicitly capped, not because the underlying odds-ratio interval
+has an upper bound of 10.
+
+### Final justification and limitations
+
+The larger independent-label case-control run resolves the earlier low-power
+problem: the newly-registered arm increased to `85` observations, the
+association is highly significant, and the direction agrees with the domain-age
+risk hypothesis. The finite, non-zero-cell OR avoids the earlier infinite-OR
+failure mode; the only reason the point estimate reaches the maximum is the
+chosen 0–30 log-odds mapping.
+
+This remains an observational case-control calibration, not a causal estimate.
+ThreatFox membership is an independently sourced malicious label, while Tranco
+top-list membership is an independently sourced clean proxy rather than a
+guarantee that a domain is harmless. WHOIS failures were excluded rather than
+treated as clean or malicious, and the missingness mechanism may affect the
+estimate. This historical `+30` proposal was not adopted. Commit `bb16056`
+removed the numeric domain-age/DGA bonuses; the calculation and artifacts are
+retained for reproducibility.
+
+**Reproducibility artifacts:**
+`scripts/adhoc/domain_age_calibration.py`,
+`scripts/adhoc/case_control_malicious.json`,
+`scripts/adhoc/case_control_clean.json`,
+`scripts/adhoc/case_control_whois_results.jsonl`, and
+`scripts/adhoc/case_control_calibration_summary.json` (gitignored adhoc files).
