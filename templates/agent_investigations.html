@@ -1684,6 +1684,42 @@ var Investigations = (function() {
                             var corrDiv = el('div', 'mt-2');
                             corrDiv.id = 'correlationResults';
                             corrDiv.appendChild(el('h6', '', 'Correlation Results'));
+                            var correlation = corrData.correlation || corrData;
+                            var corrSeverityValue = String(correlation.severity || 'info');
+                            var corrSeverity = corrSeverityValue.toLowerCase();
+                            var corrSeverityTone = 'clean';
+                            var corrSeverityIcon = 'bi-shield-check';
+                            if (corrSeverity.indexOf('critical') >= 0 || corrSeverity.indexOf('high') >= 0) {
+                                corrSeverityTone = 'malicious';
+                                corrSeverityIcon = 'bi-shield-exclamation';
+                            } else if (corrSeverity.indexOf('medium') >= 0) {
+                                corrSeverityTone = 'suspicious';
+                                corrSeverityIcon = 'bi-shield-fill-exclamation';
+                            } else if (corrSeverity.indexOf('low') >= 0) {
+                                corrSeverityTone = 'clean';
+                            } else {
+                                corrSeverityTone = 'info';
+                                corrSeverityIcon = 'bi-info-circle';
+                            }
+                            var corrSeverityBadge = el('span', 'verdict-badge verdict-' + corrSeverityTone);
+                            if (corrSeverityTone === 'info') {
+                                corrSeverityBadge.style.cssText = 'background:rgba(88,166,255,0.15); color:#58a6ff; border:1px solid rgba(88,166,255,0.3);';
+                            }
+                            corrSeverityBadge.appendChild(icon('bi ' + corrSeverityIcon + ' me-1'));
+                            corrSeverityBadge.appendChild(document.createTextNode('Severity: ' + corrSeverityValue));
+                            corrDiv.appendChild(corrSeverityBadge);
+
+                            if (Array.isArray(correlation.escalation_recommendations) && correlation.escalation_recommendations.length) {
+                                corrDiv.appendChild(el('h6', 'mt-3', 'Escalation Recommendations'));
+                                var escalationList = document.createElement('ul');
+                                escalationList.style.cssText = 'margin-bottom:0.75rem;';
+                                correlation.escalation_recommendations.forEach(function(recommendation) {
+                                    var recommendationItem = document.createElement('li');
+                                    recommendationItem.textContent = recommendation;
+                                    escalationList.appendChild(recommendationItem);
+                                });
+                                corrDiv.appendChild(escalationList);
+                            }
                             var corrPre = document.createElement('pre');
                             corrPre.style.cssText = 'background:var(--code-bg, #0d1117);padding:0.75rem;border-radius:6px;font-size:0.8rem;white-space:pre-wrap;max-height:300px;overflow-y:auto;';
                             corrPre.textContent = JSON.stringify(corrData.correlation || corrData, null, 2);

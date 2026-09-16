@@ -581,8 +581,19 @@ def serialize_correlation(result: Any, role: str) -> dict[str, Any]:
     if not isinstance(result, Mapping):
         return {}
     output = {}
-    for key in ("total_findings", "correlated_groups", "confidence", "summary"):
+    for key in (
+        "total_findings",
+        "correlated_groups",
+        "confidence",
+        "summary",
+        "severity",
+        "escalation_recommendations",
+    ):
         value = result.get(key)
         if isinstance(value, (str, int, float, bool)):
             output[key] = _text(value, 2000) if isinstance(value, str) else value
+        elif key == "escalation_recommendations" and isinstance(value, list) and all(
+            isinstance(item, str) for item in value
+        ):
+            output[key] = [_text(item, 2000) for item in value]
     return output
