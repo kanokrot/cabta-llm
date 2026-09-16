@@ -144,6 +144,43 @@ Correlation additive scoring แบบเต็ม:
 - Finding verdict: malicious ตั้งแต่ 2 แหล่งขึ้นไป `+20`; 1 แหล่ง `+10`
 - รวมคะแนนแล้ว map เป็น `>=60 critical`, `>=40 high`, `>=20 medium`, `>=10 low`, ต่ำกว่านั้น `info`
 
+### A1.1. Correlation severity decision-table refactor (16 Sep 2026)
+
+This entry supersedes the legacy additive-score description above for
+correlation severity. The previous weights (`+30`, `+25`, `+15`, `+20`) and
+score cutoffs (`60/40/20/10`) had no documented provenance and were removed
+from `src/agent/correlation.py`.
+
+| Severity | Deterministic rule | Evidence used |
+|---|---|---|
+| Critical | `any(o["count"] >= 3 for o in overlaps)` | Same IOC appears in at least 3 distinct findings/analyses |
+| Critical | `malicious_count >= 2` and `{Impact, Command and Control}` is covered | At least 2 malicious findings plus both late kill-chain tactics |
+| High | Any of `Impact`, `Credential Access`, `Lateral Movement`, `Command and Control` is present | High-risk MITRE tactic detected |
+| High | `len(tactics_seen) >= 4` | At least 4 distinct canonical tactics detected |
+| Medium | `len(overlaps) >= 1` or `malicious_count >= 1` | Correlation or malicious evidence exists, but no higher rule matched |
+| Info | None of the rules above match | No escalation signal |
+
+Implementation notes:
+
+- Rules are evaluated in priority order: Critical, High, Medium, Info.
+- `malicious_count` is deduplicated per finding; multiple qualifying fields in
+  one finding count as one malicious source.
+- Tactics are normalized with `normalize_tactic()` from
+  `src/utils/mitre_kill_chain.py` before matching and coverage counting.
+- Recommendations are generated independently from severity. Tactic-specific
+  actions, malicious-confidence, coordinated-campaign, and medium-signal
+  messages remain tied to their observable signals.
+- Info-only results retain the fallback message: `No significant correlations found. Continue monitoring.` Medium/High/Critical results never use that fallback.
+- Return contract is unchanged: `(severity, recommendations)`, with lowercase
+  labels `critical`, `high`, `medium`, and `info`.
+
+Verification: `python -m pytest tests/test_agent.py::TestCorrelationEngine -q --disable-warnings` → `45 passed, 0 failed`.
+
+Downstream compatibility: the API response shape and
+`correlation_to_wazuh_severity()` mapping remain unchanged. No corresponding
+severity thresholds are externalized in `config.yaml` or
+`config.yaml.example`.
+
 ### A2. Detection rule edit endpoint (15 Sep 2026)
 
 Commit: `f49aabc` (`feat: allow SOC to edit detection rules`)
