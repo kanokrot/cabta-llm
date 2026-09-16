@@ -4,6 +4,30 @@
 
 Blue Team Assistant integrates with **20+ threat intelligence sources** to provide comprehensive IOC analysis. This document describes each source and how to obtain API keys.
 
+## Current scoring policy
+
+The production IOC scorer uses the six-source admission set and the
+AHP-derived source-specific multipliers documented in
+[`source_weight_ahp_derivation_2026-09-16.md`](source_weight_ahp_derivation_2026-09-16.md).
+VirusTotal remains report-only pending local reliability telemetry.
+
+These sources currently enter production IOC scoring:
+
+| Source | Multiplier | Status |
+|---|---:|---|
+| `feodotracker` | 1.500000 | active |
+| `sslblacklist` | 0.878018 | active |
+| `spamhaus` | 0.695930 | active |
+| `tor_exit_nodes` | 0.542480 | active |
+| `c2_trackers` | 0.442818 | active |
+| `threatfox` | 0.339610 | active with timeout fallback |
+| `virustotal` | 0.417347 | report-only |
+
+The historical `Weight in Scoring` descriptions below are legacy documentation
+for the former API-inclusive scorer. They must not be interpreted as current
+production weights. An unavailable or stale source is not treated as a clean
+result. There is no unknown-source fallback multiplier.
+
 ---
 
 ## Source Categories
@@ -238,14 +262,15 @@ api_keys:
 
 ---
 
-### 🆓 Free Sources (No API Key Required)
+### 🆓 Community Sources
 
-These sources work without authentication:
+These sources have community/free access characteristics; authentication
+requirements still vary by source:
 
 | Source | Type | IOC Types | Data |
 |--------|------|-----------|------|
 | **URLhaus** | Malicious URLs | URL, Domain | Malware distribution URLs |
-| **ThreatFox** | IOC Database | IP, Domain, URL, Hash | Recent IOCs |
+| **ThreatFox** | IOC Database | IP, Domain, URL, Hash | Recent IOCs; free Auth-Key required |
 | **MalwareBazaar** | Malware samples | Hash | Sample metadata |
 | **OpenPhish** | Phishing | URL, Domain | Phishing URLs |
 
@@ -280,6 +305,26 @@ api_keys:
 
 ## Source Reliability & Scoring
 
+The active source multipliers are AHP-derived judgments, not statistically
+fitted weights. The full pairwise matrices, source evidence, priority vectors,
+and consistency ratios are in
+[`source_weight_ahp_derivation_2026-09-16.md`](source_weight_ahp_derivation_2026-09-16.md).
+
+ThreatFox is admitted based on 720/720 successful historical telemetry rows,
+documented confirmed/vetted submission requirements, and a six-month expiry
+policy. Two of those 720 rows exceeded the current 15-second production
+deadline (`0.277778%`; both URL records). A ThreatFox timeout is marked
+unavailable, is not retried, does not block the pipeline, is excluded from the
+round's score, and is never interpreted as clean.
+
+VirusTotal remains report-only. It has no local reliability telemetry and its
+official Public API limit is 4 requests/minute and 500 requests/day. Its AHP
+multiplier is retained for auditability only and is not used in production
+scoring.
+
+The legacy distribution illustration below is historical context only and does
+not represent the active scoring policy.
+
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                        SOURCE WEIGHT DISTRIBUTION                            │
@@ -307,19 +352,23 @@ api_keys:
 
 ### Handling Rate Limits
 
-Blue Team Assistant automatically:
-- Respects API rate limits
-- Uses timeouts (15s default)
-- Falls back gracefully on errors
+The current scoring path uses the feed-only admission policy described above.
+ThreatFox is the API-key-backed exception admitted to scoring: it has a
+15-second per-source deadline, and a timeout is marked unavailable, is not
+retried, does not block the pipeline, and is excluded from that round's score.
+Unavailable is never interpreted as clean. VirusTotal and other API/query
+sources remain report-only; their rate limits are constraints on reporting,
+not scoring multipliers.
 
 ### Best Practices
 
 1. **Start with Free Tiers**: All sources have free tiers sufficient for personal/small team use.
 
-2. **Prioritize Essential Sources**: 
-   - VirusTotal (best overall)
-   - AbuseIPDB (best for IPs)
-   - Hybrid Analysis (best for files)
+2. **Prioritize Sources by the Active Policy**:
+   - Feed-only sources contribute to production scoring using the AHP-derived
+     multipliers in the current scoring policy.
+   - VirusTotal and other API/query sources can provide supplemental reports,
+     but do not contribute to the production score.
 
 3. **Cache Results**: For bulk analysis, consider implementing caching to avoid repeated API calls.
 
@@ -339,13 +388,16 @@ Source returns: "No valid API key configured"
 ```
 Source returns: "HTTP 429" or "Rate limit"
 ```
-**Solution:** Wait and retry, or upgrade your API tier
+**Solution:** For report-only sources, respect the provider's documented quota
+or wait before a separate report query. ThreatFox scoring does not retry after
+a timeout.
 
 ### "Timeout"
 ```
 Source returns: "Timeout after 15s"
 ```
-**Solution:** Network issue or API unavailable, result will be skipped
+**Solution:** The affected source is marked unavailable and skipped for this
+scoring round; it is not treated as clean and is not retried for ThreatFox.
 
 ### "Error"
 ```
