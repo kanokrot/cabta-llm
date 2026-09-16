@@ -225,7 +225,7 @@ def test_chat_session_reads_are_admin_only_until_phase_25(role, path):
     with TestClient(_chat_app(role)) as client:
         response = client.get(path)
 
-    expected_status = 200
+    expected_status = 403 if role == SOC_ANALYST else 200
     assert response.status_code == expected_status
 
 

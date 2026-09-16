@@ -2,12 +2,12 @@
 Author: Ugur Ates
 Dashboard API endpoints.
 """
-import json
 import logging
 from fastapi import APIRouter, Depends, Request
 
 from ..auth import TEAM_LEAD, get_current_user, get_user_ids_by_role, require_role
 from ..oversight import record_cross_user_read
+from ..visibility import serialize_dashboard_job, serialize_dashboard_sources, serialize_dashboard_stats
 
 logger = logging.getLogger(__name__)
 router = APIRouter(
@@ -27,37 +27,19 @@ def _owner_scope(current_user: dict):
     return None if current_user.get('role') == 'admin' else current_user['id']
 
 
-def _flatten_job(job: dict) -> dict:
+def _flatten_job(job: dict, role: str = 'SOC Analyst Tier 1-2') -> dict:
     """Flatten a raw AnalysisManager job row into the shape the
     dashboard frontend (dashboard.js) expects: ioc/filename, ioc_type,
     type, verdict, threat_score, created_at.
     """
-    params = job.get('params') or {}
-    if isinstance(params, str):
-        try:
-            params = json.loads(params)
-        except (json.JSONDecodeError, TypeError):
-            params = {}
-
-    return {
-        'id': job.get('id'),
-        'ioc': params.get('value'),
-        'filename': params.get('filename'),
-        'ioc_type': params.get('ioc_type'),
-        'type': job.get('analysis_type'),
-        'status': job.get('status'),
-        'verdict': job.get('verdict') or 'UNKNOWN',
-        'threat_score': job.get('score'),
-        'created_at': job.get('created_at'),
-        'completed_at': job.get('completed_at'),
-    }
+    return serialize_dashboard_job(job, role=role)
 
 
 @router.get('/stats')
-async def get_stats(request: Request):
+async def get_stats(request: Request, current_user: dict = Depends(get_current_user)):
     """Get dashboard statistics."""
     mgr = request.app.state.analysis_manager
-    return mgr.get_stats()
+    return serialize_dashboard_stats(mgr.get_stats(), current_user['role'])
 
 
 @router.get('/recent')
@@ -91,12 +73,12 @@ async def get_recent(
             limit=limit,
             user_id=_owner_scope(current_user),
         )
-    analyses = [_flatten_job(j) for j in jobs]
+    analyses = [_flatten_job(j, role=current_user['role']) for j in jobs]
     return {'analyses': analyses, 'items': analyses}
 
 
 @router.get('/sources')
-async def get_sources(request: Request):
+async def get_sources(request: Request, current_user: dict = Depends(get_current_user)):
     """Get TI source health status."""
     # Placeholder - would integrate with RateLimitManager in production
     sources = [
@@ -106,4 +88,4 @@ async def get_sources(request: Request):
         {'name': 'GreyNoise', 'status': 'healthy', 'avg_response_ms': 290},
         {'name': 'AlienVault OTX', 'status': 'healthy', 'avg_response_ms': 410},
     ]
-    return {'sources': sources}
+    return {'sources': serialize_dashboard_sources(sources, current_user['role'])}

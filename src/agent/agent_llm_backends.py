@@ -40,14 +40,14 @@ class LLMBackend:
         self.vllm_model = vllm_model
 
     async def chat_with_tools(
-        self, messages: List[Dict],
+        self, messages: List[Dict], tools: Optional[List[Dict]] = None,
     ) -> Optional[Any]:
         """Call the LLM with a messages list and available tools.
 
         Supports both Ollama /api/chat and Anthropic /v1/messages.
         Returns raw response text/dict or None on failure.
         """
-        tools_json = self.tools.get_tools_for_llm()
+        tools_json = tools if tools is not None else self.tools.get_tools_for_llm()
 
         if self.provider == 'ollama':
             return await self.ollama_chat(messages, tools_json)

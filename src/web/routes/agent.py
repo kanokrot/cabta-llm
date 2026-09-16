@@ -11,6 +11,16 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from ..auth import get_current_user, require_role
+from ..visibility import (
+    serialize_agent_session,
+    serialize_agent_stats,
+    serialize_audit_entries,
+    serialize_correlation,
+    serialize_memory_stats,
+    serialize_result_payload,
+    serialize_sandbox_status,
+    serialize_tool_definition,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(
@@ -63,12 +73,13 @@ async def start_investigation(
         body.playbook_id,
         max_steps=body.max_steps,
         user_id=current_user["id"],
+        role=current_user["role"],
     )
     return {"session_id": session_id, "status": "active", "goal": body.goal}
 
 
 @router.get('/stats')
-async def agent_stats(request: Request):
+async def agent_stats(request: Request, current_user: dict = Depends(get_current_user)):
     """Get agent statistics."""
     store = _require_agent_store(request)
     stats = store.get_agent_stats()
@@ -82,21 +93,26 @@ async def agent_stats(request: Request):
         status = mcp_client.get_connection_status()
         stats['mcp_servers'] = len(status)
         stats['mcp_connected'] = sum(1 for s in status.values() if s.get('connected'))
-    return stats
+    return serialize_agent_stats(stats, current_user['role'])
 
 
 @router.get('/tools')
-async def list_tools(request: Request, category: Optional[str] = None):
+async def list_tools(request: Request, category: Optional[str] = None,
+                     current_user: dict = Depends(get_current_user)):
     """List all registered tools."""
     tool_registry = request.app.state.tool_registry
     if tool_registry is None:
         raise HTTPException(503, "Tool registry not initialized")
     tools = tool_registry.list_tools(category=category)
-    return {"tools": [t.to_dict() for t in tools]}
+    visible = [
+        serialized for tool in tools
+        if (serialized := serialize_tool_definition(tool, current_user['role'])) is not None
+    ]
+    return {"tools": visible}
 
 
 @router.get('/memory/ioc/{ioc}')
-async def recall_ioc(request: Request, ioc: str):
+async def recall_ioc(request: Request, ioc: str, current_user: dict = Depends(get_current_user)):
     """Check investigation memory for a previously analyzed IOC."""
     memory = request.app.state.investigation_memory
     if memory is None:
@@ -104,30 +120,30 @@ async def recall_ioc(request: Request, ioc: str):
 
     cached = memory.recall_ioc(ioc)
     if cached:
-        return {"cached": True, "ioc": ioc, "result": cached}
+        return {"cached": True, "ioc": ioc, "result": serialize_result_payload(cached, current_user['role'])}
     return {"cached": False, "ioc": ioc, "message": f"No prior investigation found for {ioc}"}
 
 
 @router.get('/memory/stats')
-async def memory_stats(request: Request):
+async def memory_stats(request: Request, current_user: dict = Depends(get_current_user)):
     """Get investigation memory statistics."""
     memory = request.app.state.investigation_memory
     if memory is None:
         raise HTTPException(503, "Investigation memory not initialized")
 
     summary = memory.get_pattern_summary()
-    return summary
+    return serialize_memory_stats(summary, current_user['role'])
 
 
 @router.get('/sandbox/status')
-async def sandbox_status(request: Request):
+async def sandbox_status(request: Request, current_user: dict = Depends(get_current_user)):
     """Get sandbox environment status."""
     sandbox = request.app.state.sandbox_orchestrator
     if sandbox is None:
         raise HTTPException(503, "Sandbox orchestrator not initialized")
 
     status = sandbox.get_sandbox_status()
-    return {"sandboxes": status}
+    return {"sandboxes": serialize_sandbox_status(status, current_user['role'])}
 
 
 @router.get('/correlation/{session_id}')
@@ -162,7 +178,7 @@ async def get_session_correlation(
             findings = []
 
     result = correlation_engine.correlate(findings)
-    return {"session_id": session_id, "correlation": result}
+    return {"session_id": session_id, "correlation": serialize_correlation(result, current_user['role'])}
 
 
 @router.get('/sessions')
@@ -179,7 +195,9 @@ async def list_sessions(
         status=status,
         user_id=_owner_scope(current_user),
     )
-    return {"sessions": sessions}
+    return {
+        "sessions": [serialize_agent_session(session, role=current_user['role']) for session in sessions]
+    }
 
 
 @router.get('/sessions/{session_id}')
@@ -207,7 +225,9 @@ async def get_session(
         live_state = agent_loop.get_state(session_id)
         if live_state:
             session['live_state'] = live_state
-    return session
+    return serialize_agent_session(
+        session, steps=steps, live_state=session.get('live_state'), role=current_user['role']
+    )
 
 
 @router.post('/sessions/{session_id}/approve')
@@ -239,7 +259,7 @@ async def approve_action(
             await playbook_engine.execute_from_step(session_id, approved=body.approved, approved_by=body.approved_by)
             return {"success": True}
         except Exception as exc:
-            return {"success": False, "error": str(exc)}
+            return {"success": False, "error": "Action execution failed"}
     else:
         # Flow B: Agent Loop session
         agent_loop = _require_agent_loop(request)
@@ -342,6 +362,6 @@ async def get_session_audit_trail(
         "goal": session.get('goal'),
         "status": session.get('status'),
         "total_entries": len(entries),
-        "approval_entries": approval_entries,
-        "all_entries": entries,
+        "approval_entries": serialize_audit_entries(approval_entries, current_user['role']),
+        "all_entries": serialize_audit_entries(entries, current_user['role']),
     }

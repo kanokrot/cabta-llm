@@ -8,6 +8,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from src.web.case_store import CaseStore, _severity_to_4tier
+from src.web.auth import get_current_user
 from src.web.routes.cases import router as cases_router
 
 
@@ -20,6 +21,13 @@ def store(tmp_path):
 def client_and_store(store):
     app = FastAPI()
     app.state.case_store = store
+    app.dependency_overrides[get_current_user] = lambda: {
+        "id": 101,
+        "email": "analyst@example.test",
+        "username": "analyst",
+        "role": "SOC Analyst Tier 1-2",
+        "is_active": 1,
+    }
     app.include_router(cases_router, prefix="/cases")
     return TestClient(app), store
 

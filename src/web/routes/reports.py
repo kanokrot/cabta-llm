@@ -20,7 +20,8 @@ from starlette.background import BackgroundTask
 
 from ...detection.rule_validator import validate_rule
 from ...reporting.ioc_pdf import generate_ioc_pdf
-from ..auth import TEAM_LEAD, require_role
+from ..auth import TEAM_LEAD, get_current_user, require_role
+from ..visibility import serialize_report_job, serialize_report_mitre, serialize_report_payload
 
 logger = logging.getLogger(__name__)
 REPORT_ROLES = [
@@ -144,17 +145,17 @@ def _write_rule_temp_file(rule_type: str, content: str) -> str:
 
 
 @router.get('/{analysis_id}/json')
-async def get_report_json(request: Request, analysis_id: str):
+async def get_report_json(request: Request, analysis_id: str, current_user: dict = Depends(get_current_user)):
     """Get raw JSON report."""
     mgr = request.app.state.analysis_manager
     job = mgr.get_job(analysis_id)
     if job is None:
         raise HTTPException(404, 'Analysis not found')
-    return JSONResponse(content=job.get('result') or job)
+    return JSONResponse(content=serialize_report_payload(job, current_user['role']))
 
 
 @router.get('/{analysis_id}/html')
-async def get_report_html(request: Request, analysis_id: str):
+async def get_report_html(request: Request, analysis_id: str, current_user: dict = Depends(get_current_user)):
     """Get HTML report."""
     mgr = request.app.state.analysis_manager
     job = mgr.get_job(analysis_id)
@@ -163,12 +164,12 @@ async def get_report_html(request: Request, analysis_id: str):
 
     templates = request.app.state.templates
     return templates.TemplateResponse(request, 'report_view.html', {
-        'job': job,
+        'job': serialize_report_job(job, current_user['role']),
     })
 
 
 @router.get('/{analysis_id}/html/download')
-async def download_report_html(request: Request, analysis_id: str):
+async def download_report_html(request: Request, analysis_id: str, current_user: dict = Depends(get_current_user)):
     """Download the HTML report."""
     mgr = request.app.state.analysis_manager
     job = mgr.get_job(analysis_id)
@@ -179,7 +180,7 @@ async def download_report_html(request: Request, analysis_id: str):
     return templates.TemplateResponse(
         request,
         'report_view.html',
-        {'job': job},
+        {'job': serialize_report_job(job, current_user['role'])},
         headers={
             'Content-Disposition': (
                 f'attachment; filename="report-{analysis_id}.html"'
@@ -189,38 +190,19 @@ async def download_report_html(request: Request, analysis_id: str):
 
 
 @router.get('/{analysis_id}/mitre')
-async def get_mitre_layer(request: Request, analysis_id: str):
+async def get_mitre_layer(request: Request, analysis_id: str, current_user: dict = Depends(get_current_user)):
     """Get MITRE ATT&CK Navigator layer JSON."""
     mgr = request.app.state.analysis_manager
     job = mgr.get_job(analysis_id)
     if job is None:
         raise HTTPException(404, 'Analysis not found')
 
-    result = job.get('result') or {}
-    techniques = result.get('mitre_mapping') or result.get('mitre_techniques') or []
-
-    # Build Navigator layer
-    layer = {
-        'name': f'BTA Analysis {analysis_id}',
-        'versions': {'attack': '14', 'navigator': '4.9', 'layer': '4.5'},
-        'domain': 'enterprise-attack',
-        'description': f'Auto-generated from analysis {analysis_id}',
-        'techniques': [
-            {
-                'techniqueID': t.get('technique_id', ''),
-                'tactic': t.get('tactic', '').lower().replace(' ', '-'),
-                'color': '#e60d0d',
-                'comment': t.get('technique_name', ''),
-                'enabled': True,
-            }
-            for t in techniques
-        ],
-    }
-    return JSONResponse(content=layer)
+    return JSONResponse(content=serialize_report_mitre(job, current_user['role']))
 
 
 @router.get('/{analysis_id}/pdf')
-async def get_report_pdf(request: Request, analysis_id: str, download: bool = False):
+async def get_report_pdf(request: Request, analysis_id: str, download: bool = False,
+                         current_user: dict = Depends(get_current_user)):
     """Generate a PDF report for an IOC analysis.
 
     By default the PDF is served inline (Content-Disposition: inline) so
@@ -241,7 +223,9 @@ async def get_report_pdf(request: Request, analysis_id: str, download: bool = Fa
     with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as temp_file:
         temp_path = temp_file.name
 
-    report_path = generate_ioc_pdf(result, temp_path)
+    report_path = generate_ioc_pdf(
+        serialize_report_payload(job, current_user['role']), temp_path
+    )
     if report_path is None:
         try:
             os.unlink(temp_path)

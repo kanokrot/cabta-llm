@@ -156,8 +156,8 @@
 
 {# ── Prepare result data ── #}
 {% set result = job.result if job.result is mapping else {} %}
-{% set target_display = job.params.value if job.params is mapping and job.params.value
-    else (job.params.filename if job.params is mapping and job.params.filename
+{% set target_display = job.ioc if job.ioc
+    else (job.filename if job.filename
     else (job.id | default('N/A'))) %}
 {% set analysis_type = job.analysis_type | default('N/A') %}
 {# Verdict: result.verdict first, then job.verdict, never empty #}

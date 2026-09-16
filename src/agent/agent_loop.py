@@ -31,6 +31,7 @@ from .agent_response_parsing import (
 )
 from .agent_tool_selection import ToolSelector
 from .agent_llm_backends import LLMBackend
+from src.web.visibility import is_tool_allowed
 
 logger = logging.getLogger(__name__)
 
@@ -345,6 +346,7 @@ class AgentLoop:
         playbook_id: Optional[str] = None,
         max_steps: Optional[int] = None,
         user_id: Optional[int] = None,
+        role: Optional[str] = None,
     ) -> str:
         """Start an autonomous investigation. Returns *session_id* immediately."""
 
@@ -361,6 +363,7 @@ class AgentLoop:
             goal=goal,
             case_id=case_id,
             user_id=user_id,
+            role=role,
             max_steps=effective_max_steps,
         )
         self._active_sessions[session_id] = state
@@ -639,6 +642,10 @@ class AgentLoop:
 
                 # ---- Check for run_playbook action ----
                 if decision.get('action') == 'run_playbook':
+                    if state.role not in (None, "Threat Hunter", "admin"):
+                        state.errors.append("Playbook execution is not allowed for this role")
+                        state.step_count += 1
+                        continue
                     pb_id = decision.get('playbook_id', '')
                     pb_params = decision.get('params', {})
                     reasoning = decision.get('reasoning', '')
@@ -973,6 +980,14 @@ class AgentLoop:
             findings_block += f"\n\nValidated RAG context (Flow B only):\n{rag_context}"
         playbooks_block = self.tool_selector.build_playbooks_block()
         all_tools = self.tools.get_tools_for_llm()
+        if state.role is not None:
+            all_tools = [
+                tool for tool in all_tools
+                if is_tool_allowed(
+                    state.role,
+                    self.tools.get_tool(tool.get("function", {}).get("name", "")),
+                )
+            ]
         # Filter tools to a manageable set for the LLM
         tools_json = self.tool_selector.filter_tools_for_goal(all_tools, state.goal, state)
         has_native_tools = len(tools_json) > 0
@@ -998,7 +1013,7 @@ class AgentLoop:
         ]
 
         # Attempt tool-calling API first, fall back to plain chat
-        raw = await self._chat_with_tools(messages)
+        raw = await self._chat_with_tools(messages, tools=tools_json)
         logger.info(f"[AGENT] LLM raw response type={type(raw).__name__}, "
                      f"preview={str(raw)[:500] if raw else 'None'}")
         if raw is None:
@@ -1068,9 +1083,17 @@ class AgentLoop:
 
         start = time.time()
         tool_def = None
+        if state.role is not None and not is_tool_allowed(
+            state.role, self.tools.get_tool(tool_name)
+        ):
+            result = {"error": "Tool is not allowed for this role"}
+        else:
+            result = None
         try:
             tool_def = self.tools.get_tool(tool_name)
-            if tool_def is None:
+            if result is not None:
+                pass
+            elif tool_def is None:
                 result = {"error": f"Tool not found: {tool_name}"}
             elif tool_def.source == 'local':
                 call_params = dict(params)
@@ -1193,9 +1216,9 @@ class AgentLoop:
     # ================================================================== #
 
     async def _chat_with_tools(
-        self, messages: List[Dict],
+        self, messages: List[Dict], tools: Optional[List[Dict]] = None,
     ) -> Optional[Any]:
-        return await self.llm_backend.chat_with_tools(messages)
+        return await self.llm_backend.chat_with_tools(messages, tools=tools)
 
     async def _call_llm_text(self, prompt: str) -> Optional[str]:
         return await self.llm_backend.call_llm_text(prompt)

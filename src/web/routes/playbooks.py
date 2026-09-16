@@ -15,6 +15,7 @@ from pydantic import BaseModel
 from ...agent.playbook_engine import PlaybookValidationError
 from ...reporting.html_report_generator import HTMLReportGenerator
 from ..auth import get_current_user, require_role
+from ..visibility import serialize_playbook, serialize_playbook_result
 
 logger = logging.getLogger(__name__)
 router = APIRouter(
@@ -32,30 +33,30 @@ class PlaybookRunRequest(BaseModel):
 
 
 @router.get('')
-async def list_playbooks(request: Request):
+async def list_playbooks(request: Request, current_user: dict = Depends(get_current_user)):
     """List all available playbooks."""
     engine = request.app.state.playbook_engine
     if engine:
-        return {"playbooks": engine.list_playbooks()}
+        return {"playbooks": [serialize_playbook(pb, current_user['role']) for pb in engine.list_playbooks()]}
     store = request.app.state.agent_store
     if store:
-        return {"playbooks": store.list_playbooks()}
+        return {"playbooks": [serialize_playbook(pb, current_user['role']) for pb in store.list_playbooks()]}
     return {"playbooks": []}
 
 
 @router.get('/{playbook_id}')
-async def get_playbook(request: Request, playbook_id: str):
+async def get_playbook(request: Request, playbook_id: str, current_user: dict = Depends(get_current_user)):
     """Get playbook details."""
     engine = request.app.state.playbook_engine
     if engine:
         pb = engine.get_playbook(playbook_id)
         if pb:
-            return pb
+            return serialize_playbook(pb, current_user['role'], detail=True)
     store = request.app.state.agent_store
     if store:
         pb = store.get_playbook(playbook_id)
         if pb:
-            return pb
+            return serialize_playbook(pb, current_user['role'], detail=True)
     raise HTTPException(404, "Playbook not found")
 
 
@@ -159,7 +160,9 @@ async def get_playbook_report(
 
     try:
         report_path = HTMLReportGenerator().generate_ioc_report(
-            investigation_result, ioc, temp_path,
+            serialize_playbook_result(investigation_result, current_user['role']),
+            ioc if isinstance(ioc, (str, int, float)) else None,
+            temp_path,
         )
         if report_path is None:
             raise HTTPException(500, "Failed to generate HTML report")

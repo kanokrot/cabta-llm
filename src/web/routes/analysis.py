@@ -22,12 +22,15 @@ from ..models import (
 )
 from ..auth import TEAM_LEAD, get_current_user, get_user_ids_by_role, require_role
 from ..oversight import record_cross_user_read
-from ..visibility import serialize_analysis_job
+from ..visibility import serialize_analysis_job, serialize_status
 
 logger = logging.getLogger(__name__)
 router = APIRouter(
     dependencies=[
-        Depends(require_role(["SOC Analyst Tier 1-2", TEAM_LEAD, "admin"]))
+        Depends(require_role([
+            "SOC Analyst Tier 1-2", "Incident Responder", "Threat Hunter",
+            TEAM_LEAD, "admin",
+        ]))
     ]
 )
 
@@ -311,7 +314,7 @@ async def get_analysis(
     job = _get_readable_job(request, analysis_id, current_user)
     if job is None:
         raise HTTPException(status_code=404, detail='Analysis not found')
-    return serialize_analysis_job(job)
+    return serialize_analysis_job(job, role=current_user['role'])
 
 
 @router.get('/{analysis_id}/status')
@@ -324,14 +327,7 @@ async def get_analysis_status(
     job = _get_readable_job(request, analysis_id, current_user)
     if job is None:
         raise HTTPException(status_code=404, detail='Analysis not found')
-    return {
-        'analysis_id': analysis_id,
-        'status': job.get('status'),
-        'progress': job.get('progress', 0),
-        'current_step': job.get('current_step', ''),
-        'verdict': job.get('verdict'),
-        'score': job.get('score'),
-    }
+    return serialize_status(job, role=current_user['role'])
 
 
 @router.get('/history/')
@@ -372,7 +368,7 @@ async def get_history(
             user_id=current_user["id"],
         )
     return {
-        'items': [serialize_analysis_job(job) for job in jobs],
+        'items': [serialize_analysis_job(job, role=role) for job in jobs],
         'limit': limit,
         'offset': offset,
     }

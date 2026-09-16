@@ -10,10 +10,29 @@ from typing import Sequence
 
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 
-from .auth import authorize_role, get_current_user
+from .auth import TEAM_LEAD, authorize_role, get_current_user, get_user_ids_by_role
+from .visibility import (
+    VisibilityError,
+    serialize_websocket_frame,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+async def _send_visible(websocket: WebSocket, payload: dict, *, role: str, flow: str) -> None:
+    """Serialize and send exactly one safe WebSocket frame.
+
+    The serializer is deliberately called before touching the socket.  An
+    unknown role, flow, or frame therefore fails closed without leaking the
+    original payload.
+    """
+    serializer_flow = {
+        "analysis": "websocket_analysis",
+        "agent": "websocket_agent",
+    }.get(flow, flow)
+    visible = serialize_websocket_frame(payload, role=role, flow=serializer_flow)
+    await websocket.send_json(visible)
 
 
 async def _authenticate_websocket(
@@ -66,6 +85,7 @@ async def analysis_ws(websocket: WebSocket, analysis_id: str):
             "SOC Analyst Tier 1-2",
             "Incident Responder",
             "Threat Hunter",
+            "Team Lead",
             "admin",
         ],
     )
@@ -82,20 +102,30 @@ async def analysis_ws(websocket: WebSocket, analysis_id: str):
         # Send current status immediately
         job = mgr.get_job(analysis_id)
         if job:
-            await websocket.send_json({
+            role = authenticated_user['role']
+            owner_id = job.get('user_id')
+            if role == TEAM_LEAD:
+                if owner_id is not None and owner_id not in get_user_ids_by_role('SOC Analyst Tier 1-2'):
+                    await websocket.close(code=1008)
+                    return
+            elif role != 'admin' and owner_id is not None and str(owner_id) != str(authenticated_user.get('id')):
+                await websocket.close(code=1008)
+                return
+        if job:
+            await _send_visible(websocket, {
                 'type': 'status',
                 'status': job.get('status'),
                 'progress': job.get('progress', 0),
                 'step': job.get('current_step', ''),
-            })
+            }, role=authenticated_user['role'], flow='analysis')
 
             # If already completed, send result and close
             if job.get('status') in ('completed', 'failed'):
-                await websocket.send_json({
+                await _send_visible(websocket, {
                     'type': job['status'],
                     'verdict': job.get('verdict'),
                     'score': job.get('score'),
-                })
+                }, role=authenticated_user['role'], flow='analysis')
                 await websocket.close()
                 return
 
@@ -103,14 +133,14 @@ async def analysis_ws(websocket: WebSocket, analysis_id: str):
         while True:
             try:
                 msg = await asyncio.wait_for(queue.get(), timeout=30.0)
-                await websocket.send_json(msg)
+                await _send_visible(websocket, msg, role=authenticated_user['role'], flow='analysis')
 
                 # Close after completion or failure
                 if msg.get('type') in ('completed', 'failed'):
                     break
             except asyncio.TimeoutError:
                 # Send heartbeat
-                await websocket.send_json({'type': 'heartbeat'})
+                await _send_visible(websocket, {'type': 'heartbeat'}, role=authenticated_user['role'], flow='analysis')
 
     except WebSocketDisconnect:
         logger.debug(f"[WS] Client disconnected: {analysis_id}")
@@ -136,14 +166,14 @@ async def agent_ws(websocket: WebSocket, session_id: str):
     store = websocket.app.state.agent_store
     agent_loop = websocket.app.state.agent_loop
     if not store:
-        await websocket.send_json({'type': 'error', 'error': 'Agent store not available'})
+        await _send_visible(websocket, {'type': 'failed', 'error': 'Agent store not available'}, role=authenticated_user['role'], flow='agent')
         await websocket.close()
         return
 
     # Send current session state immediately
     session = store.get_session(session_id)
     if not session:
-        await websocket.send_json({'type': 'error', 'error': 'Session not found'})
+        await _send_visible(websocket, {'type': 'failed', 'error': 'Session not found'}, role=authenticated_user['role'], flow='agent')
         await websocket.close()
         return
 
@@ -154,18 +184,18 @@ async def agent_ws(websocket: WebSocket, session_id: str):
             return
 
     steps = store.get_steps(session_id)
-    await websocket.send_json({
+    await _send_visible(websocket, {
         'type': 'session_state',
         'session': session,
         'steps': steps,
-    })
+    }, role=authenticated_user['role'], flow='agent')
 
     # If already done, close
     if session.get('status') in ('completed', 'failed', 'cancelled'):
-        await websocket.send_json({
+        await _send_visible(websocket, {
             'type': session['status'],
             'summary': session.get('summary', ''),
-        })
+        }, role=authenticated_user['role'], flow='agent')
         await websocket.close()
         return
 
@@ -176,11 +206,11 @@ async def agent_ws(websocket: WebSocket, session_id: str):
             while True:
                 try:
                     msg = await asyncio.wait_for(queue.get(), timeout=15.0)
-                    await websocket.send_json(msg)
+                    await _send_visible(websocket, msg, role=authenticated_user['role'], flow='agent')
                     if msg.get('type') in ('completed', 'failed', 'cancelled'):
                         break
                 except asyncio.TimeoutError:
-                    await websocket.send_json({'type': 'heartbeat'})
+                    await _send_visible(websocket, {'type': 'heartbeat'}, role=authenticated_user['role'], flow='agent')
         except WebSocketDisconnect:
             logger.debug(f"[WS] Agent client disconnected: {session_id}")
         except Exception as exc:
@@ -207,17 +237,17 @@ async def agent_ws(websocket: WebSocket, session_id: str):
                 current_steps = store.get_steps(session_id)
                 if len(current_steps) > last_step_count:
                     for step in current_steps[last_step_count:]:
-                        await websocket.send_json({'type': 'step', 'step': step})
+                        await _send_visible(websocket, {'type': 'step', 'step': step}, role=authenticated_user['role'], flow='agent')
                     last_step_count = len(current_steps)
 
                 if session.get('status') in ('completed', 'failed', 'cancelled'):
-                    await websocket.send_json({
+                    await _send_visible(websocket, {
                         'type': session['status'],
                         'summary': session.get('summary', ''),
-                    })
+                    }, role=authenticated_user['role'], flow='agent')
                     break
 
-                await websocket.send_json({'type': 'heartbeat'})
+                await _send_visible(websocket, {'type': 'heartbeat'}, role=authenticated_user['role'], flow='agent')
         except WebSocketDisconnect:
             logger.debug(f"[WS] Agent client disconnected: {session_id}")
         except Exception as exc:

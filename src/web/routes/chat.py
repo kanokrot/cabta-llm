@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 
 from ...agent.playbook_engine import PlaybookValidationError
 from ..auth import authorize_role, get_current_user, require_role
+from ..visibility import serialize_chat_session
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -129,6 +130,7 @@ async def send_message(
             context,
             case_id=session.get('case_id'),
             user_id=current_user["id"],
+            role=current_user["role"],
         )
         return {
             "session_id": session_id,
@@ -140,6 +142,7 @@ async def send_message(
         session_id = await agent_loop.investigate(
             body.message,
             user_id=current_user["id"],
+            role=current_user["role"],
         )
         return {
             "session_id": session_id,
@@ -155,6 +158,7 @@ async def list_chat_sessions(
     current_user: dict = Depends(get_current_user),
 ):
     """List recent chat sessions."""
+    authorize_role(current_user, ["Incident Responder", "Threat Hunter", "admin"])
     store = request.app.state.agent_store
     if store is None:
         return {"sessions": []}
@@ -162,7 +166,9 @@ async def list_chat_sessions(
         limit=limit,
         user_id=_owner_scope(current_user),
     )
-    return {"sessions": sessions}
+    return {
+        "sessions": [serialize_chat_session(session, role=current_user['role']) for session in sessions]
+    }
 
 
 @router.get('/sessions/{session_id}')
@@ -172,6 +178,7 @@ async def get_chat_session(
     current_user: dict = Depends(get_current_user),
 ):
     """Get a chat session with steps."""
+    authorize_role(current_user, ["Incident Responder", "Threat Hunter", "admin"])
     store = request.app.state.agent_store
     if store is None:
         raise HTTPException(503, "Agent store not initialized")
@@ -192,4 +199,4 @@ async def get_chat_session(
         live_state = agent_loop.get_state(session_id)
         if live_state:
             session['live_state'] = live_state
-    return session
+    return serialize_chat_session(session, steps=steps, role=current_user['role'])

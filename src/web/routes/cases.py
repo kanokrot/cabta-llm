@@ -14,7 +14,8 @@ from fastapi.responses import FileResponse
 from starlette.background import BackgroundTask
 
 from ...reporting.incident_report_pdf import generate_incident_report_pdf
-from ..auth import TEAM_LEAD, get_active_user, require_role
+from ..auth import TEAM_LEAD, get_active_user, get_current_user, require_role
+from ..visibility import serialize_case, serialize_case_report
 from ..case_store import _severity_to_4tier
 from ..models import (
     CaseCreate,
@@ -27,11 +28,20 @@ from ..models import (
 )
 
 logger = logging.getLogger(__name__)
-router = APIRouter()
+CASE_ROLES = [
+    'SOC Analyst Tier 1-2', 'Incident Responder', 'Threat Hunter', TEAM_LEAD, 'admin'
+]
+router = APIRouter(dependencies=[Depends(require_role(CASE_ROLES))])
 
 
 @router.post('')
-async def create_case(request: Request, payload: CaseCreate):
+async def create_case(
+    request: Request,
+    payload: CaseCreate,
+    current_user: dict = Depends(
+        require_role(['SOC Analyst Tier 1-2', 'Incident Responder', 'Threat Hunter', 'admin'])
+    ),
+):
     """Create a new case."""
     store = request.app.state.case_store
     case_id = store.create_case(
@@ -48,26 +58,28 @@ async def list_cases(
     limit: int = 50,
     offset: int = 0,
     status: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
 ):
     """List all cases."""
     store = request.app.state.case_store
     cases = store.list_cases(limit=limit, offset=offset, status=status)
-    return {'items': cases}
+    return {'items': [serialize_case(case, current_user['role']) for case in cases]}
 
 
 @router.get('/{case_id}')
-async def get_case(request: Request, case_id: str):
+async def get_case(request: Request, case_id: str, current_user: dict = Depends(get_current_user)):
     """Get case details with linked analyses and notes."""
     store = request.app.state.case_store
     case = store.get_case(case_id)
     if case is None:
         raise HTTPException(404, 'Case not found')
-    return case
+    return serialize_case(case, current_user['role'])
 
 
 @router.post('/{case_id}/incident-report', response_model=IncidentReport)
 async def create_incident_report(
-    request: Request, case_id: str, payload: IncidentReportCreate
+    request: Request, case_id: str, payload: IncidentReportCreate,
+    current_user: dict = Depends(require_role(['SOC Analyst Tier 1-2', 'Incident Responder', 'Threat Hunter', 'admin']))
 ):
     """Create the incident report for a case."""
     store = request.app.state.case_store
@@ -78,23 +90,26 @@ async def create_incident_report(
     if 'severity_4tier' not in fields:
         fields['severity_4tier'] = _severity_to_4tier(case['severity'])
     try:
-        return store.create_incident_report(case_id, **fields)
+        return serialize_case_report(
+            store.create_incident_report(case_id, **fields), current_user['role']
+        )
     except sqlite3.IntegrityError:
         raise HTTPException(409, 'Incident report already exists')
 
 
 @router.get('/{case_id}/incident-report', response_model=IncidentReport)
-async def get_incident_report(request: Request, case_id: str):
+async def get_incident_report(request: Request, case_id: str, current_user: dict = Depends(get_current_user)):
     """Get a case incident report."""
     report = request.app.state.case_store.get_incident_report(case_id)
     if report is None:
         raise HTTPException(404, 'Incident report not found')
-    return report
+    return serialize_case_report(report, current_user['role'])
 
 
 @router.get('/{case_id}/incident-report/pdf')
 async def get_incident_report_pdf(
-    request: Request, case_id: str, download: bool = False
+    request: Request, case_id: str, download: bool = False,
+    current_user: dict = Depends(get_current_user),
 ):
     """Generate a PDF for a case incident report."""
     store = request.app.state.case_store
@@ -105,7 +120,9 @@ async def get_incident_report_pdf(
     with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as temp_file:
         temp_path = temp_file.name
 
-    report_path = generate_incident_report_pdf(report, temp_path)
+    report_path = generate_incident_report_pdf(
+        serialize_case_report(report, current_user['role']), temp_path
+    )
     if report_path is None:
         try:
             os.unlink(temp_path)
@@ -158,23 +175,27 @@ async def update_case_operations(
         raise HTTPException(422, str(exc)) from exc
     if not updated:
         raise HTTPException(404, 'Case not found')
-    return store.get_case(case_id)
+    return serialize_case(store.get_case(case_id), _current_user['role'])
 
 
 @router.patch('/{case_id}/incident-report', response_model=IncidentReport)
 async def update_incident_report(
-    request: Request, case_id: str, payload: IncidentReportUpdate
+    request: Request, case_id: str, payload: IncidentReportUpdate,
+    current_user: dict = Depends(require_role(['SOC Analyst Tier 1-2', 'Incident Responder', 'Threat Hunter', 'admin']))
 ):
     """Partially update a case incident report."""
     store = request.app.state.case_store
     fields = payload.model_dump(exclude_none=True)
     if not store.update_incident_report(case_id, **fields):
         raise HTTPException(404, 'Incident report not found')
-    return store.get_incident_report(case_id)
+    return serialize_case_report(store.get_incident_report(case_id), current_user['role'])
 
 
 @router.patch('/{case_id}/status')
-async def update_case_status(request: Request, case_id: str, payload: CaseStatusUpdate):
+async def update_case_status(
+    request: Request, case_id: str, payload: CaseStatusUpdate,
+    _current_user: dict = Depends(require_role(['SOC Analyst Tier 1-2', 'Incident Responder', 'Threat Hunter', 'admin'])),
+):
     """Update case status."""
     store = request.app.state.case_store
     ok = store.update_case_status(case_id, payload.status.value)
@@ -184,7 +205,10 @@ async def update_case_status(request: Request, case_id: str, payload: CaseStatus
 
 
 @router.post('/{case_id}/analyses')
-async def link_analysis(request: Request, case_id: str, analysis_id: str):
+async def link_analysis(
+    request: Request, case_id: str, analysis_id: str,
+    _current_user: dict = Depends(require_role(['SOC Analyst Tier 1-2', 'Incident Responder', 'Threat Hunter', 'admin'])),
+):
     """Link an analysis to a case."""
     store = request.app.state.case_store
     ok = store.link_analysis(case_id, analysis_id)
@@ -194,7 +218,10 @@ async def link_analysis(request: Request, case_id: str, analysis_id: str):
 
 
 @router.post('/{case_id}/notes')
-async def add_note(request: Request, case_id: str, payload: CaseNote):
+async def add_note(
+    request: Request, case_id: str, payload: CaseNote,
+    _current_user: dict = Depends(require_role(['SOC Analyst Tier 1-2', 'Incident Responder', 'Threat Hunter', 'admin'])),
+):
     """Add a note to a case."""
     store = request.app.state.case_store
     note_id = store.add_note(case_id, payload.content, payload.author)
