@@ -140,36 +140,6 @@ class IOCInvestigator:
 
         return enrichment
 
-    def _calculate_domain_score_bonus(self, enrichment: Dict) -> int:
-        """
-        Calculate threat score bonus from domain enrichment.
-
-        Scoring rules:
-        - Newly registered domain (< 30 days): +20
-        - DGA detected (confidence >= 50): +30
-
-        Args:
-            enrichment: Domain enrichment results
-
-        Returns:
-            Score bonus (0-50)
-        """
-        bonus = 0
-
-        # Domain age bonus
-        domain_age = enrichment.get('domain_age', {})
-        if domain_age.get('is_newly_registered'):
-            bonus += 20
-            logger.info("[IOC] +20 score: newly registered domain")
-
-        # DGA detection bonus
-        dga = enrichment.get('dga_analysis', {})
-        if dga.get('is_dga'):
-            bonus += 30
-            logger.info(f"[IOC] +30 score: DGA detected (confidence={dga.get('confidence', 0)})")
-
-        return bonus
-
     def _aggregate_seen_dates(self, sources: Dict) -> tuple:
         """Aggregate first_seen/last_seen across sources that report them.
         VirusTotal's last_analysis reflects VT's scan cadence, not confirmed
@@ -289,14 +259,6 @@ class IOCInvestigator:
             target_domain = ioc if ioc_type == 'domain' else extract_domain_from_url(ioc)
             if target_domain:
                 domain_enrichment = await self._enrich_domain(target_domain)
-                # Apply domain-based score bonus
-                domain_bonus = self._calculate_domain_score_bonus(domain_enrichment)
-                if domain_bonus > 0:
-                    threat_score = min(100, threat_score + domain_bonus)
-                    logger.info(
-                        f"[IOC] Domain enrichment bonus +{domain_bonus} "
-                        f"-> adjusted score {threat_score}"
-                    )
 
         verdict = determine_verdict(threat_score, coverage)
 

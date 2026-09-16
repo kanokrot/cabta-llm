@@ -7,6 +7,22 @@ import logging
 from ..integrations.threat_intel import GROUP_B_EXCLUDE
 
 logger = logging.getLogger(__name__)
+
+# Production IOC scoring admits only the six sources below.  The numeric
+# values are derived from the seven-source AHP analysis documented in
+# docs/source_weight_ahp_derivation_2026-09-16.md.  VirusTotal remains
+# report-only because it has not passed the separate availability/evidence
+# admission gate.
+SOURCE_SCORING_MULTIPLIERS = {
+    "feodotracker": 1.500000,
+    "c2_trackers": 0.442818,
+    "spamhaus": 0.695930,
+    "tor_exit_nodes": 0.542480,
+    "sslblacklist": 0.878018,
+    "threatfox": 0.339610,
+}
+NON_API_SCORING_SOURCES = frozenset(SOURCE_SCORING_MULTIPLIERS)
+
 class IntelligentScoring:
     """
     Context-aware threat scoring.
@@ -96,49 +112,14 @@ class IntelligentScoring:
         return 0
     
     @staticmethod
-    def calculate_domain_enrichment_bonus(domain_enrichment: Dict) -> int:
-        """
-        Calculate score bonus from domain age and DGA analysis.
-
-        Scoring rules:
-        - Newly registered domain (< 30 days): +20
-        - DGA detected (confidence >= 50): +30
-
-        Args:
-            domain_enrichment: Dict with 'domain_age' and 'dga_analysis' keys
-
-        Returns:
-            Score bonus (0-50)
-        """
-        if not domain_enrichment:
-            return 0
-
-        bonus = 0
-
-        # Domain age: newly registered domains are high risk
-        domain_age = domain_enrichment.get('domain_age', {})
-        if isinstance(domain_age, dict) and domain_age.get('is_newly_registered'):
-            bonus += 20
-
-        # DGA detection: algorithmically generated domains are high risk
-        dga = domain_enrichment.get('dga_analysis', {})
-        if isinstance(dga, dict) and dga.get('is_dga'):
-            bonus += 30
-
-        return bonus
-
-    @staticmethod
-    def calculate_ioc_score(intel_results: Dict, domain_enrichment: Dict = None) -> int:
+    def calculate_ioc_score(intel_results: Dict) -> int:
         """
         Calculate IOC threat score.
 
-        Combines threat intelligence source scores with optional domain
-        enrichment signals (domain age, DGA detection).
+        Combines threat intelligence source scores.
 
         Args:
             intel_results: Results from threat intelligence sources
-            domain_enrichment: Optional domain enrichment data
-                (with 'domain_age' and 'dga_analysis' keys)
 
         Returns:
             Threat score (0-100)
@@ -146,9 +127,6 @@ class IntelligentScoring:
         sources = intel_results.get('sources', {})
 
         if not sources:
-            # Even with no TI sources, domain enrichment can produce a score
-            if domain_enrichment:
-                return max(0, min(100, IntelligentScoring.calculate_domain_enrichment_bonus(domain_enrichment)))
             return 0
 
         # Weight different sources.
@@ -157,31 +135,45 @@ class IntelligentScoring:
         # (พบ mismatch 9 รายการเมื่อ 2026-09-13 ดู CABTA_scope_ledger.md)
         weighted_scores = []
 
-        # High-confidence sources (weight: 1.5) - Critical for threat detection
+        # These lists preserve the operational source group inventory used by
+        # accounting/tests.  Arithmetic uses SOURCE_SCORING_MULTIPLIERS so
+        # AHP-derived source-specific values are not collapsed into legacy
+        # 1.5/1.0/0.5 tier constants.
         high_confidence_sources = [
-            'virustotal', 'abuseipdb', 'feodotracker', 'threatfox',
-            'malwarebazaar'
+            'feodotracker'
         ]
 
-        # Medium-confidence sources (weight: 1.0) - Good reputation data
         medium_confidence_sources = [
-            'alienvault', 'urlhaus', 'c2_trackers', 'greynoise',
-            'shodan', 'criminalip', 'ipqualityscore', 'spamhaus',
-            'pulsedive', 'censys',
-            # TEMP: assigned medium tier pending empirical weight-fitting, see
-            # docs/CABTA_scope_ledger.md
-            'ip2proxy', 'threatzone', 'triage', 'usom'
+            'c2_trackers', 'spamhaus', 'tor_exit_nodes', 'sslblacklist'
         ]
 
-        # Low-confidence sources (weight: 0.5) - Context sources
         low_confidence_sources = [
-            'tor_exit_nodes', 'circl', 'phishtank', 'sslblacklist'
+            'threatfox'
         ]
+
+        tier_sources = (
+            set(high_confidence_sources)
+            | set(medium_confidence_sources)
+            | set(low_confidence_sources)
+        )
+        if tier_sources != NON_API_SCORING_SOURCES:
+            raise RuntimeError(
+                "IOC scoring tier definitions are out of sync with the non-API policy"
+            )
 
         group_a_sources_flagged = 0
         for source_name, source_data in sources.items():
             source_name_lower = source_name.lower()
-            if source_name_lower in GROUP_B_EXCLUDE:
+            # API/API-key/query sources, VirusTotal, CIRCL, untiered feeds,
+            # and unknown sources are report-only under the current design.
+            if source_name_lower not in NON_API_SCORING_SOURCES:
+                continue
+
+            # An unavailable source is not a clean result and must not enter
+            # this round's score.  In particular, ThreatFox timeout handling
+            # marks the source unavailable instead of falling back to stale
+            # cache data.
+            if not isinstance(source_data, dict) or source_data.get('unavailable') is True:
                 continue
 
             if isinstance(source_data, dict) and source_data.get('status') in [
@@ -192,16 +184,9 @@ class IntelligentScoring:
             score = IntelligentScoring._get_source_score(source_data)
 
             if score > 0:
-                # Determine weight
-                if source_name_lower in high_confidence_sources:
-                    weighted_scores.append(score * 1.5)
-                elif source_name_lower in medium_confidence_sources:
-                    weighted_scores.append(score * 1.0)
-                elif source_name_lower in low_confidence_sources:
-                    weighted_scores.append(score * 0.5)
-                else:
-                    # Unknown source, use medium weight
-                    weighted_scores.append(score * 0.8)
+                weighted_scores.append(
+                    score * SOURCE_SCORING_MULTIPLIERS[source_name_lower]
+                )
 
         if not weighted_scores:
             base_score = 0
@@ -214,11 +199,6 @@ class IntelligentScoring:
                 base_score = min(100, base_score * 1.3)  # 30% boost for 3+ flagged
             elif group_a_sources_flagged >= 2:
                 base_score = min(100, base_score * 1.15)  # 15% boost for 2 flagged
-
-        # Apply domain enrichment bonus (newly registered +20, DGA +30)
-        if domain_enrichment:
-            domain_bonus = IntelligentScoring.calculate_domain_enrichment_bonus(domain_enrichment)
-            base_score += domain_bonus
 
         return max(0, min(100, int(base_score)))
 
@@ -449,8 +429,8 @@ class IntelligentScoring:
         """
         Calculate composite email phishing score.
         
-        v1.0.0: Base score ağırlığı artırıldı - email-specific indicators
-        (auth failures, SPAM flags, forensics) zaten güçlü sinyaller.
+        v1.0.0: Base score weight increased because email-specific indicators
+        (auth failures, SPAM flags, forensics) are already strong signals.
         
         Scoring breakdown:
         - Base email analysis: 70% (increased from 60%)
@@ -465,7 +445,7 @@ class IntelligentScoring:
         Returns:
             Composite phishing score (0-100)
         """
-        # Base email score (70% weight) - v1.0.0: artırıldı
+        # Base email score (70% weight) - v1.0.0: increased
         score = base_score * 0.70
         
         # IOC analysis (20% weight)
@@ -503,7 +483,8 @@ class IntelligentScoring:
             score += attachment_score * 0.10
         
       
-        # Base score yüksekse (örn. [SPAM] subject, DKIM FAIL), composite de yüksek olmalı
+        # If the base score is high (for example, [SPAM] subject or DKIM FAIL),
+        # the composite score should also remain high.
         if base_score >= 80:
             score = max(score, base_score * 0.85)  # En az %85'ini koru
         elif base_score >= 60:
