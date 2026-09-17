@@ -139,6 +139,18 @@ class IOCInvestigator:
             logger.warning(f"[IOC] DGA detection failed (non-fatal): {exc}")
             enrichment['dga_analysis'] = {'error': str(exc)}
 
+        # Independent LLM DGA comparison judgment
+        try:
+            from ..utils.llm_dga_judge import judge_domain
+
+            enrichment['llm_dga_judgment'] = await judge_domain(
+                domain,
+                self.config,
+            )
+        except Exception as exc:
+            logger.warning(f"[IOC] LLM DGA judgment failed (non-fatal): {exc}")
+            enrichment['llm_dga_judgment'] = {'error': str(exc)}
+
         return enrichment
 
     def _aggregate_seen_dates(self, sources: Dict) -> tuple:
