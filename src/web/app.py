@@ -100,7 +100,21 @@ async def _lifespan(app: FastAPI):
         agent_loop._main_loop = asyncio.get_running_loop()
         logger.info("[WEB] Captured main event loop for AgentLoop MCP bridging")
 
+    digest_task = None
+    notification_manager = getattr(app.state, "notification_manager", None)
+    if notification_manager is not None and notification_manager.enabled:
+        from src.integrations.notification_digest import run_digest_loop
+
+        digest_task = asyncio.create_task(run_digest_loop(notification_manager))
+        app.state.notification_digest_task = digest_task
+
     yield
+    if digest_task is not None:
+        digest_task.cancel()
+        try:
+            await digest_task
+        except asyncio.CancelledError:
+            pass
     # Cleanup: disconnect MCP servers on shutdown
     mcp_client = getattr(app.state, 'mcp_client', None)
     if mcp_client:
@@ -281,6 +295,12 @@ def create_app() -> FastAPI:
         logger.info("[WEB] NotificationManager initialized")
     except Exception as exc:
         logger.warning(f"[WEB] NotificationManager not available: {exc}")
+
+    # The analyzers are constructed before NotificationManager for historical
+    # startup ordering; wire the same instance into Direct Flow A explicitly.
+    for analyzer in (app.state.ioc_investigator, app.state.malware_analyzer):
+        if analyzer is not None:
+            analyzer.notification_manager = app.state.notification_manager
 
     # Agent Loop
     try:

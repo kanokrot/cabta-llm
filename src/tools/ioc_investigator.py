@@ -53,9 +53,10 @@ class IOCInvestigator:
     Investigates IPs, domains, URLs, and hashes using 20+ threat intelligence sources.
     """
     
-    def __init__(self, config: Dict):
+    def __init__(self, config: Dict, notification_manager=None):
         """Initialize IOC investigator."""
         self.config = config
+        self.notification_manager = notification_manager
         self.threat_intel = ThreatIntelligence(config)
         self.llm_analyzer = LLMAnalyzer(config)
 
@@ -261,6 +262,23 @@ class IOCInvestigator:
                 domain_enrichment = await self._enrich_domain(target_domain)
 
         verdict = determine_verdict(threat_score, coverage)
+
+        # Direct Flow A is a first-class notification producer. Keep this
+        # independent from ticket creation and let policy decide whether the
+        # verdict is realtime, digest, or intentionally silent.
+        notification_manager = getattr(self, "notification_manager", None)
+        if notification_manager is not None:
+            try:
+                notification_manager.notify("verdict_alert", {
+                    "ioc": ioc,
+                    "ioc_type": ioc_type,
+                    "verdict": verdict,
+                    "threat_score": threat_score,
+                    "analysis_id": analysis_id,
+                    "session_id": analysis_id,
+                })
+            except Exception as notify_exc:
+                logger.warning("[IOC] Notification dispatch failed: %s", notify_exc)
 
         # Sync updated threat_score to intel_results before LLM analysis
         intel_results["threat_score"] = threat_score

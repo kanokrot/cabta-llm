@@ -180,6 +180,9 @@ notifications:
     enabled: false
     channel_access_token: ""
     to_user_id: ""
+  # Per-user Gmail delivery uses each user's linked OAuth account.
+  gmail:
+    enabled: true
 
 # Logging
 logging:

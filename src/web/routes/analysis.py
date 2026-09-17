@@ -103,13 +103,13 @@ def _run_email_analysis_bg(mgr, job_id: str, eml_path: str) -> None:
         mgr.fail_job(job_id, str(e))
 
 
-def _run_file_analysis_bg(mgr, job_id: str, file_path: str) -> None:
+def _run_file_analysis_bg(mgr, job_id: str, file_path: str, notification_manager=None) -> None:
     """Run file/malware analysis in a background thread."""
     try:
         mgr.update_progress(job_id, 5, 'Loading malware analyzer...')
         from src.tools.malware_analyzer import MalwareAnalyzer
         config = _load_config()
-        analyzer = MalwareAnalyzer(config)
+        analyzer = MalwareAnalyzer(config, notification_manager=notification_manager)
 
         mgr.update_progress(job_id, 10, 'Computing file hashes...')
         mgr.update_progress(job_id, 15, 'Running PE analysis...')
@@ -133,13 +133,13 @@ def _run_file_analysis_bg(mgr, job_id: str, file_path: str) -> None:
         mgr.fail_job(job_id, str(e))
 
 
-def _run_ioc_analysis_bg(mgr, job_id: str, value: str, ioc_type: str, case_store=None, case_id: str = None) -> None:
+def _run_ioc_analysis_bg(mgr, job_id: str, value: str, ioc_type: str, case_store=None, case_id: str = None, notification_manager=None) -> None:
     """Run IOC investigation in a background thread."""
     try:
         mgr.update_progress(job_id, 5, 'Loading IOC investigator...')
         from src.tools.ioc_investigator import IOCInvestigator
         config = _load_config()
-        investigator = IOCInvestigator(config)
+        investigator = IOCInvestigator(config, notification_manager=notification_manager)
 
         mgr.update_progress(job_id, 10, f'Investigating {value}...')
 
@@ -200,7 +200,8 @@ async def analyze_ioc(
     # Launch background analysis
     t = threading.Thread(
         target=_run_ioc_analysis_bg,
-        args=(mgr, job_id, payload.value, ioc_type, case_store, payload.case_id),
+        args=(mgr, job_id, payload.value, ioc_type, case_store, payload.case_id,
+              request.app.state.notification_manager),
         daemon=True,
     )
     t.start()
@@ -248,7 +249,7 @@ async def analyze_file(
     # Launch background analysis
     t = threading.Thread(
         target=_run_file_analysis_bg,
-        args=(mgr, job_id, tmp_path),
+        args=(mgr, job_id, tmp_path, request.app.state.notification_manager),
         daemon=True,
     )
     t.start()

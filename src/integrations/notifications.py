@@ -9,11 +9,22 @@ down the agent loop or a playbook run.
 """
 
 import logging
+import json
+import os
 import smtplib
 from email.mime.text import MIMEText
 from typing import Any, Dict, List, Tuple
 
 import requests
+
+from .notification_policy import (
+    NotificationStore,
+    event_frequency,
+    make_dedup_key,
+    payload_summary,
+    resolve_recipients,
+)
+from ..web.gmail_sender import GmailSender
 
 logger = logging.getLogger(__name__)
 
@@ -140,6 +151,8 @@ class NotificationManager:
         self.enabled = notif_cfg.get("enabled") is True
         self.create_on_verdict = notif_cfg.get("create_on_verdict", []) or []
         self.channels: List[NotificationChannel] = []
+        self.gmail_sender = None
+        self.notification_store = None
 
         if not self.enabled:
             return
@@ -151,6 +164,21 @@ class NotificationManager:
         line_cfg = notif_cfg.get("line", {}) or {}
         if line_cfg.get("enabled"):
             self.channels.append(LineChannel(line_cfg))
+
+        # Gmail is a parallel per-user channel. It is enabled by default when
+        # the notification system is enabled; an explicit false can disable it
+        # without changing the legacy SMTP/LINE settings.
+        gmail_cfg = notif_cfg.get("gmail", {}) or {}
+        if gmail_cfg.get("enabled", True):
+            try:
+                self.gmail_sender = GmailSender(db_path=os.getenv("AUTH_DB_PATH"))
+                self.notification_store = NotificationStore(db_path=os.getenv("AUTH_DB_PATH"))
+            except Exception:
+                # Gmail is optional; SMTP/LINE must remain available if local
+                # OAuth/database provisioning is incomplete.
+                logger.warning("[NOTIFY] Gmail channel unavailable")
+                self.gmail_sender = None
+                self.notification_store = None
 
     def notify(self, event_type: str, payload: dict) -> list:
         """
@@ -174,7 +202,7 @@ class NotificationManager:
         """
         results: List[Dict[str, Any]] = []
 
-        if not self.channels:
+        if not self.channels and self.gmail_sender is None:
             return results
 
         subject, message = self._format_message(event_type, payload)
@@ -197,6 +225,103 @@ class NotificationManager:
 
             results.append(result)
 
+        self._notify_gmail(event_type, payload, subject, message, results)
+
+        return results
+
+    def _notify_gmail(
+        self,
+        event_type: str,
+        payload: dict,
+        subject: str,
+        message: str,
+        results: List[Dict[str, Any]],
+    ) -> None:
+        """Route policy events to linked users without affecting legacy channels."""
+        if self.gmail_sender is None or self.notification_store is None:
+            return
+        frequency = event_frequency(event_type, payload)
+        if frequency == "none":
+            return
+        summary = payload_summary(payload)
+        for recipient_user_id in resolve_recipients(event_type, payload):
+            dedup_key = make_dedup_key(event_type, payload, recipient_user_id)
+            try:
+                if self.notification_store.should_dedup(
+                    dedup_key,
+                    recipient_user_id,
+                    event_type,
+                    summary,
+                ):
+                    logger.info(
+                        "[NOTIFY] deduplicated", extra={
+                            "event": "notification_deduplicated",
+                            "event_type": event_type,
+                            "recipient_user_id": recipient_user_id,
+                        }
+                    )
+                    continue
+                if frequency == "digest":
+                    self.notification_store.enqueue_digest(
+                        recipient_user_id, event_type, summary
+                    )
+                    logger.info(
+                        "[NOTIFY] queued digest", extra={
+                            "event": "notification_digest_queued",
+                            "event_type": event_type,
+                            "recipient_user_id": recipient_user_id,
+                        }
+                    )
+                    continue
+                result = self.gmail_sender.send_email(
+                    recipient_user_id, subject, message
+                )
+                if result.get("success"):
+                    self.notification_store.mark_sent(dedup_key)
+                else:
+                    logger.info(
+                        "[NOTIFY] Gmail recipient skipped: %s", result.get("error", "delivery_failed"), extra={
+                            "event": "notification_recipient_skipped",
+                            "event_type": event_type,
+                            "recipient_user_id": recipient_user_id,
+                            "reason": result.get("error", "delivery_failed"),
+                        }
+                    )
+                results.append({**result, "channel": "Gmail", "recipient_user_id": recipient_user_id})
+            except Exception:
+                # A recipient-specific failure must never affect the producer.
+                logger.warning(
+                    "[NOTIFY] Gmail recipient skipped", extra={
+                        "event": "notification_recipient_skipped",
+                        "event_type": event_type,
+                        "recipient_user_id": recipient_user_id,
+                        "reason": "dispatch_failed",
+                    }
+                )
+
+    def send_pending_digests(self) -> list[dict]:
+        """Send one combined SUSPICIOUS digest per user and mark delivered rows."""
+        if self.gmail_sender is None or self.notification_store is None:
+            return []
+        rows = self.notification_store.pending_digest()
+        grouped: dict[int, list[Any]] = {}
+        for row in rows:
+            grouped.setdefault(int(row["recipient_user_id"]), []).append(row)
+        results: list[dict] = []
+        for user_id, user_rows in grouped.items():
+            lines = ["[CTI DIGEST] SUSPICIOUS notifications"]
+            for row in user_rows:
+                try:
+                    item = json.loads(row["payload_summary"])
+                except (TypeError, ValueError):
+                    item = {}
+                lines.append(json.dumps(item, sort_keys=True))
+            result = self.gmail_sender.send_email(
+                user_id, "[CTI DIGEST] SUSPICIOUS notifications", "\n".join(lines)
+            )
+            results.append({**result, "channel": "Gmail", "recipient_user_id": user_id})
+            if result.get("success"):
+                self.notification_store.mark_digest_sent([int(row["id"]) for row in user_rows])
         return results
 
     @staticmethod

@@ -1265,6 +1265,9 @@ class PlaybookEngine:
                         "tool": pending_step.tool,
                         "session_id": session_id,
                         "status": action_status,
+                        "approved_by": approved_by,
+                        "actor": approved_by,
+                        "owner": approved_by,
                     })
                 except Exception as notify_exc:
                     logger.warning(
