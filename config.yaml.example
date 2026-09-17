@@ -1,43 +1,199 @@
-# API Keys (Optional - tool works without them but with limited features)
+# Canonical configuration template for the current runtime.
+#
+# Copy this file to config.yaml and replace placeholders locally.
+# Never commit populated API keys, passwords, access tokens, private keys,
+# SMTP credentials, or private infrastructure addresses.
+
+# Agent runtime
+agent:
+  max_steps: 100
+
+# API keys are optional. Empty values disable the corresponding integration.
 api_keys:
-  virustotal: ""          # https://www.virustotal.com/gui/my-apikey
-  abuseipdb: ""           # https://www.abuseipdb.com/account/api
-  shodan: ""              # https://account.shodan.io/
-  alienvault: ""          # https://otx.alienvault.com/api
-  hybrid_analysis: ""     # https://www.hybrid-analysis.com/my-account?tab=api-key
-  greynoise: ""           # https://viz.greynoise.io/account/api-key
-  urlscan: ""             # https://urlscan.io/user/profile/
-  threatfox: ""           # https://auth.abuse.ch/
+  virustotal: ""
+  abuseipdb: ""
+  shodan: ""
+  alienvault: ""
+  greynoise: ""
+  urlscan: ""
+  threatfox: ""
+  pulsedive: ""
+  censys: ""
+  criminalip: ""
+  ipqualityscore: ""
+  phishtank: ""
+  triage: ""
+  threatzone: ""
+  ip2proxy: ""
+  hybrid_analysis: ""
+  hybridanalysis: ""        # compatibility key used by legacy sandbox code
+  anyrun: ""
+  joe_sandbox: ""
+  joesandbox: ""            # compatibility key used by legacy sandbox code
+  anthropic: ""
 
-# LLM Configuration (Optional - for AI-powered analysis)
+# LLM configuration. The current deployment uses vLLM; Ollama is also
+# supported for a local, credential-free setup.
 llm:
-  provider: "ollama"      # Options: ollama, openai, anthropic
-  model: "llama3.2:3b"    # Model name
-  api_key: ""             # Required for openai/anthropic
-  base_url: "http://localhost:11434"  # Ollama default
+  provider: "vllm"             # vllm, ollama, openai, anthropic
+  model: "llama3.2:3b"
+  api_key: ""
+  base_url: "http://localhost:11434"
+  vllm_api_key: ""
+  vllm_base_url: "http://localhost:8080"
+  vllm_model: ""
 
-# Analysis Settings
+# Analysis settings
 analysis:
-  max_file_size_mb: 100   # Maximum file size for analysis
-  timeout_seconds: 300    # Analysis timeout
-  enable_sandbox: true    # Enable sandbox integration
-  enable_yara: true       # Enable YARA scanning
+  max_file_size_mb: 100
+  timeout_seconds: 300
+  enable_sandbox: true
+  enable_yara: true
+  enable_llm: true
+  max_archive_depth: 3
 
-# Output Settings
+# API and sandbox timeouts
+timeouts:
+  api_timeout: 30
+  sandbox_timeout: 300
+
+# Rate limits used by integrations
+rate_limits:
+  virustotal:
+    requests_per_minute: 4
+  abuseipdb:
+    requests_per_day: 1000
+  shodan:
+    requests_per_month: 100
+  concurrent_requests: 5
+
+# Per-IOC verdict thresholds. Correlation severity is decision-table based
+# and does not use these numeric thresholds.
+scoring:
+  clean_threshold: 5
+  low_risk_threshold: 30
+  suspicious_threshold: 60
+  malicious_threshold: 80
+
+# Persistent cache settings
+cache:
+  enabled: true
+  db_dir: "~/.blue-team-assistant/cache"
+  ioc_ttl_hours: 24
+  analysis_max_age_days: 30
+
+# Web server defaults
+web:
+  host: "0.0.0.0"
+  port: 8080
+  debug: false
+  max_upload_mb: 100
+
+# Output settings
 output:
-  default_format: "cli"   # Options: cli, json, html
-  save_reports: true      # Auto-save HTML reports
-  report_dir: "./reports" # Report output directory
+  default_format: "cli"       # cli, json, html
+  save_reports: true
+  report_dir: "./reports"
 
-# Ticketing
+# Ticketing policy
 ticketing:
-  # Verdicts that should automatically create an incident ticket.
-  # Available options: MALICIOUS, SUSPICIOUS, UNKNOWN, SAFE
   create_on_verdict:
     - "MALICIOUS"
     - "SUSPICIOUS"
+    - "CLEAN"
+    - "UNKNOWN"
+
+# MCP servers. Keep only the servers available in the local environment.
+mcp_servers:
+  - name: "osint_tools"
+    command: "python"
+    args: ["-m", "src.mcp_servers.osint_tools"]
+    transport: "stdio"
+    description: ""
+    env: null
+    url: null
+  - name: "free_osint_tools"
+    command: "python"
+    args: ["-m", "src.mcp_servers.free_osint_tools"]
+    transport: "stdio"
+    description: ""
+    env: null
+    url: null
+  - name: "network_tools"
+    command: "python"
+    args: ["-m", "src.mcp_servers.network_tools"]
+    transport: "stdio"
+    description: ""
+    env: null
+    url: null
+  - name: "malwoverview_tools"
+    command: "python"
+    args: ["-m", "src.mcp_servers.malwoverview_tools"]
+    transport: "stdio"
+    description: ""
+    env: null
+    url: null
+  - name: "forensics_tools"
+    command: "python"
+    args: ["-m", "src.mcp_servers.forensics_tools"]
+    transport: "stdio"
+    description: ""
+    env: null
+    url: null
+  - name: "remnux_tools"
+    command: "python"
+    args: ["-m", "src.mcp_servers.remnux_tools"]
+    transport: "stdio"
+    description: ""
+    env: null
+    url: null
+  - name: "threat_intel_tools"
+    command: "python"
+    args: ["-m", "src.mcp_servers.threat_intel_tools"]
+    transport: "stdio"
+    description: ""
+    env: null
+    url: null
+  - name: "remote_tools"
+    command: "python"
+    args: ["-m", "src.mcp_servers.remote_tools"]
+    transport: "stdio"
+    description: ""
+    env: null
+    url: null
+
+# Notifications are disabled in the template to prevent accidental delivery.
+notifications:
+  enabled: false
+  create_on_verdict:
+    - "MALICIOUS"
+    - "SUSPICIOUS"
+  email:
+    enabled: false
+    smtp_host: "smtp.example.com"
+    smtp_port: 587
+    smtp_user: ""
+    smtp_password: ""
+    from_addr: ""
+    to_addrs: []
+  line:
+    enabled: false
+    channel_access_token: ""
+    to_user_id: ""
 
 # Logging
 logging:
-  level: "INFO"           # Options: DEBUG, INFO, WARNING, ERROR
-  file: ""                # Log file path (empty = console only)
+  level: "INFO"
+  file: "./logs/agent.log"
+  max_bytes: 10485760
+  backup_count: 5
+
+# Remote collection. Add only explicitly approved hosts and use a dedicated
+# known_hosts file; unknown host keys must not be accepted automatically.
+remote_hosts: []
+# Example:
+# remote_hosts:
+#   - host: "<approved-host>"
+#     username: "<username>"
+#     key_path: "<path-to-private-key>"
+#     known_hosts_path: "<path-to-dedicated-known-hosts>"
