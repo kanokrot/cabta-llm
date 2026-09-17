@@ -2006,3 +2006,26 @@ Implementation commit: `97f7aa5`.
   idempotent disconnect, remote-revoke failure, and migration constraints.
 - Verification: targeted Phase 4 tests `8 passed`; related auth/visibility tests
   `154 passed`; full suite `1595 passed, 12 warnings, 8 subtests passed`.
+
+## Phase 5 notification routing implementation — 17 Sep 2026
+
+**Status:** `[x]` role-based Gmail routing, deduplication, SUSPICIOUS digest,
+and Direct Flow A triggers implemented.
+
+- Migration 008 adds transactional `notification_dedup` and
+  `notification_digest_queue` tables without changing migrations 001–007.
+- `verdict_alert` routes to SOC Analyst Tier 1-2 and Team Lead;
+  `approval_required` routes only to Incident Responder; `action_executed`
+  routes directly to `approved_by`.
+- Gmail delivery uses each active user's linked OAuth credential. Missing,
+  revoked, or refresh-failed accounts are skipped with structured safe logs;
+  SMTP and LINE remain parallel channels.
+- MALICIOUS is realtime, SUSPICIOUS is queued for a 15-minute asyncio digest,
+  CLEAN/UNKNOWN are suppressed. Deduplication uses a five-minute window and
+  event/verdict/normalized-IOC/recipient key.
+- IOCInvestigator and MalwareAnalyzer now emit `verdict_alert` from Direct
+  Flow A after verdict calculation; ticket creation remains independent.
+- Verification: Phase 5 tests `10 passed`; related OAuth/playbook tests
+  `33 passed`. Full suite in the current dirty worktree: `1603 passed`, `2
+  pre-existing failures` in `scripts/eval/eval_benchmark.py` compatibility
+  tests, `8 subtests passed`.
