@@ -2029,3 +2029,24 @@ and Direct Flow A triggers implemented.
   `33 passed`. Full suite in the current dirty worktree: `1603 passed`, `2
   pre-existing failures` in `scripts/eval/eval_benchmark.py` compatibility
   tests, `8 subtests passed`.
+
+## Phase 6 MCP management authentication implementation - 17 Sep 2026
+
+**Status:** `[x]` MCP management RBAC, static tool classification, audit
+logging, and playbook dispatch enforcement implemented.
+
+- Migration 009 adds `mcp_management_audit` with actor, action, server,
+  status, and timestamp fields only; no token, secret, or raw configuration.
+  Migrations 001-008 remain unchanged.
+- MCP management reads require authentication; mutations and SSRF-prone
+  checks are admin-only. Server responses are role-sanitized and never return
+  tokens/secrets, including to admin. There is no direct MCP execute endpoint.
+- The eight configured MCP servers use an explicit static tool allowlist.
+  Unknown tools are dangerous/unclassified by default, so Threat Hunter
+  discovery and execution fail closed. Discovery metadata is replaced with
+  trusted local classification before registry or dispatcher use.
+- AgentLoop and PlaybookEngine now carry role/context into the final dispatch
+  guard, including the previously unregistered MCP fallback path. The MCP
+  HTML management page is admin-only.
+- Verification: Phase 6 security tests `32 passed`; related MCP/playbook
+  regression tests `43 passed`; staged implementation commit `08411de`.
