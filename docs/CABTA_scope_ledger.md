@@ -1983,3 +1983,26 @@ retained for reproducibility.
 `scripts/adhoc/case_control_clean.json`,
 `scripts/adhoc/case_control_whois_results.jsonl`, and
 `scripts/adhoc/case_control_calibration_summary.json` (gitignored adhoc files).
+
+## Phase 4 Gmail OAuth implementation update — 17 Sep 2026
+
+**Status:** `[x]` credential lifecycle implemented and verified; Phase 5 email
+delivery through `NotificationManager` remains out of scope.
+
+Implementation commit: `97f7aa5`.
+
+- Added migration 007 for per-user Gmail tokens, SQLite OAuth state, and
+  connect/disconnect/refresh-failure audit events; migrations 001–006 were not
+  changed.
+- Added fail-closed MultiFernet refresh-token encryption using only
+  `GMAIL_TOKEN_ENCRYPTION_KEY`, with multi-key decryption support.
+- Added owner-only connect/callback/status/disconnect routes and admin-only
+  aggregate summary. No endpoint accepts `user_id` from query/body, and no
+  token or ciphertext is returned to API/UI consumers.
+- Requests only `gmail.send`, `openid`, `email`, and `profile`; OAuth tests mock
+  Google and do not perform a real browser login.
+- Added the Gmail settings card and negative/security coverage for state
+  expiry/replay/mismatch, unauthenticated access, ciphertext secrecy,
+  idempotent disconnect, remote-revoke failure, and migration constraints.
+- Verification: targeted Phase 4 tests `8 passed`; related auth/visibility tests
+  `154 passed`; full suite `1595 passed, 12 warnings, 8 subtests passed`.
