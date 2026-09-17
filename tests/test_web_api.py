@@ -236,7 +236,7 @@ class TestFastAPIEndpoints:
             "id": 101,
             "email": "analyst@example.test",
             "username": "analyst",
-            "role": "SOC Analyst Tier 1-2",
+            "role": "admin",
             "is_active": 1,
         }
         # Override with temp DBs

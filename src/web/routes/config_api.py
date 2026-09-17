@@ -27,7 +27,9 @@ def _resolve_config_path() -> Path:
 
 
 @router.get('/health')
-async def health():
+async def health(
+    _admin_user: dict = Depends(require_role("admin")),
+):
     """Health check endpoint."""
     return {
         'status': 'healthy',
@@ -37,7 +39,9 @@ async def health():
 
 
 @router.get('/info')
-async def info():
+async def info(
+    _admin_user: dict = Depends(require_role("admin")),
+):
     """System information."""
     return {
         'app': 'Blue Team Assistant',
@@ -48,7 +52,9 @@ async def info():
 
 
 @router.get('/tools')
-async def tool_status():
+async def tool_status(
+    _admin_user: dict = Depends(require_role("admin")),
+):
     """Check status of external analysis tools."""
     tools = {}
 
@@ -168,6 +174,7 @@ async def save_settings(
 @router.get('/ollama-models')
 async def list_ollama_models(
     endpoint: str = Query(default='http://localhost:11434'),
+    _admin_user: dict = Depends(require_role("admin")),
 ):
     """Proxy endpoint to list locally available Ollama models.
 
@@ -250,13 +257,16 @@ async def _check_ollama_health(
 @router.get('/ollama-health')
 async def ollama_health(
     endpoint: str = Query(default='http://localhost:11434'),
+    _admin_user: dict = Depends(require_role("admin")),
 ):
     """Check Ollama health using the requested endpoint."""
     return await _check_ollama_health(endpoint)
 
 
 @router.get('/system-status')
-async def system_status():
+async def system_status(
+    _admin_user: dict = Depends(require_role("admin")),
+):
     """Aggregate system status for the dashboard health widget."""
     uptime_seconds = (datetime.now(timezone.utc) - _START_TIME).total_seconds()
 
