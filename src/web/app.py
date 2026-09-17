@@ -13,7 +13,7 @@ import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
@@ -29,6 +29,7 @@ from .routes import playbooks as playbook_routes
 from .routes import mcp_management as mcp_routes
 from .routes import gmail_settings as gmail_routes
 from . import websocket
+from .auth import require_role
 from .analysis_manager import AnalysisManager
 from .case_store import CaseStore
 from src.integrations.ticketing import initialize_database as initialize_ticketing_db
@@ -559,7 +560,10 @@ def _register_page_routes(app: FastAPI) -> None:
         })
 
     @app.get('/mcp/servers', response_class=HTMLResponse, include_in_schema=False)
-    async def mcp_servers_page(request: Request):
+    async def mcp_servers_page(
+        request: Request,
+        _current_user: dict = Depends(require_role("admin")),
+    ):
         db_servers = []
         if app.state.agent_store:
             db_servers = app.state.agent_store.list_mcp_connections()

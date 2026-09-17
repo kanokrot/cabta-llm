@@ -77,6 +77,7 @@ async def run_playbook(
             body.params,
             body.case_id,
             user_id=current_user["id"],
+            role=current_user["role"],
         )
         return {"session_id": session_id, "status": "running"}
     except PlaybookValidationError as e:
@@ -120,7 +121,9 @@ async def approve_playbook_step(
     if engine is None:
         raise HTTPException(503, "Playbook engine not initialized")
     try:
-        result_session_id = await engine.execute_from_step(session_id, body.approved, body.approved_by)
+        result_session_id = await engine.execute_from_step(
+            session_id, body.approved, body.approved_by, role=current_user["role"]
+        )
         return {"success": True, "session_id": result_session_id}
     except ValueError as e:
         raise HTTPException(404, str(e))

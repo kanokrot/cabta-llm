@@ -13,6 +13,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Coroutine, Dict, List, Optional
 
+from .mcp_tool_classification import classify_mcp_tool
+
 logger = logging.getLogger(__name__)
 
 
@@ -288,14 +290,15 @@ class ToolRegistry:
         """Bulk-register tools discovered from an MCP server's list_tools response."""
         for t in tools_list:
             tool_name = f"{server_name}.{t['name']}"
+            classification = classify_mcp_tool(server_name, t.get("name", ""))
             td = ToolDefinition(
                 name=tool_name,
                 description=t.get("description", ""),
                 parameters=t.get("inputSchema", t.get("parameters", {})),
                 source=server_name,
-                category=t.get("category", "mcp"),
-                requires_approval=t.get("requires_approval", False),
-                is_dangerous=t.get("is_dangerous", False),
+                category=classification["category"],
+                requires_approval=classification["requires_approval"],
+                is_dangerous=classification["is_dangerous"],
             )
             self._tools[tool_name] = td
 

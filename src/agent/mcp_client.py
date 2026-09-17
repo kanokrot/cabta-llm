@@ -16,6 +16,8 @@ from pathlib import Path
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, field
 
+from .mcp_tool_classification import decorate_mcp_tool
+
 logger = logging.getLogger(__name__)
 
 # Project root -- used as the cwd for stdio MCP server subprocesses so that
@@ -503,23 +505,29 @@ class MCPClientManager:
                 tools = []
                 for t in tools_raw:
                     if hasattr(t, "name"):
-                        tools.append({
+                        raw_tool = {
                             "name": t.name,
                             "description": getattr(t, "description", ""),
                             "inputSchema": getattr(t, "inputSchema", {}),
-                        })
+                        }
+                        tools.append(decorate_mcp_tool(connection.config.name, raw_tool))
                     elif isinstance(t, dict):
-                        tools.append({
+                        raw_tool = {
                             "name": t.get("name", ""),
                             "description": t.get("description", ""),
                             "inputSchema": t.get("inputSchema", {}),
-                        })
+                        }
+                        tools.append(decorate_mcp_tool(connection.config.name, raw_tool))
                 return tools
 
             # Fallback JSON-RPC path
             if hasattr(client, "request"):
                 resp = await client.request("tools/list", {})
-                return resp.get("tools", [])
+                return [
+                    decorate_mcp_tool(connection.config.name, tool)
+                    for tool in resp.get("tools", [])
+                    if isinstance(tool, dict)
+                ]
 
             return []
 

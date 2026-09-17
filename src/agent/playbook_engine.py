@@ -1018,6 +1018,7 @@ class PlaybookEngine:
         input_data: Any,
         case_id: Optional[str] = None,
         user_id: Optional[int] = None,
+        role: Optional[str] = None,
     ) -> str:
         """
         Start a playbook run in the background and return immediately.
@@ -1046,7 +1047,9 @@ class PlaybookEngine:
 
         def _run():
             asyncio.run(
-                self._execute_session(session_id, playbook_id, pb, steps, input_data, case_id)
+                self._execute_session(
+                    session_id, playbook_id, pb, steps, input_data, case_id, role,
+                )
             )
 
         threading.Thread(
@@ -1065,6 +1068,7 @@ class PlaybookEngine:
         input_data: Any,
         case_id: Optional[str] = None,
         user_id: Optional[int] = None,
+        role: Optional[str] = None,
     ) -> str:
         """
         Execute a playbook and block until it finishes (or hits an approval
@@ -1102,7 +1106,7 @@ class PlaybookEngine:
         )
 
         return await self._execute_session(
-            session_id, playbook_id, pb, steps, input_data, case_id,
+            session_id, playbook_id, pb, steps, input_data, case_id, role,
         )
 
     async def _execute_session(
@@ -1113,6 +1117,7 @@ class PlaybookEngine:
         steps: List["PlaybookStep"],
         input_data: Dict,
         case_id: Optional[str],
+        role: Optional[str] = None,
     ) -> str:
         """Run all steps of an already-resolved playbook for an existing
         session (fresh start, always begins at steps[0])."""
@@ -1136,13 +1141,17 @@ class PlaybookEngine:
             playbook_id, session_id, len(steps),
         )
 
-        return await self._run_step_loop(
+        step_args = (
             session_id, playbook_id, pb, steps, step_map, context,
             steps[0], 0, case_id,
         )
+        if role is None:
+            return await self._run_step_loop(*step_args)
+        return await self._run_step_loop(*step_args, role)
 
     async def execute_from_step(
         self, session_id: str, approved: bool, approved_by: str = "unknown",
+        role: Optional[str] = None,
     ) -> str:
         """Resume a playbook session paused at an approval checkpoint.
 
@@ -1184,7 +1193,7 @@ class PlaybookEngine:
 
         if approved and pending_step.for_each:
             context, next_step_name = await self._execute_for_each(
-                session_id, pending_step, context, step_number,
+                session_id, pending_step, context, step_number, role,
             )
             iteration_results = context[f"{pending_step.name}_results"]
             batch_items = context[f"{pending_step.name}_items"]
@@ -1227,7 +1236,7 @@ class PlaybookEngine:
             start = time.time()
             result = await self._run_tool(
                 pending_step.tool, params, pending_step.timeout,
-                session_id=session_id,
+                session_id=session_id, role=role,
             )
             duration_ms = int((time.time() - start) * 1000)
             self.agent_loop._notify(session_id, {
@@ -1311,10 +1320,13 @@ class PlaybookEngine:
 
         self.store.update_session_status(session_id, "active")
 
-        return await self._run_step_loop(
+        step_args = (
             session_id, playbook_id, pb, steps, step_map, context,
             next_step, step_number, case_id,
         )
+        if role is None:
+            return await self._run_step_loop(*step_args)
+        return await self._run_step_loop(*step_args, role)
 
     async def _execute_for_each(
         self,
@@ -1322,6 +1334,7 @@ class PlaybookEngine:
         current_step: "PlaybookStep",
         context: Dict[str, Any],
         step_number: int,
+        role: Optional[str] = None,
     ) -> Tuple[Dict[str, Any], Optional[str]]:
         """Run a for_each step's iteration and return (context, next step)."""
         items = _resolve_var(current_step.for_each, context)
@@ -1347,7 +1360,7 @@ class PlaybookEngine:
             start = time.time()
             result = await self._run_tool(
                 current_step.tool, params, current_step.timeout,
-                session_id=session_id,
+                session_id=session_id, role=role,
             )
             duration_ms = int((time.time() - start) * 1000)
             self.agent_loop._notify(session_id, {
@@ -1392,6 +1405,7 @@ class PlaybookEngine:
         current_step: Optional["PlaybookStep"],
         step_number: int,
         case_id: Optional[str],
+        role: Optional[str] = None,
     ) -> str:
         """Run the step loop starting at *current_step* / *step_number* with
         the given *context*. Shared by a fresh ``_execute_session`` start
@@ -1663,7 +1677,7 @@ class PlaybookEngine:
                 # Handle for_each iteration
                 if current_step.for_each:
                     context, next_step_name = await self._execute_for_each(
-                        session_id, current_step, context, step_number,
+                        session_id, current_step, context, step_number, role,
                     )
 
                 else:
@@ -1679,7 +1693,7 @@ class PlaybookEngine:
                     start = time.time()
                     result = await self._run_tool(
                         current_step.tool, params, current_step.timeout,
-                        session_id=session_id,
+                        session_id=session_id, role=role,
                     )
                     duration_ms = int((time.time() - start) * 1000)
                     self.agent_loop._notify(session_id, {
@@ -1920,7 +1934,14 @@ class PlaybookEngine:
     #  Helpers
     # ------------------------------------------------------------------ #
 
-    async def _run_tool(self, tool_name: str, params: Dict, timeout: int, session_id: str = None) -> Dict:
+    async def _run_tool(
+        self,
+        tool_name: str,
+        params: Dict,
+        timeout: int,
+        session_id: str = None,
+        role: Optional[str] = None,
+    ) -> Dict:
         """
         Run a tool via the agent loop with a timeout.
 
@@ -1932,10 +1953,20 @@ class PlaybookEngine:
                 call_params = dict(params)
                 if tool_name == "investigate_ioc" and "analysis_id" not in call_params:
                     call_params["analysis_id"] = session_id
-                result = await asyncio.wait_for(
-                    self.agent_loop.run_tool(tool_name, call_params),
-                    timeout=timeout,
-                )
+                if role is None:
+                    # Preserve compatibility with lightweight test/dry-run
+                    # loop adapters that implement the original two-argument
+                    # interface. Production role-aware calls always take the
+                    # guarded branch below.
+                    dispatch = self.agent_loop.run_tool(tool_name, call_params)
+                else:
+                    dispatch = self.agent_loop.run_tool(
+                        tool_name,
+                        call_params,
+                        role=role,
+                        context={"role": role, "session_id": session_id},
+                    )
+                result = await asyncio.wait_for(dispatch, timeout=timeout)
                 return result if isinstance(result, dict) else {"result": result}
             else:
                 return {"error": "agent_loop has no run_tool method"}

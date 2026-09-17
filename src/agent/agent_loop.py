@@ -31,6 +31,7 @@ from .agent_response_parsing import (
 )
 from .agent_tool_selection import ToolSelector
 from .agent_llm_backends import LLMBackend
+from .mcp_tool_classification import classify_mcp_tool
 from src.web.visibility import is_tool_allowed
 
 logger = logging.getLogger(__name__)
@@ -462,7 +463,13 @@ class AgentLoop:
 
         return await self.mcp_client.call_tool(server, tool, params)
 
-    async def run_tool(self, tool_name: str, params: Dict) -> Dict:
+    async def run_tool(
+        self,
+        tool_name: str,
+        params: Dict,
+        role: Optional[str] = None,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> Dict:
         """Execute a single tool by name (used by PlaybookEngine).
 
         Supports multiple tool name formats:
@@ -472,6 +479,10 @@ class AgentLoop:
 
         Returns the tool result dict.
         """
+        effective_role = role
+        if effective_role is None and isinstance(context, dict):
+            effective_role = context.get("role")
+
         # ---- Normalise playbook-style "mcp:server/tool" references ----
         original_name = tool_name
         mcp_server = None
@@ -491,7 +502,16 @@ class AgentLoop:
         tool_def = self.tools.get_tool(tool_name)
 
         if tool_def is None and mcp_server and mcp_tool:
-            # Tool not registered yet -- try calling MCP directly
+            # Tool not registered yet: it still needs a trusted static
+            # classification before the dispatcher may reach the MCP client.
+            classification = classify_mcp_tool(mcp_server, mcp_tool)
+            fallback_tool = {
+                "name": tool_name,
+                "source": mcp_server,
+                **classification,
+            }
+            if effective_role is None or not is_tool_allowed(effective_role, fallback_tool):
+                return {"error": "Tool is not allowed for this role"}
             if self.mcp_client is not None:
                 try:
                     result = await self._call_mcp_tool(
@@ -504,6 +524,12 @@ class AgentLoop:
 
         if tool_def is None:
             return {"error": f"Tool not found: {original_name}"}
+
+        # Every role-aware dispatcher call is checked at the last possible
+        # point before execution.  Legacy local callers without a role remain
+        # compatible; MCP calls without a role are denied above.
+        if effective_role is not None and not is_tool_allowed(effective_role, tool_def):
+            return {"error": "Tool is not allowed for this role"}
 
         if tool_def.source == 'local':
             return await self.tools.execute_local_tool(tool_name, **params)
@@ -669,6 +695,7 @@ class AgentLoop:
                                 pb_params,
                                 case_id=state.case_id,
                                 user_id=state.user_id,
+                                role=state.role,
                             )
                             state.add_finding({
                                 "type": "playbook_completed",
