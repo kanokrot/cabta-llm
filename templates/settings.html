@@ -274,6 +274,42 @@
         </div>
     </div>
 
+    <!-- Gmail OAuth -->
+    <div class="col-12">
+        <div class="card settings-section">
+            <div class="card-header">
+                <h6 class="mb-0"><i class="bi bi-google me-2 text-accent"></i>Gmail OAuth</h6>
+                <span id="gmailStatusLabel" class="text-muted small">Loading status...</span>
+            </div>
+            <div class="card-body">
+                <div id="gmailError" class="alert alert-danger py-2" style="display:none;"></div>
+                <div class="row g-3 align-items-end">
+                    <div class="col-md-4">
+                        <small class="text-muted d-block">Account</small>
+                        <span id="gmailAccount">Not connected</span>
+                    </div>
+                    <div class="col-md-4">
+                        <small class="text-muted d-block">Granted scopes</small>
+                        <span id="gmailScopes">—</span>
+                    </div>
+                    <div class="col-md-4">
+                        <small class="text-muted d-block">Last refresh</small>
+                        <span id="gmailLastRefresh">—</span>
+                    </div>
+                </div>
+                <div class="mt-3 d-flex gap-2">
+                    <button id="gmailConnect" type="button" class="btn btn-accent btn-sm" onclick="Settings.connectGmail()">
+                        <i class="bi bi-link-45deg me-1"></i>Connect Gmail
+                    </button>
+                    <button id="gmailDisconnect" type="button" class="btn btn-outline-danger btn-sm" onclick="Settings.disconnectGmail()" style="display:none;">
+                        <i class="bi bi-x-circle me-1"></i>Disconnect
+                    </button>
+                </div>
+                <p class="text-muted small mt-3 mb-0">Only Gmail send permission is requested. Refresh tokens are never shown here.</p>
+            </div>
+        </div>
+    </div>
+
     <!-- System Info -->
     <div class="col-12">
         <div class="card">
@@ -308,6 +344,48 @@ var Settings = (function() {
 
     function init() {
         loadConfig();
+        loadGmailStatus();
+    }
+
+    function loadGmailStatus() {
+        fetch('/api/settings/gmail/status')
+            .then(function(r) {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.json();
+            })
+            .then(function(data) {
+                var linked = data.linked === true;
+                document.getElementById('gmailStatusLabel').textContent = data.revoked ? 'Revoked' : (linked ? 'Connected' : 'Not connected');
+                document.getElementById('gmailAccount').textContent = linked ? (data.google_email || 'Connected account') : 'Not connected';
+                document.getElementById('gmailScopes').textContent = linked && data.granted_scopes && data.granted_scopes.length ? data.granted_scopes.join(', ') : '—';
+                document.getElementById('gmailLastRefresh').textContent = data.last_refresh_at || '—';
+                document.getElementById('gmailConnect').style.display = linked ? 'none' : '';
+                document.getElementById('gmailDisconnect').style.display = linked ? '' : 'none';
+            })
+            .catch(function(err) {
+                var error = document.getElementById('gmailError');
+                error.textContent = 'Unable to load Gmail status: ' + err.message;
+                error.style.display = '';
+                document.getElementById('gmailStatusLabel').textContent = 'Unavailable';
+            });
+    }
+
+    function connectGmail() {
+        window.location.href = '/api/settings/gmail/connect';
+    }
+
+    function disconnectGmail() {
+        fetch('/api/settings/gmail', { method: 'DELETE' })
+            .then(function(r) {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.json();
+            })
+            .then(loadGmailStatus)
+            .catch(function(err) {
+                var error = document.getElementById('gmailError');
+                error.textContent = 'Disconnect failed: ' + err.message;
+                error.style.display = '';
+            });
     }
 
     function loadConfig() {
@@ -548,6 +626,8 @@ var Settings = (function() {
         saveApiKeys: saveApiKeys,
         toggleVisibility: toggleVisibility,
         refreshOllamaModels: refreshOllamaModels
+        ,connectGmail: connectGmail
+        ,disconnectGmail: disconnectGmail
     };
 })();
 </script>

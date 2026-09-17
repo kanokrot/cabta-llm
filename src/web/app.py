@@ -27,6 +27,7 @@ from .routes import admin as admin_routes
 from .routes import chat as chat_routes
 from .routes import playbooks as playbook_routes
 from .routes import mcp_management as mcp_routes
+from .routes import gmail_settings as gmail_routes
 from . import websocket
 from .analysis_manager import AnalysisManager
 from .case_store import CaseStore
@@ -324,6 +325,8 @@ def create_app() -> FastAPI:
     app.include_router(tickets.router, prefix='/api', tags=['Tickets'])
     app.include_router(auth_routes.router, prefix='/api/auth', tags=['Auth'])
     app.include_router(admin_routes.router, prefix='/api/admin', tags=['Admin'])
+    app.include_router(gmail_routes.router, prefix='/api/settings/gmail', tags=['Gmail OAuth'])
+    app.include_router(gmail_routes.admin_router, prefix='/api/admin', tags=['Admin Gmail OAuth'])
     app.include_router(websocket.router)
 
     # Page routes (HTML templates)

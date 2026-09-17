@@ -15,7 +15,7 @@ ADMIN = "admin"
 VALID_ROLES = frozenset({SOC, INCIDENT_RESPONDER, THREAT_HUNTER, TEAM_LEAD, ADMIN})
 VALID_FLOWS = frozenset({
     "analysis", "dashboard", "report", "chat", "agent", "playbook", "case",
-    "websocket_analysis", "websocket_agent",
+    "websocket_analysis", "websocket_agent", "gmail", "gmail_admin",
 })
 
 
@@ -30,6 +30,10 @@ def _policy_roles(flow: str) -> frozenset[str]:
         return frozenset({INCIDENT_RESPONDER, THREAT_HUNTER, ADMIN})
     if flow in {"agent", "websocket_agent"}:
         return frozenset({THREAT_HUNTER, ADMIN})
+    if flow == "gmail":
+        return frozenset(VALID_ROLES)
+    if flow == "gmail_admin":
+        return frozenset({ADMIN})
     if flow == "playbook":
         return frozenset({INCIDENT_RESPONDER, ADMIN})
     raise VisibilityError(f"Unknown visibility flow: {flow!r}")
@@ -73,6 +77,36 @@ def _scalar_list(value: Any, limit: int = 100) -> list[Any]:
         if isinstance(item, (str, int, float, bool)):
             result.append(str(item)[:500] if isinstance(item, str) else item)
     return result
+
+
+def serialize_gmail_status(status: Mapping[str, Any], role: str) -> dict[str, Any]:
+    """Serialize only non-secret, owner-scoped Gmail connection status."""
+    authorize_flow(role, "gmail")
+    scopes = status.get("granted_scopes")
+    return {
+        "linked": bool(status.get("linked", False)),
+        "google_email": _text(status.get("google_email"), 320),
+        "granted_scopes": sorted(
+            scope for scope in scopes if isinstance(scope, str) and scope in {
+                "https://www.googleapis.com/auth/gmail.send", "openid", "email", "profile"
+            }
+        ) if isinstance(scopes, list) else [],
+        "linked_at": _text(status.get("linked_at"), 64),
+        "last_refresh_at": _text(status.get("last_refresh_at"), 64),
+        "revoked": bool(status.get("revoked", False)),
+    }
+
+
+def serialize_gmail_summary(summary: Mapping[str, Any], role: str) -> dict[str, Any]:
+    authorize_flow(role, "gmail_admin")
+    by_role = summary.get("by_role")
+    safe_roles = {}
+    if isinstance(by_role, Mapping):
+        for key in (SOC, INCIDENT_RESPONDER, THREAT_HUNTER, TEAM_LEAD, ADMIN):
+            value = by_role.get(key, 0)
+            if isinstance(value, int) and value >= 0:
+                safe_roles[key] = value
+    return {"linked_users": int(summary.get("linked_users", 0)), "by_role": safe_roles}
 
 
 def _safe_mitre(value: Any) -> list[dict[str, Any]]:
