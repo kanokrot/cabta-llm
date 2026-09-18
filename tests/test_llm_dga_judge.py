@@ -161,6 +161,58 @@ async def test_judge_domain_non_200_status(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_vllm_truncation_is_labeled_and_logged(monkeypatch, caplog):
+    response = _Response(
+        data={
+            "choices": [
+                {
+                    "finish_reason": "length",
+                    "message": {"role": "assistant", "content": "{"},
+                }
+            ]
+        }
+    )
+    monkeypatch.setattr(
+        llm_dga_judge.aiohttp,
+        "ClientSession",
+        MagicMock(return_value=_mock_session(response)),
+    )
+
+    with caplog.at_level("WARNING"):
+        result = await llm_dga_judge._judge_via_vllm(
+            "example.test",
+            {"llm": {"vllm_base_url": "http://vllm.test"}},
+        )
+
+    assert result["error"] == "vLLM response truncated due to max_tokens"
+    assert "vLLM response truncated due to max_tokens" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_vllm_timeout_log_includes_exception_type(monkeypatch, caplog):
+    session_context = _mock_session_post_error(asyncio.TimeoutError())
+    monkeypatch.setattr(
+        llm_dga_judge.aiohttp,
+        "ClientSession",
+        MagicMock(return_value=session_context),
+    )
+
+    with caplog.at_level("WARNING"):
+        result = await llm_dga_judge._judge_via_vllm(
+            "example.test",
+            {"llm": {"vllm_base_url": "http://vllm.test"}},
+        )
+
+    assert result["error"] == "vLLM request timed out"
+    assert "vLLM request timed out (TimeoutError)" in caplog.text
+
+
+def test_vllm_parser_error_names_the_provider():
+    with pytest.raises(ValueError, match="Could not parse JSON from vLLM response"):
+        llm_dga_judge._parse_json_response("not valid json", "vLLM")
+
+
+@pytest.mark.asyncio
 async def test_enrich_domain_preserves_rule_dga_and_adds_llm_judgment(monkeypatch):
     investigator = IOCInvestigator.__new__(IOCInvestigator)
     investigator.config = {"llm": {"model": "qwen2.5:3b"}}
