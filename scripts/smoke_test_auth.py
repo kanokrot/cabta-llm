@@ -104,16 +104,16 @@ def _assert_auth_cookies(
 
     session = cookies[SESSION_COOKIE]
     csrf = cookies[CSRF_COOKIE]
-    if "httponly" not in session:
+    if not bool(session["httponly"]):
         raise SmokeFailure("cabta_session is not HttpOnly")
-    if "httponly" in csrf:
+    if bool(csrf["httponly"]):
         raise SmokeFailure("cabta_csrf must remain readable by browser JavaScript")
     if session["samesite"].lower() != "strict":
         raise SmokeFailure("cabta_session is not SameSite=Strict")
     if csrf["samesite"].lower() != "strict":
         raise SmokeFailure("cabta_csrf is not SameSite=Strict")
     for name, morsel in ((SESSION_COOKIE, session), (CSRF_COOKIE, csrf)):
-        if ("secure" in morsel) != expected_secure:
+        if bool(morsel["secure"]) != expected_secure:
             raise SmokeFailure(
                 f"{name} Secure flag does not match expected AUTH_COOKIE_SECURE"
             )
