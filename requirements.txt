@@ -31,7 +31,7 @@ fonttools>=4.64.0
 
 # Authentication (Phase 1 auth core)
 passlib[bcrypt]>=1.7.4
-bcrypt>=4.0,<5.0  # pinned: passlib 1.7.4 cannot read bcrypt 5.x's version metadata (AttributeError: module 'bcrypt' has no attribute '__about__')
+bcrypt==4.0.1  # passlib 1.7.4 requires bcrypt's legacy __about__.__version__ metadata
 
 # Cryptography (certificate validation)
 cryptography>=41.0.0
