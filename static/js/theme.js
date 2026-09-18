@@ -8,13 +8,26 @@
     
     // Theme management
     const THEME_KEY = 'mcp-soc-theme';
+    let activeTheme = null;
     
     function getTheme() {
-        return localStorage.getItem(THEME_KEY) || 'dark';
+        if (activeTheme) return activeTheme;
+        try {
+            activeTheme = localStorage.getItem(THEME_KEY) || 'dark';
+        } catch (error) {
+            // Strict tracking prevention can block storage even on same-origin pages.
+            activeTheme = 'dark';
+        }
+        return activeTheme;
     }
     
     function setTheme(theme) {
-        localStorage.setItem(THEME_KEY, theme);
+        activeTheme = theme;
+        try {
+            localStorage.setItem(THEME_KEY, theme);
+        } catch (error) {
+            // Theme switching still works for this page view without persistence.
+        }
         document.documentElement.setAttribute('data-theme', theme);
         updateThemeIcon(theme);
         
@@ -84,7 +97,13 @@
         window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
             const newTheme = e.matches ? 'dark' : 'light';
             // Only auto-switch if user hasn't manually set preference
-            if (!localStorage.getItem(THEME_KEY)) {
+            let storedTheme = '';
+            try {
+                storedTheme = localStorage.getItem(THEME_KEY) || '';
+            } catch (error) {
+                // Treat blocked storage as no stored preference for this view.
+            }
+            if (!storedTheme) {
                 setTheme(newTheme);
             }
         });
