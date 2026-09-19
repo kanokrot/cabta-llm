@@ -2050,3 +2050,22 @@ logging, and playbook dispatch enforcement implemented.
   HTML management page is admin-only.
 - Verification: Phase 6 security tests `32 passed`; related MCP/playbook
   regression tests `43 passed`; staged implementation commit `08411de`.
+
+## Ticket ownership filtering — 20 Sep 2026
+
+**Status:** implementation committed; post-commit full-suite verification follows.
+
+- Ticket storage remains in the separate SQLite database selected by
+  `TICKETING_DB_PATH`. Migration `011_add_ticket_owner.py` adds nullable
+  `owner_id` and an index; existing tickets remain ownerless and are not
+  backfilled.
+- SOC Analyst Tier 1-2, Incident Responder, and Threat Hunter ticket queries
+  filter by their own `owner_id`. Team Lead and admin use the unscoped query,
+  which includes ownerless legacy tickets.
+- Ticket creation receives the initiating user ID through IOC analysis,
+  file/email analysis background jobs, and playbook sessions. Agent IOC tool
+  dispatch also forwards its session owner.
+- Verification: ticket ownership focused tests `61 passed`; full suite
+  `1746 passed`, `5 failed`, `8 subtests passed`. The five failures are in
+  pre-existing eval, scoring, and theme work outside this ticket-ownership
+  change.
