@@ -206,6 +206,7 @@ class IOCInvestigator:
         ioc: str,
         analysis_id: str = None,
         allowed_sources: Optional[Set[str]] = None,
+        user_id: int = None,
     ) -> Dict:
         """
         Investigate IOC.
@@ -411,7 +412,7 @@ class IOCInvestigator:
         ticket_verdicts = self.config.get("ticketing", {}).get("create_on_verdict", ["MALICIOUS", "SUSPICIOUS"])
         if verdict in ticket_verdicts and analysis_id:
             try:
-                create_incident_ticket(result, analysis_id)
+                create_incident_ticket(result, analysis_id, owner_id=user_id)
             except Exception as e:
                 logger.error(f"[IOC] Failed to create incident ticket: {e}")
 

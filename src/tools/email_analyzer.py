@@ -60,7 +60,9 @@ class EmailAnalyzer:
         self.ioc_investigator = None
         self.file_analyzer = None
     
-    async def analyze(self, email_path: str, analysis_id: str = None) -> Dict:
+    async def analyze(
+        self, email_path: str, analysis_id: str = None, user_id: int = None,
+    ) -> Dict:
         """
         Comprehensive email analysis with SOC-grade techniques.
         
@@ -399,7 +401,7 @@ class EmailAnalyzer:
             ticket_verdicts = self.config.get("ticketing", {}).get("create_on_verdict_email", ["PHISHING", "SUSPICIOUS"])
             if verdict in ticket_verdicts and analysis_id:
                 try:
-                    create_incident_ticket(result, analysis_id)
+                    create_incident_ticket(result, analysis_id, owner_id=user_id)
                 except Exception as e:
                     logger.error(f"[EMAIL] Failed to create incident ticket: {e}")
 

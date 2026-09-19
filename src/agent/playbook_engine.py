@@ -1747,6 +1747,8 @@ class PlaybookEngine:
             malicious_iocs = context.get("collected_malicious_iocs") or _collect_malicious_iocs(context)
             should_ticket = highest_verdict in ticket_verdicts
             if should_ticket and session_id:
+                session = self.store.get_session(session_id)
+                owner_id = session.get("user_id") if isinstance(session, dict) else None
                 ticket_verdict = highest_verdict or "MALICIOUS"
                 tickets_to_create = list(malicious_iocs)
                 if not tickets_to_create:
@@ -1775,7 +1777,9 @@ class PlaybookEngine:
                             "summary": summary,
                             "recommendations": "",
                         }
-                        create_incident_ticket(ticket_job_result, session_id)
+                        create_incident_ticket(
+                            ticket_job_result, session_id, owner_id=owner_id,
+                        )
                     except Exception as e:
                         logger.error(
                             "[PLAYBOOK] Failed to create incident ticket for %s: %s",
@@ -1953,6 +1957,10 @@ class PlaybookEngine:
                 call_params = dict(params)
                 if tool_name == "investigate_ioc" and "analysis_id" not in call_params:
                     call_params["analysis_id"] = session_id
+                if tool_name == "investigate_ioc" and "user_id" not in call_params:
+                    session = self.store.get_session(session_id)
+                    if isinstance(session, dict) and session.get("user_id") is not None:
+                        call_params["user_id"] = session["user_id"]
                 if role is None:
                     # Preserve compatibility with lightweight test/dry-run
                     # loop adapters that implement the original two-argument

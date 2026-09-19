@@ -678,11 +678,16 @@ def _register_page_routes(app: FastAPI) -> None:
         })
 
     @app.get('/tickets', response_class=HTMLResponse, include_in_schema=False)
-    async def tickets_page(request: Request):
+    async def tickets_page(
+        request: Request,
+        current_user: dict = Depends(get_current_user),
+    ):
         from src.integrations.ticketing import get_all_tickets
         import json as _json
         try:
-            raw_tickets = get_all_tickets()
+            raw_tickets = get_all_tickets(
+                owner_id=tickets.ticket_owner_scope(current_user)
+            )
         except Exception as e:
             logger.warning(f"[WEB] Failed to load tickets: {e}")
             raw_tickets = []

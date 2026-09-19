@@ -72,7 +72,7 @@ def _get_readable_job(request: Request, analysis_id: str, current_user: dict):
 # Background analysis helpers
 # ------------------------------------------------------------------
 
-def _run_email_analysis_bg(mgr, job_id: str, eml_path: str) -> None:
+def _run_email_analysis_bg(mgr, job_id: str, eml_path: str, user_id: int = None) -> None:
     """Run email analysis in a background thread."""
     try:
         mgr.update_progress(job_id, 5, 'Loading email analyzer...')
@@ -87,7 +87,9 @@ def _run_email_analysis_bg(mgr, job_id: str, eml_path: str) -> None:
         mgr.update_progress(job_id, 55, 'Detecting lookalike domains...')
         mgr.update_progress(job_id, 65, 'Analyzing HTML obfuscation...')
 
-        result = asyncio.run(analyzer.analyze(eml_path))
+        result = asyncio.run(
+            analyzer.analyze(eml_path, analysis_id=job_id, user_id=user_id)
+        )
 
         mgr.update_progress(job_id, 80, 'Generating detection rules...')
         mgr.update_progress(job_id, 85, 'Running AI analysis...')
@@ -103,7 +105,9 @@ def _run_email_analysis_bg(mgr, job_id: str, eml_path: str) -> None:
         mgr.fail_job(job_id, str(e))
 
 
-def _run_file_analysis_bg(mgr, job_id: str, file_path: str, notification_manager=None) -> None:
+def _run_file_analysis_bg(
+    mgr, job_id: str, file_path: str, notification_manager=None, user_id: int = None,
+) -> None:
     """Run file/malware analysis in a background thread."""
     try:
         mgr.update_progress(job_id, 5, 'Loading malware analyzer...')
@@ -118,7 +122,9 @@ def _run_file_analysis_bg(mgr, job_id: str, file_path: str, notification_manager
         mgr.update_progress(job_id, 45, 'Computing entropy...')
         mgr.update_progress(job_id, 55, 'Querying sandbox APIs...')
 
-        result = asyncio.run(analyzer.analyze(file_path))
+        result = asyncio.run(
+            analyzer.analyze(file_path, analysis_id=job_id, user_id=user_id)
+        )
 
         verdict = result.get('verdict', 'UNKNOWN')
         score = result.get('composite_score', result.get('threat_score', 0))
@@ -133,7 +139,10 @@ def _run_file_analysis_bg(mgr, job_id: str, file_path: str, notification_manager
         mgr.fail_job(job_id, str(e))
 
 
-def _run_ioc_analysis_bg(mgr, job_id: str, value: str, ioc_type: str, case_store=None, case_id: str = None, notification_manager=None) -> None:
+def _run_ioc_analysis_bg(
+    mgr, job_id: str, value: str, ioc_type: str, case_store=None,
+    case_id: str = None, notification_manager=None, user_id: int = None,
+) -> None:
     """Run IOC investigation in a background thread."""
     try:
         mgr.update_progress(job_id, 5, 'Loading IOC investigator...')
@@ -155,7 +164,11 @@ def _run_ioc_analysis_bg(mgr, job_id: str, value: str, ioc_type: str, case_store
         if hasattr(investigator, 'set_progress_callback'):
             investigator.set_progress_callback(_on_source_progress)
 
-        result = asyncio.run(investigator.investigate(value, analysis_id=job_id))
+        result = asyncio.run(
+            investigator.investigate(
+                value, analysis_id=job_id, user_id=user_id,
+            )
+        )
 
         verdict = result.get('verdict', 'UNKNOWN')
         score = result.get('threat_score', 0)
@@ -201,7 +214,7 @@ async def analyze_ioc(
     t = threading.Thread(
         target=_run_ioc_analysis_bg,
         args=(mgr, job_id, payload.value, ioc_type, case_store, payload.case_id,
-              request.app.state.notification_manager),
+              request.app.state.notification_manager, current_user['id']),
         daemon=True,
     )
     t.start()
@@ -249,7 +262,8 @@ async def analyze_file(
     # Launch background analysis
     t = threading.Thread(
         target=_run_file_analysis_bg,
-        args=(mgr, job_id, tmp_path, request.app.state.notification_manager),
+        args=(mgr, job_id, tmp_path, request.app.state.notification_manager,
+              current_user['id']),
         daemon=True,
     )
     t.start()
@@ -293,7 +307,7 @@ async def analyze_email(
     # Launch background email analysis
     t = threading.Thread(
         target=_run_email_analysis_bg,
-        args=(mgr, job_id, tmp_path),
+        args=(mgr, job_id, tmp_path, current_user['id']),
         daemon=True,
     )
     t.start()

@@ -66,6 +66,7 @@ def _make_engine(ticketing_config):
     agent_loop = MagicMock()
     agent_loop.config = ticketing_config
     store = MagicMock()
+    store.get_session.return_value = {"user_id": 101}
     engine = PlaybookEngine(agent_loop=agent_loop, agent_store=store)
     return engine
 
@@ -98,6 +99,7 @@ async def test_ticket_created_once_per_distinct_malicious_ioc():
     args, _ = mock_ticket.call_args
     assert args[0]["ioc"] == "hash_a"
     assert args[1] == "sess-1"
+    assert mock_ticket.call_args.kwargs["owner_id"] == 101
 
 
 @pytest.mark.asyncio

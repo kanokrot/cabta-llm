@@ -10,7 +10,9 @@ from src.agent.playbook_engine import PlaybookEngine
 def _make_engine(ticketing_config):
     agent_loop = MagicMock()
     agent_loop.config = ticketing_config
-    return PlaybookEngine(agent_loop=agent_loop, agent_store=MagicMock())
+    store = MagicMock()
+    store.get_session.return_value = {"user_id": 202}
+    return PlaybookEngine(agent_loop=agent_loop, agent_store=store)
 
 
 async def _run_completed_playbook(engine, context):
@@ -40,6 +42,7 @@ async def test_fallback_ticket_uses_direct_context_ioc():
 
     mock_ticket.assert_called_once()
     assert mock_ticket.call_args.args[0]["ioc"] == "direct-ioc"
+    assert mock_ticket.call_args.kwargs["owner_id"] == 202
 
 
 @pytest.mark.asyncio
