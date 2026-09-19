@@ -1,0 +1,53 @@
+{% extends "base_auth.html" %}
+
+{% block title %}Request access - CABTA{% endblock %}
+
+{% block content %}
+<div class="card shadow-lg">
+    <div class="card-body p-4 p-md-5">
+        <div class="mb-4">
+            <h1 class="h3 mb-2">Request access</h1>
+            <p class="text-muted mb-0">Tell an administrator how you will use CABTA.</p>
+        </div>
+
+        {% if submitted %}
+        <div class="alert alert-success" role="status">
+            Your request was submitted. An administrator will review it and send an invitation if approved.
+        </div>
+        {% endif %}
+        {% if error %}
+        <div class="alert alert-danger" role="alert">{{ error }}</div>
+        {% endif %}
+
+        <form method="post" action="/request-access" novalidate>
+            <div class="mb-3">
+                <label class="form-label" for="request-name">Name</label>
+                <input class="form-control" id="request-name" name="name" type="text"
+                       maxlength="120" autocomplete="name"
+                       value="{{ form_values.get('name', '') | e }}" required autofocus>
+            </div>
+            <div class="mb-3">
+                <label class="form-label" for="request-email">Email</label>
+                <input class="form-control" id="request-email" name="email" type="email"
+                       maxlength="254" autocomplete="email"
+                       value="{{ form_values.get('email', '') | e }}" required>
+            </div>
+            <div class="mb-3">
+                <label class="form-label" for="request-reason">Reason</label>
+                <textarea class="form-control" id="request-reason" name="reason" rows="4"
+                          maxlength="1000" required>{{ form_values.get('reason', '') | e }}</textarea>
+                <div class="form-text">Keep it brief; this helps the administrator review your request.</div>
+            </div>
+            <button class="btn btn-accent w-100" type="submit">
+                <i class="bi bi-send me-1"></i>Submit access request
+            </button>
+        </form>
+
+        <p class="text-muted small text-center mt-4 mb-0">
+            Already have an invitation?
+            <a href="/register">Activate your account</a>
+            · <a href="/login">Back to sign in</a>
+        </p>
+    </div>
+</div>
+{% endblock %}

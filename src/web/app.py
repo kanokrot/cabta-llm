@@ -12,13 +12,14 @@ import logging
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
+from urllib.parse import quote
 
-from fastapi import Depends, FastAPI, Request
+from fastapi import Depends, FastAPI, Form, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import Response
+from starlette.responses import RedirectResponse, Response
 
 from .routes import analysis, dashboard, reports, config_api, cases, tickets
 from .routes import agent as agent_routes
@@ -27,11 +28,13 @@ from .routes import admin as admin_routes
 from .routes import chat as chat_routes
 from .routes import playbooks as playbook_routes
 from .routes import mcp_management as mcp_routes
+from .routes import access_requests as access_request_routes
 from .routes import gmail_settings as gmail_routes
 from . import websocket
-from .auth import require_role
+from .auth import TEAM_LEAD, get_current_user, require_role
 from .analysis_manager import AnalysisManager
 from .case_store import CaseStore
+from .security import SESSION_COOKIE_NAME, safe_relative_path
 from src.integrations.ticketing import initialize_database as initialize_ticketing_db
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -68,6 +71,31 @@ def _load_config() -> dict:
 
 TEMPLATES_DIR = PROJECT_ROOT / 'templates'
 STATIC_DIR = PROJECT_ROOT / 'static'
+
+
+def _page_auth_user(request: Request):
+    """Return the cookie-authenticated user for an HTML page, if present."""
+    token = request.cookies.get(SESSION_COOKIE_NAME)
+    if not token:
+        authorization = request.headers.get("authorization", "")
+        if authorization.lower().startswith("bearer "):
+            token = authorization[7:].strip()
+    if not token:
+        return None
+    try:
+        return get_current_user(token, request=request)
+    except Exception:
+        return None
+
+
+def _page_auth_redirect(request: Request):
+    if _page_auth_user(request) is not None:
+        return None
+    next_path = safe_relative_path(request.url.path)
+    return RedirectResponse(
+        url=f"/login?next={quote(next_path, safe='')}",
+        status_code=303,
+    )
 
 
 class NoCacheStaticMiddleware(BaseHTTPMiddleware):
@@ -346,6 +374,16 @@ def create_app() -> FastAPI:
     app.include_router(tickets.router, prefix='/api', tags=['Tickets'])
     app.include_router(auth_routes.router, prefix='/api/auth', tags=['Auth'])
     app.include_router(admin_routes.router, prefix='/api/admin', tags=['Admin'])
+    app.include_router(
+        admin_routes.team_lead_router,
+        prefix='/api/team-lead',
+        tags=['Team Lead'],
+    )
+    app.include_router(
+        access_request_routes.router,
+        prefix='/api/admin',
+        tags=['Admin access requests'],
+    )
     app.include_router(gmail_routes.router, prefix='/api/settings/gmail', tags=['Gmail OAuth'])
     app.include_router(gmail_routes.admin_router, prefix='/api/admin', tags=['Admin Gmail OAuth'])
     app.include_router(websocket.router)
@@ -438,10 +476,149 @@ def _register_page_routes(app: FastAPI) -> None:
 
     @app.get('/', response_class=HTMLResponse, include_in_schema=False)
     async def index(request: Request):
+        redirect = _page_auth_redirect(request)
+        if redirect is not None:
+            return redirect
         return templates.TemplateResponse(request, 'agent_chat.html', {})
+
+    @app.get('/login', response_class=HTMLResponse, include_in_schema=False)
+    async def login_page(request: Request, next: str = '/'):
+        next_path = safe_relative_path(next)
+        if _page_auth_user(request) is not None:
+            return RedirectResponse(url=next_path, status_code=303)
+        return templates.TemplateResponse(request, 'login.html', {
+            'next_path': next_path,
+        })
+
+    @app.get('/register', response_class=HTMLResponse, include_in_schema=False)
+    @app.get('/accept-invite', response_class=HTMLResponse, include_in_schema=False)
+    async def register_page(
+        request: Request,
+        token: str = '',
+        next: str = '/login',
+    ):
+        next_path = safe_relative_path(next, default='/login')
+        if _page_auth_user(request) is not None:
+            return RedirectResponse(url=next_path, status_code=303)
+        return templates.TemplateResponse(request, 'register.html', {
+            'invite_token': token,
+            'next_path': next_path,
+        })
+
+    def _request_access_context(
+        *,
+        error: str | None = None,
+        submitted: bool = False,
+        form_values: dict | None = None,
+    ) -> dict:
+        return {
+            'roles': access_request_routes.REQUESTABLE_ROLES,
+            'error': error,
+            'submitted': submitted,
+            'form_values': form_values or {},
+        }
+
+    @app.get('/request-access', response_class=HTMLResponse, include_in_schema=False)
+    async def request_access_page(request: Request, submitted: bool = False):
+        return templates.TemplateResponse(
+            request,
+            'request_access.html',
+            _request_access_context(submitted=submitted),
+        )
+
+    @app.post('/request-access', response_class=HTMLResponse, include_in_schema=False)
+    async def request_access_submit(
+        request: Request,
+        name: str = Form(''),
+        email: str = Form(''),
+        reason: str = Form(''),
+    ):
+        requested_role = access_request_routes.REQUESTABLE_ROLES[0]
+        client_ip = request.client.host if request.client else 'unknown'
+        limited, retry_after = access_request_routes.check_rate_limit(client_ip)
+        form_values = {
+            'name': name,
+            'email': email,
+            'requested_role': requested_role,
+            'reason': reason,
+        }
+        if limited:
+            return templates.TemplateResponse(
+                request,
+                'request_access.html',
+                _request_access_context(
+                    error='Too many requests. Please try again later.',
+                    form_values=form_values,
+                ),
+                status_code=429,
+                headers={'Retry-After': str(retry_after)},
+            )
+
+        normalized_name = name.strip()
+        normalized_email = access_request_routes.normalize_email(email)
+        normalized_reason = reason.strip()
+        error = None
+        if not normalized_name or len(normalized_name) > 120:
+            error = 'Enter a name no longer than 120 characters.'
+        elif not access_request_routes.is_valid_email(normalized_email):
+            error = 'Enter a valid email address.'
+        elif not normalized_reason or len(normalized_reason) > 1000:
+            error = 'Enter a short reason no longer than 1000 characters.'
+
+        if error:
+            return templates.TemplateResponse(
+                request,
+                'request_access.html',
+                _request_access_context(error=error, form_values=form_values),
+                status_code=400,
+            )
+
+        try:
+            access_request_routes.create_access_request(
+                name=normalized_name,
+                email=normalized_email,
+                requested_role=requested_role,
+                reason=normalized_reason,
+            )
+        except ValueError as exc:
+            return templates.TemplateResponse(
+                request,
+                'request_access.html',
+                _request_access_context(
+                    error=str(exc),
+                    form_values=form_values,
+                ),
+                status_code=409,
+            )
+
+        return RedirectResponse('/request-access?submitted=true', status_code=303)
+
+    @app.get('/management', response_class=HTMLResponse, include_in_schema=False)
+    async def management_page(
+        request: Request,
+        _current_user: dict = Depends(require_role(['admin', TEAM_LEAD])),
+    ):
+        is_admin = _current_user.get('role') == 'admin'
+        pending_requests = (
+            access_request_routes.list_pending_access_requests()
+            if is_admin
+            else []
+        )
+        return templates.TemplateResponse(
+            request,
+            'management.html',
+            {
+                'current_user': _current_user,
+                'pending_requests': pending_requests,
+                'team_member_roles': admin_routes.TEAM_MEMBER_INVITABLE_ROLES,
+            },
+        )
 
     @app.get('/dashboard', response_class=HTMLResponse, include_in_schema=False)
     async def dashboard_page(request: Request):
+        redirect = _page_auth_redirect(request)
+        if redirect is not None:
+            return redirect
         stats = app.state.analysis_manager.get_stats()
         recent = app.state.analysis_manager.list_jobs(limit=10)
         return templates.TemplateResponse(request, 'dashboard.html', {
@@ -624,4 +801,7 @@ def _register_page_routes(app: FastAPI) -> None:
 
     @app.get('/settings', response_class=HTMLResponse, include_in_schema=False)
     async def settings_page(request: Request):
+        redirect = _page_auth_redirect(request)
+        if redirect is not None:
+            return redirect
         return templates.TemplateResponse(request, 'settings.html', {})
