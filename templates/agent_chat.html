@@ -1133,8 +1133,9 @@ var AgentChat = (function() {
 
     function checkOllamaHealth() {
         fetch('/api/config/ollama-health')
-            .then(function(r) { return r.json(); })
+            .then(function(r) { return r.ok ? r.json() : null; })
             .then(function(data) {
+                if (!data) return;
                 if (!data.ollama_running) {
                     addBubble(
                         '<i class="bi bi-exclamation-triangle-fill text-warning me-1"></i>' +
