@@ -7,6 +7,10 @@ Usage::
     uvicorn src.web.app:create_app --factory --host 0.0.0.0 --port 8080
 """
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 import asyncio
 import logging
 import os
@@ -17,7 +21,6 @@ from urllib.parse import quote
 from fastapi import Depends, FastAPI, Form, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import RedirectResponse, Response
 
@@ -34,7 +37,8 @@ from . import websocket
 from .auth import TEAM_LEAD, get_current_user, require_role
 from .analysis_manager import AnalysisManager
 from .case_store import CaseStore
-from .security import SESSION_COOKIE_NAME, safe_relative_path
+from .page_auth import PageAuthMiddleware, page_auth_user as _page_auth_user
+from .security import safe_relative_path
 from src.integrations.ticketing import initialize_database as initialize_ticketing_db
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -71,21 +75,6 @@ def _load_config() -> dict:
 
 TEMPLATES_DIR = PROJECT_ROOT / 'templates'
 STATIC_DIR = PROJECT_ROOT / 'static'
-
-
-def _page_auth_user(request: Request):
-    """Return the cookie-authenticated user for an HTML page, if present."""
-    token = request.cookies.get(SESSION_COOKIE_NAME)
-    if not token:
-        authorization = request.headers.get("authorization", "")
-        if authorization.lower().startswith("bearer "):
-            token = authorization[7:].strip()
-    if not token:
-        return None
-    try:
-        return get_current_user(token, request=request)
-    except Exception:
-        return None
 
 
 def _page_auth_redirect(request: Request):
@@ -166,14 +155,8 @@ def create_app() -> FastAPI:
         lifespan=_lifespan,
     )
 
-    # CORS
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=['*'],
-        allow_credentials=True,
-        allow_methods=['*'],
-        allow_headers=['*'],
-    )
+    # Protect browser pages and documentation with a valid session.
+    app.add_middleware(PageAuthMiddleware)
 
     # Prevent static file caching
     app.add_middleware(NoCacheStaticMiddleware)
