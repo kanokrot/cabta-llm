@@ -1,6 +1,6 @@
 # CABTA Scope Ledger
 
-**Last updated:** 16 Sep 2026
+**Last updated:** 17 Sep 2026
 
 ## Current session — AHP-derived production scoring amendment
 
@@ -83,7 +83,7 @@ positive-overlap gates and was not used to fit or replace these values.
 
 AHP replaces the source-specific legacy multipliers only. The separate
 multi-source aggregation boosts remain unchanged in this session: the code
-applies `base_score * 1.3` when at least three admitted sources are flagged and
+applies `base_score * 1.2` when at least three admitted sources are flagged and
 `base_score * 1.15` when at least two are flagged. These boost factors are
 legacy heuristics and are not derived by the AHP model.
 
@@ -113,6 +113,21 @@ included in this ledger update.
 
 ---
 
+### Future follow-up — page-level role guards for authenticated HTML routes
+
+**Status:** `Not started` — explicitly outside the current authentication
+workstream.
+
+Several HTML pages currently have the new login/session guard but no matching
+page-level role guard: `/settings`, `/` (`agent_chat.html`),
+`/agent/playbooks` (`playbooks.html`), and `/agent/investigations`
+(`agent_investigations.html`). Authenticated users without the required role
+can therefore load a mostly non-functional page and encounter multiple
+in-page `403 Insufficient permissions` responses. A future phase should decide
+between enforcing page-level RBAC redirects and rendering a deliberate
+insufficient-permissions state. This is a scope item only; it is not being
+implemented in the current workstream.
+
 ## A. Advisor Comments (ตอบก่อนพรีเซนต์ครั้งหน้า)
 
 | # | Comment | Status | Evidence Tier | Definition of Done | Next Action |
@@ -120,7 +135,7 @@ included in this ledger update.
 | 1 | Severity levels: Malicious/Suspicious/Clean/Unknown vs Critical/High/Medium/Low | ✅ | T1 | ยืนยันว่า CABTA มี severity mapping อยู่แล้ว 3 ชั้น ไม่ใช่ gap ที่ต้องออกแบบใหม่: per-IOC (`src/utils/wazuh_severity.py:33-66`, `src/utils/helpers.py:63-95`) ใช้ score >=70 → CRITICAL, >=40 → HIGH, <40 → LOW และ verdict MALICIOUS→CRITICAL, SUSPICIOUS→HIGH, CLEAN/UNKNOWN→LOW; correlation (`src/agent/correlation.py:646-736`) รวม additive score แล้ว map >=60/40/20/10/else → critical/high/medium/low/info; external Wazuh alert (`src/utils/wazuh_severity.py:83-119`) map rule.level 14-15/12-13/7-11/0-6 → CRITICAL/HIGH/MEDIUM/LOW | ปิดแล้ว — ไม่ต้อง design ใหม่ เตรียมพูดประเด็น asymmetry ระหว่าง 3-tier (per-IOC) กับ 5-tier (correlation) เผื่ออาจารย์ถามต่อ |
 | 2 | ทำไมต้องคูณ `base_score` ด้วย `1.3` และเลข `1.3` มาจากไหน | 🔍 | T3 | ตรวจพบจาก `src/scoring/intelligent_scoring.py:237` ว่า `1.3` ถูกใช้หลังคำนวณ weighted average เมื่อมี admitted Group-A sources flagged ตั้งแต่ 3 แหล่งขึ้นไป จึงเป็น 30% multi-source boost ไม่ใช่ base score; `git blame` ชี้กลับไปที่ commit `e12e768` แต่ commit message เป็นเพียง broad scoring improvement และยังไม่พบ derivation จากทฤษฎี, สถิติ, calibration, หรือเอกสารอ้างอิงใด ๆ ใน repository | ยังไม่ปิด: ตอบอาจารย์ว่า provenance ของ code พบแล้ว แต่เหตุผลเชิงทฤษฎี/สถิติของ `1.3` ยังไม่พบ; ห้ามอ้างว่าเป็น evidence-based factor และห้ามเปลี่ยน factor โดยไม่มี decision แยกพร้อมหลักฐาน/approval |
 | 3 | Source ไหนน่าเชื่อถือที่สุด (ที่มาของ weight) | ✅ | T1 | ใช้ AHP (Saaty's pairwise comparison) บน 7 sources: `feodotracker`, `c2_trackers`, `spamhaus`, `tor_exit_nodes`, `sslblacklist`, `threatfox`, `virustotal`; เปรียบเทียบ verification rigor, specificity of scope และ maintenance/delisting policy โดยอ้างอิงเอกสารของแต่ละ feed ทุกคู่ที่ไม่เท่ากัน; priority vector รวมแบบ equal criteria แล้ว scale ให้ Feodo สูงสุด = `1.5`; VT ได้ multiplier สำหรับ audit เท่านั้นและยัง report-only | เตรียมอธิบายจาก `docs/source_weight_ahp_derivation_2026-09-16.md`: matrix → priority vector → CR → multiplier และแยก admission gate ออกจาก ranking |
-| 4 | ช่องทางแจ้งเตือนผูกกับ severity ระดับไหน | ⬜ | - | ตาราง severity → channel (Email/LINE/Teams) ที่ตรงกับโค้ดจริง | เช็ค `notifications.py` ว่ามี mapping logic จริงหรือ hardcode |
+| 4 | ช่องทางแจ้งเตือนผูกกับ severity ระดับไหน | ✅ | T1 | โค้ดจริงไม่มี Teams channel และไม่มี severity→channel mapping ใน SMTP/LINE: `NotificationManager.notify()` fan-out ทุก event ไปยัง channel ที่เปิดใช้งาน; mapping ตาม verdict มีเฉพาะ Gmail policy คือ `MALICIOUS→realtime`, `SUSPICIOUS→digest`, `CLEAN/UNKNOWN→none` (`src/integrations/notification_policy.py:22-32,61-88`) ส่วน `approval_required` และ `action_executed` เป็น realtime event ไม่ใช่ severity; `verdict_alert` ส่งให้ active Gmail ของ SOC Analyst Tier 1-2 + Team Lead, approval ส่งให้ Incident Responder, action ส่งตรงผู้อนุมัติ | ปิดคำถามด้าน code mapping แล้ว; ถ้าต้องการให้ Email/LINE/Teams มี severity routing แยก ต้องเป็น design/change ใหม่ ไม่ควรอ้างว่า implementation ปัจจุบันมี mapping ดังกล่าว |
 | 5 | ความถี่แจ้งเตือน (IOC ใหม่เข้าทุกวัน) | ⬜ | - | policy เขียนชัด: real-time (Malicious) / digest (Suspicious) / none (Clean) + throttle/dedup rule | เช็คว่ามี throttle logic อยู่แล้วหรือต้องออกแบบใหม่ |
 | 6 | Role definition + user manual ต่อ role + scope | ⬜ | - | ตาราง role × scope × ผู้เกี่ยวข้อง + manual สั้นต่อ role | เช็คว่ามี RBAC ในโค้ดหรือยัง (`rg "role" src/`) — ถ้าไม่มี ต้อง report เป็น gap ตรงๆ |
 | 7 | ทฤษฎีการคำนวณ + trust source ต้องอธิบายได้ | ✅ | T1 | AHP derivation document อธิบาย Saaty's 1–9 scale, pairwise matrices, priority vectors, equal criterion aggregation, CR และการ scale เป็น multiplier; production scorer ใช้เฉพาะ `SOURCE_SCORING_MULTIPLIERS` ของ 6 active sources, ไม่มี unknown fallback, และไม่ตีความ AHP multiplier เป็น probability หรือ statistically-fitted coefficient | ใช้เอกสาร AHP เป็น handoff หลักในการตอบอาจารย์; ข้อ 2 เรื่อง base-score formula ยังเป็นงานแยกและยังไม่ปิด |
@@ -180,6 +195,95 @@ Downstream compatibility: the API response shape and
 `correlation_to_wazuh_severity()` mapping remain unchanged. No corresponding
 severity thresholds are externalized in `config.yaml` or
 `config.yaml.example`.
+
+### A1.2. Notification channel and severity routing evidence (17 Sep 2026)
+
+ข้อสรุปที่ตรงกับโค้ดจริงคือ **severity ไม่ได้เป็นตัวเลือก channel สำหรับ SMTP/LINE**
+โดยตรง แต่ระบบมีสองชั้นที่ต้องแยกกัน:
+
+1. `NotificationManager` สร้าง channel จาก configuration และ fan-out event ไปยัง
+   channel ที่เปิดใช้งานอยู่
+2. Gmail เป็น channel แบบ per-user ที่มี policy แยกสำหรับ recipient,
+   frequency, deduplication และ digest
+
+| Event / severity | SMTP Email | LINE | Gmail | ผู้รับ/พฤติกรรมที่ยืนยันจากโค้ด |
+|---|---|---|---|---|
+| `verdict_alert` + `MALICIOUS` | ส่งถ้าเปิด channel | ส่งถ้าเปิด channel | realtime | Gmail route ไป active users ที่มี linked Gmail ใน role `SOC Analyst Tier 1-2` และ `Team Lead` |
+| `verdict_alert` + `SUSPICIOUS` | ส่งถ้าเปิด channel | ส่งถ้าเปิด channel | digest | Gmail queue ต่อ user; digest loop ส่งรวมทุก 15 นาที |
+| `verdict_alert` + `CLEAN`/`UNKNOWN` | ส่งถ้า caller ส่ง event เข้ามา | ส่งถ้า caller ส่ง event เข้ามา | ไม่ส่ง | Gmail policy คืน `none`; SMTP/LINE ไม่มี severity suppression ใน `notify()` |
+| `approval_required` | ส่งถ้าเปิด channel | ส่งถ้าเปิด channel | realtime | Gmail ส่งเฉพาะ active linked Gmail ของ `Incident Responder` |
+| `action_executed` | ส่งถ้าเปิด channel | ส่งถ้าเปิด channel | realtime | Gmail ส่งตรง user ID ใน `approved_by`; ไม่มี role broadcast |
+| Teams | ไม่มี implementation | — | — | พบเพียง backlog reference; ไม่มี `TeamsChannel`, webhook หรือ Teams config key ใน production code |
+
+#### Initialization and legacy channel fan-out
+
+- `NotificationManager` อ่าน `config['notifications']`; ถ้า `enabled` ไม่เป็น
+  `True` จะไม่สร้าง channel และ `notify()` จะ no-op:
+  `src/integrations/notifications.py:139-158`
+- SMTP ถูกเพิ่มเมื่อ `notifications.email.enabled` เป็นจริง และใช้
+  `EmailChannel`: `src/integrations/notifications.py:40-84,160-163`
+- LINE ถูกเพิ่มเมื่อ `notifications.line.enabled` เป็นจริง และใช้
+  `LineChannel`: `src/integrations/notifications.py:87-133,164-166`
+- Gmail ถูกเปิดโดย default เมื่อ notification system เปิดอยู่ เว้นแต่ตั้ง
+  `gmail.enabled: false`: `src/integrations/notifications.py:168-181`
+- `notify()` format subject/message แล้วเรียกทุก channel ใน `self.channels`
+  โดยไม่ตรวจ verdict/severity ก่อนส่ง: `src/integrations/notifications.py:183-230`
+  ดังนั้น SMTP/LINE เป็น **event fan-out** ไม่ใช่ severity-aware routing
+
+ค่าตัวอย่างใน config ยืนยันว่า SMTP/LINE เป็น legacy static channels และ Gmail
+เป็น per-user channel: `config.yaml.example:165-185`
+
+#### Gmail policy flow
+
+- `FREQUENCY_MAP` กำหนด `MALICIOUS→realtime`, `SUSPICIOUS→digest`,
+  `CLEAN/UNKNOWN→none`; `approval_required` และ `action_executed` เป็น
+  realtime: `src/integrations/notification_policy.py:22-32`
+- `EVENT_ROLE_MAP` กำหนด `verdict_alert` ไป SOC Analyst Tier 1-2 + Team Lead
+  และ `approval_required` ไป Incident Responder:
+  `src/integrations/notification_policy.py:17-20`
+- `action_executed` ไม่ใช้ role map แต่ resolve จาก `approved_by` และต้องเป็น
+  active user: `src/integrations/notification_policy.py:70-88`
+- `NotificationManager._notify_gmail()` หยุดทันทีเมื่อ frequency เป็น `none`,
+  ทำ dedup ก่อน และ queue เฉพาะ digest:
+  `src/integrations/notifications.py:232-300`
+- dedup key ประกอบด้วย event, verdict, normalized IOC และ recipient; window
+  5 นาที: `src/integrations/notification_policy.py:31,91-95` และ
+  `src/integrations/notification_policy.py:143-183`
+- SUSPICIOUS digest ถูกส่งรวมต่อ user โดย `send_pending_digests()` และ loop
+  ทำงานทุก 15 นาที: `src/integrations/notifications.py:302-325`,
+  `src/integrations/notification_digest.py:7-24`
+
+#### Notification producers and important boundary
+
+- Direct Flow A ของ `IOCInvestigator` ส่ง `verdict_alert` หลังคำนวณ verdict:
+  `src/tools/ioc_investigator.py:253-281`
+- Direct Flow A ของ `MalwareAnalyzer` ส่ง `verdict_alert` ผ่าน
+  `_notify_verdict()`: `src/tools/malware_analyzer.py:128-149`
+- Agent Loop ส่ง `verdict_alert` เฉพาะเมื่อ verdict อยู่ใน
+  `notification_manager.create_on_verdict` ซึ่ง default config คือ
+  `MALICIOUS` และ `SUSPICIOUS`: `src/agent/agent_loop.py:627-640`,
+  `config.yaml.example:165-170`
+- อย่างไรก็ตาม Direct Flow A เรียก `notify()` โดยตรงโดยไม่ตรวจ
+  `create_on_verdict`; เมื่อ SMTP/LINE เปิดอยู่จึงควรถือว่า legacy channels
+  อาจได้รับทุก `verdict_alert` ที่ Direct Flow A emit รวมถึง CLEAN/UNKNOWN
+  ขณะที่ Gmail ยังคง suppress ตาม `FREQUENCY_MAP`
+- Approval checkpoint และ approved action ใน Playbook emit
+  `approval_required`/`action_executed`: `src/agent/playbook_engine.py:1248-1276`
+  และ `1490-1511`
+- Application wiring สร้าง NotificationManager แล้ว inject เข้า
+  IOCInvestigator, MalwareAnalyzer และ AgentLoop:
+  `src/web/app.py:290-318`
+
+#### Verification
+
+`tests/test_notification_routing_phase5.py` ยืนยัน role routing, Gmail
+frequency, 5-minute dedup, 15-minute digest, SMTP/LINE parallel fan-out,
+unlinked-recipient safety และ Direct Flow A triggers ที่
+`tests/test_notification_routing_phase5.py:109-310`.
+
+ดังนั้น row นี้ปิดได้ในระดับ **T1 สำหรับ behavior ที่มีอยู่จริง** แต่ยังไม่ใช่
+ข้อสรุปว่า SMTP/LINE มี severity routing แบบเดียวกับ Gmail และ Teams ยังเป็น
+backlog/design gap ไม่ใช่ implemented channel.
 
 ### A2. Detection rule edit endpoint (15 Sep 2026)
 
@@ -1795,7 +1899,30 @@ not supersede the accepted AHP derivation.
 
 **ผลลัพธ์ที่ต้องได้:** user แต่ละคนสามารถ authorize Gmail ของตนเอง และระบบใช้ credential ต่อ user ได้
 
-**สถานะ:** `[ ]` ยังไม่เริ่ม
+### Phase 4 pre-implementation setup — DONE โดยผู้ใช้
+
+**สถานะปัจจุบัน (2026-09-17):** `[~]` Google Cloud-side setup เสร็จแล้ว และพร้อมสำหรับการทำ implementation; ส่วน Phase 4 implementation ยังไม่เริ่ม
+
+ตาม user confirmation:
+
+- มี Google Cloud Project และเปิดใช้งาน Gmail API แล้ว
+- ตั้งค่า OAuth Consent Screen เป็น `External` แล้ว
+- สร้าง OAuth Client ประเภท `Web application` แล้ว
+- ลงทะเบียน Redirect URI: `http://localhost:3003/api/settings/gmail/callback` ซึ่งตรงกับ local dev port ใน README
+- ตั้งค่า Client ID และ Client Secret เป็น persistent Windows User environment variables: `GMAIL_OAUTH_CLIENT_ID` และ `GMAIL_OAUTH_CLIENT_SECRET`
+- ยืนยันการทำงานจาก terminal ใหม่หลัง activate `D:/ai_cti_automate/.venv/Scripts/Activate.ps1`
+
+**Decisions ที่บันทึกไว้สำหรับ implementation:**
+
+- owner-only: ผู้ใช้ผูก/ถอดผูกได้เฉพาะ Gmail ของตนเอง และทั้ง 5 roles สามารถ connect ได้
+- ใช้ scopes เฉพาะ `gmail.send` และ identity scopes; ไม่ขอสิทธิ์อ่านหรือแก้ไข mailbox
+- ใช้ SQLite OAuth-state table สำหรับผูก callback กับผู้ใช้และป้องกัน CSRF/state replay
+- ใช้ environment variables สำหรับ OAuth client secrets และ MultiFernet สำหรับ token encryption
+- เมื่อ disconnect ให้ hard-delete token แต่เก็บ audit record ไว้
+
+**ขั้นถัดไปที่อยู่ในคิว (ยังไม่เริ่ม):** สร้าง `007_add_user_gmail_tokens.py`, token storage/encryption, routes `/api/settings/gmail/connect`, `/callback`, `/status`, `DELETE` และ Settings UI card ตาม diff plan ที่รออนุมัติ
+
+**ข้อจำกัด:** การบันทึกนี้ไม่ถือเป็นการทำ Gmail OAuth implementation เสร็จสมบูรณ์ และยังไม่มีการแก้โค้ด สร้าง migration หรือ commit ในขั้นตอนนี้; ห้ามแตะ `smtp_*` เดิมและ MCP Server
 
 **ขอบเขตที่ต้องปลดล็อก:** ต้อง lift config scope สำหรับ `config.yaml` เฉพาะ section ใหม่ ห้ามแตะ `smtp_*` เดิม
 
@@ -2030,6 +2157,62 @@ and Direct Flow A triggers implemented.
   pre-existing failures` in `scripts/eval/eval_benchmark.py` compatibility
   tests, `8 subtests passed`.
 
+## Consensus Boost Multiplier — Empirical Grounding
+
+The boost direction is empirically supported: at threshold `sources_flagged>=2`,
+the raw OR Wilson CI lower bound is `1.372902`, which is greater than `1`.
+The exact multiplier magnitude cannot be derived from this benchmark because
+of perfect separation.
+
+The consensus boost OR analysis used `894` records from the Group A benchmark.
+The bucket table shows perfect separation: `sources_flagged>=1` is `100%`
+MALICIOUS (`332/332`, `21/21`, `2/2`), while `sources_flagged=0` is `65.7%`
+MALICIOUS (`354/539`). Raw `OR(>=2 vs <2) = inf`, Wilson CI lower bound =
+`1.372902`. Raw `OR(>=3 vs <3) = inf`, Wilson CI lower bound = `0.115896`.
+Perfect separation means point-estimate OR cannot be computed by standard
+methods.
+
+Haldane-Anscombe continuity correction was applied by adding `0.5` to every
+cell of the `2x2` table before computing OR, the standard method for zero-cell
+tables (Haldane 1956 / Anscombe 1956):
+
+- Threshold `>=2`: `a=23.5, b=0.5, c=686.5, d=185.5 -> OR ~= 12.7`
+- Threshold `>=3`: `a=2.5, b=0.5, c=707.5, d=185.5 -> OR ~= 1.31`
+
+`OR~=1.31` at threshold `>=3` is close to the existing `1.3` multiplier; this
+is an observation, not proof of correctness. These corrected OR values are an
+interim justification, not proof of the exact multiplier.
+
+An empirical false-positive search was performed as a negative result. MISP
+misp-warninglists (`github.com/MISP/misp-warninglists`) were searched for IPs
+in the Group A benchmark (`154` IP-type records, `130` with
+`sources_flagged>=1`) matching known-scanner CIDR ranges.
+
+- Scanner lists: `shodan-scanning` (`104` networks), `censys-scanning`
+  (`23`), `rapid7-nt-scanning` (`18`), and `shadowserver` (`40`) produced
+  `0` matches.
+- Cloud-provider lists: `amazon-aws` (`3868` networks), `microsoft-azure`
+  (`2335`), `digitalocean` (`234`), and `cloudflare` (`22`) produced `11`
+  matches. Manual review showed all `11` have
+  `expected_verdict=MALICIOUS` (confirmed C2/malware hosted on cloud VPS
+  infrastructure, not false positives).
+- Cloud IP ranges are used by both legitimate traffic and malicious actors;
+  cheap, low-verification VPS hosting is common C2 infrastructure, so range
+  membership alone carries no clean/malicious signal here.
+
+No usable false-positive candidates were found within the time available. This
+is a negative result from a genuine attempt, not a skipped step.
+
+### Future Work
+
+- Collect false-positive IOCs specifically for `spamhaus`/`c2_trackers` (the
+  only two sources with nonzero signal in Group A).
+- Collect a minimum `~10-15` confirmed clean examples in the
+  `sources_flagged>=1` zone to break perfect separation.
+- Investigate source delisting/retraction logs and manually curated gray-zone
+  IPs. Cloud VPS and public scanner ranges were tried and ruled out this
+  session.
+
 ## Phase 6 MCP management authentication implementation - 17 Sep 2026
 
 **Status:** `[x]` MCP management RBAC, static tool classification, audit
@@ -2051,6 +2234,26 @@ logging, and playbook dispatch enforcement implemented.
 - Verification: Phase 6 security tests `32 passed`; related MCP/playbook
   regression tests `43 passed`; staged implementation commit `08411de`.
 
+## Access-request two-tier invitation amendment - 18 Sep 2026
+
+**Status:** `[x]` public Team Lead request queue and scoped Team Lead member
+invitation capability implemented.
+
+This is an intentional amendment to the earlier D10.8 restriction that said
+Team Lead could not invite users. The original restriction remains true for
+admin and Team Lead account creation: public requests are now Team Lead-only,
+admin continues to approve those requests and retains the unrestricted
+admin-only invite endpoint, while an authenticated Team Lead may invite only
+`SOC Analyst Tier 1-2`, `Incident Responder`, or `Threat Hunter` through the
+separate Team Lead invite endpoint. Team Leads cannot invite another Team Lead
+or an admin. The existing token creation, duplicate checks, expiry, and email
+delivery path are shared rather than duplicated.
+
+`/management` is now available to both `admin` and `Team Lead`, with the admin
+access-request approval queue shown only to admins and the scoped member
+invitation form shown only to Team Leads. CSRF and role checks remain enforced
+server-side.
+
 ## Ticket ownership filtering — 20 Sep 2026
 
 **Status:** implementation committed; post-commit full-suite verification follows.
@@ -2069,3 +2272,118 @@ logging, and playbook dispatch enforcement implemented.
   `1746 passed`, `5 failed`, `8 subtests passed`. The five failures are in
   pre-existing eval, scoring, and theme work outside this ticket-ownership
   change.
+
+## Scoring aggregation formula and boost calibration decision — 20 Sep 2026
+
+**Decision:** Dividing by `weight_sum` in the AHP scoring formula is intentional.
+The production base score is `sum(weighted_scores) / weight_sum`, with the
+active AHP multipliers accumulated into `weight_sum`
+(`src/scoring/intelligent_scoring.py:193-197`). The current multi-source boosts
+are `1.20` for exactly 2 flagged sources and `1.30` for 3 or more.
+
+**Supersession:** The prior statements at lines 84-88 and 342-345 are stale for
+the current aggregation decision. In particular, line 84 records `1.20` for 3+
+and `1.15` for 2+, while line 342 records `1.30` for 3+ and `1.15` for 2+.
+Use this entry for the current values and evidence; the earlier entries remain
+unchanged as audit history.
+
+### 2-source boost calibration under `weight_sum`
+
+The current 2-source boost is `1.20`, changed from `1.15`. A paired bootstrap
+comparison of `1.15` vs `1.20`, using scores computed with `weight_sum`, gave
+`Diff=+0.0000`, `95% CI [+0.0000, +0.0000]`, with `n=21` 2-source records.
+None of those 21 records had a `base_score` in `[41.67, 43.48]`, the only range
+where changing the boost from `1.15` to `1.20` can flip classification at
+`threshold=50`.
+
+There is no empirical evidence supporting or rejecting `1.20` vs `1.15` under
+the current formula. This is not because a boost cannot affect outcomes in
+principle; the sample is small and has no records at the decision boundary. The
+previous calibration result, `95% CI [+0.0164, +0.0414]` with `n=22`, is no
+longer applicable because it measured scores under the pre-`weight_sum` formula.
+
+### Formula comparison on the Group A benchmark
+
+The old divisor (number of sources) and `weight_sum` were compared on the same
+`894`-record Group A benchmark, holding boosts equal at `1.20` for 2 sources
+and `1.30` for 3+ sources. The corresponding score files are
+`scripts/eval/eval_results_group_a_v3_rich_oldformula.jsonl` and
+`scripts/eval/eval_results_group_a_v3_rich_weightsum.jsonl`.
+
+- Overall: `F1(old)=0.2443`, `F1(weight_sum)=0.5892`, `Diff=+0.3449`,
+  `95% CI [+0.3176, +0.3709]`.
+- 0-source (`N=539`): `Diff=+0.0000`; no source flags and the scores are equal
+  under both formulas.
+- 1-source (`N=332`): `F1(old)=0.0752`, `F1(weight_sum)=1.0000`,
+  `Diff=+0.9248`.
+- 2-source (`N=21`): `F1(old)=0.4878`, `F1(weight_sum)=1.0000`,
+  `Diff=+0.5122`, `95% CI [+0.0000, +0.5385]`.
+- 3+-source (`N=2`): `Diff=+0.0000`; the sample is too small for a meaningful
+  conclusion.
+
+### Ground-truth coverage limitation
+
+| `sources_count_group` | MALICIOUS/DGA | Other (clean) | Total |
+|---|---:|---:|---:|
+| 0-source | 354 | 185 | 539 |
+| 1-source | 332 | 0 | 332 |
+| 2-source | 21 | 0 | 21 |
+| 3+-source | 2 | 0 | 2 |
+
+All `185` (`100%`) clean records in this benchmark are in the 0-source group.
+There are no clean records with one or more source flags. Therefore, F1
+differences in the 1-source, 2-source, and 3+-source groups provide
+recall-side evidence on malicious records only; they cannot measure the effect
+of `weight_sum` on the false-positive rate for clean IOCs flagged by one or
+more sources. This is a gap in the current benchmark, not evidence about the
+formula. More clean IOCs with 1, 2, or 3+ source flags are needed to evaluate
+false-positive impact.
+
+All experiments in the 2-source calibration, formula comparison, and coverage
+analysis above use the same `894`-record Group A benchmark that was used for
+the earlier boost calibration. Results therefore carry a risk of overfitting
+to this one dataset.
+
+## Scoring formula, boost selection, and Spamhaus notes — 2026-09-21
+
+### 1. สูตรรวมคะแนน (divisor)
+
+- [x] สูตรเดิมหารผลรวมคะแนนถ่วงน้ำหนักด้วยจำนวน source ที่มีคะแนนบวก; ThreatFox `90 x 0.33961 = 30.5649` ได้ `threat_score=30` หลังปัดจำนวนเต็ม จึงเป็น CLEAN ที่ threshold `50` ในตัวอย่าง `pbl_examples.txt`. สูตรปัจจุบันหารด้วย `weight_sum` เพื่อ normalize ด้วยน้ำหนัก AHP ที่ใช้จริง. หลักฐาน: `evidence/source_weights_2026-09-21/final_boost_2026-09-21/pbl_examples.txt`; `src/scoring/intelligent_scoring.py:191-200`.
+- [x] Stage 0 gate คำนวณซ้ำจาก `sources.*.score` เทียบ `threat_score` ได้ `894/894` สำหรับสามชุดพารามิเตอร์นี้:
+
+  | ไฟล์ข้อมูล | divisor | boost 2 source | boost 3+ source | ผล gate |
+  |---|---|---:|---:|---|
+  | `v3_rich` | `count` | `1.15` | `1.30` | `894/894 PASS` |
+  | `weightsum` | `weight_sum` | `1.20` | `1.30` | `894/894 PASS` |
+  | `oldformula` | `count` | `1.20` | `1.30` | `894/894 PASS` |
+
+  ชื่อไฟล์ข้อมูลใน gate คือ `scripts/eval/eval_results_group_a_v3_rich.jsonl`, `scripts/eval/eval_results_group_a_v3_rich_weightsum.jsonl`, `scripts/eval/eval_results_group_a_v3_rich_oldformula.jsonl`. หลักฐาน: `evidence/source_weights_2026-09-21/final_boost_2026-09-21/gate_results.txt`.
+- [x] ผล S1 (`count`, `1.15/1.30`) มี Macro F1 `0.2155`, 95% CI `[0.1903, 0.2398]`; ผล S3 (`weight_sum`, `1.20/1.30`) มี Macro F1 `0.5892`, 95% CI `[0.5562, 0.6200]`. CI ทั้งสองไม่ทับกัน แต่ยังไม่ได้ทำ paired bootstrap ของผลต่าง S1 กับ S3 โดยตรง; ค่าบูสต์ของสองชุดต่างกันด้วย. หลักฐาน: `evidence/source_weights_2026-09-21/final_boost_2026-09-21/S1_results.txt`, `S3_results.txt`.
+
+### 2. Boost multiplier: วิธีเลือกค่า
+
+- [x] เกณฑ์ค่าเฉลี่ยจาก `S3_as_is` ใน `score_group_summary.csv`: กลุ่ม 1 source เฉลี่ย `89.186747` หรือ `89.19`; กลุ่ม 2 source ที่ boost `5%` เฉลี่ย `87.476190` หรือ `87.48` ซึ่งต่ำกว่า; ที่ `10%` เฉลี่ย `91.428571` หรือ `91.43` ซึ่งสูงกว่า. จุดตัดของเกณฑ์นี้อยู่ราว `7%`.
+- [x] เกณฑ์ไม่ชนเพดาน `100`: กลุ่ม 2 source ที่ `20%` เฉลี่ย `99.047619` หรือ `99.05`; ที่ `25%` ขึ้นไป คะแนนเฉลี่ยและคะแนนต่ำสุดเป็น `100` เท่ากันทั้ง `21` รายการ.
+- [x] เกณฑ์ threshold sweep: ที่ threshold `95` ใน S3 ค่า F1 เพิ่มจาก `0.176147` ที่ boost `10%` เป็น `0.206610` ที่ `15%`; ค่า `15%` และ `20%` เท่ากัน. หลักฐานของเกณฑ์ทั้งสามข้อ: `evidence/source_weights_2026-09-21/final_boost_2026-09-21/score_group_summary.csv`, `threshold_sweep.csv`.
+- [x] ช่วงที่ผ่านเกณฑ์ข้างต้นคือ `15-20%`; ข้อมูล threshold sweep แยก `15%` กับ `20%` ไม่ออก จึงคง `1.20` (เพิ่ม `20%`) ที่ scorer ใช้อยู่ เป็นกฎ tie-break และไม่ใช่ผลทดลองว่าค่านี้เหนือกว่า `15%`. หลักฐานค่าปัจจุบัน: `src/scoring/intelligent_scoring.py:210-214`; ผล sweep: `evidence/source_weights_2026-09-21/final_boost_2026-09-21/threshold_sweep.csv`.
+- [x] Boost `3+` คง `1.30` ตามการออกแบบ; S3 มี `n=2`, S4 หลัง exclude PBL มี `n=1`, และคะแนนเต็ม `100` ทั้งกลุ่ม จึง calibrate ค่ากลุ่มนี้จากข้อมูลชุดนี้ไม่ได้. หลักฐาน: `evidence/source_weights_2026-09-21/final_boost_2026-09-21/S3_results.txt`, `S4_results.txt`, `score_group_summary.csv`.
+- [x] ที่ threshold `50` ค่า Macro F1 ของ S3 คง `0.589171` ทุก boost ที่ sweep; คะแนนเฉลี่ยกลุ่ม 2 source เป็น `83.428571` ก่อน boost, `95.238095` ที่ `15%`, `99.047619` ที่ `20%`. AUC/AP diff เป็น `0` ใน threshold-free metrics; source-flagged records ใน Group A เป็น MALICIOUS ทั้งหมด จึงไม่ใช้ diff `0` เป็นเหตุผลเลือก boost. หลักฐาน: `evidence/source_weights_2026-09-21/final_boost_2026-09-21/threshold_sweep.csv`, `score_group_summary.csv`, `threshold_free_metrics.csv`, `S3_results.txt`.
+- [x] ตัวเลขจากสูตร count ที่ไม่ใช่ผลของสูตรปัจจุบัน: Macro F1 `0.2443`, diff `+0.0288`, 95% CI ของ diff `[+0.0164, +0.0414]`, ชนะทุกรอบ bootstrap `100%`; ทำซ้ำได้ใน S1 โดยเปรียบเทียบ count+`1.15/1.30` กับ count+`1.20/1.30` เท่านั้น. ผลนี้มาจาก `20` IOC ที่คะแนนเปลี่ยนจาก `49` เป็น `51`; `49` ต่ำกว่าเส้นตัด `50` หนึ่งคะแนน. หลักฐาน: `evidence/source_weights_2026-09-21/final_boost_2026-09-21/S1_results.txt`, `pbl_examples.txt`.
+- [x] PR-curve ของ S3 ที่ threshold `0` รายงาน positive-class F1 `0.8846`, precision `0.793` (`709/894`), recall `1.0`; threshold `0` ทำนายทุกรายการเป็น MALICIOUS จึงไม่ใช่ผลการทำงานของระบบที่ threshold ใช้งาน. หลักฐาน: `evidence/source_weights_2026-09-21/final_boost_2026-09-21/sweep_results.txt`, `S3_pr_curves.csv`.
+
+### 3. Spamhaus return codes
+
+- [x] `check_spamhaus()` ที่ `src/integrations/threat_intel_extended.py:262-291` ตั้ง `found=True` เมื่อ DNS resolve สำเร็จ และไม่แยก return code. ใน tests ที่ค้นพบ `tests/test_threat_intel_source_accounting.py:121,193` มีเพียง mock การเรียก method; ไม่มี test ตรวจการแปล return code.
+- [x] Group A มี Spamhaus hits `49` รายการ: `33` PBL-only (`127.0.0.10/11`) และ `16` รายการมี code อื่น. DNS ที่เก็บวันที่ `2026-09-21` ตรงกับ cache `49/49`. ไม่พบ `127.255.255.x` ในชุด code ที่ตรวจ. หลักฐาน: `evidence/source_weights_2026-09-21/spamhaus_codes_group_a_2026-09-21.jsonl`, `spamhaus_pbl_sensitivity_2026-09-21.json`.
+- [x] Holdout overlap มี clean proxy ที่ Spamhaus ติดธง `21` รายการ: `20` ตอบ `127.0.0.11` และ `1` ตอบ `127.0.0.2` (`39.109.117.195`). Manifest ระบุรายการหลังเป็น clean proxy จาก public DNS ที่ยังไม่ยืนยัน จึงไม่นับเป็น false positive ที่ยืนยันแล้ว. หลักฐาน: `evidence/source_weights_2026-09-21/independent_external_proxy_holdout_2026-09-21.json`, `independent_external_proxy_holdout_overlap_2026-09-21.json`.
+- [x] เมื่อ exclude PBL, F1 ของ S3→S4 เปลี่ยนจาก `0.589171` เป็น `0.571506`. สำหรับการนับจาก `sources_flagged` ใน S1→S2 ค่า `n(2-src)` เปลี่ยน `22→9`; การนับจาก scorer-status เปลี่ยน `21→8`. ใน S3→S4 ทั้ง record `sources_flagged` และ scorer-status เปลี่ยน `21→8`. จำนวนเหล่านี้นับคนละแบบใน S1/S2; Group A มี clean IP เพียง `3` รายการ จึงวัดผลของ PBL ต่อ false positive ไม่ได้. หลักฐาน: `evidence/source_weights_2026-09-21/final_boost_2026-09-21/S1_results.txt`, `S2_results.txt`, `S3_results.txt`, `S4_results.txt`, `spamhaus_pbl_sensitivity_2026-09-21.json`, `scripts/eval/eval_results_group_a_v3_rich.jsonl`.
+- [ ] ยังไม่ได้แก้ scorer ให้แยก Spamhaus PBL; เป็น future work หลังงานนี้. หลักฐานพฤติกรรมปัจจุบัน: `src/integrations/threat_intel_extended.py:262-291`; รายละเอียดผลทดสอบในหัวข้อนี้.
+
+### 4. สถานะและข้อจำกัด
+
+- [x] ไม่มีผลประเมินสูตร/boost บน held-out set: การเลือกค่าและตัวชี้วัดข้างต้นใช้ Group A ชุดเดียวกัน. มี manifest holdout `780` records และไฟล์ overlap แต่ไม่ได้คำนวณผล scoring บนชุดนั้น. หลักฐาน: `evidence/source_weights_2026-09-21/final_boost_2026-09-21/S1_results.txt`, `S3_results.txt`, `evidence/source_weights_2026-09-21/independent_external_proxy_holdout_2026-09-21.json`, `independent_external_proxy_holdout_overlap_2026-09-21.json`.
+- [x] `ThreatFox` ไม่อยู่ใน `TARGET_SOURCES` ของ `scripts/eval/collect_holdout_source_overlap.py:28`; holdout overlap จึงไม่วัด source นี้.
+- [x] guard ปัจจุบันใน `scripts/eval/collect_holdout_source_overlap.py:82-89` กำหนดให้ `records` เป็น list ที่ไม่ว่าง; script ยัง untracked และยังไม่ commit. หลักฐาน: `scripts/eval/collect_holdout_source_overlap.py`.
+- [x] Worktree มีไฟล์ค้าง: `src/scoring/intelligent_scoring.py` เป็น tracked file ที่แก้ไขแล้วยังไม่ commit; `scripts/eval/eval_results_group_a_v3_rich*.jsonl`, `paired_bootstrap_f1_ci.py`, `grid_search_boost_v2.py` เป็น untracked; `evidence/` ถูก ignore. สถานะ: `git status --short`; ignore rule: `.gitignore`.
+- [x] `paired_bootstrap_f1_ci.py` ย้อนคะแนน 2-source ด้วย `1.20`, ส่วน `grid_search_boost_v2.py` ใช้ `1.15`; ทั้งคู่เป็นการคำนวณแบบย้อนจากไฟล์ v3_rich/count และสมมติฐานต่างกัน. Gate ยืนยันว่า v3_rich ตรงกับ count+`1.15/1.30` (`894/894`), ไม่ใช่การย้อนด้วย `1.20`; ใช้ `recompute_boost.py` คำนวณจาก `sources.*.score` แทน. หลักฐาน: `scripts/eval/paired_bootstrap_f1_ci.py`, `scripts/eval/grid_search_boost_v2.py`, `evidence/source_weights_2026-09-21/final_boost_2026-09-21/gate_results.txt`, `evidence/source_weights_2026-09-21/final_boost_2026-09-21/recompute_boost.py`.
+- [ ] คำสั่งทำซ้ำที่บันทึกไว้ (ไม่ได้รันซ้ำในงานนี้): `D:\ai_cti_automate\evidence\source_weights_2026-09-21\final_boost_2026-09-21\run_all.ps1 -Set S1`; `D:\ai_cti_automate\evidence\source_weights_2026-09-21\final_boost_2026-09-21\run_all.ps1 -Set S3`; `D:\ai_cti_automate\evidence\source_weights_2026-09-21\final_boost_2026-09-21\run_sweep.ps1`. หลักฐาน: `evidence/source_weights_2026-09-21/final_boost_2026-09-21/run_all.ps1`, `run_sweep.ps1`.
