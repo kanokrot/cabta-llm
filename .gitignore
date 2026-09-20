@@ -116,5 +116,12 @@ pixel-office.zip
 
 hermes-plugins-reference/
 data/benchmark/
-
+scripts/eval/__pycache__/
+*.pyc
+*.bak
+evidence_raw/
 test_keys/
+
+evidence
+evidence/source_weights_2026-09-16
+!.env.example
