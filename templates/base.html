@@ -350,13 +350,16 @@
                 </div>
 
                 <div class="offcanvas-body d-lg-flex align-items-center gap-1">
+                    {% set nav_role = request.state.user.role %}
 
+                    {% if nav_role in ['Incident Responder', 'Threat Hunter', 'admin'] %}
                     <!-- Agent Chat (home) -->
                     <a href="/" class="nav-link {% if request.url.path == '/' or request.url.path == '/agent/chat' %}active{% endif %}">
                         <i class="bi bi-chat-dots me-1"></i>Agent Chat
                     </a>
 
                     <span class="nav-divider"></span>
+                    {% endif %}
 
                     <!-- Dashboard -->
                     <a href="/dashboard" class="nav-link {% if request.url.path == '/dashboard' %}active{% endif %}">
@@ -365,6 +368,7 @@
 
                     <span class="nav-divider"></span>
 
+                    {% if nav_role in ['Incident Responder', 'Threat Hunter', 'admin'] %}
                     <!-- Agent dropdown -->
                     <div class="d-lg-none nav-section-label">AGENT</div>
                     <div class="nav-item dropdown">
@@ -373,21 +377,27 @@
                             <i class="bi bi-robot me-1"></i>Agent
                         </a>
                         <ul class="dropdown-menu">
+                            {% if nav_role in ['Threat Hunter', 'admin'] %}
                             <li>
                                 <a class="dropdown-item {% if request.url.path == '/agent/investigations' %}active{% endif %}" href="/agent/investigations">
                                     <i class="bi bi-binoculars"></i> Investigations
                                 </a>
                             </li>
+                            {% endif %}
+                            {% if nav_role in ['Incident Responder', 'admin'] %}
                             <li>
                                 <a class="dropdown-item {% if request.url.path == '/agent/playbooks' %}active{% endif %}" href="/agent/playbooks">
                                     <i class="bi bi-journal-code"></i> Playbooks
                                 </a>
                             </li>
+                            {% endif %}
                         </ul>
                     </div>
 
                     <span class="nav-divider"></span>
+                    {% endif %}
 
+                    {% if nav_role in ['SOC Analyst Tier 1-2', 'admin'] %}
                     <!-- Analysis dropdown -->
                     <div class="d-lg-none nav-section-label">ANALYSIS</div>
                     <div class="nav-item dropdown">
@@ -415,6 +425,7 @@
                     </div>
 
                     <span class="nav-divider"></span>
+                    {% endif %}
 
                     <!-- Management dropdown -->
                     <div class="d-lg-none nav-section-label">MANAGEMENT</div>
@@ -434,6 +445,13 @@
                                     <i class="bi bi-folder2-open"></i> Case Management
                                 </a>
                             </li>
+                            {% if nav_role in ['admin', 'Team Lead'] %}
+                            <li>
+                                <a class="dropdown-item {% if request.url.path == '/management' %}active{% endif %}" href="/management">
+                                    <i class="bi bi-person-plus"></i> Access Requests
+                                </a>
+                            </li>
+                            {% endif %}
                             <li>
                                 <a class="dropdown-item {% if request.url.path == '/tickets' %}active{% endif %}" href="/tickets">
                                     <i class="bi bi-ticket-perforated"></i> Incident Tickets
@@ -444,6 +462,7 @@
 
                     <span class="nav-divider"></span>
 
+                    {% if nav_role == 'admin' %}
                     <!-- System dropdown -->
                     <div class="d-lg-none nav-section-label">SYSTEM</div>
                     <div class="nav-item dropdown">
@@ -466,6 +485,7 @@
                     </div>
 
                     <span class="nav-divider"></span>
+                    {% endif %}
 
                     <!-- SOC Room -->
                     <a href="/soc-operations" class="nav-link {% if request.url.path == '/soc-operations' %}active{% endif %}">
