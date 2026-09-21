@@ -34,9 +34,10 @@ def test_api_sources_are_report_only_and_do_not_trigger_boost():
         }
     })
 
-    # Only the admitted non-API source contributes; API/query results do not
-    # contribute points or count toward the multi-source boost.
-    assert score == 90
+    # Only FeodoTracker contributes. With one source, the AHP multiplier is
+    # present in both the numerator and denominator, so the score remains 60.
+    # API/query results do not contribute or count toward the multi-source boost.
+    assert score == 60
 
 
 def test_active_source_multipliers_match_ahp_derivation():
@@ -58,7 +59,7 @@ def test_threatfox_available_result_uses_ahp_multiplier():
         }
     })
 
-    assert score == 33
+    assert score == 100
 
 
 def test_threatfox_timeout_is_excluded_not_clean_or_scored():
