@@ -25,10 +25,10 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
 from src.tools.ioc_investigator import IOCInvestigator
+from src.scoring.intelligent_scoring import IntelligentScoring
 from src.utils.config import load_config
 
 BENCHMARK_PATH = REPO_ROOT / "data" / "benchmark" / "benchmark_iocs_v2.json"
-RESULTS_PATH = REPO_ROOT / "scripts" / "eval" / "eval_results_group_a_v2.jsonl"
 GROUP_A_EVAL_SOURCES = frozenset(
     {
         "feodotracker",
@@ -37,9 +37,49 @@ GROUP_A_EVAL_SOURCES = frozenset(
         "usom",
         "sslblacklist",
         "spamhaus",
-        "circl",
     }
 )
+
+SCORING_SOURCES = (
+    "feodotracker",
+    "c2_trackers",
+    "spamhaus",
+    "tor_exit_nodes",
+    "sslblacklist",
+    "threatfox",
+)
+
+
+def export_scoring_sources(result):
+    """Export the six active scoring-source fields for each eval record."""
+    raw_sources = result.get("sources")
+    if not isinstance(raw_sources, dict):
+        raw_sources = {}
+
+    exported = {}
+    for source_name in SCORING_SOURCES:
+        source_data = raw_sources.get(source_name)
+        if not isinstance(source_data, dict):
+            exported[source_name] = {
+                "status": None,
+                "score": 0,
+                "unavailable": True,
+            }
+            continue
+
+        score = source_data.get("score")
+        if not isinstance(score, (int, float)):
+            # Preserve current production fallback semantics, e.g. Spamhaus
+            # uses listed=True even when no explicit score field exists.
+            score = IntelligentScoring._get_source_score(source_data)
+
+        exported[source_name] = {
+            "status": source_data.get("status"),
+            "score": int(score),
+            "unavailable": source_data.get("unavailable") is True,
+        }
+
+    return exported
 
 
 def load_benchmark_stratified(malicious_limit, seed):
@@ -72,11 +112,11 @@ def load_benchmark_stratified(malicious_limit, seed):
     return combined
 
 
-def load_existing_results():
+def load_existing_results(results_path):
     done = {}
-    if RESULTS_PATH.exists():
+    if results_path.exists():
         for line_number, line in enumerate(
-            RESULTS_PATH.read_text(encoding="utf-8").splitlines(), 1
+            results_path.read_text(encoding="utf-8").splitlines(), 1
         ):
             if line.strip():
                 try:
@@ -94,16 +134,22 @@ def load_existing_results():
     return done
 
 
-async def evaluate(records, delay_seconds, resume, allowed_sources=None):
+async def evaluate(
+    records,
+    delay_seconds,
+    resume,
+    output_path,
+    allowed_sources=None,
+):
     config = load_config()
     investigator = IOCInvestigator(config)
 
-    done = load_existing_results() if resume else {}
+    done = load_existing_results(output_path) if resume else {}
     mode = "a" if resume else "w"
-    RESULTS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     written_count = 0
 
-    with RESULTS_PATH.open(mode, encoding="utf-8") as out:
+    with output_path.open(mode, encoding="utf-8") as out:
         try:
             for i, rec in enumerate(records, 1):
                 ioc = rec["ioc"]
@@ -131,6 +177,7 @@ async def evaluate(records, delay_seconds, resume, allowed_sources=None):
                     "threat_score": result.get("threat_score"),
                     "sources_checked": result.get("sources_checked"),
                     "sources_flagged": result.get("sources_flagged"),
+                    "sources": export_scoring_sources(result),
                     "trusted_shortcut": "trusted_hostname" in result,
                     "error": result.get("error"),
                 }
@@ -155,6 +202,12 @@ def main():
                          help="random seed สำหรับ reproducible subsample")
     parser.add_argument("--delay", type=float, default=16.0,
                          help="วินาทีหน่วงระหว่าง IOC (default 16 = ~4/min, ตาม VT free tier)")
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default="eval_results.jsonl",
+        help="output JSONL path (default: eval_results.jsonl)",
+    )
     parser.add_argument("--resume", action="store_true",
                          help="ข้าม IOC ที่ทำไปแล้วใน eval_results.jsonl")
     parser.add_argument(
@@ -170,8 +223,16 @@ def main():
         f"Evaluating {len(records)} IOC(s) total, delay={args.delay}s, "
         f"resume={args.resume}, group_a_only={args.group_a_only}"
     )
-    asyncio.run(evaluate(records, args.delay, args.resume, allowed_sources))
-    print(f"\nDone. Raw results: {RESULTS_PATH}")
+    asyncio.run(
+        evaluate(
+            records,
+            args.delay,
+            args.resume,
+            args.output,
+            allowed_sources,
+        )
+    )
+    print(f"\nDone. Raw results: {args.output}")
 
 
 if __name__ == "__main__":

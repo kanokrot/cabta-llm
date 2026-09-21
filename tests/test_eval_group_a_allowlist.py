@@ -21,7 +21,7 @@ def test_group_a_only_flag_passes_locked_allowlist(monkeypatch):
 
     monkeypatch.setattr(module, "load_benchmark_stratified", lambda limit, seed: [])
 
-    async def fake_evaluate(records, delay_seconds, resume, allowed_sources=None):
+    async def fake_evaluate(records, delay_seconds, resume, output=None, allowed_sources=None):
         captured["records"] = records
         captured["delay_seconds"] = delay_seconds
         captured["resume"] = resume
@@ -39,7 +39,6 @@ def test_group_a_only_flag_passes_locked_allowlist(monkeypatch):
         "usom",
         "sslblacklist",
         "spamhaus",
-        "circl",
     }
     assert captured["resume"] is False
 
@@ -50,7 +49,7 @@ def test_default_eval_mode_passes_no_allowlist(monkeypatch):
 
     monkeypatch.setattr(module, "load_benchmark_stratified", lambda limit, seed: [])
 
-    async def fake_evaluate(records, delay_seconds, resume, allowed_sources=None):
+    async def fake_evaluate(records, delay_seconds, resume, output=None, allowed_sources=None):
         captured["allowed_sources"] = allowed_sources
 
     monkeypatch.setattr(module, "evaluate", fake_evaluate)

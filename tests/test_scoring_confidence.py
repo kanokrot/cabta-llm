@@ -1,13 +1,16 @@
 import pytest
 
-from src.scoring.intelligent_scoring import IntelligentScoring
+from src.scoring.intelligent_scoring import (
+    IntelligentScoring,
+    SOURCE_SCORING_MULTIPLIERS,
+)
 
 
-def test_calculate_ioc_score_output_unchanged_by_new_function():
+def test_report_only_sources_do_not_change_ioc_score():
     intel_results = {
         "sources": {
             "test_source_alpha": {"status": "✓", "score": 15},
-            # Synthetic sources use the unknown-source fallback weight (0.8).
+            # Unknown sources are report-only under the feed-only policy.
             "test_source_beta": {"status": "✓", "score": 138},
         },
         "sources_flagged": 2,
@@ -17,9 +20,79 @@ def test_calculate_ioc_score_output_unchanged_by_new_function():
     IntelligentScoring.calculate_source_coverage(intel_results)
     score_after_coverage = IntelligentScoring.calculate_ioc_score(intel_results)
 
-    assert score_before_coverage == 70
+    assert score_before_coverage == 0
     assert score_after_coverage == score_before_coverage
     assert isinstance(score_after_coverage, int)
+
+
+def test_api_sources_are_report_only_and_do_not_trigger_boost():
+    score = IntelligentScoring.calculate_ioc_score({
+        "sources": {
+            "feodotracker": {"status": "✓", "score": 60},
+            "usom": {"status": "✓", "score": 100},
+            "virustotal": {"status": "✓", "score": 100},
+        }
+    })
+
+    # Only the admitted non-API source contributes; API/query results do not
+    # contribute points or count toward the multi-source boost.
+    assert score == 90
+
+
+def test_active_source_multipliers_match_ahp_derivation():
+    # Values are derived in docs/source_weight_ahp_derivation_2026-09-16.md.
+    assert SOURCE_SCORING_MULTIPLIERS == {
+        "feodotracker": 1.500000,
+        "sslblacklist": 0.878018,
+        "spamhaus": 0.695930,
+        "tor_exit_nodes": 0.542480,
+        "c2_trackers": 0.442818,
+        "threatfox": 0.339610,
+    }
+
+
+def test_threatfox_available_result_uses_ahp_multiplier():
+    score = IntelligentScoring.calculate_ioc_score({
+        "sources": {
+            "threatfox": {"status": "✓", "score": 100},
+        }
+    })
+
+    assert score == 33
+
+
+def test_threatfox_timeout_is_excluded_not_clean_or_scored():
+    intel_results = {
+        "sources": {
+            "threatfox": {
+                "status": "⚠",
+                "error": "Timeout after 15s",
+                "found": False,
+                "score": 0,
+                "unavailable": True,
+                "timeout": True,
+                "cached": False,
+            }
+        }
+    }
+
+    assert IntelligentScoring.calculate_ioc_score(intel_results) == 0
+    coverage = IntelligentScoring.calculate_source_coverage(intel_results)
+    assert coverage["sources_unavailable"] == 1
+    assert coverage["sources_clean"] == 0
+
+
+def test_non_api_tiered_sources_use_their_explicit_tier():
+    score = IntelligentScoring.calculate_ioc_score({
+        "sources": {
+            "feodotracker": {"status": "✓", "score": 100},
+            "c2_trackers": {"status": "✓", "score": 100},
+        }
+    })
+
+    # Average of the AHP multipliers for FeodoTracker and C2 Trackers,
+    # followed by the two-source boost.
+    assert score == 100
 
 
 def test_all_sources_flagged_high_coverage():
