@@ -262,7 +262,10 @@ async def list_categories(current_user: dict = Depends(get_current_user)):
 
 
 @router.get('/servers')
-async def list_servers(request: Request, current_user: dict = Depends(get_current_user)):
+async def list_servers(
+    request: Request,
+    current_user: dict = Depends(require_role(["Incident Responder", "Threat Hunter", "admin"])),
+):
     """List all configured MCP servers.
 
     Merges pre-configured servers from config.yaml with any servers
