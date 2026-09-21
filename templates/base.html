@@ -318,10 +318,12 @@
 
     <!-- ═══ Top Navbar ═══════════════════════════════════════════ -->
     <nav class="navbar navbar-expand-lg cabta-navbar fixed-top">
+        {% set nav_role = request.state.user.role if request.state.user is defined else '' %}
+        {% set logo_href = '/dashboard' if nav_role == 'SOC Analyst Tier 1-2' else '/' %}
         <div class="container-fluid px-2 px-lg-3">
 
             <!-- Brand -->
-            <a class="navbar-brand me-3" href="/">
+            <a class="navbar-brand me-3" href="{{ logo_href }}">
                 <img src="/static/img/logo.svg" alt="CABTA" class="brand-logo">
                 <span class="brand-label">
                     CABTA
@@ -342,7 +344,7 @@
 
                 <!-- Offcanvas header (mobile only) -->
                 <div class="offcanvas-header d-lg-none">
-                    <a class="navbar-brand" href="/">
+                    <a class="navbar-brand" href="{{ logo_href }}">
                         <img src="/static/img/logo.svg" alt="CABTA" class="brand-logo">
                         <span class="brand-label">CABTA</span>
                     </a>
@@ -350,8 +352,6 @@
                 </div>
 
                 <div class="offcanvas-body d-lg-flex align-items-center gap-1">
-                    {% set nav_role = request.state.user.role %}
-
                     {% if nav_role in ['Incident Responder', 'Threat Hunter', 'admin'] %}
                     <!-- Agent Chat (home) -->
                     <a href="/" class="nav-link {% if request.url.path == '/' or request.url.path == '/agent/chat' %}active{% endif %}">
