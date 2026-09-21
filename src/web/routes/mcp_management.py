@@ -208,7 +208,21 @@ def _sanitize_server(entry: dict, role: str) -> dict:
     name = str(entry.get("name", ""))
     status = entry.get("status") or "planned"
     if role != "admin":
-        return {"name": name, "category": _server_category(entry), "status": str(status)}
+        live_status = entry.get("live_status")
+        if not isinstance(live_status, dict):
+            live_status = {}
+        live_tools = live_status.get("tools", [])
+        tool_count = len(live_tools) if isinstance(live_tools, (list, tuple)) else 0
+        if not tool_count:
+            tool_count = live_status.get("tool_count", 0)
+        if not isinstance(tool_count, int) or isinstance(tool_count, bool) or tool_count < 0:
+            tool_count = 0
+        return {
+            "name": name,
+            "category": _server_category(entry),
+            "status": str(status),
+            "tool_count": tool_count,
+        }
 
     config = _decode_config(entry)
     output = {

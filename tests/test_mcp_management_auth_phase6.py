@@ -212,7 +212,7 @@ def test_non_admin_mcp_mutations_are_forbidden(monkeypatch, tmp_path, role, meth
 
 
 def test_server_listing_redacts_non_admin_and_admin_secrets(monkeypatch, tmp_path):
-    for role in ("SOC Analyst Tier 1-2", "admin"):
+    for role in ("Incident Responder", "admin"):
         app = _app(monkeypatch, tmp_path, role)
         with TestClient(app) as client:
             response = client.get("/api/mcp/servers")
@@ -224,7 +224,7 @@ def test_server_listing_redacts_non_admin_and_admin_secrets(monkeypatch, tmp_pat
         if role == "admin":
             assert "command" in response.json()["servers"][0]
         else:
-            assert set(response.json()["servers"][0]) <= {"name", "category", "status"}
+            assert set(response.json()["servers"][0]) <= {"name", "category", "status", "tool_count"}
 
 
 def test_tools_endpoint_reuses_visibility_policy_and_fails_closed(monkeypatch, tmp_path):
