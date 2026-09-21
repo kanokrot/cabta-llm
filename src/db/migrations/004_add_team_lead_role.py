@@ -37,6 +37,10 @@ def upgrade(connection: sqlite3.Connection) -> None:
     connection.execute("PRAGMA foreign_keys = OFF")
 
     try:
+        baseline_violations = {
+            tuple(row)
+            for row in connection.execute("PRAGMA foreign_key_check").fetchall()
+        }
         connection.execute("BEGIN IMMEDIATE")
 
         users_done = _contains_team_lead(connection, "users")
@@ -126,12 +130,14 @@ def upgrade(connection: sqlite3.Connection) -> None:
             "CREATE INDEX invite_tokens_email_idx ON invite_tokens(email)"
         )
 
-        violations = connection.execute(
-            "PRAGMA foreign_key_check"
-        ).fetchall()
-        if violations:
+        after_violations = {
+            tuple(row)
+            for row in connection.execute("PRAGMA foreign_key_check").fetchall()
+        }
+        new_violations = after_violations - baseline_violations
+        if new_violations:
             raise RuntimeError(
-                f"Foreign-key violations after migration: {violations!r}"
+                f"Foreign-key violations introduced by migration: {new_violations!r}"
             )
 
         connection.commit()
