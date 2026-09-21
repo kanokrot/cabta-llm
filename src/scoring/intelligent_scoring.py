@@ -162,6 +162,8 @@ class IntelligentScoring:
             )
 
         group_a_sources_flagged = 0
+        weight_sum = 0.0  # True AHP Denominator (ผลรวมน้ำหนัก)
+
         for source_name, source_data in sources.items():
             source_name_lower = source_name.lower()
             # API/API-key/query sources, VirusTotal, CIRCL, untiered feeds,
@@ -184,15 +186,18 @@ class IntelligentScoring:
             score = IntelligentScoring._get_source_score(source_data)
 
             if score > 0:
-                weighted_scores.append(
-                    score * SOURCE_SCORING_MULTIPLIERS[source_name_lower]
-                )
+                mult = SOURCE_SCORING_MULTIPLIERS[source_name_lower]
+                weighted_scores.append(score * mult)
+                weight_sum += mult  # สะสมน้ำหนักของ Source ที่ใช้งานจริง
 
-        if not weighted_scores:
+        if not weighted_scores or weight_sum == 0:
             base_score = 0
         else:
-            # Calculate weighted average
-            base_score = sum(weighted_scores) / len(weighted_scores)
+            # Calculate True AHP Weighted Average (หารด้วยผลรวมน้ำหนัก แทนที่จะหารด้วยจำนวน source)
+            # 2026-09-21: ใช้ weight_sum หารตามน้ำหนัก AHP จริง; สูตร count ทำให้ ThreatFox 90 x 0.33961
+            # เหลือ 30.56 (ปัดเป็น 30, CLEAN ที่ threshold 50). หลักฐาน: evidence/source_weights_2026-09-21/final_boost_2026-09-21/gate_results.txt,
+            # evidence/source_weights_2026-09-21/final_boost_2026-09-21/S1_results.txt และ S3_results.txt.
+            base_score = sum(weighted_scores) / weight_sum
 
             # Boost score if multiple sources flagged
             if group_a_sources_flagged >= 3:
