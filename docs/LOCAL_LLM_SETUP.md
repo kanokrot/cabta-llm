@@ -1,104 +1,59 @@
-# Local LLM Setup Guide (Ollama)
+# Local LLM Setup Guide (vLLM Primary)
 
-## Why Local LLM?
+## Current Project Setup
 
-### 🔐 Security & Privacy
-- **Data Sovereignty**: Threat intelligence data never leaves your infrastructure
-- **Regulatory Compliance**: Meets strict critical infrastructure cybersecurity requirements
-- **No Data Leakage**: Sensitive IOCs, emails, files analyzed locally
-- **Audit Trail**: Full control over what's processed where
+The active deployment uses **vLLM** as the primary LLM backend.
+The configured provider is `vllm`, and the application calls the
+OpenAI-compatible vLLM chat-completions API.
 
-### 💰 Cost Benefits
-- **FREE**: No API costs, no usage limits
-- **Unlimited**: Analyze thousands of samples without paying
-- **No Rate Limits**: Process as fast as your hardware allows
+The application uses these vLLM settings:
 
-### ⚡ Performance
-- **Low Latency**: No network round-trip, instant results
-- **Offline Capable**: Works without internet (after initial model download)
-- **Predictable**: No API downtime or quota issues
+- `vllm_base_url`
+- `vllm_model`
+- `vllm_api_key` when authentication is required
 
-## Installation
+Keep deployment-specific URLs, credentials, and model identifiers out of
+committed documentation.
 
-### 1. Install Ollama
+## Why Self-Hosted vLLM?
 
-**macOS:**
-```bash
-brew install ollama
-```
+- Threat intelligence data can remain within the approved infrastructure.
+- The deployment can be tuned for the available GPU and serving capacity.
+- Model serving, access control, retention, and audit requirements remain
+  under the deployment owner's control.
 
-**Linux:**
-```bash
-curl -fsSL https://ollama.com/install.sh | sh
-```
+## Provisioning vLLM
 
-**Windows:**
-Download from https://ollama.com/download
+Run vLLM using the deployment method approved for your environment. The
+service must expose an OpenAI-compatible API and serve the model ID used by
+the application.
 
-### 2. Pull Recommended Models
+Verify that the service exposes the expected model list:
 
 ```bash
-# Best all-around model (requires 8GB RAM)
-ollama pull llama3.1:8b
-
-# Alternative options:
-ollama pull mistral:7b        # Faster, good for quick analysis
-ollama pull qwen2.5:7b        # Excellent reasoning
-ollama pull deepseek-r1:7b    # Strong at technical analysis
+curl "<vllm-endpoint-url>/v1/models"
 ```
-
-### 3. Verify Installation
-
-```bash
-# Check Ollama is running
-ollama list
-
-# Test a model
-ollama run llama3.1:8b "Hello, test message"
-```
-
-## Model Recommendations
-
-### For Different Hardware
-
-**8GB RAM:**
-- `llama3.1:8b` (Recommended)
-- `mistral:7b`
-- `qwen2.5:7b`
-
-**16GB+ RAM:**
-- `llama3.1:70b` (Best quality)
-- `qwen2.5:14b`
-- `deepseek-r1:14b`
-
-**32GB+ RAM:**
-- `llama3.1:70b` (Maximum accuracy)
-- `qwen2.5:32b`
-
-### For Different Use Cases
-
-**General SOC Analysis:**
-- `llama3.1:8b` - Best balance of speed and accuracy
-
-**Fast Triage:**
-- `mistral:7b` - Quick initial assessment
-
-**Deep Analysis:**
-- `qwen2.5:14b` - Better reasoning for complex threats
-
-**Technical Code Analysis:**
-- `deepseek-r1:7b` - Specialized for code/scripts
 
 ## Configuration
 
-Edit `config.yaml`:
+Edit the deployment-local `config.yaml`:
 
 ```yaml
 llm:
-  provider: ollama
-  ollama_endpoint: http://localhost:11434
-  ollama_model: llama3.1:8b  # Change to your preferred model
+  provider: vllm
+  vllm_base_url: "<vllm-endpoint-url>"
+  vllm_model: "<served-model-id>"
+  vllm_api_key: "<api-key-if-required>"
 ```
+
+The application appends `/v1/chat/completions` to `vllm_base_url`.
+Use the base URL format expected by the application.
+
+## Selecting the Served Model
+
+The value of `vllm_model` must exactly match the model ID returned by the
+vLLM `/v1/models` endpoint. GPU memory, batching, context length, and
+quantization are deployment-specific vLLM settings.
 
 ## Testing
 
@@ -108,7 +63,8 @@ llm:
 python -m src.soc_agent ioc 8.8.8.8
 ```
 
-Expected output should include LLM analysis section with:
+Expected output should include an LLM analysis section with:
+
 - Verdict
 - Confidence score
 - Analysis summary
@@ -120,139 +76,73 @@ Expected output should include LLM analysis section with:
 python -m src.soc_agent email sample.eml
 ```
 
-LLM will analyze:
-- Phishing indicators
-- Authentication results
-- Behavioral patterns
-
 ### Test File Analysis
 
 ```bash
 python -m src.soc_agent file sample.exe
 ```
 
-LLM will provide:
-- Malware family assessment
-- Behavioral analysis
-- Threat level
+LLM-assisted analysis remains supplementary; deterministic scoring remains
+authoritative.
 
 ## Performance Tuning
 
-### Increase Context Window
+Tune context length, batching, quantization, and GPU allocation in the vLLM
+deployment. Exact options depend on the vLLM version and serving
+environment.
 
-For complex analysis, use larger context:
+For slow responses:
 
-```yaml
-llm:
-  ollama_model: llama3.2:3b
-  # Add context size parameter
-  context_size: 8192  # Default: 2048
-```
-
-### GPU Acceleration
-
-If you have NVIDIA GPU:
-
-```bash
-# Ollama automatically uses GPU if available
-# Verify with:
-nvidia-smi
-
-# You should see Ollama process using GPU
-```
-
-### CPU Optimization
-
-For CPU-only systems:
-
-```yaml
-llm:
-  ollama_model: mistral:7b  # Faster on CPU
-```
+1. Confirm that the requested model is loaded and matches `vllm_model`.
+2. Check GPU memory and server-side batching settings.
+3. Review vLLM service logs without exposing credentials.
 
 ## Troubleshooting
 
-### Ollama Not Running
+### vLLM Unavailable
+
+Check that the vLLM service is running and that `vllm_base_url` points to
+the intended service.
+
+### Served Model Not Found
+
+Compare `vllm_model` with the model ID returned by:
 
 ```bash
-# Check if Ollama is running
-curl http://localhost:11434/api/tags
-
-# If not, start it
-ollama serve
+curl "<vllm-endpoint-url>/v1/models"
 ```
 
-### Model Not Found
+### Authentication Failure
 
-```bash
-# List available models
-ollama list
+For services requiring authentication, configure the deployment-local
+`vllm_api_key`. Never place a real key in documentation or committed files.
 
-# Pull missing model
-ollama pull llama3.1:8b
-```
+### Request or Connection Failure
 
-### Slow Performance
+Confirm that the endpoint is reachable from the application runtime and
+that the service exposes the OpenAI-compatible chat-completions route.
 
-**Solutions:**
-1. Use smaller model: `mistral:7b` instead of `llama3.1:70b`
-2. Enable GPU acceleration (NVIDIA only)
-3. Increase system RAM
-4. Close other applications
+## Optional Backends
 
-### Connection Timeout
+The codebase also retains support for Ollama as an optional local fallback.
+Ollama is not the current backend for this deployment and should not be
+documented as an equivalent active setup.
 
-Check endpoint in `config.yaml`:
-```yaml
-llm:
-  ollama_endpoint: http://localhost:11434  # Verify port
-```
+The code also contains an optional Anthropic integration path. The current
+deployment does not use Anthropic, so this guide intentionally does not
+include an Anthropic configuration block or API-key example.
 
-## Advanced: Custom Models
-
-You can use custom fine-tuned models:
-
-```bash
-# Create custom model from Modelfile
-ollama create soc-analyzer -f Modelfile
-
-# Use in config
-llm:
-  ollama_model: soc-analyzer
-```
-
-Example Modelfile:
-```
-FROM llama3.1:8b
-SYSTEM You are a senior SOC analyst specializing in critical infrastructure cybersecurity.
-PARAMETER temperature 0.3
-```
-
-## Cloud vs Local Comparison
-
-| Feature | Local (Ollama) | Cloud (Anthropic) |
-|---------|---------------|-------------------|
-| Cost | FREE | $3-15 per million tokens |
-| Privacy | ✅ 100% local | ❌ Data sent to cloud |
-| Speed | ⚡ Fast (local) | 🌐 Network dependent |
-| Compliance | ✅ Compliance-ready | ❌ May violate policies |
-| Rate Limits | ✅ None | ❌ API quotas |
-| Offline | ✅ Works offline | ❌ Requires internet |
-
-## Recommended Setup for Critical Infrastructure SOCs
+## Recommended Setup for This Project
 
 ```yaml
 llm:
-  provider: ollama  # ALWAYS use local
-  ollama_endpoint: http://localhost:11434
-  ollama_model: llama3.1:8b
-  
-  # DO NOT configure Anthropic API key
-  # Keep data on-premises
+  provider: vllm
+  vllm_base_url: "<vllm-endpoint-url>"
+  vllm_model: "<served-model-id>"
+  vllm_api_key: "<api-key-if-required>"
 ```
 
-## Support
+## Commit Safety
 
-- Ollama Documentation: https://github.com/ollama/ollama
-- Model Library: https://ollama.com/library
-- Community: https://discord.gg/ollama
+Use placeholders such as `<vllm-endpoint-url>` and `<served-model-id>` in
+documentation. Never commit real endpoints, API keys, tokens, or credentials.
