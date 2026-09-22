@@ -28,6 +28,7 @@ AI/LLM is used only for **interpretation**, never for **decision making**.
 - Missing API keys = reduced functionality, not failure
 - Network timeouts = graceful degradation
 - Unknown file types = generic analysis
+- Optional integrations are initialized on a best-effort basis; failures are logged and dependent functionality degrades gracefully.
 
 ---
 
@@ -269,16 +270,21 @@ Local LLM integration via Ollama.
 #### `intelligent_scoring.py`
 Multi-signal threat scoring algorithm.
 
-Current IOC source scoring uses an explicit admission policy with AHP-derived
-source-specific multipliers. `feodotracker`, `c2_trackers`, `spamhaus`,
-`tor_exit_nodes`, `sslblacklist`, and `threatfox` can contribute source points.
-VirusTotal and other API/query sources remain report-only. Source availability
-(`clean`, `unavailable`, and `stale`) is tracked separately and unavailable
-must not be interpreted as clean. The derivation is documented in
+The current application IOC-scoring formula uses an explicit admission policy
+with AHP-derived source-specific multipliers. The six sources admitted by the
+formula are `feodotracker`, `c2_trackers`, `spamhaus`, `tor_exit_nodes`,
+`sslblacklist`, and `threatfox`. This scoring-source list is implemented by
+`NON_API_SCORING_SOURCES` and `SOURCE_SCORING_MULTIPLIERS` in
+`src/scoring/intelligent_scoring.py`; it is separate from
+`GROUP_A_EVAL_SOURCES`, which is evaluation configuration. VirusTotal and
+other API/query sources remain report-only. Source availability (`clean`,
+`unavailable`, and `stale`) is tracked separately and unavailable must not be
+interpreted as clean. The derivation is documented in
 `docs/source_weight_ahp_derivation_2026-09-16.md`.
 
 ```python
-# Current production admission and source-specific multipliers.  This is an
+# Current application IOC-scoring admission and source-specific multipliers.
+# This is an
 # abridged excerpt; the complete AHP derivation is documented in
 # docs/source_weight_ahp_derivation_2026-09-16.md.
 from src.scoring.intelligent_scoring import (
@@ -302,11 +308,15 @@ class IntelligentScoring:
                 weighted_scores.append(
                     source_score * SOURCE_SCORING_MULTIPLIERS[source_name]
                 )
-        # The production implementation applies the documented multi-source
+        # The application implementation applies the documented multi-source
         # boost before clamping 0-100. Domain-age/DGA enrichment remains
         # analyst-facing metadata/recommendation context, not score input.
         return max(0, min(100, int(sum(weighted_scores) / len(weighted_scores))))
 ```
+
+The score formula consumes admitted IOC-source results only. Domain-age,
+DGA, and LLM-DGA enrichment remain outside this score formula and are exposed
+as enrichment or interpretation context.
 
 #### `false_positive_filter.py`
 Reduces false positives through:
@@ -365,6 +375,21 @@ output:
   report_dir: "./reports"
 ```
 
+## Configuration and Application Lifecycle
+
+The web factory configures authenticated page/API access and registers
+ticketing, agent storage, MCP, notification, Gmail OAuth, correlation,
+memory, and route-level authorization components. It attempts to initialize
+optional runtime components on a best-effort basis. If an optional component
+cannot be initialized, the failure is logged and dependent functionality
+degrades gracefully; dependent routes may return `503` as described under
+Fail-Safe Behavior.
+
+`CorrelationEngine` and `InvestigationMemory` are initialized by
+`src/web/app.py:create_app` when available. The correlation engine is consumed
+by `/api/agent/correlation/{session_id}`. Investigation memory is consumed by
+`/api/agent/memory/ioc/{ioc}` and `/api/agent/memory/stats`.
+
 ---
 
 ## Extending the System
@@ -409,8 +434,8 @@ async def check_new_source(self, ioc: str) -> Dict:
     }
 ```
 
-2. Complete the admission and AHP review before adding a source to production
-   scoring. The source must be added to the explicit
+2. Complete the admission and AHP review before adding a source to application
+   IOC scoring. The source must be added to the explicit
    `SOURCE_SCORING_MULTIPLIERS`/`NON_API_SCORING_SOURCES` policy with a
    documented derivation; do not assign an arbitrary integer weight:
 
@@ -445,6 +470,15 @@ Built-in availability handling:
 ---
 
 ## Security Considerations
+
+### Authentication and Authorization
+- Browser pages are protected by `PageAuthMiddleware`.
+- Protected API routes use `get_current_user`; selected routers/routes also
+  apply `require_role(...)`.
+- Resource ownership and visibility checks are route-specific; this document
+  does not claim that every route has identical authorization behavior.
+- Human approval checks apply to selected agent actions, not universally to
+  every route.
 
 ### API Key Storage
 - Keys stored in `config.yaml`
