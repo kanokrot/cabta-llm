@@ -2,7 +2,9 @@
 
 ## Overview
 
-Blue Team Assistant integrates with **20+ threat intelligence sources** to provide comprehensive IOC analysis. This document describes each source and how to obtain API keys.
+CABTA (Cyan Agent Blue Team Assistant) integrates with multiple threat-intelligence
+and sandbox integrations. This document distinguishes active IOC integrations,
+report-only sources, and sandbox paths.
 
 ## Current scoring policy
 
@@ -11,7 +13,7 @@ AHP-derived source-specific multipliers documented in
 [`source_weight_ahp_derivation_2026-09-16.md`](source_weight_ahp_derivation_2026-09-16.md).
 VirusTotal remains report-only pending local reliability telemetry.
 
-These sources currently enter production IOC scoring:
+Exactly six sources currently enter the production IOC-scoring formula:
 
 | Source | Multiplier | Status |
 |---|---:|---|
@@ -20,8 +22,18 @@ These sources currently enter production IOC scoring:
 | `spamhaus` | 0.695930 | active |
 | `tor_exit_nodes` | 0.542480 | active |
 | `c2_trackers` | 0.442818 | active |
-| `threatfox` | 0.339610 | active with timeout fallback |
-| `virustotal` | 0.417347 | report-only |
+| `threatfox` | 0.339610 | active; timeout becomes unavailable and is excluded from that round |
+
+`GROUP_B_EXCLUDE` sources are report-only and do not enter the production
+score:
+
+`virustotal`, `abuseipdb`, `shodan`, `alienvault`, `greynoise`, `censys`,
+`pulsedive`, `criminalip`, `ipqualityscore`, `phishtank`, `ip2proxy`,
+`triage`, and `threatzone`.
+
+More generally, any source not in `NON_API_SCORING_SOURCES` is excluded from
+the production score. `GROUP_A_EVAL_SOURCES` is evaluation configuration,
+not the production scoring admission list.
 
 The historical `Weight in Scoring` descriptions below are legacy documentation
 for the former API-inclusive scorer. They must not be interpreted as current
@@ -30,7 +42,57 @@ result. There is no unknown-source fallback multiplier.
 
 ---
 
-## Source Categories
+## Verified Source Categories
+
+### Admitted IOC scoring sources
+
+These six sources are admitted by `NON_API_SCORING_SOURCES` and
+`SOURCE_SCORING_MULTIPLIERS`:
+
+- **FeodoTracker**
+- **C2 Trackers**
+- **Spamhaus**
+- **Tor Exit Nodes**
+- **SSL Blacklist**
+- **ThreatFox**
+
+### Report-only IOC integrations
+
+The following sources may provide enrichment or reports but are not consumed
+by the production IOC-scoring formula:
+
+- VirusTotal
+- AbuseIPDB
+- Shodan
+- AlienVault OTX
+- GreyNoise
+- Censys
+- Pulsedive
+- Criminal IP
+- IPQualityScore
+- PhishTank
+- IP2Proxy
+- Triage
+- ThreatZone
+
+Other implemented IOC integrations, including URLhaus, MalwareBazaar, Talos,
+CIRCL, USOM, SMET NRD, and Hagezi NRD, are also report-only because they are
+not members of `NON_API_SCORING_SOURCES`.
+
+### Sandbox integrations
+
+Hybrid Analysis, ANY.RUN, and Joe Sandbox use separate sandbox paths.
+They are not members of the six-source IOC scoring admission set.
+
+### Not currently implemented as active integrations
+
+SecurityTrails, PassiveTotal, BinaryEdge, OpenPhish, and URLScan are not
+currently dispatched by the inspected source-integration code.
+
+## Historical Source Categories
+
+The following diagram is retained as historical taxonomy only. It is not an
+implementation inventory and must not be used to infer scoring admission.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -295,11 +357,24 @@ api_keys:
   greynoise: "your-greynoise-key"
   ipqualityscore: "your-ipqs-key"
   triage: "your-triage-key"
-  censys_id: "your-censys-id"
-  censys_secret: "your-censys-secret"
-  urlscan: "your-urlscan-key"
-  securitytrails: "your-st-key"
+  censys: "<api-key>"
+  threatfox: "<api-key>"
+  hybrid_analysis: "<api-key>"
+  anyrun: "<api-key-if-required>"
+  joe_sandbox: "<api-key>"
 ```
+
+### Hybrid Analysis configuration-key compatibility
+
+The current code contains two sandbox paths with different key names:
+
+- `api_keys.hybrid_analysis` is used by `SandboxIntegration`.
+- `api_keys.hybridanalysis` is used by the legacy `Sandboxes` path and the
+  default environment mapping.
+
+The configuration loader does not normalize these names. Until that code
+discrepancy is fixed, configuring only `hybrid_analysis` works for the current
+`SandboxIntegration` path but may not enable the legacy path.
 
 ---
 
@@ -317,10 +392,10 @@ deadline (`0.277778%`; both URL records). A ThreatFox timeout is marked
 unavailable, is not retried, does not block the pipeline, is excluded from the
 round's score, and is never interpreted as clean.
 
-VirusTotal remains report-only. It has no local reliability telemetry and its
-official Public API limit is 4 requests/minute and 500 requests/day. Its AHP
-multiplier is retained for auditability only and is not used in production
-scoring.
+VirusTotal remains report-only. The application currently defines a local
+limit of 4 requests/minute. Provider plan limits and daily quotas must be
+verified against current provider documentation. Its AHP multiplier is
+retained for auditability only and is not used in production scoring.
 
 The legacy distribution illustration below is historical context only and does
 not represent the active scoring policy.
@@ -362,7 +437,8 @@ not scoring multipliers.
 
 ### Best Practices
 
-1. **Start with Free Tiers**: All sources have free tiers sufficient for personal/small team use.
+1. **Verify Provider Quotas**: Free tiers, quotas, and eligibility vary by
+   provider and plan; do not assume that every source has a sufficient free tier.
 
 2. **Prioritize Sources by the Active Policy**:
    - Feed-only sources contribute to production scoring using the AHP-derived
