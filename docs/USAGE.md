@@ -53,8 +53,8 @@ python -m src.soc_agent ioc 185.199.108.153 --report ip_investigation.html
 │  GreyNoise       : Not seen scanning
 │  AlienVault OTX  : 2 pulses        ← Number of threat intel reports
 │
-│  Sources Checked: 12               ← Total APIs queried
-│  Sources Flagged: 3                ← APIs that flagged this IOC
+│  Sources Checked: <count>          ← Sources attempted for this IOC
+│  Sources Flagged: <count>          ← Sources reporting a positive finding
 └─────────────────────────────────────────────────────────────────────────────
 
 ┌─ DETECTION RULES                    ← Auto-generated rules
@@ -79,10 +79,17 @@ python -m src.soc_agent ioc 185.199.108.153 --report ip_investigation.html
 
 | Score | Verdict | Action |
 |-------|---------|--------|
-| 0-25 | CLEAN | No action required |
-| 26-50 | SUSPICIOUS | Monitor and investigate further |
-| 51-75 | LIKELY MALICIOUS | Block and investigate |
-| 76-100 | MALICIOUS | Immediate block and incident response |
+| 0-39 | CLEAN | No action required |
+| 40-69 | SUSPICIOUS | Monitor and investigate further |
+| 70-100 | MALICIOUS | Block and investigate |
+| Any score | UNKNOWN | Source coverage is insufficient |
+
+These scores are signals from the scoring formula, not probabilities. The
+application may return `UNKNOWN` when the covered source ratio is below 30%.
+However, a score of at least 70 with at least one flagged source remains
+`MALICIOUS` even when coverage is low. An unavailable source is not treated as
+a clean result. In particular, ThreatFox timeouts are recorded as unavailable
+and excluded from that round's score.
 
 ---
 
@@ -337,11 +344,18 @@ python -m src.soc_agent email phish.eml --report email_report.html
 - **Visual**: Charts, color-coded verdicts
 - **Shareable**: Self-contained single file
 
-### JSON Output
+### Additional File Exports
+
+The CLI currently supports human-readable output and HTML reports through
+`--report`. It does not define a `--format json` argument.
+
+For file analysis, the following optional exports are available:
 
 ```bash
-# Get JSON output (useful for automation)
-python -m src.soc_agent ioc 8.8.8.8 --format json > result.json
+python -m src.soc_agent file sample.exe --pdf executive.pdf
+python -m src.soc_agent file sample.exe --timeline timeline.html
+python -m src.soc_agent file sample.exe --navigator mitre_layer.json
+python -m src.soc_agent file sample.exe --sandbox
 ```
 
 ---
@@ -423,9 +437,11 @@ Get-ChildItem -Path .\samples\*.exe | ForEach-Object {
 HTML reports are self-contained and can be shared with non-technical stakeholders.
 
 ### 2. Check Configuration
-Ensure API keys are configured for full functionality:
+Review `config.yaml` for the integrations you intend to use. To inspect the
+available CLI commands:
+
 ```bash
-python test_setup.py
+python -m src.soc_agent --help
 ```
 
 ### 3. Interpret Scores in Context
