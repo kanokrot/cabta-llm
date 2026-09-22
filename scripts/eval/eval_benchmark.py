@@ -82,12 +82,12 @@ def export_scoring_sources(result):
     return exported
 
 
-def load_benchmark_stratified(malicious_limit, seed):
+def load_benchmark_stratified(malicious_limit, seed, benchmark_path=BENCHMARK_PATH):
     """
     Stratified sample: เอา CLEAN ทั้งหมดเสมอ (dataset เล็ก ไม่อยากสุ่มทิ้ง)
     + สุ่ม MALICIOUS ตามจำนวนที่ขอ (malicious_limit=0 แปลว่าเอาหมด)
     """
-    records = json.loads(BENCHMARK_PATH.read_text(encoding="utf-8"))
+    records = json.loads(benchmark_path.read_text(encoding="utf-8"))
 
     clean_records = [r for r in records if r["expected_verdict"] == "CLEAN"]
     malicious_records = [r for r in records if r["expected_verdict"] == "MALICIOUS"]
@@ -208,6 +208,12 @@ def main():
         default="eval_results.jsonl",
         help="output JSONL path (default: eval_results.jsonl)",
     )
+    parser.add_argument(
+        "--benchmark",
+        type=Path,
+        default=BENCHMARK_PATH,
+        help="benchmark JSON path (default: data/benchmark/benchmark_iocs_v2.json)",
+    )
     parser.add_argument("--resume", action="store_true",
                          help="ข้าม IOC ที่ทำไปแล้วใน eval_results.jsonl")
     parser.add_argument(
@@ -217,7 +223,11 @@ def main():
     )
     args = parser.parse_args()
 
-    records = load_benchmark_stratified(args.malicious_limit or None, args.seed)
+    records = load_benchmark_stratified(
+        args.malicious_limit or None,
+        args.seed,
+        args.benchmark,
+    )
     allowed_sources = GROUP_A_EVAL_SOURCES if args.group_a_only else None
     print(
         f"Evaluating {len(records)} IOC(s) total, delay={args.delay}s, "
