@@ -8,6 +8,20 @@ from typing import Dict, Any, Optional
 import logging
 
 logger = logging.getLogger(__name__)
+
+def _normalize_hybrid_analysis_aliases(config: Dict[str, Any]) -> Dict[str, Any]:
+    """Keep canonical and legacy Hybrid Analysis config keys in sync."""
+    api_keys = config.setdefault('api_keys', {})
+    canonical = api_keys.get('hybrid_analysis')
+    legacy = api_keys.get('hybridanalysis')
+
+    if canonical and not legacy:
+        api_keys['hybridanalysis'] = canonical
+    elif legacy and not canonical:
+        api_keys['hybrid_analysis'] = legacy
+
+    return config
+
 def load_config(config_path: Optional[str] = None) -> Dict[str, Any]:
     """
     Load configuration from YAML file.
@@ -56,7 +70,7 @@ def get_default_config() -> Dict[str, Any]:
     Returns:
         Default configuration dict
     """
-    return {
+    defaults = {
         'api_keys': {
             # Core sources
             'virustotal': os.environ.get('VIRUSTOTAL_API_KEY', ''),
@@ -129,6 +143,8 @@ def get_default_config() -> Dict[str, Any]:
             'format': '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
         }
     }
+    return _normalize_hybrid_analysis_aliases(defaults)
+
 def merge_with_defaults(config: Dict[str, Any]) -> Dict[str, Any]:
     """
     Merge user config with defaults.
@@ -140,6 +156,7 @@ def merge_with_defaults(config: Dict[str, Any]) -> Dict[str, Any]:
         Merged configuration
     """
     defaults = get_default_config()
+    config = _normalize_hybrid_analysis_aliases(config)
     
     def deep_merge(base: Dict, override: Dict) -> Dict:
         """Recursively merge two dicts."""
@@ -151,7 +168,7 @@ def merge_with_defaults(config: Dict[str, Any]) -> Dict[str, Any]:
                 result[key] = value
         return result
     
-    return deep_merge(defaults, config)
+    return _normalize_hybrid_analysis_aliases(deep_merge(defaults, config))
 def get_api_key(config: Dict[str, Any], service: str) -> Optional[str]:
     """
     Get API key for a service.
