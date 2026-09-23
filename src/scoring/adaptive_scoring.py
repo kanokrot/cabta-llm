@@ -3,9 +3,9 @@ Author: Ugur Ates
 Adaptive Scoring Engine - Akilli Karar.
 
 Gelismis skorlama ozellikleri:
-- Adaptif agirliklar: Bos donen araclarin agirligi digerlere dagilir
+- Adaptive weights: weights for empty tool results are redistributed to others
 - Logaritmik eskalasyon: score = base + log2(1 + ek_gostergeler) * carpan
-- Guncellik agirliklama: Yeni TI verileri daha yuksek agirlik
+- Recency weighting: New TI data receives a higher weight
 - Combo scoring: Pattern-based threat escalation
 - Kill-chain detection: download -> decode -> execute -> persist
 """
@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class AdaptiveScore:
-    """Adaptive scoring sonucu."""
+    """Adaptive scoring result."""
     final_score: int
     base_score: int
     combo_bonus: int

@@ -569,7 +569,7 @@ class EmailAnalyzer:
         keyword_matches = sum(1 for keyword in phishing_keywords if keyword in combined_text)
         score += min(10, keyword_matches * 2)
         
-        # ==================== SPAM IN SUBJECT (v1.0.0: ağırlık artırıldı) ====================
+        # ==================== SPAM IN SUBJECT (v1.0.0: weight increased) ====================
         if '[spam]' in subject:
             score += 40  # Gateway already flagged as SPAM - very strong indicator!
         elif 'spam' in subject:

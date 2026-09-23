@@ -1,9 +1,9 @@
 """
 tool_based_scoring.py
 Author: Ugur Ates
-Tool-Based Scoring - Harici araç çıktılarına dayalı skorlama.
+Tool-Based Scoring - Scoring based on external tool output.
 
-Her araç kendi threat score'unu üretir:
+Each tool produces its own threat score:
 - capa: Capability count * severity
 - FLOSS: Obfuscated string count + IOC count
 - DIE: Packer/protector detection
@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 logger = logging.getLogger(__name__)
 @dataclass
 class ToolScore:
-    """Tek bir araçtan gelen skor."""
+    """Score produced by a single tool."""
     tool_name: str
     score: int
     weight: float
@@ -37,11 +37,11 @@ class ScoringResult:
     contributing_factors: List[str] = field(default_factory=list)
     breakdown: Dict[str, int] = field(default_factory=dict)
 class ToolBasedScoring:
-    """Araç çıktılarına dayalı akıllı skorlama."""
+    """Intelligent scoring based on tool output."""
     
-    # Araç ağırlıkları - file analysis için
+    # Tool weights for file analysis
     FILE_TOOL_WEIGHTS = {
-        'capa': 0.25,           # Capability detection (en önemli)
+        'capa': 0.25,           # Capability detection (most important)
         'floss': 0.15,          # Obfuscated strings
         'diec': 0.12,           # Packer detection
         'pe_analysis': 0.15,    # PE header analysis
@@ -54,7 +54,7 @@ class ToolBasedScoring:
         'packer': 0.12,         # Packer/crypter detection
     }
     
-    # Araç ağırlıkları - Office analysis için
+    # Tool weights for Office analysis
     OFFICE_TOOL_WEIGHTS = {
         'olevba': 0.30,         # VBA macro analysis
         'mraptor': 0.25,        # Malicious macro detection
@@ -64,7 +64,7 @@ class ToolBasedScoring:
         'threat_intel': 0.15,   # Hash reputation
     }
     
-    # Araç ağırlıkları - PDF analysis için
+    # Tool weights for PDF analysis
     PDF_TOOL_WEIGHTS = {
         'pdfid': 0.35,          # PDF structure
         'pdf_parser': 0.25,     # Object analysis
@@ -73,7 +73,7 @@ class ToolBasedScoring:
         'strings': 0.10,        # String analysis
     }
     
-    # Araç ağırlıkları - Email analysis için
+    # Tool weights for email analysis
     EMAIL_TOOL_WEIGHTS = {
         'forensics': 0.18,      # Email forensics
         'authentication': 0.12, # SPF/DKIM/DMARC
@@ -94,7 +94,7 @@ class ToolBasedScoring:
     def calculate_combined_score(tool_scores: Dict[str, int], 
                                   weights: Dict[str, float] = None) -> int:
         """
-        Tüm araç skorlarını birleştir.
+        Combine all tool scores.
         
         Args:
             tool_scores: {tool_name: score}
@@ -124,7 +124,7 @@ class ToolBasedScoring:
     
     @staticmethod
     def determine_verdict(score: int) -> str:
-        """Score'dan verdict belirle."""
+        """Determine the verdict from the score."""
         if score >= ToolBasedScoring.VERDICT_THRESHOLDS['MALICIOUS']:
             return 'MALICIOUS'
         elif score >= ToolBasedScoring.VERDICT_THRESHOLDS['SUSPICIOUS']:
@@ -135,7 +135,7 @@ class ToolBasedScoring:
     @staticmethod
     def calculate_confidence(tool_scores: Dict[str, int], weights: Dict[str, float]) -> float:
         """
-        Analiz güvenilirliğini hesapla.
+        Calculate analysis confidence.
         
         Confidence factors:
         - Number of tools that provided scores
@@ -171,7 +171,7 @@ class ToolBasedScoring:
     @staticmethod
     def calculate_file_score(analysis_result: Dict) -> ScoringResult:
         """
-        File analiz sonucundan combined score hesapla.
+        Calculate the combined score from file analysis results.
         
         Args:
             analysis_result: Full analysis result dictionary
@@ -292,15 +292,15 @@ class ToolBasedScoring:
             factors = []
             
           
-            # Script dosyalarının threat_score'u genellikle çok anlamlıdır
+            # Script threat scores are generally highly informative.
             is_script = static.get('file_type') == 'Script' or static.get('script_type')
             
             if is_script and score > 0:
-                # Script için threat_score'u direkt büyük faktör olarak kullan
+                # Use the script threat score as a major factor directly.
                 tool_scores['script_analysis'] = ToolScore(
                     tool_name='script_analysis',
                     score=score,
-                    weight=0.40,  # Yüksek ağırlık - script analysis güvenilir
+                    weight=0.40,  # High weight because script analysis is reliable.
                     contributing_factors=[f"Script threat score: {score}/100"]
                 )
                 contributing_factors.append(f"Script analysis: {score}/100 threat score")
@@ -628,7 +628,7 @@ class ToolBasedScoring:
     
     @staticmethod
     def calculate_office_score(analysis_result: Dict) -> ScoringResult:
-        """Office document analiz sonucundan score hesapla."""
+        """Calculate the score from Office document analysis results."""
         tool_scores: Dict[str, ToolScore] = {}
         contributing_factors: List[str] = []
         
@@ -728,7 +728,7 @@ class ToolBasedScoring:
     
     @staticmethod
     def calculate_pdf_score(analysis_result: Dict) -> ScoringResult:
-        """PDF analiz sonucundan score hesapla."""
+        """Calculate the score from PDF analysis results."""
         tool_scores: Dict[str, ToolScore] = {}
         contributing_factors: List[str] = []
         
@@ -790,7 +790,7 @@ class ToolBasedScoring:
     
     @staticmethod
     def calculate_email_score(analysis_result: Dict) -> ScoringResult:
-        """Email analiz sonucundan combined score hesapla."""
+        """Calculate the combined score from email analysis results."""
         tool_scores: Dict[str, ToolScore] = {}
         contributing_factors: List[str] = []
         
