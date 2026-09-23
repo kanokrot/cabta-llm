@@ -12,12 +12,14 @@ class RuleGenerator:
     """
     Generate detection rules for multiple platforms.
     
-    Supports:
+    IOC generation supports:
     - KQL (Microsoft Defender/Sentinel)
     - SPL (Splunk)
     - SIGMA (Universal)
     - XQL (Cortex XDR)
-    - YARA (File signatures)
+    - DQL (Google SecOps)
+    - Suricata
+    - Firewall
     """
     
     @staticmethod
@@ -31,7 +33,8 @@ class RuleGenerator:
             context: Additional context (malware family, etc.)
         
         Returns:
-            Dict with rules for each platform
+            Dict containing seven IOC rules: KQL, SPL, Sigma, XQL, DQL,
+            Suricata, and Firewall.
         """
         rules = {
             'kql': RuleGenerator._generate_kql_ioc(ioc, ioc_type, context),
