@@ -1,21 +1,28 @@
 /**
  * Theme Toggle System
- * v5.1 Advanced HTML Reports
+ * v5.1 Advanced HTML Reports (Fixed)
  */
 
 (function() {
     'use strict';
     
-    // Theme management
     const THEME_KEY = 'mcp-soc-theme';
     let activeTheme = null;
     
+    // Auto-detect system preference
+    function detectSystemTheme() {
+        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+            return 'dark';
+        }
+        return 'light';
+    }
+
     function getTheme() {
         if (activeTheme) return activeTheme;
         try {
-            activeTheme = localStorage.getItem(THEME_KEY) || 'dark';
+            // ใช้ detectSystemTheme() หากไม่มีค่าใน localStorage
+            activeTheme = localStorage.getItem(THEME_KEY) || detectSystemTheme();
         } catch (error) {
-            // Strict tracking prevention can block storage even on same-origin pages.
             activeTheme = 'dark';
         }
         return activeTheme;
@@ -31,7 +38,6 @@
         document.documentElement.setAttribute('data-theme', theme);
         updateThemeIcon(theme);
         
-        // Update Chart.js if available
         if (window.Chart) {
             updateChartTheme(theme);
         }
@@ -40,15 +46,15 @@
     function updateThemeIcon(theme) {
         const icon = document.querySelector('.theme-toggle');
         if (icon) {
-            icon.textContent = theme === 'dark' ? '☀️' : '🌙';
-            icon.title = theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode';
+            const isDark = theme === 'dark';
+            icon.className = `theme-toggle bi ${isDark ? 'bi-sun-fill' : 'bi-moon-stars-fill'}`;
+            icon.title = isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode';
         }
     }
     
     function updateChartTheme(theme) {
         const isDark = theme === 'dark';
         
-        // Update Chart.js defaults
         Chart.defaults.color = isDark ? '#e9ecef' : '#212529';
         Chart.defaults.borderColor = isDark ? '#495057' : '#dee2e6';
         
@@ -56,20 +62,17 @@
             Chart.defaults.plugins.legend.labels.color = isDark ? '#e9ecef' : '#212529';
         }
         
-        // Update all existing charts
-        Object.values(Chart.instances).forEach(chart => {
-            if (chart.options.scales) {
-                Object.values(chart.options.scales).forEach(scale => {
-                    if (scale.ticks) {
-                        scale.ticks.color = isDark ? '#e9ecef' : '#212529';
-                    }
-                    if (scale.grid) {
-                        scale.grid.color = isDark ? '#495057' : '#e9ecef';
-                    }
-                });
-            }
-            chart.update();
-        });
+        if (Chart.instances) {
+            Object.values(Chart.instances).forEach(chart => {
+                if (chart.options && chart.options.scales) {
+                    Object.values(chart.options.scales).forEach(scale => {
+                        if (scale.ticks) scale.ticks.color = isDark ? '#e9ecef' : '#212529';
+                        if (scale.grid) scale.grid.color = isDark ? '#495057' : '#e9ecef';
+                    });
+                }
+                chart.update();
+            });
+        }
     }
     
     function toggleTheme() {
@@ -78,40 +81,28 @@
         setTheme(newTheme);
     }
     
-    // Initialize theme on page load
     function initTheme() {
         const theme = getTheme();
         setTheme(theme);
     }
     
-    // Auto-detect system preference
-    function detectSystemTheme() {
-        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-            return 'dark';
-        }
-        return 'light';
-    }
-    
     // Listen for system theme changes
     if (window.matchMedia) {
         window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
-            const newTheme = e.matches ? 'dark' : 'light';
-            // Only auto-switch if user hasn't manually set preference
             let storedTheme = '';
             try {
                 storedTheme = localStorage.getItem(THEME_KEY) || '';
-            } catch (error) {
-                // Treat blocked storage as no stored preference for this view.
-            }
+            } catch (error) {}
+            
             if (!storedTheme) {
-                setTheme(newTheme);
+                setTheme(e.matches ? 'dark' : 'light');
             }
         });
     }
     
     // Keyboard shortcut (Ctrl/Cmd + Shift + T)
     document.addEventListener('keydown', function(e) {
-        if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'T') {
+        if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 't') {
             e.preventDefault();
             toggleTheme();
         }
@@ -124,7 +115,6 @@
         initTheme();
     }
     
-    // Export functions
     window.MCPTheme = {
         toggle: toggleTheme,
         set: setTheme,
