@@ -38,6 +38,14 @@ PAGE_ROLE_REQUIREMENTS = {
     "/settings": frozenset({"admin"}),
 }
 
+ROLE_DEFAULT_LANDING = {
+    "SOC Analyst Tier 1-2": "/analysis/ioc",
+    "Incident Responder": "/agent/playbooks",
+    "Threat Hunter": "/",
+    "Team Lead": "/dashboard",
+    "admin": "/",
+}
+
 
 def page_auth_user(request: Request):
     """Return the authenticated user from the session cookie or Bearer header."""

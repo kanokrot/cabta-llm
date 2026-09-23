@@ -37,7 +37,11 @@ from . import websocket
 from .auth import TEAM_LEAD, get_current_user, require_role
 from .analysis_manager import AnalysisManager
 from .case_store import CaseStore
-from .page_auth import PageAuthMiddleware, page_auth_user as _page_auth_user
+from .page_auth import (
+    PageAuthMiddleware,
+    ROLE_DEFAULT_LANDING,
+    page_auth_user as _page_auth_user,
+)
 from .security import safe_relative_path
 from src.integrations.ticketing import initialize_database as initialize_ticketing_db
 
@@ -467,7 +471,10 @@ def _register_page_routes(app: FastAPI) -> None:
     @app.get('/login', response_class=HTMLResponse, include_in_schema=False)
     async def login_page(request: Request, next: str = '/'):
         next_path = safe_relative_path(next)
-        if _page_auth_user(request) is not None:
+        user = _page_auth_user(request)
+        if user is not None:
+            if next_path == '/':
+                next_path = ROLE_DEFAULT_LANDING.get(user.get('role'), '/dashboard')
             return RedirectResponse(url=next_path, status_code=303)
         return templates.TemplateResponse(request, 'login.html', {
             'next_path': next_path,
