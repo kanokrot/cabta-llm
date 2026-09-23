@@ -223,3 +223,22 @@ def test_detection_rule_markdown_copy_is_available_on_all_analysis_pages(
     assert "Copy format" in template_texts["ioc"]
     assert "Copy format" in template_texts["email"]
     assert "rule-copy-format-trigger" in template_texts["email"]
+
+
+def test_detection_rule_editor_handlers_are_present(analysis_js_text):
+    """The report rule editor must keep its delegated action handlers wired."""
+    required_fragments = [
+        "function initializeRuleArtifactControls()",
+        "action === 'edit'",
+        "action === 'save'",
+        "action === 'cancel'",
+        "data-rule-editor",
+        "method: 'PUT'",
+        "detail.validation.errors",
+        "updateRuleArtifactControls(analysisId, ruleType, state)",
+    ]
+    for fragment in required_fragments:
+        assert fragment in analysis_js_text, (
+            f"Expected detection-rule editor fragment {fragment!r} "
+            "to remain in analysis.js."
+        )

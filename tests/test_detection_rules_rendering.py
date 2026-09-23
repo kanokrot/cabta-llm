@@ -1,6 +1,43 @@
 """Regression coverage for dynamic detection-rule HTML rendering."""
 
+from pathlib import Path
+
+import pytest
+from jinja2 import Environment, FileSystemLoader, select_autoescape
+from starlette.requests import Request
+
 from src.reporting.html_report_generator import HTMLReportGenerator
+
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+
+def _render_report_view(role: str) -> str:
+    scope = {
+        "type": "http",
+        "method": "GET",
+        "path": "/report/job-1",
+        "raw_path": b"/report/job-1",
+        "query_string": b"",
+        "headers": [],
+        "scheme": "http",
+        "server": ("testserver", 80),
+        "client": ("testclient", 50000),
+    }
+    request = Request(scope)
+    request.state.user = {"role": role}
+    job = {
+        "id": "job-1",
+        "analysis_type": "ioc",
+        "result": {"detection_rules": {"kql": "DeviceEvents | take 10"}},
+    }
+    environment = Environment(
+        loader=FileSystemLoader(str(PROJECT_ROOT / "templates")),
+        autoescape=select_autoescape(["html", "xml"]),
+    )
+    return environment.get_template("report_view.html").render(
+        request=request, job=job
+    )
 
 
 def _render(rules):
@@ -112,3 +149,26 @@ def test_empty_rule_values_are_skipped():
 
 def test_empty_rules_dict_returns_empty_string():
     assert _render({}) == ""
+
+
+@pytest.mark.parametrize("role", ["Threat Hunter", "admin"])
+def test_rule_edit_controls_render_for_editing_roles(role):
+    rendered = _render_report_view(role)
+
+    assert 'data-rule-action="edit"' in rendered
+    assert 'data-rule-action="save"' in rendered
+    assert 'data-rule-action="cancel"' in rendered
+    assert 'data-analysis-id="job-1"' in rendered
+    assert 'data-rule-type="kql"' in rendered
+
+
+@pytest.mark.parametrize(
+    "role",
+    ["SOC Analyst Tier 1-2", "Incident Responder", "Team Lead"],
+)
+def test_rule_edit_controls_are_hidden_for_read_only_roles(role):
+    rendered = _render_report_view(role)
+
+    assert 'data-rule-action="edit"' not in rendered
+    assert 'data-rule-action="save"' not in rendered
+    assert 'data-rule-action="cancel"' not in rendered

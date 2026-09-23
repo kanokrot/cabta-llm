@@ -1961,6 +1961,136 @@
         });
     }
 
+    function ruleArtifactContentUrl(analysisId, ruleType) {
+        return '/api/reports/' + encodeURIComponent(analysisId) + '/rules/' +
+            encodeURIComponent(ruleType);
+    }
+
+    function refreshRuleArtifactStatus(analysisId, ruleType) {
+        return fetch(ruleArtifactUrl(analysisId, ruleType, 'status'))
+            .then(function (response) {
+                if (!response.ok) throw new Error('HTTP ' + response.status);
+                return response.json();
+            })
+            .then(function (state) {
+                updateRuleArtifactControls(analysisId, ruleType, state);
+                return state;
+            })
+            .catch(function () {
+                /* The rule was saved; keep the existing controls if refresh fails. */
+            });
+    }
+
+    function ruleEditorCard(button) {
+        return button.closest('[data-analysis-id][data-rule-type]');
+    }
+
+    function clearRuleValidationErrors(card) {
+        var container = card && card.querySelector('[data-rule-validation-errors]');
+        if (!container) return;
+        container.hidden = true;
+        container.textContent = '';
+    }
+
+    function showRuleValidationErrors(card, errors) {
+        var container = card && card.querySelector('[data-rule-validation-errors]');
+        if (!container) return;
+        var safeErrors = Array.isArray(errors) && errors.length ? errors : ['Rule validation failed'];
+        container.innerHTML = '<ul class="mb-0">' + safeErrors.map(function (error) {
+            return '<li>' + escHtml(String(error)) + '</li>';
+        }).join('') + '</ul>';
+        container.hidden = false;
+    }
+
+    function setRuleEditorMode(card, editing) {
+        var display = card.querySelector('[data-rule-display]');
+        var editor = card.querySelector('[data-rule-editor]');
+        var editButton = card.querySelector('[data-rule-action="edit"]');
+        var saveButton = card.querySelector('[data-rule-action="save"]');
+        var cancelButton = card.querySelector('[data-rule-action="cancel"]');
+        if (display) display.hidden = editing;
+        if (editor) editor.hidden = !editing;
+        if (editButton) editButton.hidden = editing;
+        if (saveButton) saveButton.hidden = !editing;
+        if (cancelButton) cancelButton.hidden = !editing;
+    }
+
+    function editRuleArtifact(button) {
+        var card = ruleEditorCard(button);
+        var display = card && card.querySelector('[data-rule-display] code');
+        var editor = card && card.querySelector('[data-rule-editor]');
+        if (!card || !display || !editor) return;
+        editor.value = display.textContent;
+        clearRuleValidationErrors(card);
+        setRuleEditorMode(card, true);
+        editor.focus();
+    }
+
+    function cancelRuleArtifactEdit(button) {
+        var card = ruleEditorCard(button);
+        var display = card && card.querySelector('[data-rule-display] code');
+        var editor = card && card.querySelector('[data-rule-editor]');
+        if (!card || !display || !editor) return;
+        editor.value = display.textContent;
+        clearRuleValidationErrors(card);
+        setRuleEditorMode(card, false);
+    }
+
+    function readRuleValidationError(response) {
+        return response.json().then(function (payload) {
+            var detail = payload && payload.detail;
+            var validationErrors = detail && typeof detail === 'object' && detail.validation ?
+                detail.validation.errors : [];
+            return {
+                validation: true,
+                errors: Array.isArray(validationErrors) ? validationErrors : [],
+                message: detail && typeof detail === 'object' ? detail.message : String(detail || 'Rule validation failed')
+            };
+        }).catch(function () {
+            return { validation: true, errors: [], message: 'Rule validation failed' };
+        });
+    }
+
+    function saveRuleArtifactContent(button) {
+        var card = ruleEditorCard(button);
+        var analysisId = button.getAttribute('data-analysis-id');
+        var ruleType = button.getAttribute('data-rule-type');
+        var editor = card && card.querySelector('[data-rule-editor]');
+        var display = card && card.querySelector('[data-rule-display] code');
+        if (!card || !editor || !display) return;
+        button.disabled = true;
+        clearRuleValidationErrors(card);
+        fetch(ruleArtifactContentUrl(analysisId, ruleType), {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ content: editor.value })
+        }).then(function (response) {
+            if (response.status === 422) {
+                return readRuleValidationError(response).then(function (error) {
+                    showRuleValidationErrors(card, error.errors);
+                    throw error;
+                });
+            }
+            if (!response.ok) {
+                return ruleArtifactError(response).then(function (message) {
+                    throw new Error(message);
+                });
+            }
+            return response.json();
+        }).then(function () {
+            display.textContent = editor.value;
+            setRuleEditorMode(card, false);
+            return refreshRuleArtifactStatus(analysisId, ruleType);
+        }).then(function () {
+            showToast(ruleType.toUpperCase() + ' rule saved.', 'success');
+        }).catch(function (error) {
+            if (error && error.validation) return;
+            showToast('Save failed: ' + error.message, 'error');
+        }).finally(function () {
+            button.disabled = false;
+        });
+    }
+
     function saveRuleArtifact(response, fallbackFilename) {
         return response.blob().then(function (blob) {
             var disposition = response.headers.get('content-disposition') || '';
@@ -2095,6 +2225,9 @@
         document.querySelectorAll('[data-rule-action]').forEach(function (button) {
             button.addEventListener('click', function () {
                 var action = button.getAttribute('data-rule-action');
+                if (action === 'edit') editRuleArtifact(button);
+                if (action === 'save') saveRuleArtifactContent(button);
+                if (action === 'cancel') cancelRuleArtifactEdit(button);
                 if (action === 'approve') approveRuleArtifact(button);
                 if (action === 'download') downloadRuleArtifact(button);
                 if (action === 'deploy') markRuleArtifactDeployed(button);
