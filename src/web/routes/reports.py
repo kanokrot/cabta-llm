@@ -130,6 +130,38 @@ def _require_rule_export_approval(
     return state
 
 
+def _threat_hunter_can_export_rule(
+    request: Request,
+    analysis_id: str,
+    rule_type: str,
+    current_user: dict,
+) -> bool:
+    """Allow Threat Hunters their latest edits and rules with no owner."""
+    if current_user.get('role') != 'Threat Hunter':
+        return True
+    owner = request.app.state.analysis_manager.get_detection_rule_owner(
+        analysis_id, rule_type
+    )
+    if owner is None:
+        return True
+    return str(owner.get('last_edited_by')) == str(current_user.get('id'))
+
+
+def _require_rule_export_ownership(
+    request: Request,
+    analysis_id: str,
+    rule_type: str,
+    current_user: dict,
+) -> None:
+    if not _threat_hunter_can_export_rule(
+        request, analysis_id, rule_type, current_user
+    ):
+        raise HTTPException(
+            403,
+            'Threat Hunter may export only rules they last edited or unowned rules',
+        )
+
+
 def _write_rule_temp_file(rule_type: str, content: str) -> str:
     with tempfile.NamedTemporaryFile(
         mode='w',
@@ -261,7 +293,7 @@ async def update_rule_content(
     analysis_id: str,
     rule_type: str,
     body: RuleContentUpdateRequest,
-    _current_user: dict = Depends(
+    current_user: dict = Depends(
         require_role(['Threat Hunter', 'admin'])
     ),
 ):
@@ -284,6 +316,7 @@ async def update_rule_content(
         analysis_id,
         normalized_type,
         body.content,
+        current_user['id'],
     )
     if not updated:
         raise HTTPException(404, 'Analysis or rule not found')
@@ -362,9 +395,13 @@ async def download_detection_rule(
     request: Request,
     analysis_id: str,
     rule_type: str,
+    current_user: dict = Depends(get_current_user),
 ):
     """Serve one validated, human-approved rule as a deployable text file."""
     normalized_type, content = _get_rule_content(request, analysis_id, rule_type)
+    _require_rule_export_ownership(
+        request, analysis_id, normalized_type, current_user
+    )
     _require_rule_export_approval(analysis_id, normalized_type, content)
     temp_path = _write_rule_temp_file(normalized_type, content)
     return FileResponse(
@@ -383,6 +420,7 @@ async def export_detection_rules_zip(
     request: Request,
     analysis_id: str,
     rule_types: str = Query(..., description='Comma-separated rule types'),
+    current_user: dict = Depends(get_current_user),
 ):
     """Bundle selected, individually approved rule artifacts into a ZIP file."""
     selected_types = list(dict.fromkeys(
@@ -398,8 +436,18 @@ async def export_detection_rules_zip(
             analysis_id,
             selected_type,
         )
+        if not _threat_hunter_can_export_rule(
+            request, analysis_id, normalized_type, current_user
+        ):
+            continue
         _require_rule_export_approval(analysis_id, normalized_type, content)
         approved_rules.append((normalized_type, content))
+
+    if not approved_rules:
+        raise HTTPException(
+            403,
+            'No selected detection rules are available for this Threat Hunter',
+        )
 
     with tempfile.NamedTemporaryFile(suffix='.zip', delete=False) as temp_file:
         temp_path = temp_file.name

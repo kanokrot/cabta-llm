@@ -95,11 +95,13 @@ class AnalysisManager:
         analysis_id: str,
         rule_type: str,
         content: str,
+        editor_user_id: Optional[int] = None,
     ) -> bool:
         """Persist one detection-rule edit without replacing other result data.
 
         The read-modify-write cycle uses the same self._lock as complete_job(),
-        and commits the complete JSON result after changing one rule key.
+        and commits the complete JSON result plus optional ownership metadata
+        in one transaction.
         """
         with self._lock:
             conn = self._connect()
@@ -132,6 +134,23 @@ class AnalysisManager:
                     "UPDATE analysis_jobs SET result = ? WHERE id = ?",
                     (json.dumps(result, default=str), analysis_id),
                 )
+                if editor_user_id is not None:
+                    conn.execute(
+                        """
+                        INSERT INTO detection_rule_ownership (
+                            analysis_id, rule_type, last_edited_by, last_edited_at
+                        ) VALUES (?, ?, ?, ?)
+                        ON CONFLICT(analysis_id, rule_type) DO UPDATE SET
+                            last_edited_by = excluded.last_edited_by,
+                            last_edited_at = excluded.last_edited_at
+                        """,
+                        (
+                            analysis_id,
+                            rule_type,
+                            int(editor_user_id),
+                            datetime.now(timezone.utc).isoformat(),
+                        ),
+                    )
                 conn.commit()
                 return True
             except Exception:
@@ -139,6 +158,33 @@ class AnalysisManager:
                 raise
             finally:
                 conn.close()
+
+    def get_detection_rule_owner(
+        self,
+        analysis_id: str,
+        rule_type: str,
+    ) -> Optional[Dict[str, Any]]:
+        """Return the latest editor metadata for one rule, if it exists."""
+        conn = self._connect()
+        try:
+            row = conn.execute(
+                """
+                SELECT analysis_id, rule_type, last_edited_by, last_edited_at
+                FROM detection_rule_ownership
+                WHERE analysis_id = ? AND rule_type = ?
+                """,
+                (analysis_id, rule_type),
+            ).fetchone()
+            if row is None:
+                return None
+            return {
+                "analysis_id": row[0],
+                "rule_type": row[1],
+                "last_edited_by": row[2],
+                "last_edited_at": row[3],
+            }
+        finally:
+            conn.close()
 
     def list_jobs(
         self,
@@ -360,6 +406,24 @@ class AnalysisManager:
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_jobs_user_id "
             "ON analysis_jobs(user_id)"
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS detection_rule_ownership (
+                analysis_id TEXT NOT NULL,
+                rule_type TEXT NOT NULL,
+                last_edited_by INTEGER NOT NULL,
+                last_edited_at TEXT NOT NULL,
+                PRIMARY KEY (analysis_id, rule_type),
+                FOREIGN KEY (analysis_id) REFERENCES analysis_jobs(id)
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_detection_rule_ownership_editor
+            ON detection_rule_ownership(last_edited_by)
+            """
         )
         conn.commit()
         conn.close()

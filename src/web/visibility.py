@@ -169,7 +169,12 @@ def _safe_findings(value: Any) -> list[dict[str, Any]]:
     return output
 
 
-def _safe_result(result: Mapping[str, Any], *, detailed: bool) -> dict[str, Any]:
+def _safe_result(
+    result: Mapping[str, Any],
+    *,
+    detailed: bool,
+    include_detection_rules: bool = False,
+) -> dict[str, Any]:
     """Build a report-safe result from known presentation fields only."""
     output: dict[str, Any] = {}
     scalar_fields = (
@@ -218,6 +223,7 @@ def _safe_result(result: Mapping[str, Any], *, detailed: bool) -> dict[str, Any]
                 if key in {"attack_techniques", "threat_score", "success"}
                 and isinstance(value, (list, str, int, float, bool))
             }
+    if detailed or include_detection_rules:
         rules = result.get("detection_rules")
         if isinstance(rules, dict):
             output["detection_rules"] = {
@@ -270,7 +276,11 @@ def serialize_report_job(job: Dict[str, Any], role: str = SOC) -> Dict[str, Any]
     authorize_flow(role, "report")
     detailed = role in {INCIDENT_RESPONDER, THREAT_HUNTER, ADMIN}
     base = serialize_analysis_job(job, role=role, flow="report")
-    base["result"] = _safe_result(_as_dict(job.get("result")), detailed=detailed)
+    base["result"] = _safe_result(
+        _as_dict(job.get("result")),
+        detailed=detailed,
+        include_detection_rules=True,
+    )
     return base
 
 
