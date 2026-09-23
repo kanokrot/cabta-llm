@@ -7,6 +7,28 @@ import logging
 import re
 import uuid
 
+import yaml
+
+
+class _SigmaDumper(yaml.SafeDumper):
+    """Indent list items under keys like the existing Sigma output."""
+
+    def increase_indent(self, flow=False, indentless=False):
+        return super().increase_indent(flow, False)
+
+
+class _SingleQuoted(str):
+    """Value that should always be emitted as a single-quoted YAML scalar."""
+
+
+def _represent_single_quoted(dumper, data):
+    return dumper.represent_scalar(
+        'tag:yaml.org,2002:str', str(data), style="'"
+    )
+
+
+_SigmaDumper.add_representer(_SingleQuoted, _represent_single_quoted)
+
 logger = logging.getLogger(__name__)
 class RuleGenerator:
     """
@@ -203,103 +225,88 @@ index=* earliest=-30d
     
     @staticmethod
     def _generate_sigma_ioc(ioc: str, ioc_type: str, context: Dict) -> str:
-        """Generate complete SIGMA rule for IOC."""
+        """Generate complete SIGMA rule for IOC using safe YAML serialization."""
         from datetime import datetime
-        
-        malware_family = context.get('malware_family', 'Unknown') if context else 'Unknown'
-        verdict = context.get('verdict', 'Unknown') if context else 'Unknown'
-        
-        # Determine level based on verdict
-        level = 'critical' if verdict == 'MALICIOUS' else 'high' if verdict == 'SUSPICIOUS' else 'medium'
+
+        ioc = str(ioc)
+        malware_family = (
+            str(context.get('malware_family', 'Unknown'))
+            if context else 'Unknown'
+        )
+        verdict = str(context.get('verdict', 'Unknown')) if context else 'Unknown'
+
+        level = (
+            'critical' if verdict == 'MALICIOUS'
+            else 'high' if verdict == 'SUSPICIOUS'
+            else 'medium'
+        )
         rule_id = uuid.uuid5(uuid.NAMESPACE_URL, f"{ioc_type}:{ioc}")
-        
-        rule = f"""title: Detection of {malware_family} IOC - {ioc}
-id: {rule_id}
-status: experimental
-description: Detects network activity related to {verdict} IOC
-author: Ugur Ates
-date: {datetime.now().strftime('%Y/%m/%d')}
-references:
-    - https://github.com/ugur-ates/blue-team-assistant
-tags:
-    - attack.command_and_control
-    - attack.t1071"""
-        
+        value = _SingleQuoted(ioc)
+
+        rule = {
+            'title': f'Detection of {malware_family} IOC - {ioc}',
+            'id': str(rule_id),
+            'status': 'experimental',
+            'description': f'Detects network activity related to {verdict} IOC',
+            'author': 'Ugur Ates',
+            'date': datetime.now().strftime('%Y/%m/%d'),
+            'references': ['https://github.com/ugur-ates/blue-team-assistant'],
+            'tags': ['attack.command_and_control', 'attack.t1071'],
+        }
+
         if ioc_type == 'ipv4':
-            rule += f"""
-logsource:
-    category: firewall
-detection:
-    selection_dst:
-        dst_ip: '{ioc}'
-    selection_src:
-        src_ip: '{ioc}'
-    condition: selection_dst or selection_src
-fields:
-    - src_ip
-    - dst_ip
-    - dst_port
-    - action"""
-        
+            rule['logsource'] = {'category': 'firewall'}
+            rule['detection'] = {
+                'selection_dst': {'dst_ip': value},
+                'selection_src': {'src_ip': value},
+                'condition': 'selection_dst or selection_src',
+            }
+            rule['fields'] = ['src_ip', 'dst_ip', 'dst_port', 'action']
         elif ioc_type == 'domain':
-            rule += f"""
-logsource:
-    category: dns
-detection:
-    selection:
-        query|contains: '{ioc}'
-    condition: selection
-fields:
-    - query
-    - answer
-    - src_ip"""
-        
+            rule['logsource'] = {'category': 'dns'}
+            rule['detection'] = {
+                'selection': {'query|contains': value},
+                'condition': 'selection',
+            }
+            rule['fields'] = ['query', 'answer', 'src_ip']
         elif ioc_type == 'url':
-            rule += f"""
-logsource:
-    category: proxy
-detection:
-    selection:
-        c-uri|contains: '{ioc}'
-    condition: selection
-fields:
-    - c-uri
-    - cs-host
-    - src_ip"""
-        
+            rule['logsource'] = {'category': 'proxy'}
+            rule['detection'] = {
+                'selection': {'c-uri|contains': value},
+                'condition': 'selection',
+            }
+            rule['fields'] = ['c-uri', 'cs-host', 'src_ip']
         elif ioc_type in ['sha256', 'md5', 'sha1', 'hash']:
-            rule += f"""
-logsource:
-    category: file_event
-    product: windows
-detection:
-    selection:
-        Hashes|contains: '{ioc}'
-    condition: selection
-fields:
-    - TargetFilename
-    - Hashes
-    - User"""
-        
+            rule['logsource'] = {'category': 'file_event', 'product': 'windows'}
+            rule['detection'] = {
+                'selection': {'Hashes|contains': value},
+                'condition': 'selection',
+            }
+            rule['fields'] = ['TargetFilename', 'Hashes', 'User']
         else:
             # Generic fallback
-            rule += f"""
-logsource:
-    category: network_connection
-detection:
-    selection:
-        - dst_ip: '{ioc}'
-        - query: '{ioc}'
-        - url|contains: '{ioc}'
-    condition: selection"""
-        
-        rule += f"""
-falsepositives:
-    - Legitimate traffic to this destination
-level: {level}
-"""
-        
-        return rule
+            rule['logsource'] = {'category': 'network_connection'}
+            rule['detection'] = {
+                'selection': [
+                    {'dst_ip': value},
+                    {'query': value},
+                    {'url|contains': value},
+                ],
+                'condition': 'selection',
+            }
+
+        rule['falsepositives'] = ['Legitimate traffic to this destination']
+        rule['level'] = level
+
+        return yaml.dump(
+            rule,
+            Dumper=_SigmaDumper,
+            sort_keys=False,
+            allow_unicode=True,
+            default_flow_style=False,
+            indent=4,
+            width=1_000_000,
+        )
     
     @staticmethod
     def _generate_xql_ioc(ioc: str, ioc_type: str, context: Dict) -> str:
