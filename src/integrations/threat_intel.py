@@ -553,7 +553,7 @@ class ThreatIntelligence:
         """
         Check IOC against ThreatFox (Abuse.ch).
         
-        v1.0.0: İyileştirildi - hata yönetimi, no-auth API
+        v1.0.0: Improved error handling and no-auth API support.
         
         Args:
             ioc: IOC to check
