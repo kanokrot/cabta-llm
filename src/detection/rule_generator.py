@@ -249,9 +249,9 @@ index=* earliest=-30d
             'status': 'experimental',
             'description': f'Detects network activity related to {verdict} IOC',
             'author': 'Ugur Ates',
-            'date': datetime.now().strftime('%Y/%m/%d'),
+            'date': datetime.now().strftime('%Y-%m-%d'),
             'references': ['https://github.com/ugur-ates/blue-team-assistant'],
-            'tags': ['attack.command_and_control', 'attack.t1071'],
+            'tags': ['attack.command-and-control', 'attack.t1071'],
         }
 
         if ioc_type == 'ipv4':

@@ -1,3 +1,6 @@
+import re
+from datetime import datetime
+
 import pytest
 import yaml
 
@@ -78,3 +81,25 @@ def test_normal_ioc_keeps_single_quoted_format():
         '203.0.113.42', 'ipv4', {}
     )['sigma']
     assert "dst_ip: '203.0.113.42'" in text
+
+
+def _assert_sigma_metadata(doc):
+    assert doc['tags'] == ['attack.command-and-control', 'attack.t1071']
+    assert isinstance(doc['date'], str)
+    assert re.fullmatch(r'\d{4}-\d{2}-\d{2}', doc['date'])
+    datetime.strptime(doc['date'], '%Y-%m-%d')
+
+
+@pytest.mark.parametrize('ioc_type', list(DETECTION_PATHS))
+def test_generated_sigma_metadata_uses_spec_format(ioc_type):
+    text = RuleGenerator.generate_ioc_rules(
+        '203.0.113.42', ioc_type, {}
+    )['sigma']
+    _assert_sigma_metadata(yaml.safe_load(text))
+
+
+def test_generic_sigma_metadata_uses_spec_format():
+    text = RuleGenerator._generate_sigma_ioc(
+        'mutex-value', 'mutex', {}
+    )
+    _assert_sigma_metadata(yaml.safe_load(text))
