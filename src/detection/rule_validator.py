@@ -82,7 +82,7 @@ def validate_rule(rule_type: str, rule_content: str) -> dict:
             'rule_type': normalized_type,
             'syntax_valid': syntax_valid,
             'semantic_valid': semantic_valid,
-            'status': 'semantic_validated' if semantic_valid else 'syntax_only',
+            'status': 'schema_only' if semantic_valid else 'syntax_only',
         }
 
     else:
