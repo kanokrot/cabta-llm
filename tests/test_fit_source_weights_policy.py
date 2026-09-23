@@ -22,6 +22,7 @@ def test_select_cv_sources_keeps_only_validated_group_a_sources():
         {"source": "c2_trackers"},
         {"source": "circl"},
         {"source": "sslblacklist"},
+        {"source": "threatfox"},
         {"source": "usom"},
         {"source": "alienvault"},
     ]
@@ -33,19 +34,26 @@ def test_select_cv_sources_keeps_only_validated_group_a_sources():
         "feodotracker",
         "spamhaus",
         "sslblacklist",
+        "threatfox",
         "tor_exit_nodes",
-        "usom",
     ]
-    assert set(excluded) == {"alienvault", "circl"}
+    assert set(excluded) == {"alienvault", "circl", "usom"}
     assert "excluded permanently" in excluded["circl"]
+    assert "query API" in excluded["usom"]
     assert set(fit_source_weights.CV_SOURCE_ALLOWLIST) == {
         "c2_trackers",
         "feodotracker",
         "spamhaus",
         "sslblacklist",
+        "threatfox",
         "tor_exit_nodes",
-        "usom",
     }
+
+
+def test_current_scoring_weight_uses_ahp_values_and_no_unknown_fallback():
+    assert fit_source_weights.current_scoring_weight("threatfox") == 0.339610
+    assert fit_source_weights.current_scoring_weight("virustotal") == 0.0
+    assert fit_source_weights.current_scoring_weight("unknown") == 0.0
 
 
 def test_build_feature_matrix_can_use_explicit_source_policy():

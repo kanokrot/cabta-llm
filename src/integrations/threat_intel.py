@@ -27,6 +27,12 @@ GROUP_B_EXCLUDE = {
     'ip2proxy', 'triage', 'threatzone'
 }
 
+# Comprehensive investigation currently gives each source task a fixed
+# deadline. ThreatFox is admitted to scoring, so a missed deadline must be
+# represented as unavailable rather than silently replaced with stale data.
+SOURCE_EXECUTION_TIMEOUT_SECONDS = 15.0
+THREATFOX_SOURCE_NAME = 'threatfox'
+
 
 def _normalize_ipv4_host(value: str) -> str | None:
     host = value.split(':', 1)[0]
@@ -621,7 +627,14 @@ class ThreatIntelligence:
                         return {'status': '⚠', 'error': f'HTTP {response.status}'}
         
         except asyncio.TimeoutError:
-            return {'status': '⚠', 'error': 'Timeout', 'score': 0}
+            return {
+                'status': '⚠',
+                'error': 'Timeout after 15s',
+                'score': 0,
+                'found': False,
+                'unavailable': True,
+                'timeout': True,
+            }
         except Exception as e:
             logger.error(f"[ThreatFox] Error: {e}")
             return {'status': '⚠', 'error': str(e)}
@@ -1101,12 +1114,30 @@ class ThreatIntelligence:
         async def safe_execute(name: str, coro, ioc: str, ioc_type: str) -> tuple:
             """Execute with timeout and error handling."""
             try:
-                result = await asyncio.wait_for(coro, timeout=15.0)
+                result = await asyncio.wait_for(
+                    coro, timeout=SOURCE_EXECUTION_TIMEOUT_SECONDS
+                )
                 if result and result.get('status') != '⚠':
                     self._ioc_cache.set(ioc, ioc_type, name, result)
                 return name, result
             except asyncio.TimeoutError:
-                logger.warning(f"[INTEL] {name}: Timeout after 15s")
+                logger.warning(
+                    f"[INTEL] {name}: Timeout after "
+                    f"{SOURCE_EXECUTION_TIMEOUT_SECONDS:g}s"
+                )
+                if name.lower() == THREATFOX_SOURCE_NAME:
+                    # ThreatFox is an admitted source, but an unavailable
+                    # response cannot contribute a clean or malicious signal.
+                    # Do not retry or substitute stale cache data here.
+                    return name, {
+                        'status': '⚠',
+                        'error': 'Timeout after 15s',
+                        'found': False,
+                        'score': 0,
+                        'unavailable': True,
+                        'timeout': True,
+                        'cached': False,
+                    }
                 cached = self._ioc_cache.get(ioc, ioc_type, name)
                 if cached is not None:
                     cached_copy = dict(cached)
@@ -1150,6 +1181,10 @@ class ThreatIntelligence:
             if source.lower() in GROUP_B_EXCLUDE:
                 continue
             if isinstance(data, dict):
+                # An unavailable source is absent from this round's evidence;
+                # its placeholder score must not dilute the aggregate average.
+                if data.get('unavailable') is True:
+                    continue
                 # Count flagged sources
                 if data.get('status') == '✓':
                     sources_flagged += 1

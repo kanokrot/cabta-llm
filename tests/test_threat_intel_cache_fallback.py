@@ -97,6 +97,43 @@ async def test_timeout_without_cache_preserves_error_result():
 
 
 @pytest.mark.asyncio
+async def test_threatfox_timeout_is_unavailable_without_cache_fallback():
+    intel = _build_intel(None)
+    intel.check_threatfox = AsyncMock(side_effect=asyncio.TimeoutError())
+
+    result = await intel.investigate_ioc_comprehensive(
+        "evil.com", "domain", allowed_sources={"threatfox"}
+    )
+
+    assert result["sources"]["threatfox"] == {
+        "status": "⚠",
+        "error": "Timeout after 15s",
+        "found": False,
+        "score": 0,
+        "unavailable": True,
+        "timeout": True,
+        "cached": False,
+    }
+    # ThreatFox timeout handling must not read or use stale cache data.
+    intel._ioc_cache.get.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_threatfox_timeout_does_not_dilute_aggregate_score():
+    intel = _build_intel(None)
+    intel.check_threatfox = AsyncMock(side_effect=asyncio.TimeoutError())
+    intel.check_c2_trackers = AsyncMock(
+        return_value={"status": "ok", "found": True, "score": 100}
+    )
+
+    result = await intel.investigate_ioc_comprehensive(
+        "evil.com", "domain", allowed_sources={"threatfox", "c2_trackers"}
+    )
+
+    assert result["threat_score"] == 100
+
+
+@pytest.mark.asyncio
 async def test_source_error_uses_unexpired_cached_source_result():
     cached_result = {"status": "✓", "pulses": 21, "score": 100}
     intel = _build_intel(RuntimeError("upstream unavailable"), cached_result)

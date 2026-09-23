@@ -37,6 +37,7 @@ GROUP_A_EVAL_SOURCES = frozenset(
         "usom",
         "sslblacklist",
         "spamhaus",
+        "threatfox",
     }
 )
 
