@@ -27,7 +27,7 @@ GMAIL_CLIENT_ID_ENV = "GMAIL_OAUTH_CLIENT_ID"
 GMAIL_CLIENT_SECRET_ENV = "GMAIL_OAUTH_CLIENT_SECRET"
 GMAIL_REDIRECT_URI = "http://localhost:3003/api/settings/gmail/callback"
 GMAIL_REVOKE_URI = "https://oauth2.googleapis.com/revoke"
-STATE_TTL_SECONDS = 10 * 60
+STATE_TTL_SECONDS = 20 * 60
 ALLOWED_SCOPES = frozenset(
     {
         "https://www.googleapis.com/auth/gmail.send",
