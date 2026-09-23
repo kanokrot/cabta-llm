@@ -333,3 +333,8 @@ def sample_email_analysis_result():
         'threat_score': 80,
         'verdict': 'MALICIOUS',
     }
+
+
+@pytest.fixture(autouse=True)
+def _force_canary_control_group(monkeypatch):
+    monkeypatch.setenv("LLM_DGA_VLLM_CANARY_PERCENT", "0")
