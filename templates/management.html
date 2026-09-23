@@ -1,0 +1,171 @@
+{% extends "base.html" %}
+
+{% block title %}{% if current_user.role == 'admin' %}Access Requests{% else %}Team Management{% endif %} - Blue Team Assistant{% endblock %}
+{% block page_title %}{% if current_user.role == 'admin' %}Access Requests{% else %}Team Management{% endif %}{% endblock %}
+{% block page_subtitle %}<span class="page-subtitle">{% if current_user.role == 'admin' %}Admin review queue{% else %}Invite team members{% endif %}</span>{% endblock %}
+
+{% block content %}
+{% if current_user.role == 'Team Lead' %}
+<div class="card">
+    <div class="card-header">
+        <h5 class="mb-1"><i class="bi bi-person-plus me-2 text-accent"></i>Invite team member</h5>
+        <p class="text-muted small mb-0">Team Leads can invite SOC operators directly.</p>
+    </div>
+    <div class="card-body">
+        <form id="team-member-invite-form">
+            <div class="mb-3">
+                <label class="form-label" for="team-member-email">Email</label>
+                <input class="form-control" id="team-member-email" name="email" type="email"
+                       maxlength="254" autocomplete="email" required>
+            </div>
+            <div class="mb-3">
+                <label class="form-label" for="team-member-role">Role</label>
+                <select class="form-control" id="team-member-role" name="role" required>
+                    <option value="">Select a role</option>
+                    {% for role in team_member_roles | sort %}
+                    <option value="{{ role | e }}">{{ role }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button class="btn btn-accent" type="submit">
+                <i class="bi bi-send me-1"></i>Send invitation
+            </button>
+        </form>
+    </div>
+</div>
+{% else %}
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <div>
+            <h5 class="mb-1"><i class="bi bi-person-plus me-2 text-accent"></i>Pending access requests</h5>
+            <p class="text-muted small mb-0">Approving a request sends the existing invitation email.</p>
+        </div>
+        <span class="badge text-bg-secondary" id="request-count">{{ pending_requests | length }}</span>
+    </div>
+    <div class="card-body p-0">
+        {% if pending_requests %}
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0" id="access-request-table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Email</th>
+                        <th>Requested role</th>
+                        <th>Reason</th>
+                        <th>Submitted</th>
+                        <th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for item in pending_requests %}
+                    <tr data-request-id="{{ item.id }}">
+                        <td>{{ item.name }}</td>
+                        <td>{{ item.email }}</td>
+                        <td><span class="badge text-bg-secondary">{{ item.requested_role }}</span></td>
+                        <td class="text-break" style="min-width: 220px;">{{ item.reason }}</td>
+                        <td class="text-muted small">{{ item.created_at }}</td>
+                        <td class="text-end text-nowrap">
+                            <button type="button" class="btn btn-sm btn-accent me-1"
+                                    onclick="AccessRequests.decide({{ item.id }}, 'approve', this)">
+                                <i class="bi bi-check-lg me-1"></i>Approve
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-danger"
+                                    onclick="AccessRequests.decide({{ item.id }}, 'reject', this)">
+                                <i class="bi bi-x-lg me-1"></i>Reject
+                            </button>
+                        </td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="p-5 text-center text-muted" id="empty-access-requests">
+            <i class="bi bi-inbox fs-2 d-block mb-2"></i>
+            No pending access requests.
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if current_user.role == 'Team Lead' %}
+<script>
+document.getElementById('team-member-invite-form').addEventListener('submit', function (event) {
+    event.preventDefault();
+    var form = event.currentTarget;
+    var button = form.querySelector('button[type="submit"]');
+    var email = document.getElementById('team-member-email').value.trim();
+    var role = document.getElementById('team-member-role').value;
+    if (button) button.disabled = true;
+    CABTAAuth.fetch('/api/team-lead/users/invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email, role: role })
+    }).then(function (response) {
+        if (!response.ok) {
+            return response.clone().json().then(function (data) {
+                throw new Error(data.detail || 'Invitation failed.');
+            }).catch(function (error) {
+                throw error.message ? error : new Error('Invitation failed.');
+            });
+        }
+        return response.json();
+    }).then(function () {
+        form.reset();
+        CABTAAuth.showToast('Invitation sent.', 'success');
+    }).catch(function (error) {
+        CABTAAuth.showToast(error.message || 'Invitation failed.', 'error');
+    }).finally(function () {
+        if (button) button.disabled = false;
+    });
+});
+</script>
+{% else %}
+<script>
+var AccessRequests = (function () {
+    function message(response, fallback) {
+        return response.clone().json().then(function (data) {
+            return data.detail || data.error || fallback;
+        }).catch(function () { return fallback; });
+    }
+
+    function decide(id, action, button) {
+        if (action === 'reject' && !window.confirm('Reject this access request?')) return;
+        button.disabled = true;
+        var row = button.closest('tr');
+        CABTAAuth.fetch('/api/admin/access-requests/' + id + '/' + action, {
+            method: 'POST'
+        }).then(function (response) {
+            if (!response.ok) {
+                return message(response, 'Access request action failed.').then(function (text) {
+                    throw new Error(text);
+                });
+            }
+            return response.json();
+        }).then(function () {
+            if (row) row.remove();
+            var count = document.querySelectorAll('#access-request-table tbody tr').length;
+            var countElement = document.getElementById('request-count');
+            if (countElement) countElement.textContent = count;
+            if (!count && !document.getElementById('empty-access-requests')) {
+                var table = document.getElementById('access-request-table');
+                if (table && table.parentNode) {
+                    table.parentNode.innerHTML = '<div class="p-5 text-center text-muted" id="empty-access-requests">' +
+                        '<i class="bi bi-inbox fs-2 d-block mb-2"></i>No pending access requests.</div>';
+                }
+            }
+            CABTAAuth.showToast(action === 'approve' ? 'Invitation sent.' : 'Request rejected.', 'success');
+        }).catch(function (error) {
+            button.disabled = false;
+            CABTAAuth.showToast(error.message || 'Access request action failed.', 'error');
+        });
+    }
+
+    return { decide: decide };
+}());
+</script>
+{% endif %}
+{% endblock %}
