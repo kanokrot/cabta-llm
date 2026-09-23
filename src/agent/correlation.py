@@ -654,84 +654,121 @@ class CorrelationEngine:
         Returns:
             (severity_string, list_of_recommendation_strings)
         """
-        score = 0
         recommendations: List[str] = []
 
-        # ---- Overlap scoring ----
-        high_overlap = sum(1 for o in overlaps if o["count"] >= 3)
-        if high_overlap >= 3:
-            score += 30
+        # ---- Observable signals ----
+        high_overlap = sum(1 for o in overlaps if o.get("count", 0) >= 3)
+
+        tactics_seen = {
+            normalize_tactic(tactic)
+            for ttp in ttps
+            if isinstance(ttp, dict)
+            for tactic in [ttp.get("tactic")]
+            if isinstance(tactic, str) and tactic.strip()
+        }
+
+        # Count at most one malicious source per finding.  A finding can expose
+        # the same verdict through multiple fields (for example verdict and
+        # score), but it must not count as multiple sources.
+        malicious_count = 0
+        for finding in findings:
+            if not isinstance(finding, dict):
+                continue
+
+            finding_is_malicious = False
+            for key in ("verdict", "threat_level", "score"):
+                value = self._deep_get(finding, key)
+                if value is None:
+                    continue
+
+                normalized_value = str(value).lower()
+                if (
+                    normalized_value in ("malicious", "malware", "high", "critical")
+                    or (
+                        normalized_value.isdigit()
+                        and int(normalized_value) >= 70
+                    )
+                ):
+                    finding_is_malicious = True
+                    break
+
+            if finding_is_malicious:
+                malicious_count += 1
+
+        high_risk_tactics = {
+            "Impact",
+            "Credential Access",
+            "Lateral Movement",
+            "Command and Control",
+        }
+        late_kill_chain = {"Impact", "Command and Control"}
+
+        critical_overlap = high_overlap > 0
+        critical_malicious_chain = (
+            malicious_count >= 2 and late_kill_chain.issubset(tactics_seen)
+        )
+        high_risk_tactic = bool(tactics_seen & high_risk_tactics)
+        high_tactic_coverage = len(tactics_seen) >= 4
+        medium_signal = bool(overlaps) or malicious_count >= 1
+
+        # ---- Recommendations follow signals, independently of severity ----
+        if critical_overlap:
             recommendations.append(
                 f"{high_overlap} IOCs appear in 3+ analyses -- "
                 "strong correlation indicates a coordinated campaign."
             )
-        elif overlaps:
-            score += 10 * min(len(overlaps), 5)
 
-        # ---- TTP scoring ----
-        tactics_seen = {t["tactic"] for t in ttps if t.get("tactic")}
-        if "impact" in tactics_seen:
-            score += 25
+        if "Impact" in tactics_seen:
             recommendations.append(
                 "Impact-phase TTPs detected (ransomware/wiper). "
                 "Escalate to Incident Response immediately."
             )
-        if "credential-access" in tactics_seen:
-            score += 15
+        if "Credential Access" in tactics_seen:
             recommendations.append(
                 "Credential access TTPs detected. "
                 "Reset affected credentials and audit access logs."
             )
-        if "lateral-movement" in tactics_seen:
-            score += 15
+        if "Lateral Movement" in tactics_seen:
             recommendations.append(
                 "Lateral movement TTPs detected. "
                 "Isolate affected hosts and check neighbour systems."
             )
-        if "command-and-control" in tactics_seen:
-            score += 15
+        if "Command and Control" in tactics_seen:
             recommendations.append(
                 "C2 communication TTPs detected. "
                 "Block identified C2 infrastructure at the perimeter."
             )
-        if len(tactics_seen) >= 4:
-            score += 10
+
+        if high_tactic_coverage:
             recommendations.append(
                 f"Attack spans {len(tactics_seen)} MITRE ATT&CK tactics -- "
                 "full kill-chain coverage suggests an advanced threat."
             )
 
-        # ---- Finding verdicts ----
-        verdicts: List[str] = []
-        for f in findings:
-            for key in ("verdict", "threat_level", "score"):
-                v = self._deep_get(f, key) if isinstance(f, dict) else None
-                if v is not None:
-                    verdicts.append(str(v).lower())
-
-        malicious_count = sum(
-            1 for v in verdicts
-            if v in ("malicious", "malware", "high", "critical")
-            or (v.isdigit() and int(v) >= 70)
-        )
         if malicious_count >= 2:
-            score += 20
             recommendations.append(
                 f"{malicious_count} sources report malicious verdict. "
                 "High confidence of true positive."
             )
-        elif malicious_count == 1:
-            score += 10
 
-        # ---- Map score to severity ----
-        if score >= 60:
+        # Medium signals must still have an actionable explanation instead of
+        # the no-signal fallback used for Info.
+        if overlaps and not critical_overlap:
+            recommendations.append(
+                "IOC overlap detected across findings. Investigate related evidence."
+            )
+        if malicious_count == 1:
+            recommendations.append(
+                "One source reports a malicious verdict. Review supporting evidence."
+            )
+
+        # ---- Decision table: first matching severity wins ----
+        if critical_overlap or critical_malicious_chain:
             severity = "critical"
-        elif score >= 40:
+        elif high_risk_tactic or high_tactic_coverage:
             severity = "high"
-        elif score >= 20:
+        elif medium_signal:
             severity = "medium"
-        elif score >= 10:
-            severity = "low"
         else:
             severity = "info"
 

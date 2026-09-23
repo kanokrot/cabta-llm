@@ -486,6 +486,244 @@ class TestToolRegistry:
 class TestCorrelationEngine:
     """Test CorrelationEngine.correlate() with realistic findings."""
 
+    @staticmethod
+    def _overlap(count):
+        """Build the minimal overlap shape consumed by _assess_severity()."""
+        return [{"ioc": "shared.example", "count": count}]
+
+    @staticmethod
+    def _ttps(*tactics):
+        """Build the minimal TTP shape consumed by _assess_severity()."""
+        return [{"tactic": tactic} for tactic in tactics]
+
+    @pytest.mark.parametrize(
+        "overlap_count,expected_severity",
+        [(0, "info"), (1, "medium"), (2, "medium"), (3, "critical"), (4, "critical")],
+        ids=["zero", "one", "two", "three", "more-than-three"],
+    )
+    def test_assess_severity_overlap_boundaries(
+        self, correlation_engine, overlap_count, expected_severity,
+    ):
+        """Overlap severity follows 1/2/3 distinct-finding boundaries."""
+        overlaps = [] if overlap_count == 0 else self._overlap(overlap_count)
+        severity, _ = correlation_engine._assess_severity([], overlaps, [])
+        assert severity == expected_severity
+
+    @pytest.mark.parametrize(
+        "findings,ttps,expected_severity",
+        [
+            ([{"verdict": "clean"}], [], "info"),
+            ([{"verdict": "malicious"}], [], "medium"),
+            (
+                [{"verdict": "malicious"}, {"verdict": "malicious"}],
+                [],
+                "medium",
+            ),
+            (
+                [{"verdict": "malicious"}, {"verdict": "malicious"}],
+                [
+                    {"tactic": "impact"},
+                    {"tactic": "command-and-control"},
+                ],
+                "critical",
+            ),
+        ],
+        ids=[
+            "malicious-count-zero",
+            "malicious-count-one",
+            "malicious-count-two-without-late-kill-chain",
+            "malicious-count-two-with-impact-and-c2",
+        ],
+    )
+    def test_assess_severity_malicious_boundaries(
+        self, correlation_engine, findings, ttps, expected_severity,
+    ):
+        severity, _ = correlation_engine._assess_severity(findings, [], ttps)
+        assert severity == expected_severity
+
+    def test_assess_severity_deduplicates_malicious_fields_per_finding(
+        self, correlation_engine,
+    ):
+        """Verdict and score from one finding count as one malicious source."""
+        findings = [{"verdict": "malicious", "score": 90}]
+        severity, recommendations = correlation_engine._assess_severity(
+            findings, [], [],
+        )
+
+        assert severity == "medium"
+        assert not any(
+            "high confidence" in recommendation.lower()
+            for recommendation in recommendations
+        )
+
+    @pytest.mark.parametrize(
+        "tactic",
+        ["impact", "credential-access", "lateral-movement", "command-and-control"],
+    )
+    def test_assess_severity_each_high_risk_tactic_is_high(
+        self, correlation_engine, tactic,
+    ):
+        severity, _ = correlation_engine._assess_severity(
+            [], [], self._ttps(tactic),
+        )
+        assert severity == "high"
+
+    def test_assess_severity_non_high_risk_tactic_alone_is_not_high(
+        self, correlation_engine,
+    ):
+        severity, _ = correlation_engine._assess_severity(
+            [], [], self._ttps("reconnaissance"),
+        )
+        assert severity == "info"
+
+    @pytest.mark.parametrize(
+        "tactics,expected_severity",
+        [
+            (
+                ("reconnaissance", "initial-access", "execution"),
+                "info",
+            ),
+            (
+                ("reconnaissance", "initial-access", "execution", "persistence"),
+                "high",
+            ),
+        ],
+        ids=["three-distinct-tactics", "four-distinct-non-high-risk-tactics"],
+    )
+    def test_assess_severity_tactic_coverage_boundary(
+        self, correlation_engine, tactics, expected_severity,
+    ):
+        severity, _ = correlation_engine._assess_severity(
+            [], [], self._ttps(*tactics),
+        )
+        assert severity == expected_severity
+
+    @pytest.mark.parametrize(
+        "raw_tactic,canonical_tactic",
+        [
+            ("Impact", "Impact"),
+            ("impact", "Impact"),
+            ("Command and Control", "Command and Control"),
+            ("command-and-control", "Command and Control"),
+        ],
+        ids=["Impact-title", "impact-slug", "C2-title", "C2-slug"],
+    )
+    def test_assess_severity_normalizes_tactic_forms(
+        self, correlation_engine, raw_tactic, canonical_tactic,
+    ):
+        from src.utils.mitre_kill_chain import normalize_tactic
+
+        assert normalize_tactic(raw_tactic) == canonical_tactic
+        severity, _ = correlation_engine._assess_severity(
+            [], [], self._ttps(raw_tactic),
+        )
+        assert severity == "high"
+
+    def test_assess_severity_empty_findings_has_info_monitoring_fallback(
+        self, correlation_engine,
+    ):
+        severity, recommendations = correlation_engine._assess_severity([], [], [])
+
+        assert severity == "info"
+        assert recommendations == [
+            "No significant correlations found. Continue monitoring."
+        ]
+
+    def test_assess_severity_clean_finding_has_info_monitoring_fallback(
+        self, correlation_engine,
+    ):
+        severity, recommendations = correlation_engine._assess_severity(
+            [{"verdict": "clean"}], [], [],
+        )
+
+        assert severity == "info"
+        assert recommendations == [
+            "No significant correlations found. Continue monitoring."
+        ]
+
+    @pytest.mark.parametrize(
+        "tactic,recommendation_fragment",
+        [
+            ("credential-access", "Reset affected credentials"),
+            ("lateral-movement", "Isolate affected hosts"),
+            ("command-and-control", "Block identified C2 infrastructure"),
+            ("impact", "Escalate to Incident Response"),
+        ],
+        ids=["credential-access", "lateral-movement", "command-and-control", "impact"],
+    )
+    def test_assess_severity_recommendation_follows_tactic_signal(
+        self, correlation_engine, tactic, recommendation_fragment,
+    ):
+        severity, recommendations = correlation_engine._assess_severity(
+            [], [], self._ttps(tactic),
+        )
+
+        assert severity == "high"
+        assert any(
+            recommendation_fragment.lower() in recommendation.lower()
+            for recommendation in recommendations
+        )
+
+    def test_assess_severity_malicious_two_has_confidence_recommendation(
+        self, correlation_engine,
+    ):
+        severity, recommendations = correlation_engine._assess_severity(
+            [{"verdict": "malicious"}, {"verdict": "malicious"}], [], [],
+        )
+
+        assert severity == "medium"
+        assert any(
+            "high confidence" in recommendation.lower()
+            or "true positive" in recommendation.lower()
+            for recommendation in recommendations
+        )
+
+    def test_assess_severity_overlap_three_has_campaign_recommendation(
+        self, correlation_engine,
+    ):
+        severity, recommendations = correlation_engine._assess_severity(
+            [], self._overlap(3), [],
+        )
+
+        assert severity == "critical"
+        assert any(
+            "coordinated campaign" in recommendation.lower()
+            for recommendation in recommendations
+        )
+
+    @pytest.mark.parametrize(
+        "findings,overlaps",
+        [
+            ([], [{"ioc": "shared.example", "count": 1}]),
+            ([{"verdict": "malicious"}], []),
+        ],
+        ids=["medium-from-one-overlap", "medium-from-one-malicious-finding"],
+    )
+    def test_assess_severity_medium_signal_is_not_no_significant_fallback(
+        self, correlation_engine, findings, overlaps,
+    ):
+        severity, recommendations = correlation_engine._assess_severity(
+            findings, overlaps, [],
+        )
+
+        assert severity == "medium"
+        assert recommendations
+        assert not any(
+            "no significant correlations" in recommendation.lower()
+            for recommendation in recommendations
+        )
+
+    def test_assess_severity_critical_takes_priority_over_high(
+        self, correlation_engine,
+    ):
+        severity, recommendations = correlation_engine._assess_severity(
+            [], self._overlap(3), self._ttps("credential-access"),
+        )
+
+        assert severity == "critical"
+        assert any("coordinated campaign" in r.lower() for r in recommendations)
+        assert any("reset affected credentials" in r.lower() for r in recommendations)
+
     def test_correlate_empty_findings(self, correlation_engine):
         result = correlation_engine.correlate([])
         assert result["severity"] == "info"
