@@ -954,7 +954,7 @@ class ThreatIntelligence:
             'feodotracker': {'status': '➖', 'message': 'IP only'},
             'threatfox': {'status': '⏳', 'message': 'Pending'},
             'malwarebazaar': {'status': '➖', 'message': 'Hash only'},
-            'c2_trackers': {'status': '⏳', 'message': 'Pending'},
+            'c2_trackers': {'status': '➖', 'message': 'IP/Domain/URL only'},
             'tor_exit_nodes': {'status': '➖', 'message': 'IP only'},
             'sslblacklist': {'status': '➖', 'message': 'IPv4/SHA1 only'},
             'smet_nrd': {'status': '➖', 'message': 'Domain only'},

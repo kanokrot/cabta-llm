@@ -288,10 +288,10 @@ async def test_hash_source_accounting_excludes_unscheduled_placeholders():
         },
     }
     assert result["sources"]["c2_trackers"] == {
-        "status": "⏳",
-        "message": "Pending",
-        "not_applicable": True,
-    }
+    "status": "➖",
+    "message": "IP/Domain/URL only",
+    "not_applicable": True,
+}
 
 
 def test_skipped_sources_do_not_inflate_verdict_coverage():
