@@ -1,8 +1,8 @@
 """
 Author: Ugur Ates
-Firmware Analyzer - Binary Firmware Analizi.
+Firmware Analyzer - Binary firmware analysis.
 
-Entegre Araçlar:
+Integrated tools:
 - binwalk: Signature scanning, entropy analysis, extraction
 - strings: String extraction
 - file: File type detection
@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 logger = logging.getLogger(__name__)
 @dataclass
 class FirmwareAnalysisResult:
-    """Firmware analiz sonucu."""
+    """Firmware analysis result."""
     success: bool = False
     file_path: str = ""
     file_size: int = 0
@@ -36,7 +36,7 @@ class FirmwareAnalysisResult:
     threat_score: int = 0
     raw_outputs: Dict[str, str] = field(default_factory=dict)
 class FirmwareAnalyzer:
-    """Binary firmware analizi."""
+    """Binary firmware analysis."""
     
     SUSPICIOUS_PATTERNS = [
         (r'busybox', 'Busybox shell'),
@@ -58,7 +58,7 @@ class FirmwareAnalyzer:
         self.tool_runner = get_tool_runner()
     
     def analyze(self, file_path: str) -> FirmwareAnalysisResult:
-        """Kapsamlı firmware analizi."""
+        """Perform comprehensive firmware analysis."""
         logger.info(f"[FIRMWARE] Analyzing: {Path(file_path).name}")
         result = FirmwareAnalysisResult(file_path=file_path)
         

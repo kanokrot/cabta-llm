@@ -1,8 +1,8 @@
 """
 Author: Ugur Ates
-PDF Analyzer - Profesyonel PDF Analizi.
+PDF Analyzer - Professional PDF analysis.
 
-Entegre Araçlar:
+Integrated tools:
 - pdfid: Suspicious keyword detection
 - pdf-parser: Object extraction & analysis
 - YARA scanning
@@ -19,7 +19,7 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 class PDFAnalyzer:
     """
-    Profesyonel PDF analizi with external tool integration.
+    Professional PDF analysis with external tool integration.
     
     Features:
     - JavaScript detection & extraction
@@ -61,7 +61,7 @@ class PDFAnalyzer:
     
     def analyze(self, file_path: str) -> Dict:
         """
-        Kapsamlı PDF analizi.
+        Perform comprehensive PDF analysis.
         
         Pipeline:
         1. pdfid - Keyword detection

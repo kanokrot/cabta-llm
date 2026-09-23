@@ -404,14 +404,14 @@ class ScriptAnalyzer:
         """
         Extract IOCs from script using global IOCExtractor.
         
-        v1.0.0: Global IOCExtractor kullanılıyor - tüm false positive filtering dahil
+        v1.0.0: Uses the global IOCExtractor, including all false-positive filtering.
         """
         from ..utils.ioc_extractor import IOCExtractor
         
-        # Global IOCExtractor kullan - tüm filtering dahil
+        # Use the global IOCExtractor, including all filtering.
         all_iocs = IOCExtractor.extract_all(content)
         
-        # File paths ayrıca extract et (script-specific)
+        # Also extract file paths (script-specific).
         file_paths = []
         path_pattern = re.compile(r'[A-Za-z]:\\[^\s<>"\'*?|]+')
         for path in path_pattern.findall(content):
@@ -485,7 +485,7 @@ class ScriptAnalyzer:
         """
         Calculate threat score based on findings.
         
-        v1.0.0: Ağırlıklar artırıldı - yüksek riskli pattern'ler için daha yüksek skor
+        v1.0.0: Weights increased to give higher scores to high-risk patterns.
         """
         score = 0
         

@@ -1,8 +1,8 @@
 """
 Author: Ugur Ates
-Office Analyzer - Profesyonel MS Office Dosya Analizi.
+Office Analyzer - Professional MS Office file analysis.
 
-Entegre Araçlar:
+Integrated tools:
 - oletools (olevba, mraptor, oleobj, oleid)
 - YARA scanning
 - String extraction
@@ -20,7 +20,7 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 class OfficeAnalyzer:
     """
-    Profesyonel Office dosya analizi with oletools integration.
+    Professional Office file analysis with oletools integration.
     
     Features:
     - VBA Macro extraction and analysis (olevba)
@@ -66,7 +66,7 @@ class OfficeAnalyzer:
     
     def analyze(self, file_path: str) -> Dict:
         """
-        Kapsamlı Office dosya analizi.
+        Perform comprehensive Office file analysis.
         
         Pipeline:
         1. oleid - OLE file indicators

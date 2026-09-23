@@ -1,8 +1,8 @@
 """
 Author: Ugur Ates
-APK Analyzer - Android Package Analizi.
+APK Analyzer - Android package analysis.
 
-Entegre Araçlar:
+Integrated tools:
 - apktool: APK decompilation
 - aapt: Manifest/resource extraction
 - unzip: APK extraction
@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class APKAnalysisResult:
-    """APK analiz sonucu."""
+    """APK analysis result."""
     success: bool = False
     file_path: str = ""
     package_name: str = ""
@@ -56,7 +56,7 @@ class APKAnalysisResult:
     permission_categories: Dict[str, List[str]] = field(default_factory=dict)
 
 class APKAnalyzer:
-    """Android APK analizi."""
+    """Android APK analysis."""
 
     DANGEROUS_PERMISSIONS_LEGACY = [
         'android.permission.READ_SMS',
@@ -142,11 +142,11 @@ class APKAnalyzer:
         self.tool_runner = get_tool_runner()
 
     def analyze(self, file_path: str) -> APKAnalysisResult:
-        """Kapsamli APK analizi."""
+        """Perform comprehensive APK analysis."""
         logger.info(f"[APK] Analyzing: {Path(file_path).name}")
         result = APKAnalysisResult(file_path=file_path)
 
-        # 1. aapt ile manifest analizi
+        # 1. Analyze the manifest with aapt.
         if self.tool_runner.is_available('aapt'):
             aapt_out = self.tool_runner.run_aapt(file_path)
             if aapt_out.success:
@@ -154,7 +154,7 @@ class APKAnalyzer:
                 result.raw_outputs['aapt'] = aapt_out.stdout
                 result.success = True
 
-        # 2. ZIP olarak ac ve analiz et
+        # 2. Open as a ZIP archive and analyze it.
         try:
             self._analyze_apk_contents(file_path, result)
         except Exception as e:
@@ -182,7 +182,7 @@ class APKAnalyzer:
         return result
 
     def _parse_aapt_output(self, output: str, result: APKAnalysisResult):
-        """aapt dump badging ciktisini parse et."""
+        """Parse aapt dump badging output."""
         for line in output.split('\n'):
             if line.startswith('package:'):
                 # package: name='com.example' versionCode='1' versionName='1.0'
@@ -229,7 +229,7 @@ class APKAnalyzer:
                     result.receivers.append(name.group(1))
 
     def _analyze_apk_contents(self, file_path: str, result: APKAnalysisResult):
-        """APK icerigini analiz et."""
+        """Analyze APK contents."""
         with zipfile.ZipFile(file_path, 'r') as apk:
             # Native libraries
             for name in apk.namelist():
@@ -248,7 +248,7 @@ class APKAnalyzer:
                     pass
 
     def _analyze_dex_strings(self, content: bytes, result: APKAnalysisResult):
-        """DEX dosyasindan string'leri analiz et."""
+        """Analyze strings from the DEX file."""
         try:
             text = content.decode('utf-8', errors='ignore')
         except Exception:
@@ -279,7 +279,7 @@ class APKAnalyzer:
             result._dex_text += text
 
     def _detect_suspicious_permissions(self, result: APKAnalysisResult):
-        """Tehlikeli permission'lari tespit et."""
+        """Detect dangerous permissions."""
         categories: Dict[str, List[str]] = {}
 
         for perm in result.permissions:
@@ -451,7 +451,7 @@ class APKAnalyzer:
         return "NONE"
 
     def _calculate_score(self, result: APKAnalysisResult) -> int:
-        """Threat score hesapla (legacy)."""
+        """Calculate the threat score (legacy)."""
         score = 0
 
         # Suspicious permissions

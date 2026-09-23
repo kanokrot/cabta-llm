@@ -1,7 +1,7 @@
 """
-PE Analyzer - Profesyonel Windows Executable Analizi.
+PE Analyzer - Professional Windows executable analysis.
 
-Entegre Araclar:
+Integrated tools:
 - pefile: PE header parsing
 - capa: Capability detection (Mandiant)
 - FLOSS: Obfuscated string extraction (Mandiant)
@@ -37,7 +37,7 @@ except ImportError:
 
 class PEAnalyzer:
     """
-    Profesyonel PE file analizi with external tool integration.
+    Professional PE file analysis with external tool integration.
 
     Features:
     - PE header parsing (pefile)
@@ -163,7 +163,7 @@ class PEAnalyzer:
 
     def analyze(self, file_path: str) -> Dict:
         """
-        Kapsamli PE analizi with all integrated tools.
+        Perform comprehensive PE analysis with all integrated tools.
 
         Pipeline:
         1. PE header analysis (pefile)

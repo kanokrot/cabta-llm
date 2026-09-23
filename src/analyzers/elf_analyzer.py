@@ -1,8 +1,8 @@
 """
 Author: Ugur Ates
-ELF Analyzer - Linux Executable Analizi.
+ELF Analyzer - Linux executable analysis.
 
-Entegre Araçlar:
+Integrated tools:
 - readelf: ELF header/section analysis
 - objdump: Disassembly ve symbol analysis
 - strings: String extraction
@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 logger = logging.getLogger(__name__)
 @dataclass
 class ELFAnalysisResult:
-    """ELF analiz sonucu."""
+    """ELF analysis result."""
     success: bool = False
     file_path: str = ""
     elf_class: str = ""
@@ -42,7 +42,7 @@ class ELFAnalysisResult:
     threat_score: int = 0
     raw_outputs: Dict[str, str] = field(default_factory=dict)
 class ELFAnalyzer:
-    """Linux ELF executable analizi."""
+    """Linux ELF executable analysis."""
     
     SUSPICIOUS_IMPORTS = {
         'process': ['ptrace', 'process_vm_readv', 'mmap', 'mprotect', 'memfd_create'],
@@ -57,7 +57,7 @@ class ELFAnalyzer:
         self.tool_runner = get_tool_runner()
     
     def analyze(self, file_path: str) -> ELFAnalysisResult:
-        """Kapsamlı ELF analizi."""
+        """Perform comprehensive ELF analysis."""
         logger.info(f"[ELF] Analyzing: {Path(file_path).name}")
         result = ELFAnalysisResult(file_path=file_path)
         

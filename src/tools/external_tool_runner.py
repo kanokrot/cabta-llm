@@ -1,8 +1,8 @@
 """
 Author: Ugur Ates
-External Tool Runner - Profesyonel malware analiz araçlarını çalıştırır.
+External Tool Runner - Runs professional malware analysis tools.
 
-Desteklenen Araçlar:
+Supported tools:
 - capa: Capability detection (Mandiant)
 - floss: Obfuscated string extraction (Mandiant)
 - diec: Detect It Easy CLI (packer/compiler detection)
@@ -32,7 +32,7 @@ class ToolAvailability(Enum):
     ERROR = "error"
 @dataclass
 class ToolResult:
-    """Harici araç çalıştırma sonucu."""
+    """Result of running an external tool."""
     tool_name: str
     success: bool
     exit_code: int
@@ -42,9 +42,9 @@ class ToolResult:
     execution_time_ms: float = 0
     error_message: str = ""
 class ExternalToolRunner:
-    """Harici malware analiz araçlarını çalıştırır."""
+    """Runs external malware analysis tools."""
     
-    # Araç binary isimleri ve alternatif isimleri
+    # Tool binary names and alternatives
     TOOL_BINARIES = {
         'capa': ['capa', 'capa.exe'],
         'floss': ['floss', 'floss.exe'],
@@ -73,7 +73,7 @@ class ExternalToolRunner:
         self._discover_tools()
     
     def _discover_tools(self):
-        """Sistemde mevcut araçları keşfet."""
+        """Discover tools available on the system."""
         for tool_name, binaries in self.TOOL_BINARIES.items():
             for binary in binaries:
                 path = shutil.which(binary)
@@ -85,15 +85,15 @@ class ExternalToolRunner:
                 logger.debug(f"[TOOLS] {tool_name} not found in PATH")
     
     def is_available(self, tool_name: str) -> bool:
-        """Araç mevcut mu kontrol et."""
+        """Check whether a tool is available."""
         return tool_name in self.tool_paths
     
     def get_available_tools(self) -> List[str]:
-        """Mevcut araçların listesini döndür."""
+        """Return the list of available tools."""
         return list(self.tool_paths.keys())
     
     def get_tool_status(self) -> Dict[str, str]:
-        """Tüm araçların durumunu döndür."""
+        """Return the status of all tools."""
         status = {}
         for tool_name in self.TOOL_BINARIES.keys():
             if tool_name in self.tool_paths:
@@ -104,7 +104,7 @@ class ExternalToolRunner:
     
     def run_tool(self, tool_name: str, args: List[str], 
                  timeout: int = 300, input_data: bytes = None) -> ToolResult:
-        """Harici aracı çalıştır."""
+        """Run an external tool."""
         start_time = time.time()
         
         if tool_name not in self.tool_paths:
@@ -162,7 +162,7 @@ class ExternalToolRunner:
     # ==================== CAPA ====================
     def run_capa(self, file_path: str, output_format: str = 'json') -> ToolResult:
         """
-        Mandiant capa ile capability detection.
+        Capability detection with Mandiant capa.
         
         Capabilities:
         - ATT&CK technique mapping
@@ -187,7 +187,7 @@ class ExternalToolRunner:
     # ==================== FLOSS ====================
     def run_floss(self, file_path: str, output_format: str = 'json') -> ToolResult:
         """
-        Mandiant FLOSS ile obfuscated string extraction.
+        Obfuscated string extraction with Mandiant FLOSS.
         
         String Types:
         - Static ASCII/Unicode strings
@@ -212,7 +212,7 @@ class ExternalToolRunner:
     # ==================== DETECT IT EASY ====================
     def run_diec(self, file_path: str) -> ToolResult:
         """
-        Detect It Easy CLI ile packer/compiler/linker detection.
+        Packer, compiler, and linker detection with the Detect It Easy CLI.
         
         Detects:
         - Compilers (MSVC, GCC, Clang, Delphi, Go, Rust, etc.)
@@ -235,7 +235,7 @@ class ExternalToolRunner:
     def run_binwalk(self, file_path: str, extract: bool = False, 
                     entropy: bool = True, signature: bool = True) -> ToolResult:
         """
-        Binwalk ile embedded file ve firmware analizi.
+        Embedded file and firmware analysis with Binwalk.
         
         Features:
         - Signature scanning
@@ -271,7 +271,7 @@ class ExternalToolRunner:
     # ==================== OLETOOLS ====================
     def run_olevba(self, file_path: str, decode: bool = True) -> ToolResult:
         """
-        olevba ile Office VBA macro extraction.
+        Office VBA macro extraction with olevba.
         
         Features:
         - VBA macro extraction
@@ -302,7 +302,7 @@ class ExternalToolRunner:
     
     def run_mraptor(self, file_path: str) -> ToolResult:
         """
-        mraptor ile malicious macro detection.
+        Malicious macro detection with mraptor.
         
         Detects macros that:
         - A: Auto-execute
@@ -313,19 +313,19 @@ class ExternalToolRunner:
         return self.run_tool('mraptor', args)
     
     def run_oleobj(self, file_path: str) -> ToolResult:
-        """oleobj ile embedded OLE object extraction."""
+        """Embedded OLE object extraction with oleobj."""
         args = [file_path]
         return self.run_tool('oleobj', args)
     
     def run_oleid(self, file_path: str) -> ToolResult:
-        """oleid ile OLE file indicator detection."""
+        """OLE file indicator detection with oleid."""
         args = [file_path]
         return self.run_tool('oleid', args)
     
     # ==================== PDF TOOLS ====================
     def run_pdfid(self, file_path: str) -> ToolResult:
         """
-        pdfid ile PDF suspicious keyword detection.
+        PDF suspicious keyword detection with pdfid.
         
         Detects:
         - /JavaScript, /JS
@@ -341,7 +341,7 @@ class ExternalToolRunner:
     def run_pdf_parser(self, file_path: str, search: str = None, 
                        object_id: int = None, raw: bool = True) -> ToolResult:
         """
-        pdf-parser ile PDF object extraction.
+        PDF object extraction with pdf-parser.
         
         Features:
         - Object enumeration
@@ -362,13 +362,13 @@ class ExternalToolRunner:
     
     # ==================== ELF TOOLS ====================
     def run_readelf(self, file_path: str, option: str = '-a') -> ToolResult:
-        """readelf ile ELF header/section analizi."""
+        """ELF header and section analysis with readelf."""
         args = [option, file_path]
         return self.run_tool('readelf', args)
     
     def run_objdump(self, file_path: str, headers: bool = True, 
                     disassemble: bool = False) -> ToolResult:
-        """objdump ile disassembly ve header analizi."""
+        """Disassembly and header analysis with objdump."""
         args = []
         if headers:
             args.append('-x')
@@ -379,25 +379,25 @@ class ExternalToolRunner:
     
     # ==================== MACH-O TOOLS ====================
     def run_otool(self, file_path: str, option: str = '-L') -> ToolResult:
-        """otool ile Mach-O analizi (macOS)."""
+        """Mach-O analysis with otool (macOS)."""
         args = [option, file_path]
         return self.run_tool('otool', args)
     
     # ==================== APK TOOLS ====================
     def run_apktool(self, file_path: str, output_dir: str) -> ToolResult:
-        """apktool ile APK decompilation."""
+        """APK decompilation with apktool."""
         args = ['d', file_path, '-o', output_dir, '-f']
         return self.run_tool('apktool', args)
     
     def run_aapt(self, file_path: str) -> ToolResult:
-        """aapt ile APK metadata extraction."""
+        """APK metadata extraction with aapt."""
         args = ['dump', 'badging', file_path]
         return self.run_tool('aapt', args)
     
     # ==================== BASIC TOOLS ====================
     def run_strings(self, file_path: str, min_length: int = 4, 
                     encoding: str = 'all') -> ToolResult:
-        """strings ile string extraction."""
+        """String extraction with strings."""
         args = ['-n', str(min_length)]
         
         if encoding == 'unicode':
@@ -409,17 +409,17 @@ class ExternalToolRunner:
         return self.run_tool('strings', args)
     
     def run_file(self, file_path: str) -> ToolResult:
-        """file komutu ile file type detection."""
+        """File type detection with the file command."""
         args = ['-b', file_path]  # Brief output
         return self.run_tool('file', args)
     
     def run_sha256sum(self, file_path: str) -> ToolResult:
-        """sha256sum ile hash calculation."""
+        """Hash calculation with sha256sum."""
         args = [file_path]
         return self.run_tool('sha256sum', args)
     
     def run_exiftool(self, file_path: str) -> ToolResult:
-        """exiftool ile metadata extraction."""
+        """Metadata extraction with exiftool."""
         args = ['-j', file_path]  # JSON output
         result = self.run_tool('exiftool', args)
         

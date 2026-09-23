@@ -1,6 +1,6 @@
 """
 Author: Ugur Ates
-File Type Router - Dosya tipine göre uygun analyzer'a yönlendirir.
+File Type Router - Routes files to the appropriate analyzer by type.
 
 Supported Types:
 - PE: Windows executables (.exe, .dll, .sys, .scr)
@@ -29,7 +29,7 @@ try:
 except ImportError:
     logger.warning("[ROUTER] python-magic not available, using fallback detection")
 class FileType(Enum):
-    """Desteklenen dosya tipleri."""
+    """Supported file types."""
     PE = "pe"
     ELF = "elf"
     MACHO = "macho"
@@ -43,7 +43,7 @@ class FileType(Enum):
     TEXT = "text"
     UNKNOWN = "unknown"
 class FileTypeRouter:
-    """Dosya tipini tespit et ve uygun analyzer'a yönlendir."""
+    """Detect the file type and route it to the appropriate analyzer."""
     
     # Extension -> FileType mapping
     EXTENSION_MAP = {
@@ -179,7 +179,7 @@ class FileTypeRouter:
     @staticmethod
     def detect_file_type(file_path: str) -> Tuple[FileType, Dict]:
         """
-        Dosya tipini tespit et.
+        Detect the file type.
         
         Returns:
             (FileType, metadata dict)
@@ -338,7 +338,7 @@ class FileTypeRouter:
     @staticmethod
     def get_analyzer_class(file_type: FileType) -> Optional[Type]:
         """
-        FileType için uygun analyzer class'ını döndür.
+        Return the analyzer class appropriate for the FileType.
         
         Returns:
             Analyzer class or None

@@ -1,7 +1,7 @@
 """
 Author: CABTA
-Text File Analyzer - Metin dosyalarından (txt, log, csv, conf, cfg, ini, json, xml, yaml)
-zararlı göstergeleri (IOC) çıkarır ve C2 iletişim kalıplarını tespit eder.
+Text File Analyzer - Extracts malicious indicators (IOCs) from text files
+(txt, log, csv, conf, cfg, ini, json, xml, yaml) and detects C2 communication patterns.
 """
 
 import re
@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 
 class TextFileAnalyzer:
-    """Text dosyası zararlı gösterge analizi."""
+    """Analyze malicious indicators in text files."""
 
     C2_PATTERNS = {
         'ip_port': {

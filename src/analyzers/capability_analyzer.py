@@ -1,12 +1,12 @@
 """
 Author: Ugur Ates
-Capability Analyzer - Mandiant capa entegrasyonu.
+Capability Analyzer - Mandiant capa integration.
 
-capa, executable dosyalardaki davranışları (capabilities) tespit eder:
+capa detects behaviors (capabilities) in executable files:
 - ATT&CK tekniklerini mapping
-- Malware davranışlarını kategorize etme
+- Categorizing malware behaviors
 - Anti-analysis teknikleri
-- Network/file/process operasyonları
+- Network, file, and process operations
 
 https://github.com/mandiant/capa
 """
@@ -29,7 +29,7 @@ class Capability:
     description: str = ""
 @dataclass
 class CapaAnalysisResult:
-    """capa analiz sonucu."""
+    """capa analysis result."""
     success: bool
     capabilities: List[Capability] = field(default_factory=list)
     attack_techniques: List[Dict] = field(default_factory=list)
@@ -39,9 +39,9 @@ class CapaAnalysisResult:
     raw_output: str = ""
     error_message: str = ""
 class CapabilityAnalyzer:
-    """Mandiant capa ile capability detection."""
+    """Capability detection with Mandiant capa."""
     
-    # Yüksek riskli capability namespace'leri
+    # High-risk capability namespaces
     HIGH_RISK_NAMESPACES = [
         'anti-analysis',
         'collection',
@@ -126,10 +126,10 @@ class CapabilityAnalyzer:
     
     def analyze(self, file_path: str) -> CapaAnalysisResult:
         """
-        capa ile dosyayı analiz et.
+        Analyze the file with capa.
         
         Args:
-            file_path: Analiz edilecek dosya
+            file_path: File to analyze
             
         Returns:
             CapaAnalysisResult
@@ -157,7 +157,7 @@ class CapabilityAnalyzer:
         return self._parse_capa_output(result.stdout, result.parsed_output)
     
     def _parse_capa_output(self, raw_output: str, parsed: Optional[Dict]) -> CapaAnalysisResult:
-        """capa JSON çıktısını parse et."""
+        """Parse capa JSON output."""
         capabilities = []
         attack_techniques = []
         mbc_behaviors = []
@@ -243,7 +243,7 @@ class CapabilityAnalyzer:
             )
     
     def _calculate_threat_score(self, capabilities: List[Capability]) -> int:
-        """Capability'lere göre threat score hesapla."""
+        """Calculate the threat score from capabilities."""
         score = 0
         seen_namespaces = set()
         
@@ -285,7 +285,7 @@ class CapabilityAnalyzer:
     def _generate_summary(self, capabilities: List[Capability], 
                           attack_techniques: List[Dict],
                           mbc_behaviors: List[Dict]) -> str:
-        """Analiz özeti oluştur."""
+        """Build an analysis summary."""
         if not capabilities:
             return "No capabilities detected by capa"
         

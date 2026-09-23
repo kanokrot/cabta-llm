@@ -2,10 +2,10 @@
 Author: Ugur Ates
 MITRE ATT&CK Kill Chain Analyzer.
 
-Tespit edilen tekniklerden saldiri ilerleme asamasini tanimlar
-ve tehdit seviyesini belirler.
+Defines the attack progression stage from detected techniques
+and determines the threat level.
 
-Kill-chain asamalari (Unified Kill Chain modeli):
+Kill-chain stages (Unified Kill Chain model):
   Initial Access -> Execution -> Persistence -> Privilege Escalation
   -> Defense Evasion -> Credential Access -> Discovery
   -> Lateral Movement -> Collection -> C2 -> Exfiltration -> Impact

@@ -169,7 +169,7 @@ class IOCExtractor:
         """
         Extract domain names from text.
         
-        v1.0.0: İyileştirildi - trailing dots, tek kelime domain'ler, kısa TLD'ler filtreli
+        v1.0.0: Improved filtering for trailing dots, single-word domains, and short TLDs.
         
         Args:
             text: Input text
@@ -293,8 +293,8 @@ class IOCExtractor:
         """
         Extract URLs from text.
         
-        v1.0.0: URL temizleme eklendi - trailing quotes ve noktalama
-        v1.0.0: URL whitelist filtering, HTML tag temizleme
+        v1.0.0: Added URL cleanup for trailing quotes and punctuation.
+        v1.0.0: URL whitelist filtering and HTML tag cleanup.
         
         Args:
             text: Input text
@@ -317,13 +317,13 @@ class IOCExtractor:
             if '<' in url:
                 url = url.split('<')[0]
             
-            # Sondaki tırnak, parantez, noktalama işaretlerini temizle
+            # Remove trailing quotes, brackets, and punctuation.
             url = url.rstrip('"\'><)]};,.')
             
-            # Başındaki tırnak işaretlerini temizle
+            # Remove leading quote characters.
             url = url.lstrip('"\'<([{')
             
-            # Geçerli URL kontrolü
+            # Validate the URL.
             if not url or len(url) <= 10 or '://' not in url:
                 continue
             

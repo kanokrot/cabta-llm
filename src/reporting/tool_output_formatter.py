@@ -1,6 +1,6 @@
 """
 Author: Ugur Ates
-Tool Output Formatter - Araç çıktılarını SOC raporlarına dönüştürür.
+Tool Output Formatter - Converts tool output into SOC reports.
 
 Format Types:
 1. Terminal output (colored, structured)
@@ -14,12 +14,12 @@ from typing import Dict, List, Optional
 from datetime import datetime
 from pathlib import Path
 class ToolOutputFormatter:
-    """Araç çıktılarını formatla."""
+    """Format tool output."""
     
     @staticmethod
     def format_file_analysis(result: Dict, format_type: str = 'terminal') -> str:
         """
-        File analizi için çıktı üret.
+        Generate output for file analysis.
         
         Args:
             result: Analysis result dictionary
@@ -231,7 +231,7 @@ class ToolOutputFormatter:
     
     @staticmethod
     def _format_for_llm(result: Dict) -> str:
-        """LLM analizi için prompt hazırla."""
+        """Prepare a prompt for LLM analysis."""
         lines = []
         
         lines.append("# Malware Analysis Summary for AI Review")
@@ -292,7 +292,7 @@ class ToolOutputFormatter:
     
     @staticmethod
     def format_email_analysis(result: Dict, format_type: str = 'terminal') -> str:
-        """Email analizi için çıktı."""
+        """Generate output for email analysis."""
         if format_type == 'terminal':
             return ToolOutputFormatter._format_email_terminal(result)
         elif format_type == 'markdown':

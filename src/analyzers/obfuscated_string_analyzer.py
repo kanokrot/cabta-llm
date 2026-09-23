@@ -1,8 +1,8 @@
 """
 Author: Ugur Ates
-Obfuscated String Analyzer - Mandiant FLOSS entegrasyonu.
+Obfuscated String Analyzer - Mandiant FLOSS integration.
 
-FLOSS (FLARE Obfuscated String Solver) obfuscate edilmiş stringleri otomatik çıkarır:
+FLOSS (FLARE Obfuscated String Solver) automatically extracts obfuscated strings:
 - Static strings (ASCII/Unicode)
 - Decoded/decrypted strings
 - Stack strings
@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 logger = logging.getLogger(__name__)
 @dataclass
 class ExtractedString:
-    """Çıkarılan string."""
+    """Extracted string."""
     value: str
     string_type: str  # static, decoded, stack, tight
     encoding: str = "ascii"  # ascii, utf-16le, utf-16be
@@ -28,7 +28,7 @@ class ExtractedString:
     function_address: Optional[str] = None
 @dataclass
 class FlossAnalysisResult:
-    """FLOSS analiz sonucu."""
+    """FLOSS analysis result."""
     success: bool = False
     
     # String kategorileri
@@ -37,7 +37,7 @@ class FlossAnalysisResult:
     stack_strings: List[ExtractedString] = field(default_factory=list)
     tight_strings: List[ExtractedString] = field(default_factory=list)
     
-    # Kategorize edilmiş IOC'lar
+    # Categorized IOCs
     urls: List[str] = field(default_factory=list)
     ips: List[str] = field(default_factory=list)
     domains: List[str] = field(default_factory=list)
@@ -55,7 +55,7 @@ class FlossAnalysisResult:
     raw_output: str = ""
     error_message: str = ""
 class ObfuscatedStringAnalyzer:
-    """Mandiant FLOSS ile obfuscated string extraction."""
+    """Obfuscated string extraction with Mandiant FLOSS."""
     
     # IOC extraction patterns
     IOC_PATTERNS = {
@@ -162,10 +162,10 @@ class ObfuscatedStringAnalyzer:
     
     def analyze(self, file_path: str) -> FlossAnalysisResult:
         """
-        FLOSS ile dosyayı analiz et.
+        Analyze the file with FLOSS.
         
         Args:
-            file_path: Analiz edilecek dosya
+            file_path: File to analyze
             
         Returns:
             FlossAnalysisResult
@@ -196,7 +196,7 @@ class ObfuscatedStringAnalyzer:
         return self._parse_floss_output(result.stdout, result.parsed_output)
     
     def _parse_floss_output(self, raw_output: str, parsed: Optional[Dict]) -> FlossAnalysisResult:
-        """FLOSS JSON çıktısını parse et."""
+        """Parse FLOSS JSON output."""
         static_strings = []
         decoded_strings = []
         stack_strings = []
@@ -315,7 +315,7 @@ class ObfuscatedStringAnalyzer:
             )
     
     def _extract_iocs(self, strings: List[str]) -> tuple:
-        """Stringlerden IOC'ları çıkar."""
+        """Extract IOCs from strings."""
         urls: Set[str] = set()
         ips: Set[str] = set()
         domains: Set[str] = set()
@@ -373,7 +373,7 @@ class ObfuscatedStringAnalyzer:
         )
     
     def _find_suspicious(self, strings: List[str]) -> tuple:
-        """Suspicious string'leri bul."""
+        """Find suspicious strings."""
         crypto: Set[str] = set()
         suspicious: Set[str] = set()
         api_names: Set[str] = set()
@@ -406,7 +406,7 @@ class ObfuscatedStringAnalyzer:
     
     def _calculate_threat_score(self, decoded, stack, tight,
                                 urls, ips, suspicious, api_names) -> int:
-        """Threat score hesapla."""
+        """Calculate the threat score."""
         score = 0
         
         # Obfuscated strings are significant indicators
@@ -427,7 +427,7 @@ class ObfuscatedStringAnalyzer:
         return min(score, 100)
     
     def _generate_summary(self, static, decoded, stack, tight, urls, suspicious) -> str:
-        """Summary oluştur."""
+        """Build a summary."""
         lines = ["FLOSS String Analysis:"]
         lines.append(f"  Static strings: {static}")
         lines.append(f"  Decoded strings: {decoded}")

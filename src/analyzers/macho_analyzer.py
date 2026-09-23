@@ -1,8 +1,8 @@
 """
 Author: Ugur Ates
-Mach-O Analyzer - macOS Executable Analizi.
+Mach-O Analyzer - macOS executable analysis.
 
-Entegre Araçlar:
+Integrated tools:
 - otool: Mach-O header/load commands
 - strings: String extraction
 - codesign: Signature verification
@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 logger = logging.getLogger(__name__)
 @dataclass
 class MachOAnalysisResult:
-    """Mach-O analiz sonucu."""
+    """Mach-O analysis result."""
     success: bool = False
     file_path: str = ""
     cpu_type: str = ""
@@ -36,7 +36,7 @@ class MachOAnalysisResult:
     threat_score: int = 0
     raw_outputs: Dict[str, str] = field(default_factory=dict)
 class MachOAnalyzer:
-    """macOS Mach-O executable analizi."""
+    """macOS Mach-O executable analysis."""
     
     SUSPICIOUS_IMPORTS = {
         'injection': ['task_for_pid', 'mach_vm_allocate', 'mach_vm_write', 'thread_create'],
@@ -52,7 +52,7 @@ class MachOAnalyzer:
         self.tool_runner = get_tool_runner()
     
     def analyze(self, file_path: str) -> MachOAnalysisResult:
-        """Kapsamlı Mach-O analizi."""
+        """Perform comprehensive Mach-O analysis."""
         logger.info(f"[MACHO] Analyzing: {Path(file_path).name}")
         result = MachOAnalysisResult(file_path=file_path)
         
