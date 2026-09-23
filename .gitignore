@@ -98,6 +98,13 @@ scripts/adhoc/
 # Keep repeatable evaluation tooling and its rationale trackable separately.
 !scripts/eval/
 !scripts/eval/**
+scripts/eval/output/
+scripts/eval/*.jsonl
+scripts/eval/*.json
+scripts/eval/*.csv
+scripts/eval/*.log
+reports/
+data/benign_1000_for_ti.csv
 data/simulated_actions/
 output.html
 fix_incident_response_playbook.py
