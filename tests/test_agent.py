@@ -1388,11 +1388,19 @@ class TestFastAPIEndpoints:
     def _build_app(agent_store, tool_registry=None, mcp_client=None, playbook_engine=None):
         """Build a minimal FastAPI app with the agent routes mounted."""
         from fastapi import FastAPI
+        from src.web.auth import get_current_user
         from src.web.routes import agent as agent_routes
         from src.web.routes import playbooks as playbook_routes
         from src.web.routes import mcp_management as mcp_routes
 
         app = FastAPI()
+        app.dependency_overrides[get_current_user] = lambda: {
+            "id": 1,
+            "email": "admin@example.test",
+            "username": "admin",
+            "role": "admin",
+            "is_active": 1,
+        }
         app.state.agent_loop = None
         app.state.agent_store = agent_store
         app.state.tool_registry = tool_registry
@@ -1664,6 +1672,14 @@ class TestSettingsAPI:
         from src.web.app import create_app
 
         app = create_app()
+        from src.web.auth import get_current_user
+        app.dependency_overrides[get_current_user] = lambda: {
+            "id": 1,
+            "email": "admin@example.test",
+            "username": "admin",
+            "role": "admin",
+            "is_active": 1,
+        }
         client = TestClient(app)
         resp = client.get("/api/config/settings")
         assert resp.status_code == 200
@@ -1683,6 +1699,14 @@ class TestSettingsAPI:
         from src.web.app import create_app
 
         app = create_app()
+        from src.web.auth import get_current_user
+        app.dependency_overrides[get_current_user] = lambda: {
+            "id": 1,
+            "email": "admin@example.test",
+            "username": "admin",
+            "role": "admin",
+            "is_active": 1,
+        }
         client = TestClient(app)
         resp = client.post("/api/config/settings", json={
             "agent": {"max_steps": 100},
@@ -1704,6 +1728,14 @@ class TestSettingsAPI:
         from src.web.app import create_app
 
         app = create_app()
+        from src.web.auth import get_current_user
+        app.dependency_overrides[get_current_user] = lambda: {
+            "id": 1,
+            "email": "admin@example.test",
+            "username": "admin",
+            "role": "admin",
+            "is_active": 1,
+        }
         client = TestClient(app)
         resp = client.get("/api/config/settings")
         data = resp.json()
