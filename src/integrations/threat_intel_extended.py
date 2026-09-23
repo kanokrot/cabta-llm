@@ -261,6 +261,10 @@ class ThreatIntelExtended:
     
     async def check_spamhaus(self, ip: str) -> Dict:
         """Spamhaus - Spam/malware tracking."""
+        # 2026-09-21: DNS resolve สำเร็จเมื่อใดก็ set found=True โดยไม่แยก return code. PBL 127.0.0.10/11
+        # เป็นนโยบายอีเมล ไม่ใช่สัญญาณ malware; แต่ status นี้ถูกนับใน scoring เท่า SBL. tests ปัจจุบัน mock
+        # เฉพาะ dispatch ไม่มี test ตรวจ code. หลักฐาน: evidence/source_weights_2026-09-21/spamhaus_codes_group_a_2026-09-21.jsonl และ
+        # docs/CABTA_scope_ledger.md หัวข้อ 3.
         try:
             # Spamhaus uses DNSBL
             import socket
