@@ -56,33 +56,89 @@ def validate_rule(rule_type: str, rule_content: str) -> dict:
 
     elif normalized_type == 'sigma':
         syntax_valid = False
-        semantic_valid = False
+        schema_valid = False
         try:
             document = yaml.safe_load(content)
         except yaml.YAMLError as exc:
             errors.append(f'Sigma YAML syntax error: {exc}')
-        else:
-            syntax_valid = True
-            if not isinstance(document, dict):
-                errors.append('Sigma rule must be a YAML mapping')
-            else:
-                for required_field in ('title', 'logsource', 'detection'):
-                    if required_field not in document:
-                        errors.append(
-                            f"Sigma rule is missing required field: {required_field}"
-                        )
-                detection = document.get('detection')
-                if isinstance(detection, dict) and 'condition' not in detection:
-                    errors.append('Sigma detection is missing required field: condition')
-            semantic_valid = not errors
+            return {
+                'valid': False,
+                'errors': errors,
+                'rule_type': normalized_type,
+                'syntax_valid': syntax_valid,
+                'schema_valid': schema_valid,
+                'status': 'syntax_only',
+            }
 
+        syntax_valid = True
+        if not isinstance(document, dict):
+            errors.append('Sigma rule must be a YAML mapping')
+        else:
+            for required_field in ('title', 'logsource', 'detection'):
+                if required_field not in document:
+                    errors.append(
+                        f"Sigma rule is missing required field: {required_field}"
+                    )
+            detection = document.get('detection')
+            if isinstance(detection, dict) and 'condition' not in detection:
+                errors.append('Sigma detection is missing required field: condition')
+
+        schema_errors = list(errors)
+        try:
+            from sigma.collection import SigmaCollection
+        except ImportError:
+            schema_valid = not schema_errors
+            return {
+                'valid': schema_valid,
+                'errors': schema_errors,
+                'rule_type': normalized_type,
+                'syntax_valid': syntax_valid,
+                'schema_valid': schema_valid,
+                'status': 'schema_only' if schema_valid else 'syntax_only',
+            }
+
+        try:
+            collection = SigmaCollection.from_yaml(content, collect_errors=True)
+        except Exception as exc:
+            errors = schema_errors + [f'{type(exc).__name__}: {exc}']
+            return {
+                'valid': False,
+                'errors': errors,
+                'rule_type': normalized_type,
+                'syntax_valid': syntax_valid,
+                'schema_valid': schema_valid,
+                'status': 'pysigma_rejected',
+            }
+
+        pysigma_errors = [
+            f'{type(error).__name__}: {error}'
+            for error in collection.errors
+        ]
+        if len(collection.rules) != 1:
+            pysigma_errors.append(
+                'SigmaCollection must contain exactly one rule; '
+                f'found {len(collection.rules)}'
+            )
+
+        if schema_errors or pysigma_errors:
+            errors = schema_errors + pysigma_errors
+            return {
+                'valid': False,
+                'errors': errors,
+                'rule_type': normalized_type,
+                'syntax_valid': syntax_valid,
+                'schema_valid': schema_valid,
+                'status': 'pysigma_rejected',
+            }
+
+        schema_valid = True
         return {
-            'valid': not errors,
-            'errors': errors,
+            'valid': True,
+            'errors': [],
             'rule_type': normalized_type,
             'syntax_valid': syntax_valid,
-            'semantic_valid': semantic_valid,
-            'status': 'schema_only' if semantic_valid else 'syntax_only',
+            'schema_valid': schema_valid,
+            'status': 'pysigma_parsed',
         }
 
     else:

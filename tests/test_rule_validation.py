@@ -1,5 +1,9 @@
-import pytest
+import importlib.util
 
+import pytest
+import yaml
+
+from src.detection.rule_generator import RuleGenerator
 from src.detection.rule_validator import validate_rule
 
 
@@ -19,6 +23,12 @@ VALID_YARA = """rule Suspicious_File {
         $marker
 }
 """
+
+
+requires_pysigma = pytest.mark.skipif(
+    importlib.util.find_spec('sigma') is None,
+    reason='pySigma not installed',
+)
 
 
 @pytest.mark.parametrize(
@@ -58,6 +68,82 @@ def test_sigma_uses_yaml_parser_and_requires_core_sigma_shape():
     assert missing_shape['valid'] is False
     assert 'Sigma rule is missing required field: logsource' in missing_shape['errors']
     assert 'Sigma rule is missing required field: detection' in missing_shape['errors']
+
+
+@pytest.mark.parametrize('ioc_type', ['ipv4', 'domain', 'url', 'sha256'])
+@requires_pysigma
+def test_sigma_generated_ioc_is_parsed_by_pysigma(ioc_type):
+    content = RuleGenerator.generate_ioc_rules(
+        '203.0.113.42', ioc_type, {}
+    )['sigma']
+
+    result = validate_rule('sigma', content)
+
+    assert result['valid'] is True
+    assert result['syntax_valid'] is True
+    assert result['schema_valid'] is True
+    assert result['status'] == 'pysigma_parsed'
+
+
+@pytest.mark.parametrize(
+    'invalid_case', ['missing_condition', 'unknown_modifier', 'missing_logsource',
+                     'invalid_level', 'invalid_date', 'invalid_id']
+)
+@requires_pysigma
+def test_sigma_pysigma_rejects_invalid_rules(invalid_case):
+    document = yaml.safe_load(
+        RuleGenerator.generate_ioc_rules(
+            '203.0.113.42', 'ipv4', {}
+        )['sigma']
+    )
+
+    if invalid_case == 'missing_condition':
+        del document['detection']['condition']
+    elif invalid_case == 'unknown_modifier':
+        document['detection']['selection_dst'] = {
+            'query|foo': '203.0.113.42'
+        }
+    elif invalid_case == 'missing_logsource':
+        del document['logsource']
+    elif invalid_case == 'invalid_level':
+        document['level'] = 'not-a-level'
+    elif invalid_case == 'invalid_date':
+        document['date'] = 'not-a-date'
+    elif invalid_case == 'invalid_id':
+        document['id'] = 'not-a-uuid'
+
+    result = validate_rule('sigma', yaml.safe_dump(document, sort_keys=False))
+
+    assert result['valid'] is False
+    assert result['syntax_valid'] is True
+    assert result['schema_valid'] is False
+    assert result['status'] == 'pysigma_rejected'
+    assert result['errors']
+
+
+@requires_pysigma
+def test_sigma_unknown_condition_is_currently_only_parsed():
+    document = yaml.safe_load(
+        RuleGenerator.generate_ioc_rules(
+            '203.0.113.42', 'ipv4', {}
+        )['sigma']
+    )
+    # from_yaml currently does not reject a condition naming an unknown selection.
+    document['detection']['condition'] = 'selection_missing'
+
+    result = validate_rule('sigma', yaml.safe_dump(document, sort_keys=False))
+
+    assert result['valid'] is True
+    assert result['status'] == 'pysigma_parsed'
+
+
+def test_sigma_yaml_syntax_error_is_syntax_only():
+    result = validate_rule('sigma', 'title: Test\ndetection: [')
+
+    assert result['valid'] is False
+    assert result['syntax_valid'] is False
+    assert result['schema_valid'] is False
+    assert result['status'] == 'syntax_only'
 
 
 def test_yara_uses_yara_python_compiler():

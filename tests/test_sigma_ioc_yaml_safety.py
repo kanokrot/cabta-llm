@@ -1,4 +1,5 @@
 import re
+import sys
 from datetime import datetime
 
 import pytest
@@ -50,7 +51,8 @@ def test_generated_sigma_passes_validator(ioc_type, ioc):
     assert result['syntax_valid'] is True
 
 
-def test_sigma_fallback_status_is_schema_only():
+def test_sigma_fallback_status_is_schema_only(monkeypatch):
+    monkeypatch.setitem(sys.modules, 'sigma.collection', None)
     text = RuleGenerator.generate_ioc_rules(
         '203.0.113.42', 'ipv4', {}
     )['sigma']
