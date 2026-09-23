@@ -11,6 +11,7 @@ from typing import Sequence
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 
 from .auth import TEAM_LEAD, authorize_role, get_current_user, get_user_ids_by_role
+from .security import SESSION_COOKIE_NAME
 from .visibility import (
     VisibilityError,
     serialize_websocket_frame,
@@ -38,7 +39,23 @@ async def _send_visible(websocket: WebSocket, payload: dict, *, role: str, flow:
 async def _authenticate_websocket(
     websocket: WebSocket, roles: Sequence[str]
 ) -> dict | None:
-    """Accept, then require a first JSON auth message within five seconds."""
+    """Authenticate from the upgrade cookie or the legacy first message.
+
+    Browser clients authenticate during the HTTP upgrade using the httpOnly
+    session cookie.  Non-browser clients retain the existing first-message
+    ``{"type": "auth", "token": "..."}`` protocol.
+    """
+    cookie_token = websocket.cookies.get(SESSION_COOKIE_NAME)
+    if cookie_token:
+        try:
+            user = get_current_user(cookie_token)
+            authorize_role(user, roles)
+        except (HTTPException, ValueError):
+            await websocket.close(code=1008)
+            return None
+        await websocket.accept()
+        return user
+
     await websocket.accept()
     try:
         message = await asyncio.wait_for(websocket.receive_json(), timeout=5.0)
