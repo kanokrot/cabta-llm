@@ -95,6 +95,11 @@ class LLMBackend:
                 "model": self.ollama_model,
                 "messages": messages,
                 "stream": False,
+                "options": {
+                    "temperature": 0.2,
+                    "repeat_penalty": 1.3,
+                    "num_predict": 2048,
+                },
             }
 
             if ollama_tools:
@@ -143,6 +148,11 @@ class LLMBackend:
                 "model": self.ollama_model,
                 "prompt": prompt,
                 "stream": False,
+                "options": {
+                    "temperature": 0.2,
+                    "repeat_penalty": 1.3,
+                    "num_predict": 2048,
+                },
             }
             async with aiohttp.ClientSession(timeout=self.timeout) as session:
                 async with session.post(

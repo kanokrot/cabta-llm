@@ -582,7 +582,12 @@ Be specific and reference the tool findings in your analysis."""
                 'model': self.ollama_model,
                 'prompt': prompt,
                 'stream': False,
-                'format': 'json'  # Request JSON output
+                'format': 'json',  # Request JSON output
+                'options': {
+                    'temperature': 0.2,
+                    'repeat_penalty': 1.3,
+                    'num_predict': 512,
+                },
             }
 
             async with aiohttp.ClientSession(timeout=self.timeout) as session:
