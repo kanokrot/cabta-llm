@@ -1,0 +1,45 @@
+{% extends "base_auth.html" %}
+
+{% block title %}Activate account - CABTA{% endblock %}
+
+{% block content %}
+<div class="card shadow-lg">
+    <div class="card-body p-4 p-md-5">
+        <div class="mb-4">
+            <h1 class="h3 mb-2">Activate account</h1>
+            <p class="text-muted mb-0">Use the invitation sent by your administrator.</p>
+        </div>
+
+        <form id="register-form" data-auth-form="register" data-next="{{ next_path | e }}" novalidate>
+            <div class="mb-3">
+                <label class="form-label" for="invite-token">Invitation token</label>
+                <input class="form-control" id="invite-token" name="token" type="text"
+                       value="{{ invite_token | e }}" autocomplete="off" required>
+            </div>
+            <div class="mb-3">
+                <label class="form-label" for="register-username">Username</label>
+                <input class="form-control" id="register-username" name="username" type="text"
+                       minlength="3" maxlength="64" autocomplete="username" required>
+            </div>
+            <div class="mb-3">
+                <label class="form-label" for="register-password">Password</label>
+                <input class="form-control" id="register-password" name="password" type="password"
+                       minlength="8" maxlength="72" autocomplete="new-password" required>
+            </div>
+            <div class="mb-3">
+                <label class="form-label" for="register-password-confirm">Confirm password</label>
+                <input class="form-control" id="register-password-confirm" name="password_confirm" type="password"
+                       minlength="8" maxlength="72" autocomplete="new-password" required>
+            </div>
+            <div id="register-error" class="alert alert-danger d-none" role="alert"></div>
+            <button class="btn btn-accent w-100" type="submit">
+                <i class="bi bi-person-check me-1"></i>Activate account
+            </button>
+        </form>
+
+        <p class="text-muted small text-center mt-4 mb-0">
+            Already activated? <a href="/login">Sign in</a>
+        </p>
+    </div>
+</div>
+{% endblock %}

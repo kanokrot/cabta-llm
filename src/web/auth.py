@@ -13,9 +13,15 @@ import time
 from pathlib import Path
 from typing import Any, Dict, Optional, Sequence
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from passlib.context import CryptContext
+
+from .security import (
+    CSRF_COOKIE_NAME,
+    SESSION_COOKIE_NAME,
+    UNSAFE_METHODS,
+)
 
 
 AUTH_DB_ENV = "AUTH_DB_PATH"
@@ -35,7 +41,10 @@ VALID_ROLES = frozenset(
 )
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
+oauth2_scheme = OAuth2PasswordBearer(
+    tokenUrl="/api/auth/login",
+    auto_error=False,
+)
 
 
 def _connect() -> sqlite3.Connection:
@@ -123,11 +132,14 @@ def verify_password(password: str, password_hash: str) -> bool:
 
 
 def authenticate_user(email: str, password: str) -> Optional[Dict[str, Any]]:
+    """Authenticate by email or username without changing the public API."""
+    identifier = email.strip()
     with _connect() as connection:
         row = connection.execute(
             "SELECT id, email, username, password_hash, role, is_active "
-            "FROM users WHERE lower(email) = lower(?)",
-            (email.strip(),),
+            "FROM users WHERE lower(email) = lower(?) "
+            "OR lower(username) = lower(?)",
+            (identifier, identifier),
         ).fetchone()
 
     if row is None or not row["is_active"]:
@@ -172,12 +184,48 @@ def _session_is_active(connection: sqlite3.Connection, jti: str) -> bool:
     )
 
 
-def get_current_user(token: str = Depends(oauth2_scheme)) -> Dict[str, Any]:
+def get_access_token(
+    request: Request,
+    token: Optional[str] = Depends(oauth2_scheme),
+) -> Optional[str]:
+    """Return a bearer token first, falling back to the browser session cookie."""
+    return token or request.cookies.get(SESSION_COOKIE_NAME)
+
+
+def _require_cookie_csrf(request: Request) -> None:
+    if request.method.upper() not in UNSAFE_METHODS:
+        return
+
+    cookie_token = request.cookies.get(CSRF_COOKIE_NAME)
+    header_token = request.headers.get("X-CSRF-Token")
+    if (
+        not cookie_token
+        or not header_token
+        or not hmac.compare_digest(cookie_token, header_token)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="CSRF validation failed",
+        )
+
+
+def get_current_user(
+    token: Optional[str] = Depends(oauth2_scheme),
+    request: Request = None,
+) -> Dict[str, Any]:
     credentials_error = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
+    cookie_token = request.cookies.get(SESSION_COOKIE_NAME) if request else None
+    using_session_cookie = not token and bool(cookie_token)
+    token = token or cookie_token
+    if using_session_cookie and request is not None:
+        _require_cookie_csrf(request)
+    if not token:
+        raise credentials_error
+
     try:
         payload = _decode_jwt(token)
         user_id = int(payload["sub"])
