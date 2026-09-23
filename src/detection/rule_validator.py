@@ -55,11 +55,14 @@ def validate_rule(rule_type: str, rule_content: str) -> dict:
             errors.append(f'YARA syntax error: {exc}')
 
     elif normalized_type == 'sigma':
+        syntax_valid = False
+        semantic_valid = False
         try:
             document = yaml.safe_load(content)
         except yaml.YAMLError as exc:
             errors.append(f'Sigma YAML syntax error: {exc}')
         else:
+            syntax_valid = True
             if not isinstance(document, dict):
                 errors.append('Sigma rule must be a YAML mapping')
             else:
@@ -71,6 +74,16 @@ def validate_rule(rule_type: str, rule_content: str) -> dict:
                 detection = document.get('detection')
                 if isinstance(detection, dict) and 'condition' not in detection:
                     errors.append('Sigma detection is missing required field: condition')
+            semantic_valid = not errors
+
+        return {
+            'valid': not errors,
+            'errors': errors,
+            'rule_type': normalized_type,
+            'syntax_valid': syntax_valid,
+            'semantic_valid': semantic_valid,
+            'status': 'semantic_validated' if semantic_valid else 'syntax_only',
+        }
 
     else:
         pairs = {')': '(', ']': '[', '}': '{'}
@@ -125,6 +138,9 @@ def validate_rule(rule_type: str, rule_content: str) -> dict:
                             'must contain an action, header, direction, and options'
                         )
 
+        if normalized_type == 'firewall':
+            syntax_valid = not errors
+
         if normalized_type == 'firewall' and not errors:
             active_lines = [
                 line.strip() for line in content.splitlines()
@@ -144,6 +160,20 @@ def validate_rule(rule_type: str, rule_content: str) -> dict:
                     'Firewall rule must use key/value entries or a recognized '
                     'allow, deny, block, permit, or configuration command'
                 )
+
+        if normalized_type == 'firewall':
+            semantic_valid = syntax_valid and not errors
+            return {
+                'valid': not errors,
+                'errors': errors,
+                'rule_type': normalized_type,
+                'syntax_valid': syntax_valid,
+                'semantic_valid': semantic_valid,
+                'status': (
+                    'semantic_validated'
+                    if semantic_valid else 'syntax_only'
+                ),
+            }
 
     return {
         'valid': not errors,
