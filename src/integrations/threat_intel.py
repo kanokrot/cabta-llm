@@ -3,6 +3,7 @@ Author: Ugur AtesThreat intelligence API integrations (20+ sources)."""
 
 import aiohttp
 import asyncio
+import base64
 import ipaddress
 import re
 from typing import Dict, Optional, List, Set
@@ -41,6 +42,11 @@ def _normalize_ipv4_host(value: str) -> str | None:
         return str(ip) if ip.version == 4 else None
     except ValueError:
         return None
+
+
+def _vt_url_id(ioc: str) -> str:
+    """Build the VirusTotal API v3 identifier for a URL IOC."""
+    return base64.urlsafe_b64encode(ioc.encode()).decode().strip('=')
 
 
 class ThreatIntelligence:
@@ -109,8 +115,7 @@ class ThreatIntelligence:
             elif ioc_type == 'domain':
                 url = f'https://www.virustotal.com/api/v3/domains/{ioc}'
             elif ioc_type == 'url':
-                import base64
-                url_id = base64.urlsafe_b64encode(ioc.encode()).decode().strip('=')
+                url_id = _vt_url_id(ioc)
                 url = f'https://www.virustotal.com/api/v3/urls/{url_id}'
             else:
                 return {'status': '⚠', 'error': 'Unsupported type'}
@@ -718,7 +723,8 @@ class ThreatIntelligence:
     async def get_raw_virustotal_report(self, ioc: str, ioc_type: str) -> Dict:
         """
         Get the full, raw VirusTotal API v3 report for an IOC, including
-        relationships like communicating files and DNS resolutions.
+        relationships like communicating files and DNS resolutions. URL IOCs
+        are converted to VirusTotal API v3 URL identifiers.
 
         Args:
             ioc: Indicator to check
@@ -736,6 +742,8 @@ class ThreatIntelligence:
             'ipv4': f'ip_addresses/{ioc}',
             'domain': f'domains/{ioc}',
         }
+        if ioc_type == 'url':
+            endpoint_map['url'] = f'urls/{_vt_url_id(ioc)}'
         if ioc_type not in endpoint_map:
             return {'error': f'Unsupported IOC type for raw report: {ioc_type}'}
 
