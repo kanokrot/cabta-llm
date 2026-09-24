@@ -19,6 +19,7 @@ import json
 import random
 import sys
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -34,7 +35,6 @@ GROUP_A_EVAL_SOURCES = frozenset(
         "feodotracker",
         "tor_exit_nodes",
         "c2_trackers",
-        "usom",
         "sslblacklist",
         "spamhaus",
         "threatfox",
@@ -51,7 +51,7 @@ SCORING_SOURCES = (
 )
 
 
-def export_scoring_sources(result):
+def export_scoring_sources(result, observed_at):
     """Export the six active scoring-source fields for each eval record."""
     raw_sources = result.get("sources")
     if not isinstance(raw_sources, dict):
@@ -65,6 +65,7 @@ def export_scoring_sources(result):
                 "status": None,
                 "score": 0,
                 "unavailable": True,
+                "observed_at": observed_at,
             }
             continue
 
@@ -74,10 +75,14 @@ def export_scoring_sources(result):
             # uses listed=True even when no explicit score field exists.
             score = IntelligentScoring._get_source_score(source_data)
 
+        unavailable = source_data.get("unavailable") is True
+        if source_name == "sslblacklist" and source_data.get("status") == "⚠":
+            unavailable = True
         exported[source_name] = {
             "status": source_data.get("status"),
             "score": int(score),
-            "unavailable": source_data.get("unavailable") is True,
+            "unavailable": unavailable,
+            "observed_at": source_data.get("observed_at") or observed_at,
         }
 
     return exported
@@ -135,6 +140,18 @@ def load_existing_results(results_path):
     return done
 
 
+def normalize_output_ioc_type(value):
+    return "ip" if value == "ipv4" else value
+
+
+def evaluation_path(result):
+    if "trusted_hostname" in result:
+        return "trusted_shortcut"
+    if result.get("error"):
+        return "record_error"
+    return "source_checks"
+
+
 async def evaluate(
     records,
     delay_seconds,
@@ -168,18 +185,24 @@ async def evaluate(
                 except Exception as exc:
                     result = {"error": str(exc)}
 
+                observed_at = datetime.now(timezone.utc).isoformat()
+                predicted_ioc_type_raw = result.get("ioc_type")
                 row = {
                     "ioc": ioc,
                     "expected_verdict": rec["expected_verdict"],
                     "expected_ioc_type": rec["ioc_type"],
                     "source": rec.get("source"),
+                    "label_collected_at": rec.get("collected_at"),
+                    "evaluation_observed_at": observed_at,
                     "predicted_verdict": result.get("verdict"),
-                    "predicted_ioc_type": result.get("ioc_type"),
+                    "predicted_ioc_type_raw": predicted_ioc_type_raw,
+                    "predicted_ioc_type": normalize_output_ioc_type(predicted_ioc_type_raw),
                     "threat_score": result.get("threat_score"),
                     "sources_checked": result.get("sources_checked"),
                     "sources_flagged": result.get("sources_flagged"),
-                    "sources": export_scoring_sources(result),
+                    "sources": export_scoring_sources(result, observed_at),
                     "trusted_shortcut": "trusted_hostname" in result,
+                    "evaluation_path": evaluation_path(result),
                     "error": result.get("error"),
                 }
                 out.write(json.dumps(row, ensure_ascii=False) + "\n")

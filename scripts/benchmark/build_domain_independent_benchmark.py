@@ -19,20 +19,36 @@ def normalize_ioc(value):
     return str(value or "")
 
 
-def make_threatfox_record(row, collected_at):
-    evidence = row.get("source_provenance", {}).get("evidence", [])
+def normalize_label_source(value):
+    return str(value or "").strip().lower().replace(" ", "_")
+
+
+def label_providers(row):
+    provenance = row.get("source_provenance") or {}
+    providers = provenance.get("providers") or []
+    if not providers:
+        providers = [item.get("source") for item in provenance.get("evidence", [])]
+    return list(dict.fromkeys(
+        normalize_label_source(provider)
+        for provider in providers
+        if provider
+    ))
+
+
+def build_domain_record(row, collected_at):
+    evidence = (row.get("source_provenance") or {}).get("evidence", [])
+    providers = label_providers(row)
     first_seen = next((item.get("first_seen") for item in evidence if item.get("first_seen")), None)
-    tags = []
-    for item in evidence:
-        for value in (item.get("threat_type"), item.get("malware"), item.get("malware_printable")):
-            if value and value not in tags:
-                tags.append(value)
     return {
         "ioc": normalize_ioc(row["domain"]),
         "ioc_type": "domain",
         "expected_verdict": "MALICIOUS",
-        "source": "threatfox",
-        "tags": tags,
+        "source": providers[0] if providers else "unknown",
+        "label_sources": providers,
+        "label_provenance": {
+            "providers": providers,
+            "evidence": evidence,
+        },
         "first_seen": first_seen,
         "collected_at": collected_at,
     }
@@ -80,7 +96,7 @@ def main():
     rng = random.Random(args.seed)
     selected_iocs = rng.sample(eligible, args.count)
     selected_records = [
-        make_threatfox_record(case_by_ioc[ioc], case_control.get("collected_at_utc"))
+        build_domain_record(case_by_ioc[ioc], case_control.get("collected_at_utc"))
         for ioc in selected_iocs
     ]
     selected_ioc_set = {normalize_ioc(row["ioc"]) for row in selected_records}

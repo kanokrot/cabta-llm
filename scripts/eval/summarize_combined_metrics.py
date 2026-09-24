@@ -134,8 +134,12 @@ def main():
         raise SystemExit(f"duplicate ioc values found; refusing to summarize: {sample}")
 
     by_type = defaultdict(list)
+    by_type_and_source = defaultdict(lambda: defaultdict(list))
     for row in all_rows:
-        by_type[normalized_ioc_type(row.get("expected_ioc_type"))].append(row)
+        ioc_type = normalized_ioc_type(row.get("expected_ioc_type"))
+        source = str(row.get("source") or "UNKNOWN")
+        by_type[ioc_type].append(row)
+        by_type_and_source[ioc_type][source].append(row)
 
     summary = {
         "inputs": {
@@ -165,6 +169,13 @@ def main():
             ioc_type: binary_metrics(by_type[ioc_type])
             for ioc_type in IOC_TYPE_ORDER
             if ioc_type in by_type
+        },
+        "by_expected_ioc_type_and_label_source": {
+            ioc_type: {
+                source: binary_metrics(source_rows)
+                for source, source_rows in sorted(source_map.items())
+            }
+            for ioc_type, source_map in sorted(by_type_and_source.items())
         },
     }
 
