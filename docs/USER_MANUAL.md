@@ -1,12 +1,70 @@
-# 📖 Usage Guide
+# 📖 User Manual
 
 ## Table of Contents
+- [Login & Roles](#login--roles)
 - [IOC Investigation](#ioc-investigation)
 - [Malware Analysis](#malware-analysis)
 - [Email Analysis](#email-analysis)
+- [Web UI](#web-ui)
+- [Agent / Local Tool](#agent--local-tool)
 - [Report Generation](#report-generation)
 - [MCP Server Mode](#mcp-server-mode)
 - [Batch Processing](#batch-processing)
+
+---
+
+## Login & Roles
+
+### Roles
+
+The application defines these roles:
+
+- `SOC Analyst Tier 1-2`
+- `Incident Responder`
+- `Threat Hunter`
+- `admin`
+- `Team Lead`
+
+### Login and session security
+
+Login accepts either a username or an email address, together with a
+password. A successful login creates an access token and sets the
+`cabta_session` session cookie and `cabta_csrf` CSRF cookie. Cookie-authenticated
+unsafe requests (`POST`, `PUT`, `PATCH`, and `DELETE`) must send an
+`X-CSRF-Token` header matching the CSRF cookie. The cookies use `SameSite=Strict`.
+Failed login attempts are rate-limited.
+
+### Default landing page by role
+
+After login, `ROLE_DEFAULT_LANDING` returns the following default path:
+
+| Role | Default path |
+|---|---|
+| `SOC Analyst Tier 1-2` | `/analysis/ioc` |
+| `Incident Responder` | `/agent/playbooks` |
+| `Threat Hunter` | `/` |
+| `Team Lead` | `/dashboard` |
+| `admin` | `/` |
+
+### Team Lead invites
+
+A Team Lead can invite a team member through the team-member invite endpoint.
+The flow is invite-based: the server creates a one-time invite token, and the
+recipient completes the invitation through `/api/auth/accept-invite` with the
+token, username, and password. Team Leads may invite operator roles only; this
+is not self-registration or role selection by the recipient.
+
+### Requesting access
+
+Users can submit an access request at `/request-access` with the page's GET/POST
+flow. Pending requests are stored and can be listed, approved, or rejected.
+The `/management` page renders the pending access-request queue.
+
+### Per-user Gmail OAuth
+
+Gmail connect, status, and disconnect operations are bound to the authenticated
+user. OAuth state and tokens are persisted by `user_id`. The callback URI is
+`http://localhost:3003/api/settings/gmail/callback`.
 
 ---
 
@@ -326,6 +384,89 @@ python -m src.soc_agent email phishing.eml --report email_report.html
 
 ---
 
+## Web UI
+
+### Agent
+
+Open `/agent/chat` for the Agent chat page or `/agent/investigations` for the
+investigations page. The Agent API is under `/api/agent`: it starts an
+investigation, lists and loads sessions, and handles approval, rejection, and
+cancellation. The pages use `templates/agent_chat.html` and
+`templates/agent_investigations.html`; the investigations template includes the
+start form and API call.
+
+Evidence: `src/web/routes/agent.py:62-78`, `:184-228`, `:233-292`;
+`src/web/app.py:708-719`; `templates/agent_chat.html`,
+`templates/agent_investigations.html:845-865`, `:2614-2644`.
+
+### Playbooks
+
+Open `/agent/playbooks`. The Playbooks API is under `/api/playbooks`: it lists
+playbooks, shows details, runs a playbook, approves or rejects a pending step,
+and generates a session report. The page is rendered by
+`templates/playbooks.html`.
+
+Evidence: `src/web/routes/playbooks.py:35-88`, `:96-131`, `:134-179`;
+`src/web/app.py:723-731`; `templates/playbooks.html:430-578`, `:976-1043`.
+
+### Cases
+
+Use `/cases` for the case list and `/cases/{case_id}` for a case detail page.
+The Cases API is under `/api/cases`: it creates, lists, and displays cases;
+handles incident reports; updates routing and status; links analyses; and adds
+notes. The pages use `templates/cases.html` and `templates/case_detail.html`.
+
+Evidence: `src/web/routes/cases.py:37-72`, `:79-137`, `:143-225`;
+`src/web/app.py:654-667`; `templates/cases.html:2-14` and
+`templates/case_detail.html:2-7`, `:231-321`.
+
+### Tickets
+
+Open `/tickets` to view authenticated, owner-scoped tickets. The ticket page
+identifies auto-generated incident tickets and displays their status. The page
+uses `templates/tickets.html` and the API route is under the `/api` prefix.
+
+Evidence: `src/web/routes/tickets.py:16-25`; `src/web/app.py:670-695`;
+`templates/tickets.html:2-19`, `:29-56`.
+
+### MCP Management
+
+Open `/mcp/servers` to configure and manage MCP server connections. The MCP
+Management API is under `/api/mcp`: it lists categories and servers, adds and
+removes servers, connects and disconnects them, lists server tools, and checks
+availability. The page is rendered by `templates/mcp_servers.html`.
+
+Evidence: `src/web/routes/mcp_management.py:271-333`, `:348-478`;
+`src/web/app.py:734-750`; `templates/mcp_servers.html:218-226`, `:300-433`,
+`:808-951`.
+
+### Reports — Web UI/API
+
+Open `/report/{job_id}` for the report view. The Reports API is under
+`/api/reports` and serves JSON, HTML, HTML downloads, MITRE output, and PDF.
+It also supports editing, approving, marking detection rules as deployed,
+downloading rules, and exporting detection rules as a ZIP. The page is rendered
+by `templates/report_view.html`.
+
+Evidence: `src/web/app.py:697-705`; `src/web/routes/reports.py:179-275`,
+`:279-475`; `templates/report_view.html:206`, `:218-253`, `:1378-1550`.
+
+The CLI report-generation instructions remain in [Report Generation](#report-generation).
+
+---
+
+## Agent / Local Tool
+
+`generate_rules` is a local Agent tool. Its executor is defined at
+`src/agent/tool_registry.py:613-640`, and the local tool is registered at
+`src/agent/tool_registry.py:848-899`.
+
+The registered tool accepts `analysis_result`, `rule_type`, `rule_types`, and
+`network_iocs`. It is not one of the tools exposed by the legacy
+`python -m src.server` MCP server.
+
+---
+
 ## Report Generation
 
 ### HTML Reports
@@ -364,6 +505,17 @@ python -m src.soc_agent file sample.exe --sandbox
 
 Blue Team Assistant can run as an MCP (Model Context Protocol) server for integration with Claude Desktop or other MCP clients.
 
+### Remote Host MCP Server
+
+Remote Host is provided by the separate `src.mcp_servers.remote_tools` MCP
+server; it is not a Web UI feature. It exposes these five tools:
+`system_info_collect`, `process_list_collect`, `netstat_collect`,
+`event_log_collect`, and `autoruns_check`.
+
+Before use, configure the `remote_hosts` allowlist in `config.yaml` with the
+approved host, SSH key, and dedicated `known_hosts` file. The example default
+is `remote_hosts: []`, so no host is allowed by default.
+
 ### Starting the Server
 
 ```bash
@@ -377,7 +529,6 @@ python -m src.server
 | `investigate_ioc` | Investigate an IOC |
 | `analyze_file` | Analyze a file |
 | `analyze_email` | Analyze an email |
-| `generate_rules` | Generate detection rules |
 
 ### Claude Desktop Configuration
 

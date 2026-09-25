@@ -62,41 +62,52 @@ The loader also accepts an alternate configuration path through the
 # Test CLI entry point
 python -m src.soc_agent --help
 
-# Start the Web UI/API using the documented local Quick Start port.
-# The example configuration default is port 8080.
-python -m uvicorn src.web.app:create_app --factory --host 127.0.0.1 --port 3003
+# Start the Web UI/API using the default web.port from config.yaml.example.
+# The configuration default is port 8080.
+python -m uvicorn src.web.app:create_app --factory --host 127.0.0.1 --port 8080
 
 # Optional network-dependent IOC smoke test
 python -m src.soc_agent ioc 8.8.8.8
 ```
 
-Open `http://localhost:3003` for the Web UI or
-`http://localhost:3003/api/docs` for Swagger UI.
+Open `http://localhost:8080` for the Web UI or
+`http://localhost:8080/api/docs` for Swagger UI.
 
-The command above explicitly selects port `3003` for local Quick Start. The
-example configuration default is port `8080`; use whichever port matches your
-deployment configuration.
+Port `3003` is an explicit local-development override used by the repository's
+Quick Start documentation and by the current Gmail OAuth callback URI. If you
+need that setup, run the same command with `--port 3003` and register/use
+`http://localhost:3003/api/settings/gmail/callback` for Gmail OAuth. Otherwise,
+use the default `8080` shown above.
 
-### 6. Configure Claude Desktop (Optional)
+### 6. Configure MCP servers (Optional)
 
-Add to Claude Desktop config file:
-- **MacOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
-- **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
+The current Web UI/Agent runtime loads MCP server definitions from the
+`mcp_servers` list in `config.yaml`. Start from `config.yaml.example` and keep
+only the servers available in the local environment. The current structure is:
 
-```json
-{
-  "mcpServers": {
-    "cabta": {
-      "command": "python",
-      "args": ["-m", "src.server"],
-      "cwd": "/absolute/path/to/cabta-llm"
-    }
-  }
-}
+```yaml
+mcp_servers:
+  - name: "osint_tools"
+    command: "python"
+    args: ["-m", "src.mcp_servers.osint_tools"]
+    transport: "stdio"
+    description: ""
+    env: null
+    url: null
+  - name: "free_osint_tools"
+    command: "python"
+    args: ["-m", "src.mcp_servers.free_osint_tools"]
+    transport: "stdio"
+    description: ""
+    env: null
+    url: null
 ```
 
-Run the MCP server as a Python module from the project root and use an
-absolute `cwd` path.
+The template also includes the configured `network_tools`,
+`malwoverview_tools`, `forensics_tools`, `remnux_tools`, `threat_intel_tools`,
+and `remote_tools` servers. Some servers require external tools, services, or
+credentials. MCP connections are discovered and managed by CABTA from this
+configuration; do not use the legacy `src.server` entry for the current setup.
 
 ## Troubleshooting
 
@@ -113,7 +124,7 @@ integration; verify credentials only for the services you intend to use.
 ## Next Steps
 
 - Read the [Configuration section](../README.md#6-configuration)
-- Check [Usage Examples](USAGE.md)
+- Check the [User Manual](USER_MANUAL.md)
 - Review [Architecture](ARCHITECTURE.md)
 
 ## Getting Help
