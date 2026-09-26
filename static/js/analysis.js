@@ -1006,9 +1006,10 @@
                 entHtml += '<div class="mb-3"><h6><i class="bi bi-bar-chart me-1 text-accent"></i>Byte Frequency Distribution</h6>';
                 entHtml += '<div class="d-flex flex-wrap gap-2">';
                 byteFreq.most_common.slice(0, 16).forEach(function (b) {
-                    var bVal = Array.isArray(b) ? '0x' + (b[0] !== undefined ? Number(b[0]).toString(16).toUpperCase().padStart(2, '0') : '??') : escHtml(String(b));
-                    var bCount = Array.isArray(b) ? (b[1] || 0) : '';
-                    entHtml += '<div class="entropy-stat-card" style="padding:6px 10px;"><div class="es-value" style="font-size:0.9rem;"><code>' + bVal + '</code></div><div class="es-label">' + bCount + '</div></div>';
+                    var bVal = escHtml(String(b.byte || '??'));
+                    var bCount = escHtml(String(b.count || 0));
+                    var bPercentage = b.percentage !== undefined ? ' (' + escHtml(String(b.percentage)) + '%)' : '';
+                    entHtml += '<div class="entropy-stat-card" style="padding:6px 10px;"><div class="es-value" style="font-size:0.9rem;"><code>' + bVal + '</code></div><div class="es-label">' + bCount + bPercentage + '</div></div>';
                 });
                 entHtml += '</div></div>';
             }
