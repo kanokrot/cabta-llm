@@ -61,6 +61,38 @@ def _as_dict(value: Any) -> Dict[str, Any]:
     return {}
 
 
+_FILE_RESULT_SENSITIVE_KEYS = {
+    "path", "file_path", "temp_path", "token", "password",
+    "secret", "credential", "credentials", "api_key",
+    "provider_payload", "raw_source",
+}
+_FILE_RESULT_OMIT = object()
+
+
+def _safe_file_result_value(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        output = {}
+        for key, item in list(value.items())[:200]:
+            if not isinstance(key, str) or key.lower() in _FILE_RESULT_SENSITIVE_KEYS:
+                continue
+            safe_item = _safe_file_result_value(item)
+            if safe_item is not _FILE_RESULT_OMIT:
+                output[key[:200]] = safe_item
+        return output
+    if isinstance(value, (list, tuple)):
+        output = []
+        for item in list(value)[:100]:
+            safe_item = _safe_file_result_value(item)
+            if safe_item is not _FILE_RESULT_OMIT:
+                output.append(safe_item)
+        return output
+    if isinstance(value, str):
+        return value[:20000]
+    if isinstance(value, (int, float, bool)):
+        return value
+    return _FILE_RESULT_OMIT
+
+
 def _text(value: Any, limit: int = 2000) -> Optional[str]:
     if value is None:
         return None
@@ -257,6 +289,17 @@ def serialize_analysis_job(job: Dict[str, Any], role: str = SOC, flow: str = "an
         "summary": _text(result.get("summary"), 4000),
         "confidence": result.get("confidence"),
     }
+    if job.get("analysis_type") == "file":
+        for key in (
+            "entropy_analysis",
+            "static_analysis",
+            "capabilities",
+            "detection_rules",
+        ):
+            if key in result:
+                safe_value = _safe_file_result_value(result[key])
+                if safe_value is not _FILE_RESULT_OMIT:
+                    output[key] = safe_value
     return {key: value for key, value in output.items() if value is not None}
 
 
