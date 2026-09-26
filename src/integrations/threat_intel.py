@@ -108,7 +108,7 @@ class ThreatIntelligence:
             headers = {'x-apikey': api_key}
             
             # Determine endpoint
-            if ioc_type == 'hash':
+            if ioc_type in ('hash', 'md5', 'sha1', 'sha256'):
                 url = f'https://www.virustotal.com/api/v3/files/{ioc}'
             elif ioc_type == 'ipv4':
                 url = f'https://www.virustotal.com/api/v3/ip_addresses/{ioc}'

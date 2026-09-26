@@ -122,3 +122,25 @@ async def test_check_virustotal_url_still_uses_same_url_id_after_helper_extracti
     assert session.calls[0][0] == (
         f"https://www.virustotal.com/api/v3/urls/{SAMPLE_URL_ID}"
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("ioc_type", ["md5", "sha1", "sha256"])
+async def test_check_virustotal_hash_types_use_files_endpoint(ioc_type):
+    ioc = "a" * 64
+    payload = {
+        "data": {
+            "attributes": {
+                "last_analysis_stats": {"malicious": 1, "harmless": 1},
+            }
+        }
+    }
+    intel, session = _intel_and_session(payload)
+
+    with patch("src.integrations.threat_intel.aiohttp.ClientSession", return_value=session):
+        result = await intel.check_virustotal(ioc, ioc_type)
+
+    assert result["detections"] == "1/2"
+    assert session.calls[0][0] == (
+        f"https://www.virustotal.com/api/v3/files/{ioc}"
+    )
