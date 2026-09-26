@@ -118,6 +118,28 @@ class TestReconstructHeaderTimeline(unittest.TestCase):
         self.assertIsNotNone(ts)
         self.assertIsInstance(ts, datetime)
 
+    def test_reconstruct_header_timeline_missing_from_clause(self):
+        """A Received header without a from clause yields an empty server value."""
+        hdr = (
+            "by mail.example.com with ESMTP id abc123; "
+            "Mon, 01 Jan 2026 00:00:00 +0000"
+        )
+        msg = _make_msg(received_headers=[hdr])
+        timeline = EmailForensics.reconstruct_header_timeline(msg)
+        self.assertEqual(timeline[0]['from_server'], '')
+
+    def test_analyze_relay_path_handles_missing_from_server(self):
+        """A missing from clause does not make relay analysis raise."""
+        hdr = (
+            "by mail.example.com with ESMTP id abc123; "
+            "Mon, 01 Jan 2026 00:00:00 +0000"
+        )
+        timeline = EmailForensics.reconstruct_header_timeline(
+            _make_msg(received_headers=[hdr])
+        )
+        result = EmailForensics.analyze_relay_path(timeline)
+        self.assertIsInstance(result, dict)
+
 
 class TestValidateAuthenticationChain(unittest.TestCase):
     """Tests for EmailForensics.validate_authentication_chain."""
@@ -314,6 +336,19 @@ class TestPerformFullForensics(unittest.TestCase):
                      'forensics_score', 'safety_score'):
             self.assertIn(key, result, f"Missing key: {key}")
         self.assertIsInstance(result['forensics_score'], (int, float))
+
+    def test_perform_full_forensics_handles_missing_from_server_no_crash(self):
+        """Full forensics handles a Received header without a from clause."""
+        hdr = (
+            "by mail.example.com with ESMTP id abc123; "
+            "Mon, 01 Jan 2026 00:00:00 +0000"
+        )
+        msg = _make_msg(received_headers=[hdr])
+        result = EmailForensics.perform_full_forensics(
+            msg, 'sender@example.com', 'example.com'
+        )
+        self.assertIsInstance(result, dict)
+        self.assertIn('relay_analysis', result)
 
 
 # ===================================================================

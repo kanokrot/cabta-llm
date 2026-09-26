@@ -42,7 +42,7 @@ class EmailForensics:
                 'hop_number': idx + 1,
                 'header': header,
                 'timestamp': None,
-                'from_server': None,
+                'from_server': '',
                 'from_ip': None,
                 'by_server': None,
                 'protocol': None
