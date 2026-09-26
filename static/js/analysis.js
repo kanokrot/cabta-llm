@@ -244,6 +244,7 @@
         if (res.email_data && res.email_data.from) {
             output.sender = {
                 email: res.email_data.from,
+                domain: res.email_data.from_domain || '',
                 display_name: res.email_data.from_display || '',
                 reply_to: res.email_data.reply_to || ''
             };

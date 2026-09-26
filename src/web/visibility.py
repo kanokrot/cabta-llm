@@ -354,7 +354,7 @@ def serialize_analysis_job(job: Dict[str, Any], role: str = SOC, flow: str = "an
                 safe_email_data = {}
                 for key in (
                     "spf", "dkim", "dmarc", "urls", "ips", "domains",
-                    "from", "to", "subject", "date", "reply_to", "attachments",
+                    "from", "from_domain", "to", "subject", "date", "reply_to", "attachments",
                 ):
                     if key not in email_data_raw:
                         continue

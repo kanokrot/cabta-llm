@@ -413,8 +413,11 @@ class EmailAnalyzer:
     
     async def _extract_email_data(self, msg: email.message.Message) -> Dict:
         """Extract basic email data."""
+        from_email = parseaddr(msg.get('From', ''))[1]
+        from_domain = from_email.split('@')[-1] if '@' in from_email else ''
         email_data = {
             'from': msg.get('From', ''),
+            'from_domain': from_domain,
             'to': msg.get('To', ''),
             'subject': msg.get('Subject', ''),
             'date': msg.get('Date', ''),

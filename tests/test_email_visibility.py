@@ -1,5 +1,10 @@
+import asyncio
+import email
+from email import policy
+
 import pytest
 
+from src.tools.email_analyzer import EmailAnalyzer
 from src.web.visibility import (
     ADMIN,
     INCIDENT_RESPONDER,
@@ -222,6 +227,42 @@ def test_verdict_and_score_preserved_for_email_regardless_of_role(role):
     output = serialize_analysis_job(_email_job(), role=role)
     assert output["verdict"] == "PHISHING"
     assert output["score"] == 88
+
+
+@pytest.mark.parametrize("role", [INCIDENT_RESPONDER, THREAT_HUNTER, ADMIN])
+def test_email_from_domain_exposed_for_detailed_roles(role):
+    output = serialize_analysis_job(
+        _email_job(email_data={"from_domain": "example.com"}),
+        role=role,
+    )
+
+    assert output["email_data"]["from_domain"] == "example.com"
+
+
+def test_email_from_domain_absent_for_non_detailed_role():
+    output = serialize_analysis_job(
+        _email_job(email_data={"from_domain": "example.com"}),
+        role=SOC,
+    )
+
+    assert "from_domain" not in output.get("email_data", {})
+
+
+@pytest.mark.parametrize(
+    ("raw_message", "expected_domain"),
+    [
+        ("From: Name <user@example.com>\n\nbody", "example.com"),
+        ("From: malformed\n\nbody", ""),
+        ("\nbody", ""),
+    ],
+)
+def test_extract_email_data_from_domain_handles_valid_and_invalid_from(raw_message, expected_domain):
+    message = email.message_from_string(raw_message, policy=policy.default)
+    analyzer = EmailAnalyzer.__new__(EmailAnalyzer)
+
+    result = asyncio.run(analyzer._extract_email_data(message))
+
+    assert result["from_domain"] == expected_domain
 
 
 def test_email_headers_exposed_for_detailed_roles():
