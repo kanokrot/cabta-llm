@@ -93,6 +93,52 @@ def _safe_file_result_value(value: Any) -> Any:
     return _FILE_RESULT_OMIT
 
 
+_EMAIL_RESULT_SENSITIVE_KEYS = {
+    "path", "file_path", "temp_path", "token", "password",
+    "secret", "credential", "credentials", "api_key",
+    "provider_payload", "raw_source",
+}
+_EMAIL_RESULT_DROP_KEYS = {
+    "body_text", "body_html", "raw_output", "raw_response",
+    "data", "base64", "provider_payload",
+}
+_EMAIL_RESULT_OMIT = object()
+
+
+def _safe_email_result_value(value: Any, *, _in_attachment: bool = False) -> Any:
+    if isinstance(value, Mapping):
+        output = {}
+        for key, item in list(value.items())[:200]:
+            if not isinstance(key, str):
+                continue
+            lowered_key = key.lower()
+            if lowered_key in _EMAIL_RESULT_SENSITIVE_KEYS:
+                continue
+            if lowered_key in _EMAIL_RESULT_DROP_KEYS:
+                continue
+            if lowered_key == "content" and _in_attachment:
+                continue
+            safe_item = _safe_email_result_value(
+                item,
+                _in_attachment=_in_attachment or lowered_key == "attachments",
+            )
+            if safe_item is not _EMAIL_RESULT_OMIT:
+                output[key[:200]] = safe_item
+        return output
+    if isinstance(value, (list, tuple)):
+        output = []
+        for item in list(value)[:100]:
+            safe_item = _safe_email_result_value(item, _in_attachment=_in_attachment)
+            if safe_item is not _EMAIL_RESULT_OMIT:
+                output.append(safe_item)
+        return output
+    if isinstance(value, str):
+        return value[:20000]
+    if isinstance(value, (int, float, bool)):
+        return value
+    return _EMAIL_RESULT_OMIT
+
+
 def _text(value: Any, limit: int = 2000) -> Optional[str]:
     if value is None:
         return None
@@ -300,6 +346,51 @@ def serialize_analysis_job(job: Dict[str, Any], role: str = SOC, flow: str = "an
                 safe_value = _safe_file_result_value(result[key])
                 if safe_value is not _FILE_RESULT_OMIT:
                     output[key] = safe_value
+    elif job.get("analysis_type") == "email":
+        detailed = role in {INCIDENT_RESPONDER, THREAT_HUNTER, ADMIN}
+        if detailed:
+            email_data_raw = result.get("email_data")
+            if isinstance(email_data_raw, dict):
+                safe_email_data = {}
+                for key in (
+                    "spf", "dkim", "dmarc", "urls", "ips", "domains",
+                    "from", "to", "subject", "date", "reply_to", "attachments",
+                ):
+                    if key not in email_data_raw:
+                        continue
+                    if key == "attachments":
+                        attachments_raw = email_data_raw[key]
+                        if isinstance(attachments_raw, (list, tuple)):
+                            safe_attachments = []
+                            for attachment in list(attachments_raw)[:100]:
+                                if not isinstance(attachment, Mapping):
+                                    continue
+                                safe_attachment = {}
+                                for attachment_key in ("filename", "content_type", "size"):
+                                    if attachment_key not in attachment:
+                                        continue
+                                    safe_value = _safe_email_result_value(
+                                        attachment[attachment_key],
+                                        _in_attachment=True,
+                                    )
+                                    if safe_value is not _EMAIL_RESULT_OMIT:
+                                        safe_attachment[attachment_key] = safe_value
+                                safe_attachments.append(safe_attachment)
+                            safe_email_data[key] = safe_attachments
+                        continue
+                    safe_value = _safe_email_result_value(email_data_raw[key])
+                    if safe_value is not _EMAIL_RESULT_OMIT:
+                        safe_email_data[key] = safe_value
+                if safe_email_data:
+                    output["email_data"] = safe_email_data
+            for key in (
+                "composite_score", "base_phishing_score", "forensics",
+                "advanced_analysis", "detection_rules", "llm_analysis", "iocs_found",
+            ):
+                if key in result:
+                    safe_value = _safe_email_result_value(result[key])
+                    if safe_value is not _EMAIL_RESULT_OMIT:
+                        output[key] = safe_value
     return {key: value for key, value in output.items() if value is not None}
 
 
