@@ -196,7 +196,11 @@ async def get_report_html(request: Request, analysis_id: str, current_user: dict
 
     templates = request.app.state.templates
     return templates.TemplateResponse(request, 'report_view.html', {
-        'job': serialize_report_job(job, current_user['role']),
+        'job': serialize_report_job(
+            job,
+            current_user['role'],
+            viewer_user_id=current_user.get('id'),
+        ),
     })
 
 
@@ -212,7 +216,13 @@ async def download_report_html(request: Request, analysis_id: str, current_user:
     return templates.TemplateResponse(
         request,
         'report_view.html',
-        {'job': serialize_report_job(job, current_user['role'])},
+        {
+            'job': serialize_report_job(
+                job,
+                current_user['role'],
+                viewer_user_id=current_user.get('id'),
+            )
+        },
         headers={
             'Content-Disposition': (
                 f'attachment; filename="report-{analysis_id}.html"'

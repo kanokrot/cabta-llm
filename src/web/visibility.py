@@ -406,9 +406,15 @@ def serialize_dashboard_job(job: Dict[str, Any], role: str = SOC) -> Dict[str, A
     }
 
 
-def serialize_report_job(job: Dict[str, Any], role: str = SOC) -> Dict[str, Any]:
+def serialize_report_job(
+    job: Dict[str, Any],
+    role: str = SOC,
+    viewer_user_id: int | None = None,
+) -> Dict[str, Any]:
     authorize_flow(role, "report")
-    detailed = role in {INCIDENT_RESPONDER, THREAT_HUNTER, ADMIN}
+    detailed = role in {INCIDENT_RESPONDER, THREAT_HUNTER, ADMIN} or (
+        viewer_user_id is not None and job.get("user_id") == viewer_user_id
+    )
     base = serialize_analysis_job(job, role=role, flow="report")
     base["result"] = _safe_result(
         _as_dict(job.get("result")),
