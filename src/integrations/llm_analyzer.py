@@ -1,3 +1,4 @@
+import asyncio
 import aiohttp
 import re
 import json
@@ -161,7 +162,9 @@ Keep it concise and factual."""
             if self.provider == 'ollama':
                 response_data = await self._call_ollama_api(prompt)
             elif self.provider == 'vllm':
-                response_data = await self._call_vllm_api(prompt)
+                response_data = await self._call_vllm_api(
+                    prompt, raise_on_failure=True,
+                )
             else:
                 response_data = await self._call_anthropic_api(prompt)
 
@@ -182,6 +185,13 @@ Keep it concise and factual."""
 
         except Exception as e:
             logger.error(f"[LLM] Analysis failed: {e}")
+            if self.provider == 'vllm':
+                return {
+                    'error': 'Failed to get LLM response',
+                    'provider': self.provider,
+                    'exception_type': type(e).__name__,
+                    'exception_message': str(e),
+                }
             return {'error': str(e)}
 
     def _format_rag_section(self, rag_context: Optional[list]) -> str:
@@ -632,7 +642,9 @@ Be specific and reference the tool findings in your analysis."""
             logger.error(f"[LLM] Ollama API call failed: {e}")
             return None
 
-    async def _call_vllm_api(self, prompt: str) -> Optional[Dict]:
+    async def _call_vllm_api(
+        self, prompt: str, raise_on_failure: bool = False,
+    ) -> Optional[Dict]:
         """
         Call vLLM OpenAI-compatible API.
 
@@ -646,63 +658,79 @@ Be specific and reference the tool findings in your analysis."""
             logger.warning("[LLM] No vLLM base URL configured")
             return None
 
-        try:
-            logger.info(f"[LLM] Calling vLLM ({self.vllm_model})...")
+        for attempt in range(2):
+            try:
+                logger.info(f"[LLM] Calling vLLM ({self.vllm_model})...")
 
-            headers = {
-                'content-type': 'application/json',
-            }
-            if self.vllm_api_key:
-                headers['Authorization'] = f'Bearer {self.vllm_api_key}'
+                headers = {
+                    'content-type': 'application/json',
+                }
+                if self.vllm_api_key:
+                    headers['Authorization'] = f'Bearer {self.vllm_api_key}'
 
-            payload = {
-                'model': self.vllm_model,
-                'messages': [
-                    {'role': 'user', 'content': prompt}
-                ]
-            }
+                payload = {
+                    'model': self.vllm_model,
+                    'messages': [
+                        {'role': 'user', 'content': prompt}
+                    ]
+                }
 
-            async with aiohttp.ClientSession(timeout=self.timeout) as session:
-                async with session.post(
-                    f'{self.vllm_base_url}/v1/chat/completions',
-                    headers=headers,
-                    json=payload
-                ) as response:
-                    if response.status == 200:
-                        data = await response.json()
-                        text = data['choices'][0]['message']['content']
+                async with aiohttp.ClientSession(timeout=self.timeout) as session:
+                    async with session.post(
+                        f'{self.vllm_base_url}/v1/chat/completions',
+                        headers=headers,
+                        json=payload
+                    ) as response:
+                        if response.status == 200:
+                            data = await response.json()
+                            text = data['choices'][0]['message']['content']
 
-                        # Parse JSON from response
-                        try:
-                            return json.loads(text)
-                        except json.JSONDecodeError:
-                            # Try to extract JSON from markdown code blocks
-                            json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', text, re.DOTALL)
-                            if json_match:
-                                return json.loads(json_match.group(1))
+                            # Parse JSON from response
+                            try:
+                                return json.loads(text)
+                            except json.JSONDecodeError:
+                                # Try to extract JSON from markdown code blocks
+                                json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', text, re.DOTALL)
+                                if json_match:
+                                    return json.loads(json_match.group(1))
 
-                            # Try to find JSON object in text
-                            start = text.find('{')
-                            end = text.rfind('}') + 1
-                            if start >= 0 and end > start:
-                                return json.loads(text[start:end])
+                                # Try to find JSON object in text
+                                start = text.find('{')
+                                end = text.rfind('}') + 1
+                                if start >= 0 and end > start:
+                                    return json.loads(text[start:end])
 
-                            logger.warning(f"[LLM] Could not parse JSON from vLLM response")
-                            return {'raw_response': text}
-                    else:
-                        body = await response.text()
-                        logger.error(f"[LLM] vLLM API error {response.status}: {body[:200]}")
-                        return None
+                                logger.warning(f"[LLM] Could not parse JSON from vLLM response")
+                                return {'raw_response': text}
+                        else:
+                            body = await response.text()
+                            logger.error(f"[LLM] vLLM API error {response.status}: {body[:200]}")
+                            return None
 
-        except aiohttp.ClientConnectorError:
-            logger.error(
-                f"[LLM] Cannot connect to vLLM at {self.vllm_base_url}. "
-                "Is the vLLM server running?"
-            )
-            return None
-        except Exception as e:
-            logger.error(f"[LLM] vLLM API call failed: {e}")
-            return None
+            except aiohttp.ClientConnectorError:
+                logger.error(
+                    f"[LLM] Cannot connect to vLLM at {self.vllm_base_url}. "
+                    "Is the vLLM server running?"
+                )
+                if attempt == 0:
+                    continue
+                if raise_on_failure:
+                    raise
+                return None
+            except asyncio.TimeoutError as e:
+                logger.error(f"[LLM] vLLM API call failed: {e}")
+                if attempt == 0:
+                    continue
+                if raise_on_failure:
+                    raise
+                return None
+            except Exception as e:
+                logger.error(f"[LLM] vLLM API call failed: {e}")
+                if raise_on_failure:
+                    raise
+                return None
+
+        return None
 
     async def _call_anthropic_api(self, prompt: str) -> Optional[Dict]:
         """
