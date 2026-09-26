@@ -222,3 +222,47 @@ def test_verdict_and_score_preserved_for_email_regardless_of_role(role):
     output = serialize_analysis_job(_email_job(), role=role)
     assert output["verdict"] == "PHISHING"
     assert output["score"] == 88
+
+
+def test_email_headers_exposed_for_detailed_roles():
+    header_analysis = {
+        "received_chain": ["192.0.2.10"],
+        "originating_ip": "198.51.100.10",
+        "message_id": "<message@example.test>",
+        "return_path": "sender@example.test",
+        "from_address": "Sender <sender@example.test>",
+        "anomalies": ["Message-ID domain mismatch"],
+    }
+    output = serialize_analysis_job(
+        _email_job(advanced_analysis={"header_analysis": header_analysis}),
+        role=INCIDENT_RESPONDER,
+    )
+
+    assert output["email_data"]["headers"] == header_analysis
+
+
+def test_email_headers_absent_for_non_detailed_role():
+    header_analysis = {
+        "received_chain": ["192.0.2.10"],
+        "originating_ip": "198.51.100.10",
+        "message_id": "<message@example.test>",
+        "return_path": "sender@example.test",
+        "from_address": "Sender <sender@example.test>",
+        "anomalies": ["Message-ID domain mismatch"],
+    }
+    output = serialize_analysis_job(
+        _email_job(advanced_analysis={"header_analysis": header_analysis}),
+        role=SOC,
+    )
+
+    assert "headers" not in output.get("email_data", {})
+    assert "email_data" not in output
+
+
+def test_email_headers_missing_advanced_analysis_no_crash():
+    output = serialize_analysis_job(
+        _email_job(advanced_analysis=None),
+        role=INCIDENT_RESPONDER,
+    )
+
+    assert "headers" not in output["email_data"]

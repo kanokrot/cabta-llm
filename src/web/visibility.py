@@ -381,6 +381,13 @@ def serialize_analysis_job(job: Dict[str, Any], role: str = SOC, flow: str = "an
                     safe_value = _safe_email_result_value(email_data_raw[key])
                     if safe_value is not _EMAIL_RESULT_OMIT:
                         safe_email_data[key] = safe_value
+                advanced_analysis_raw = result.get("advanced_analysis")
+                if isinstance(advanced_analysis_raw, Mapping):
+                    header_analysis = advanced_analysis_raw.get("header_analysis")
+                    if isinstance(header_analysis, Mapping):
+                        safe_value = _safe_email_result_value(header_analysis)
+                        if safe_value is not _EMAIL_RESULT_OMIT:
+                            safe_email_data["headers"] = safe_value
                 if safe_email_data:
                     output["email_data"] = safe_email_data
             for key in (
