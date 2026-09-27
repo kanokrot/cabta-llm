@@ -38,6 +38,42 @@ python -m pip install -r requirements.txt
 
 ### 4. Configure API Keys
 
+#### 4.1 Create the environment file
+
+Copy the environment template to `.env` in the repository root:
+
+```bash
+cp .env.example .env
+
+# Windows PowerShell
+Copy-Item .env.example .env
+```
+
+Set `AUTH_JWT_SECRET` to a locally generated secret; this key is required for
+the web application to start. If Gmail linking or Gmail notifications are
+used, also set `GMAIL_TOKEN_ENCRYPTION_KEY`. Generate both values locally, for
+example with:
+
+```bash
+python -c "import secrets; print(secrets.token_hex(32))"
+```
+
+The remaining `.env` keys are optional and should only be set when the related
+integration or deployment override is used. These include `BTA_CONFIG`,
+`TICKETING_DB_PATH`, authentication tuning keys (`AUTH_LOGIN_MAX_ATTEMPTS`,
+`AUTH_LOGIN_WINDOW_SECONDS`, `AUTH_COOKIE_SECURE`), `LLM_DGA_VLLM_CANARY_PERCENT`,
+the threat-intelligence keys (`VIRUSTOTAL_API_KEY`, `ABUSEIPDB_API_KEY`,
+`SHODAN_API_KEY`, `ALIENVAULT_API_KEY`, `GREYNOISE_API_KEY`, `CENSYS_API_KEY`,
+`PULSEDIVE_API_KEY`, `CRIMINALIP_API_KEY`, `IPQS_API_KEY`, `PHISHTANK_API_KEY`,
+`HYBRID_API_KEY`, `ANYRUN_API_KEY`, `TRIAGE_API_KEY`, `THREATZONE_API_KEY`,
+`JOESANDBOX_API_KEY`, `IP2PROXY_API_KEY`, `ANTHROPIC_API_KEY`), and external
+tool settings such as `GHIDRA_HOME`, `MOBSF_URL`, and `MOBSF_API_KEY`.
+
+Keep `.env` out of version control and never include real credential values in
+documentation, screenshots, logs, or support requests.
+
+#### 4.2 Configure the application
+
 ```bash
 # Copy the canonical configuration template
 cp config.yaml.example config.yaml
