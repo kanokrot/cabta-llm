@@ -110,12 +110,21 @@ class SandboxIntegration:
             }
             
             async with aiohttp.ClientSession(timeout=self.timeout) as session:
-                async with session.post(url, headers=headers, data={'hash': file_hash}) as response:
+                async with session.get(
+                    url,
+                    headers=headers,
+                    params={'hash': file_hash}
+                ) as response:
                     if response.status == 200:
                         data = await response.json()
+                        reports = (
+                            data.get('reports', [])
+                            if isinstance(data, dict)
+                            else data
+                        )
                         
-                        if data and len(data) > 0:
-                            report = data[0]  # Latest report
+                        if reports and len(reports) > 0:
+                            report = reports[0]  # Latest report
                             
                             return {
                                 'found': True,
@@ -135,11 +144,19 @@ class SandboxIntegration:
                         else:
                             return {'found': False}
                     else:
-                        return {'error': f'HTTP {response.status}'}
+                        body = await response.text()
+                        return {
+                            'error': f'HTTP {response.status}',
+                            'response_body': body[:500]
+                        }
         
         except Exception as e:
             logger.error(f"[SANDBOX] Hybrid Analysis error: {e}")
-            return {'error': str(e)}
+            return {
+                'error': str(e),
+                'exception_type': type(e).__name__,
+                'exception_message': str(e)
+            }
     
     async def _check_virustotal_behavior(self, file_hash: str) -> Dict:
         """Check VirusTotal for behavior analysis."""
