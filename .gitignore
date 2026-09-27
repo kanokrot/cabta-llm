@@ -129,6 +129,8 @@ scripts/eval/__pycache__/
 evidence_raw/
 test_keys/
 
-evidence
+evidence/*
+!evidence/vt_independent_holdout_2026-09-25/
+!evidence/operational_metrics_2026-09-27/
 evidence/source_weights_2026-09-16
 !.env.example
