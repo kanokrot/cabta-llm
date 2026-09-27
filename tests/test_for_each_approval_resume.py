@@ -8,7 +8,9 @@ from src.agent.agent_store import AgentStore
 from src.agent.playbook_engine import PlaybookEngine, PlaybookStep
 
 
-def _build_paused_engine(tmp_path, step_dict, context, tool_result):
+def _build_paused_engine(
+    tmp_path, step_dict, context, tool_result, additional_steps=None,
+):
     store = AgentStore(str(tmp_path / "agent.db"))
     agent_loop = MagicMock()
     agent_loop.config = {}
@@ -20,7 +22,7 @@ def _build_paused_engine(tmp_path, step_dict, context, tool_result):
     engine._cache[playbook_id] = {
         "id": playbook_id,
         "name": "Approval resume test",
-        "_parsed_steps": [step],
+        "_parsed_steps": [step, *(additional_steps or [])],
     }
 
     session_id = store.create_session(
@@ -160,3 +162,48 @@ async def test_execute_from_step_keeps_single_approved_tool_call_behavior(tmp_pa
     }
     assert context["block_malicious_ip_blocked"] is True
     assert context["block_malicious_ip_ip"] == "203.0.113.10"
+
+
+@pytest.mark.asyncio
+async def test_execute_from_step_rejected_approval_skips_action_and_follows_failure(
+    tmp_path,
+):
+    failure_step = PlaybookStep.from_dict({
+        "name": "approval_denied",
+        "action": "final_answer",
+        "description": "Approval was rejected",
+    })
+    engine, agent_loop, session_id, captured = _build_paused_engine(
+        tmp_path,
+        {
+            "name": "block_malicious_ip",
+            "tool": "block_ip",
+            "params": {"ip_address": "{{target_ip}}"},
+            "requires_approval": True,
+            "on_failure": "approval_denied",
+        },
+        {"target_ip": "203.0.113.10"},
+        {"blocked": True},
+        additional_steps=[failure_step],
+    )
+
+    await engine.execute_from_step(
+        session_id, approved=False, approved_by="analyst-1",
+    )
+
+    agent_loop.run_tool.assert_not_awaited()
+
+    rejection_entries = [
+        entry
+        for entry in engine.store.get_audit_log(session_id)
+        if entry["action_type"] == "approval_rejected"
+    ]
+    assert len(rejection_entries) == 1
+    assert rejection_entries[0]["action"] == "block_ip"
+    assert rejection_entries[0]["approved_by"] == "analyst-1"
+    assert rejection_entries[0]["status"] == "rejected"
+
+    steps = engine.store.get_steps(session_id)
+    assert any(step["step_type"] == "approval_rejected" for step in steps)
+    assert captured["current_step"].name == "approval_denied"
+    assert engine.store.get_session(session_id)["status"] == "active"
