@@ -1314,6 +1314,22 @@ class PlaybookEngine:
                 approved_by=approved_by,
                 status="rejected",
             )
+            # Preserve the rejection in the execution context.  Downstream
+            # steps may reference fields from this step; those fields do not
+            # exist because the protected action was intentionally skipped.
+            # Marking the step lets the loop skip dependent work instead of
+            # treating a missing result as a malformed playbook.
+            skipped_steps = context.setdefault("_skipped_steps", {})
+            skipped_steps[pending_step.name] = {
+                "status": "rejected",
+                "reason": "approval rejected",
+            }
+            context[pending_step.name] = {
+                "status": "rejected",
+                "skipped": True,
+                "reason": "approval rejected",
+            }
+            context["last_result"] = context[pending_step.name]
             next_step_name = pending_step.on_failure
 
         next_step = self._resolve_next(next_step_name, step_map, steps, pending_step, step_index_map)
@@ -1477,6 +1493,12 @@ class PlaybookEngine:
                             ),
                             tool_name=current_step.tool,
                         )
+                        context[current_step.name] = {
+                            "status": "skipped",
+                            "skipped": True,
+                            "reason": "condition evaluated false",
+                        }
+                        context["last_result"] = context[current_step.name]
                         current_step = self._resolve_next(
                             current_step.on_success, step_map, steps, current_step, step_index_map,
                         )
@@ -1682,9 +1704,40 @@ class PlaybookEngine:
 
                 else:
                     # Single execution
-                    params = self._interpolate_params(
-                        current_step.params, context, step_name=current_step.name,
-                    )
+                    try:
+                        params = self._interpolate_params(
+                            current_step.params, context, step_name=current_step.name,
+                        )
+                    except PlaybookValidationError as exc:
+                        if not self._is_skipped_dependency_error(exc, context):
+                            raise
+                        logger.info(
+                            "[PLAYBOOK] Skipping '%s' because an upstream step "
+                            "was rejected: %s",
+                            current_step.name,
+                            exc,
+                        )
+                        self.store.add_step(
+                            session_id=session_id,
+                            step_number=step_number,
+                            step_type="skipped_dependency",
+                            content=f"Skipped: {exc}",
+                            tool_name=current_step.tool,
+                        )
+                        context[current_step.name] = {
+                            "status": "skipped",
+                            "skipped": True,
+                            "reason": str(exc),
+                        }
+                        context["last_result"] = context[current_step.name]
+                        current_step = self._resolve_next(
+                            current_step.on_failure,
+                            step_map,
+                            steps,
+                            current_step,
+                            step_index_map,
+                        )
+                        continue
 
                     self.agent_loop._notify(session_id, {
                         "type": "tool_call", "step": step_number,
@@ -2018,6 +2071,19 @@ class PlaybookEngine:
         self.agent_loop._notify(
             session_id, {"type": "failed", "error": str(exc)[:200]},
         )
+
+    @staticmethod
+    def _is_skipped_dependency_error(
+        exc: PlaybookValidationError,
+        context: Dict[str, Any],
+    ) -> bool:
+        """Return whether an interpolation error depends on a rejected step."""
+        match = re.search(r"Unresolved template '\{\{(.+?)\}\}'", str(exc))
+        if not match:
+            return False
+        variable_root = match.group(1).strip().split(".", 1)[0]
+        skipped_steps = context.get("_skipped_steps", {})
+        return isinstance(skipped_steps, dict) and variable_root in skipped_steps
 
     def _interpolate_params(
         self,

@@ -1120,6 +1120,70 @@ class TestPlaybookEngine:
         assert session["status"] == "completed"
 
     @pytest.mark.asyncio
+    async def test_rejected_step_dependencies_are_skipped(self, playbook_engine, agent_store):
+        """Rejecting an approval must not break dependent downstream steps."""
+        pid = playbook_engine.register_playbook(
+            name="Reject dependency PB",
+            description="Approval rejection regression",
+            steps=[
+                {
+                    "name": "collect_event_logs",
+                    "tool": "remote_tools.event_log_collect",
+                    "params": {"host": "127.0.0.1"},
+                    "requires_approval": True,
+                },
+                {
+                    "name": "extract_iocs",
+                    "tool": "extract_iocs",
+                    "params": {"text": "{{collect_event_logs.raw_text}}"},
+                },
+            ],
+        )
+
+        session_id = await playbook_engine.execute(pid, {})
+        assert agent_store.get_session(session_id)["status"] == "waiting_approval"
+
+        await playbook_engine.execute_from_step(
+            session_id,
+            approved=False,
+            approved_by="test-analyst",
+        )
+
+        session = agent_store.get_session(session_id)
+        assert session["status"] == "completed"
+        steps = agent_store.get_steps(session_id)
+        assert any(step["step_type"] == "skipped_dependency" for step in steps)
+        audit = agent_store.get_audit_log(session_id)
+        assert any(entry["action_type"] == "approval_rejected" for entry in audit)
+
+    @pytest.mark.asyncio
+    async def test_conditionally_skipped_steps_publish_context(self, playbook_engine, agent_store):
+        """A false condition must provide a safe skipped result to later steps."""
+        pid = playbook_engine.register_playbook(
+            name="Conditional dependency PB",
+            description="Conditional skip regression",
+            steps=[
+                {
+                    "name": "optional_collection",
+                    "tool": "optional_tool",
+                    "params": {},
+                    "condition": "enabled == true",
+                },
+                {
+                    "name": "consume_optional",
+                    "tool": "consume_tool",
+                    "params": {"value": "{{optional_collection}}"},
+                },
+            ],
+        )
+
+        session_id = await playbook_engine.execute(pid, {"enabled": False})
+
+        assert agent_store.get_session(session_id)["status"] == "completed"
+        steps = agent_store.get_steps(session_id)
+        assert any(step["step_type"] == "skipped" for step in steps)
+
+    @pytest.mark.asyncio
     async def test_execute_nonexistent_playbook_raises(self, playbook_engine):
         with pytest.raises(ValueError, match="not found"):
             await playbook_engine.execute("nonexistent", {})

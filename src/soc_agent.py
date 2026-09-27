@@ -15,6 +15,28 @@ from .utils.config import load_config
 from .utils.logger import setup_logger
 from .reporting.soc_output_formatter import SOCOutputFormatter
 
+
+def _configure_cli_output_encoding() -> None:
+    """Keep human-readable CLI output safe on Windows consoles.
+
+    The reports intentionally contain Unicode symbols.  Windows Python
+    processes may otherwise expose a cp1252 stdout stream, which raises
+    ``UnicodeEncodeError`` before an otherwise successful analysis can be
+    reported.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        try:
+            reconfigure(encoding="utf-8", errors="replace")
+        except (OSError, ValueError):
+            # Embedded callers may provide a stream that cannot be changed.
+            continue
+
+
+_configure_cli_output_encoding()
+
 # Setup centralized logger (supports LOG_FORMAT=json env var)
 setup_logger('blue-team-assistant', 'INFO')
 logger = logging.getLogger(__name__)

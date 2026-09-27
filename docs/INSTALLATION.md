@@ -92,6 +92,12 @@ configured. Keep populated credentials out of version control.
 The loader also accepts an alternate configuration path through the
 `BTA_CONFIG` environment variable.
 
+If `llm.provider` is `vllm`, set `llm.vllm_base_url` and `llm.vllm_model` to a
+separate running vLLM/OpenAI-compatible service. Do not point
+`vllm_base_url` at the CABTA Web UI port (`8080`). The template leaves this
+value empty when no vLLM service has been provisioned; use the endpoint and
+served model ID supplied by your deployment owner.
+
 ### 5. Test Installation
 
 ```bash

@@ -40,7 +40,9 @@ llm:
   api_key: ""
   base_url: "http://localhost:11434"
   vllm_api_key: ""
-  vllm_base_url: "http://localhost:8080"
+  # Set this to the separate vLLM/OpenAI-compatible service URL. Do not use
+  # the CABTA Web UI port (8080). Leave empty until a vLLM service is running.
+  vllm_base_url: ""
   vllm_model: ""
 
 # Analysis settings
