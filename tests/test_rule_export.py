@@ -86,18 +86,29 @@ def test_approval_validates_and_individual_download_uses_expected_extension(
 
     approval = client.post(
         f'/api/reports/{job_id}/rules/yara/approve',
-        json={'approved_by': 'analyst-01'},
+        json={'approved_by': 'forged'},
     )
     download = client.get(f'/api/reports/{job_id}/rules/yara/download')
 
     assert approval.status_code == 200
     assert approval.json()['status'] == 'approved'
-    assert approval.json()['approved_by'] == 'analyst-01'
+    assert approval.json()['approved_by'] == 'admin'
     assert approval.json()['approved_at']
     assert approval.json()['validation']['valid'] is True
     assert download.status_code == 200
     assert download.content.decode('utf-8').rstrip() == YARA_RULE.rstrip()
     assert f'analysis-{job_id}-yara.yar' in download.headers['content-disposition']
+
+
+def test_approval_without_body_uses_authenticated_username(report_client):
+    client, _, job_id = report_client
+
+    approval = client.post(
+        f'/api/reports/{job_id}/rules/kql/approve',
+    )
+
+    assert approval.status_code == 200
+    assert approval.json()['approved_by'] == 'admin'
 
 
 def test_invalid_rule_cannot_be_approved_or_exported(report_client):
@@ -161,7 +172,7 @@ def test_mark_deployed_is_record_only_and_requires_prior_approval(report_client)
 
     denied = client.post(
         f'/api/reports/{job_id}/rules/suricata/mark-deployed',
-        json={'deployed_by': 'operator-01'},
+        json={'deployed_by': 'forged'},
     )
     assert denied.status_code == 403
 
@@ -171,14 +182,14 @@ def test_mark_deployed_is_record_only_and_requires_prior_approval(report_client)
     )
     deployed = client.post(
         f'/api/reports/{job_id}/rules/suricata/mark-deployed',
-        json={'deployed_by': 'operator-01'},
+        json={'deployed_by': 'forged'},
     )
 
     assert deployed.status_code == 200
     assert deployed.json()['status'] == 'deployed'
-    assert deployed.json()['deployed_by'] == 'operator-01'
+    assert deployed.json()['deployed_by'] == 'admin'
     assert deployed.json()['deployed_at']
-    assert deployed.json()['approved_by'] == 'analyst-03'
+    assert deployed.json()['approved_by'] == 'admin'
 
 
 def test_changed_rule_content_returns_to_pending_export(report_client):

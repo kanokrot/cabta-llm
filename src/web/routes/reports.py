@@ -344,7 +344,7 @@ async def approve_rule_export(
     analysis_id: str,
     rule_type: str,
     body: Optional[RuleApprovalRequest] = None,
-    _current_user: dict = Depends(
+    current_user: dict = Depends(
         require_role(['Incident Responder', TEAM_LEAD, 'admin'])
     ),
 ):
@@ -360,7 +360,7 @@ async def approve_rule_export(
             },
         )
 
-    approved_by = (body.approved_by if body else 'unknown').strip() or 'unknown'
+    approved_by = current_user.get('username') or current_user.get('email')
     state = _get_rule_export_state(analysis_id, normalized_type, content)
     with _rule_export_lock:
         stored_state = _rule_export_states[(analysis_id, normalized_type)]
@@ -382,14 +382,14 @@ async def mark_rule_deployed(
     analysis_id: str,
     rule_type: str,
     body: Optional[RuleDeploymentRequest] = None,
-    _current_user: dict = Depends(
+    current_user: dict = Depends(
         require_role(['Incident Responder', 'admin'])
     ),
 ):
     """Record a human-reported manual deployment without calling external systems."""
     normalized_type, content = _get_rule_content(request, analysis_id, rule_type)
     _require_rule_export_approval(analysis_id, normalized_type, content)
-    deployed_by = (body.deployed_by if body else 'unknown').strip() or 'unknown'
+    deployed_by = current_user.get('username') or current_user.get('email')
     with _rule_export_lock:
         stored_state = _rule_export_states[(analysis_id, normalized_type)]
         stored_state.update({
