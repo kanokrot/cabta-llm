@@ -346,7 +346,7 @@
     <!-- ═══ Top Navbar ═══════════════════════════════════════════ -->
     <nav class="navbar navbar-expand-lg cabta-navbar fixed-top">
         {% set nav_role = request.state.user.role if request.state.user is defined else '' %}
-        {% set logo_href = '/dashboard' if nav_role == 'SOC Analyst Tier 1-2' else '/' %}
+        {% set logo_href = '/' if nav_role in ['Threat Hunter', 'admin'] else '/dashboard' %}
         <div class="container-fluid px-2 px-lg-3">
 
             <!-- Brand -->
@@ -379,7 +379,7 @@
                 </div>
 
                 <div class="offcanvas-body d-lg-flex align-items-center gap-1">
-                    {% if nav_role in ['Incident Responder', 'Threat Hunter', 'admin'] %}
+                    {% if nav_role in ['Threat Hunter', 'admin'] %}
                     <!-- Agent Chat (home) -->
                     <a href="/" class="nav-link {% if request.url.path == '/' or request.url.path == '/agent/chat' %}active{% endif %}">
                         <i class="bi bi-chat-dots me-1"></i>Agent Chat

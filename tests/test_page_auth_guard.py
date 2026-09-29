@@ -269,3 +269,55 @@ def test_api_tickets_team_lead_and_admin_see_all_owners_and_legacy(role, monkeyp
 
 def test_safe_relative_path_blocks_external_next() -> None:
     assert safe_relative_path("https://attacker.example") == "/"
+
+def _session_cookie_for_role(monkeypatch, tmp_path: Path, role: str) -> str:
+    db_path = tmp_path / "auth.db"
+    _auth_db(db_path)
+    monkeypatch.setenv("AUTH_DB_PATH", str(db_path))
+    monkeypatch.setenv("AUTH_JWT_SECRET", "page-auth-guard-test-secret")
+    with sqlite3.connect(db_path) as connection:
+        connection.execute(
+            "INSERT INTO users (email, username, password_hash, role, is_active) "
+            "VALUES (?, ?, ?, ?, 1)",
+            ("role@example.test", "role-user", "hash", role),
+        )
+        connection.commit()
+        row = connection.execute(
+            "SELECT id, email, username, role, is_active FROM users "
+            "WHERE username = ?",
+            ("role-user",),
+        ).fetchone()
+    user = {
+        "id": row[0],
+        "email": row[1],
+        "username": row[2],
+        "role": row[3],
+        "is_active": row[4],
+    }
+    return auth_core.create_access_token(user)
+
+
+@pytest.mark.parametrize("path", ["/", "/agent/chat"])
+@pytest.mark.parametrize(
+    "role,allowed",
+    [
+        ("Threat Hunter", True),
+        ("admin", True),
+        ("Incident Responder", False),
+        ("SOC Analyst Tier 1-2", False),
+        ("Team Lead", False),
+    ],
+)
+def test_agent_chat_pages_limited_to_threat_hunter_and_admin(
+    path, role, allowed, monkeypatch, tmp_path
+) -> None:
+    token = _session_cookie_for_role(monkeypatch, tmp_path, role)
+    with TestClient(_middleware_app()) as client:
+        client.cookies.set(SESSION_COOKIE_NAME, token)
+        response = client.get(path, follow_redirects=False)
+
+    if allowed:
+        assert response.status_code == 200
+    else:
+        assert response.status_code == 403
+        assert response.json() == {"detail": "Insufficient permissions"}

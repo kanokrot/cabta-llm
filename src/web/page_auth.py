@@ -28,8 +28,8 @@ DOCS_PATHS = frozenset(
     }
 )
 PAGE_ROLE_REQUIREMENTS = {
-    "/": frozenset({"Incident Responder", "Threat Hunter", "admin"}),
-    "/agent/chat": frozenset({"Incident Responder", "Threat Hunter", "admin"}),
+    "/": frozenset({"Threat Hunter", "admin"}),
+    "/agent/chat": frozenset({"Threat Hunter", "admin"}),
     "/agent/investigations": frozenset({"Threat Hunter", "admin"}),
     "/agent/playbooks": frozenset({"Incident Responder", "admin"}),
     "/analysis/ioc": frozenset({"SOC Analyst Tier 1-2", "admin"}),
