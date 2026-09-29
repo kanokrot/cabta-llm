@@ -83,6 +83,48 @@ def test_team_lead_sees_no_new_email_fields():
     assert output["score"] == 88
 
 
+def _ioc_job(**result_overrides):
+    result = {
+        "verdict": "MALICIOUS",
+        "threat_score": 90,
+        "sources_checked": 18,
+        "sources_flagged": 1,
+    }
+    result.update(result_overrides)
+    return {
+        "id": "ioc-job-1",
+        "analysis_type": "ioc",
+        "status": "completed",
+        "progress": 100,
+        "verdict": "MALICIOUS",
+        "score": 90,
+        "result": result,
+    }
+
+
+@pytest.mark.parametrize("role", [SOC, TEAM_LEAD])
+def test_ioc_source_counts_are_exposed_for_allowed_roles(role):
+    output = serialize_analysis_job(_ioc_job(), role=role)
+
+    assert output["sources_checked"] == 18
+    assert output["sources_flagged"] == 1
+    assert "sources" not in output
+    assert "result" not in output
+
+
+def test_ioc_source_counts_are_omitted_when_absent():
+    output = serialize_analysis_job(
+        _ioc_job(
+            sources_checked=None,
+            sources_flagged=None,
+        ),
+        role=SOC,
+    )
+
+    assert "sources_checked" not in output
+    assert "sources_flagged" not in output
+
+
 def _assert_full_email_fields(output):
     assert EMAIL_FIELDS.issubset(output)
     assert output["email_data"]["spf"] == "pass"

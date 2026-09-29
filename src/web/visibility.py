@@ -335,6 +335,10 @@ def serialize_analysis_job(job: Dict[str, Any], role: str = SOC, flow: str = "an
         "summary": _text(result.get("summary"), 4000),
         "confidence": result.get("confidence"),
     }
+    for key in ("sources_checked", "sources_flagged"):
+        value = result.get(key)
+        if isinstance(value, int) and not isinstance(value, bool):
+            output[key] = value
     if job.get("analysis_type") == "file":
         for key in (
             "entropy_analysis",
