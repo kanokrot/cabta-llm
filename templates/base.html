@@ -193,6 +193,33 @@
             border: 1px solid rgba(34,197,94,0.15);
         }
 
+        .navbar-user-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            max-width: 220px;
+            padding: 0.25rem 0.55rem;
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            color: var(--text-secondary);
+            font-size: 0.72rem;
+            white-space: nowrap;
+        }
+
+        .navbar-user-badge i {
+            color: var(--accent, #3b82f6);
+        }
+
+        .navbar-user-name {
+            max-width: 110px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .navbar-user-role {
+            color: var(--text-primary);
+        }
+
         /* ── Sub-header / Status Bar ───────────────────────────── */
         .sub-header {
             height: 36px;
@@ -505,6 +532,15 @@
                 <button id="health-check-button" type="button" class="btn-nav-icon" title="Health Check" aria-label="Health Check">
                     <i class="bi bi-heart-pulse"></i>
                 </button>
+                {% if request.state.user is defined %}
+                {% set nav_user = request.state.user %}
+                {% set nav_identity = nav_user.get('username') or nav_user.get('email') %}
+                <span class="navbar-user-badge" title="{{ nav_user.get('role', '') | e }}">
+                    <i class="bi bi-person-circle"></i>
+                    <span class="navbar-user-name d-none d-md-inline">{{ nav_identity | e }}</span>
+                    <span class="navbar-user-role">{{ nav_user.get('role', '') | e }}</span>
+                </span>
+                {% endif %}
                 <!-- Logout -->
                 <button id="logout-button" type="button" class="btn-nav-icon" title="Logout" aria-label="Logout">
                     <i class="bi bi-box-arrow-right"></i>

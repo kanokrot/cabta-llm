@@ -194,6 +194,7 @@ async def get_report_html(request: Request, analysis_id: str, current_user: dict
     if job is None:
         raise HTTPException(404, 'Analysis not found')
 
+    request.state.user = current_user
     templates = request.app.state.templates
     return templates.TemplateResponse(request, 'report_view.html', {
         'job': serialize_report_job(
