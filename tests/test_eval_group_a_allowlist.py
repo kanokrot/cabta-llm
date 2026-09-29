@@ -40,7 +40,6 @@ def test_group_a_only_flag_passes_locked_allowlist(monkeypatch):
         "feodotracker",
         "tor_exit_nodes",
         "c2_trackers",
-        "usom",
         "sslblacklist",
         "spamhaus",
         "threatfox",
