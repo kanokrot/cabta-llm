@@ -52,7 +52,8 @@
     }
     .tool-chip {
         display: inline-flex;
-        align-items: center;
+        flex-direction: column;
+        align-items: flex-start;
         gap: 0.3rem;
         padding: 0.2rem 0.6rem;
         border-radius: 4px;
@@ -61,8 +62,38 @@
         font-size: 0.78rem;
         color: var(--text-primary);
         margin: 0.15rem;
+        cursor: pointer;
+        text-align: left;
     }
+    .tool-chip:hover, .tool-chip:focus { border-color: var(--color-accent); outline: none; }
     .tool-chip i { color: var(--color-accent); font-size: 0.7rem; }
+    .tool-chip-summary {
+        display: block;
+        max-width: 270px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        color: var(--text-secondary);
+        font-size: 0.68rem;
+    }
+    .mcp-tool-icon { flex: 0 0 auto; color: var(--color-accent); }
+    .tool-logo {
+        width: 20px;
+        height: 20px;
+        object-fit: contain;
+        padding: 2px;
+        border-radius: 4px;
+        background: rgba(255,255,255,0.88);
+        flex: 0 0 auto;
+    }
+    .tool-detail-logo { width: 48px; height: 48px; padding: 5px; }
+    .tool-detail-header { display: flex; align-items: center; gap: 0.75rem; }
+    .tool-detail-header h5 { margin: 0; }
+    .tool-technical-id { font-family: var(--bs-font-monospace); font-size: 0.75rem; color: var(--text-secondary); word-break: break-all; }
+    .tool-detail-section { margin-top: 1rem; }
+    .tool-detail-section h6 { color: var(--text-secondary); text-transform: uppercase; font-size: 0.72rem; letter-spacing: 0.04em; }
+    .tool-parameter-table th, .tool-parameter-table td { font-size: 0.78rem; vertical-align: top; }
+    .tool-safety-alert { border-left: 4px solid var(--color-danger); background: rgba(239,68,68,0.12); padding: 0.75rem; }
 
     /* ── Transport badge ─────────────────────────────────────── */
     .transport-badge {
@@ -537,6 +568,21 @@
     </div>
 </div>
 
+<!-- Tool Details Modal -->
+<div class="modal fade" id="toolDetailsModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content" style="background-color: var(--bg-secondary); color: var(--text-primary); border-color: var(--border-color);">
+            <div class="modal-header" style="border-bottom-color: var(--border-color);">
+                <h5 class="modal-title"><i class="bi bi-info-circle me-2 text-accent"></i>Tool Details</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="toolDetailsModalBody">
+                <div class="text-center py-4 text-muted">Select a tool to view its details.</div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Install Info Modal -->
 <div class="modal fade" id="installInfoModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog">
@@ -574,12 +620,26 @@ var MCPServers = (function () {
         return svg;
     }
 
+    function toolLogo(t, detail) {
+        var logo = typeof t.logo === 'string' ? t.logo : '';
+        if (!logo || logo.indexOf('/static/') !== 0 || logo.indexOf('://') !== -1) return null;
+        var img = document.createElement('img');
+        img.className = detail ? 'tool-logo tool-detail-logo' : 'tool-logo';
+        img.alt = '';
+        img.src = logo;
+        img.addEventListener('error', function () {
+            if (img.parentNode) img.parentNode.removeChild(img);
+        });
+        return img;
+    }
+
     function toolIdentity(t) {
         var wrap = document.createElement('span');
         wrap.className = 'mcp-tool-identity';
         wrap.title = t.name || '';
 
-        wrap.appendChild(toolIconSvg(t.icon));
+        var logo = toolLogo(t, false);
+        wrap.appendChild(logo || toolIconSvg(t.icon));
 
         var label = document.createElement('strong');
         label.className = 'tool-friendly-name ms-1';
@@ -604,6 +664,116 @@ var MCPServers = (function () {
             wrap.appendChild(dangerous);
         }
         return wrap;
+    }
+
+    function shortSummary(summary) {
+        var value = typeof summary === 'string' ? summary.trim() : '';
+        if (!value) return 'Open details for parameters and usage.';
+        return value.length > 60 ? value.slice(0, 57) + '...' : value;
+    }
+
+    function createToolChip(t, serverName) {
+        var chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'tool-chip';
+        chip.setAttribute('aria-label', 'View details for ' + (t.display_name || t.name || 'tool'));
+        chip.appendChild(toolIdentity(t));
+        var summary = document.createElement('span');
+        summary.className = 'tool-chip-summary';
+        summary.textContent = shortSummary(t.summary || t.description);
+        chip.appendChild(summary);
+        chip.addEventListener('click', function () { showToolDetails(t, serverName); });
+        return chip;
+    }
+
+    function addText(parent, tag, className, value) {
+        var el = document.createElement(tag);
+        if (className) el.className = className;
+        el.textContent = value == null ? '' : String(value);
+        parent.appendChild(el);
+        return el;
+    }
+
+    function showToolDetails(t, serverName) {
+        var body = document.getElementById('toolDetailsModalBody');
+        while (body.firstChild) body.removeChild(body.firstChild);
+
+        var header = document.createElement('div');
+        header.className = 'tool-detail-header';
+        var logo = toolLogo(t, true);
+        header.appendChild(logo || toolIconSvg(t.icon));
+        var title = document.createElement('div');
+        addText(title, 'h5', '', t.display_name || t.name || 'Unknown tool');
+        var badges = document.createElement('div');
+        badges.className = 'mt-1';
+        addText(badges, 'span', 'source-badge source-badge-mcp me-1', serverName || t.source || 'MCP');
+        addText(badges, 'span', 'badge bg-secondary', t.ui_category || t.category || 'Tool');
+        title.appendChild(badges);
+        header.appendChild(title);
+        body.appendChild(header);
+
+        addText(body, 'div', 'tool-technical-id mt-2', t.name || '');
+
+        var what = document.createElement('section');
+        what.className = 'tool-detail-section';
+        addText(what, 'h6', '', 'What it does');
+        addText(what, 'p', 'mb-0', t.summary || t.description || 'No description available.');
+        body.appendChild(what);
+
+        var examples = Array.isArray(t.examples) ? t.examples : [];
+        if (examples.length) {
+            var use = document.createElement('section');
+            use.className = 'tool-detail-section';
+            addText(use, 'h6', '', 'What you can do with it');
+            var list = document.createElement('ul');
+            examples.slice(0, 4).forEach(function (example) { addText(list, 'li', '', example); });
+            use.appendChild(list);
+            body.appendChild(use);
+        }
+
+        var parameterSection = document.createElement('section');
+        parameterSection.className = 'tool-detail-section';
+        addText(parameterSection, 'h6', '', 'Parameters');
+        var schema = t.inputSchema && typeof t.inputSchema === 'object' ? t.inputSchema : {};
+        var properties = schema.properties && typeof schema.properties === 'object' ? schema.properties : {};
+        var required = Array.isArray(schema.required) ? schema.required : [];
+        var names = Object.keys(properties);
+        if (!names.length) {
+            addText(parameterSection, 'p', 'text-muted mb-0', 'No parameters.');
+        } else {
+            var table = document.createElement('table');
+            table.className = 'table table-sm table-hover tool-parameter-table';
+            var head = document.createElement('thead');
+            var headRow = document.createElement('tr');
+            ['Name', 'Type', 'Required', 'Description'].forEach(function (label) { addText(headRow, 'th', '', label); });
+            head.appendChild(headRow);
+            table.appendChild(head);
+            var tableBody = document.createElement('tbody');
+            names.forEach(function (name) {
+                var definition = properties[name] && typeof properties[name] === 'object' ? properties[name] : {};
+                var row = document.createElement('tr');
+                addText(row, 'td', '', name);
+                addText(row, 'td', '', definition.type || 'object');
+                addText(row, 'td', '', required.indexOf(name) !== -1 ? 'Required' : 'Optional');
+                addText(row, 'td', '', definition.description || '');
+                tableBody.appendChild(row);
+            });
+            table.appendChild(tableBody);
+            parameterSection.appendChild(table);
+        }
+        body.appendChild(parameterSection);
+
+        if (t.requires_approval || t.is_dangerous) {
+            var alert = document.createElement('div');
+            alert.className = 'tool-detail-section tool-safety-alert';
+            addText(alert, 'strong', '', 'Safety notice');
+            if (t.requires_approval) addText(alert, 'div', '', 'This tool requires approval before execution.');
+            if (t.is_dangerous) addText(alert, 'div', '', 'This tool is marked dangerous and may be restricted by role.');
+            body.appendChild(alert);
+        }
+
+        var modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('toolDetailsModal'));
+        modal.show();
     }
 
     /* ── Category filtering ──────────────────────────────────── */
@@ -757,11 +927,7 @@ var MCPServers = (function () {
 
             var container = document.createElement('div');
             tools.forEach(function(t) {
-                var chip = document.createElement('span');
-                chip.className = 'tool-chip';
-                chip.appendChild(toolIdentity(t));
-                if (t.description) chip.title = t.description;
-                container.appendChild(chip);
+                container.appendChild(createToolChip(t, serverName));
             });
             td.appendChild(container);
         })
@@ -995,21 +1161,16 @@ var MCPServers = (function () {
             var list = document.createElement('div');
             list.className = 'list-group';
             tools.forEach(function (t) {
-                var item = document.createElement('div');
+                var item = document.createElement('button');
+                item.type = 'button';
                 item.className = 'list-group-item';
                 item.style.backgroundColor = 'var(--bg-tertiary)';
                 item.style.borderColor = 'var(--border-color)';
                 item.style.color = 'var(--text-primary)';
-
+                item.style.textAlign = 'left';
                 item.appendChild(toolIdentity(t));
-
-                if (t.description) {
-                    item.appendChild(document.createElement('br'));
-                    var descEl = document.createElement('small');
-                    descEl.className = 'text-muted';
-                    descEl.textContent = t.description;
-                    item.appendChild(descEl);
-                }
+                addText(item, 'small', 'd-block text-muted mt-1', shortSummary(t.summary || t.description));
+                item.addEventListener('click', function () { showToolDetails(t, serverName); });
                 list.appendChild(item);
             });
             body.appendChild(list);
