@@ -875,6 +875,21 @@ pre code {
     background: var(--hover-overlay);
 }
 
+/* Bootstrap's .table paints cells from --bs-table-* (light by default because this app
+   switches themes via data-theme, not data-bs-theme). Map them to theme tokens so
+   body cells follow the active theme. */
+.table {
+    --bs-table-bg: transparent;
+    --bs-table-color: var(--text-secondary);
+    --bs-table-border-color: var(--border-color);
+    --bs-table-striped-bg: var(--hover-overlay);
+    --bs-table-striped-color: var(--text-secondary);
+    --bs-table-active-bg: var(--hover-overlay);
+    --bs-table-active-color: var(--text-primary);
+    --bs-table-hover-bg: var(--hover-overlay);
+    --bs-table-hover-color: var(--text-primary);
+}
+
 .table tbody tr:last-child td {
     border-bottom: none;
 }
