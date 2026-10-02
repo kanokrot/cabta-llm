@@ -446,7 +446,7 @@ def _dns_query_txt_result(name: str, timeout: int = 3) -> tuple[list[str], bool,
     """Return TXT lines, whether the query completed, and resolver label."""
     if not _dns_helper.dns_available():
         return _legacy_dns_query_txt(name, timeout=timeout)
-    query = _dns_helper.resolve_record(name, "TXT")
+    query = _dns_helper.resolve_record(name, "TXT", timeout=timeout)
     if query.status in ("ok", "nxdomain", "noanswer"):
         return query.answers, True, query.resolver
     return [], False, query.resolver

@@ -213,6 +213,29 @@ def test_import_error_keeps_nslookup_path(monkeypatch):
     assert lines
 
 
+def test_txt_timeout_reaches_dns_helper(monkeypatch):
+    from src.mcp_servers import osint_tools
+
+    captured = {}
+
+    def fake_resolve(name, record_type, *, timeout=None, **kwargs):
+        captured.update(name=name, record_type=record_type, timeout=timeout)
+        return _dns_helper.DNSQueryResult(["v=spf1"], "system")
+
+    monkeypatch.setattr(osint_tools._dns_helper, "resolve_record", fake_resolve)
+
+    lines, ok, resolver = osint_tools._dns_query_txt_result("example.com", timeout=4)
+
+    assert captured == {
+        "name": "example.com",
+        "record_type": "TXT",
+        "timeout": 4,
+    }
+    assert lines == ["v=spf1"]
+    assert ok is True
+    assert resolver == "system"
+
+
 def test_schema_parity_plus_resolver(monkeypatch):
     from src.mcp_servers import network_tools, osint_tools
 
