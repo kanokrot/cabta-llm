@@ -434,26 +434,24 @@ index=* earliest=-30d
     
     @staticmethod
     def _generate_yara_file(file_data: Dict) -> str:
-        """Generate comprehensive YARA rule for file."""
+        """Generate byte-provable YARA rules for a file."""
         from datetime import datetime
-        
+
+        if file_data.get('emit_yara', True) is False:
+            return ''
+
         filename = file_data.get('filename', 'unknown')
         sha256 = file_data.get('sha256', '')
         md5 = file_data.get('md5', '')
         malware_family = file_data.get('malware_family', 'Unknown')
-        
+
         # Clean filename for rule name
-        rule_name = filename.replace('.', '_').replace('-', '_').replace(' ', '_')
-        
-        # Extract suspicious strings from analysis
-        indicators = file_data.get('suspicious_indicators', [])
+        rule_name = re.sub(r'[^A-Za-z0-9_]', '_', str(filename))
+        rule_name = re.sub(r'_+', '_', rule_name).strip('_') or 'file'
         iocs = file_data.get('iocs', [])
 
-        if not indicators and not iocs:
-            return ''
-        
-        rule = f"""rule BTA_{rule_name} {{
-    meta:
+        def meta() -> str:
+            return f"""    meta:
         description = "Auto-generated rule for {filename}"
         author = "Blue Team Assistant"
         date = "{datetime.now().strftime('%Y-%m-%d')}"
@@ -461,37 +459,38 @@ index=* earliest=-30d
         hash_md5 = "{md5}"
         malware_family = "{malware_family}"
         severity = "high"
-        reference = "https://github.com/ugur-ates/blue-team-assistant"
-    
-    strings:
-"""
-        
-        # Add suspicious strings
-        for i, indicator in enumerate(indicators[:10]):
-            # Escape special characters
-            escaped = str(indicator).replace('\\', '\\\\').replace('"', '\\"')[:50]
-            rule += f'        $sus_{i} = "{escaped}" ascii wide nocase\n'
-        
-        # Add IOCs
-        for i, ioc in enumerate(iocs[:5]):
-            escaped = str(ioc).replace('\\', '\\\\').replace('"', '\\"')[:50]
-            rule += f'        $ioc_{i} = "{escaped}" ascii wide nocase\n'
-        
-        condition_parts = []
-        if iocs:
-            condition_parts.append('any of ($ioc_*)')
-        if len(indicators) >= 2:
-            condition_parts.append('2 of ($sus_*)')
-        elif len(indicators) == 1:
-            condition_parts.append('$sus_0')
-        if not condition_parts:
-            return ''
+        reference = "https://github.com/ugur-ates/blue-team-assistant\""""
 
-        rule += "\n    condition:\n        "
-        rule += "\n        or ".join(f"({condition})" for condition in condition_parts)
-        rule += "\n}\n"
-        
-        return rule
+        rules = []
+        has_sha256 = isinstance(sha256, str) and re.fullmatch(r'[0-9a-fA-F]{64}', sha256)
+        if has_sha256:
+            rules.append(
+                f"""rule BTA_{rule_name}_exact {{
+{meta()}
+    condition:
+        hash.sha256(0, filesize) == "{sha256}"
+}}"""
+            )
+
+        if iocs:
+            strings = []
+            for i, ioc in enumerate(iocs[:5]):
+                escaped = str(ioc).replace('\\', '\\\\').replace('"', '\\"')[:50]
+                strings.append(f'        $ioc_{i} = "{escaped}" ascii wide nocase')
+            rules.append(
+                f"""rule BTA_{rule_name}_ioc {{
+{meta()}
+    strings:
+{chr(10).join(strings)}
+    condition:
+        any of ($ioc_*)
+}}"""
+            )
+
+        if not rules:
+            return ''
+        prefix = 'import "hash"\n\n' if has_sha256 else ''
+        return prefix + '\n\n'.join(rules) + '\n'
     
     @staticmethod
     def _generate_sigma_file(file_data: Dict) -> str:
