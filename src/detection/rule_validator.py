@@ -6,6 +6,50 @@ from typing import List
 import yaml
 
 
+def _sigma_condition_errors(document: dict) -> List[str]:
+    detection = document.get('detection')
+    if not isinstance(detection, dict):
+        return []
+    condition = detection.get('condition')
+    if not isinstance(condition, str):
+        return []
+
+    selection_names = {
+        str(name) for name in detection if str(name) != 'condition'
+    }
+    errors = []
+    wildcard_patterns = []
+    for match in re.finditer(
+        r'(?:(?:\d+)|all)\s+of\s+([A-Za-z_][A-Za-z0-9_]*(?:\*)?|them)(?=\s|$|\))',
+        condition,
+        re.IGNORECASE,
+    ):
+        pattern = match.group(1)
+        wildcard_patterns.append(pattern)
+        if pattern.lower() == 'them':
+            has_match = bool(selection_names)
+        else:
+            regex = re.compile(
+                '^' + re.escape(pattern).replace(r'\*', '.*') + '$'
+            )
+            has_match = any(regex.match(name) for name in selection_names)
+        if not has_match:
+            errors.append(
+                f'Sigma condition references undefined selection: {pattern}'
+            )
+
+    excluded = {'and', 'or', 'not', 'of', 'all', 'them'}
+    identifiers = re.findall(r'[A-Za-z_][A-Za-z0-9_]*\*?', condition)
+    for identifier in identifiers:
+        if identifier.lower() in excluded or identifier in wildcard_patterns:
+            continue
+        if identifier not in selection_names:
+            errors.append(
+                f'Sigma condition references undefined selection: {identifier}'
+            )
+    return errors
+
+
 def validate_rule(rule_type: str, rule_content: str) -> dict:
     """Perform basic, offline syntax sanity checks for a detection rule.
 
@@ -84,9 +128,11 @@ def validate_rule(rule_type: str, rule_content: str) -> dict:
                 errors.append('Sigma detection is missing required field: condition')
 
         schema_errors = list(errors)
+        condition_errors = _sigma_condition_errors(document) if isinstance(document, dict) else []
         try:
             from sigma.collection import SigmaCollection
         except ImportError:
+            schema_errors.extend(condition_errors)
             schema_valid = not schema_errors
             return {
                 'valid': schema_valid,
@@ -100,7 +146,9 @@ def validate_rule(rule_type: str, rule_content: str) -> dict:
         try:
             collection = SigmaCollection.from_yaml(content, collect_errors=True)
         except Exception as exc:
-            errors = schema_errors + [f'{type(exc).__name__}: {exc}']
+            errors = schema_errors + condition_errors + [
+                f'{type(exc).__name__}: {exc}'
+            ]
             return {
                 'valid': False,
                 'errors': errors,
@@ -120,8 +168,8 @@ def validate_rule(rule_type: str, rule_content: str) -> dict:
                 f'found {len(collection.rules)}'
             )
 
-        if schema_errors or pysigma_errors:
-            errors = schema_errors + pysigma_errors
+        if schema_errors or pysigma_errors or condition_errors:
+            errors = schema_errors + pysigma_errors + condition_errors
             return {
                 'valid': False,
                 'errors': errors,

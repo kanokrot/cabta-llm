@@ -448,6 +448,9 @@ index=* earliest=-30d
         # Extract suspicious strings from analysis
         indicators = file_data.get('suspicious_indicators', [])
         iocs = file_data.get('iocs', [])
+
+        if not indicators and not iocs:
+            return ''
         
         rule = f"""rule BTA_{rule_name} {{
     meta:
@@ -474,29 +477,15 @@ index=* earliest=-30d
             escaped = str(ioc).replace('\\', '\\\\').replace('"', '\\"')[:50]
             rule += f'        $ioc_{i} = "{escaped}" ascii wide nocase\n'
         
-        # Add common malicious patterns
-        rule += """
-        // Common malicious patterns
-        $ps_encoded = /powershell.*-e(nc(odedcommand)?)?/i
-        $ps_bypass = /powershell.*-ex(ec(utionpolicy)?)?.*bypass/i
-        $ps_hidden = /powershell.*-w(indowstyle)?.*hidden/i
-        $ps_download = /(downloadstring|downloadfile|invoke-webrequest)/i
-        $vba_shell = /Shell\\s*\\(|WScript\\.Shell/i
-        $vba_exec = /\\.Run\\s*\\(|\\.Exec\\s*\\(/i
-    
-"""
-
         condition_parts = []
-        if indicators and iocs:
-            condition_parts.append('2 of ($sus_*) and 1 of ($ioc_*)')
-        elif indicators:
+        if iocs:
+            condition_parts.append('any of ($ioc_*)')
+        if len(indicators) >= 2:
             condition_parts.append('2 of ($sus_*)')
-        elif iocs:
-            condition_parts.append('1 of ($ioc_*)')
-        condition_parts.extend([
-            '3 of ($ps_*)',
-            '$vba_shell and $vba_exec',
-        ])
+        elif len(indicators) == 1:
+            condition_parts.append('$sus_0')
+        if not condition_parts:
+            return ''
 
         rule += "\n    condition:\n        "
         rule += "\n        or ".join(f"({condition})" for condition in condition_parts)
@@ -539,7 +528,7 @@ detection:
         - Hashes|contains: '{sha256}'
         - Hashes|contains: '{md5}'
     selection_filename:
-        - Image|endswith: '\\\\{filename}'
+        - Image|endswith: '\\{filename}'
         - OriginalFileName: '{filename}'"""
         
         if indicators:
