@@ -106,11 +106,58 @@
     .chat-messages {
         flex: 1;
         overflow-y: auto;
+        min-height: 0;
         padding: 1rem;
         display: flex;
         flex-direction: column;
         gap: 0.75rem;
         scroll-behavior: smooth;
+    }
+
+    /* ===== Desktop viewport layout =====
+       .cabta-navbar is 56px and .sub-header is 36px in base.html. */
+    @media (min-width: 992px) {
+        html, body { height: 100%; }
+        body { overflow: hidden; }
+        #main-content {
+            height: calc(100vh - 92px);
+            min-height: 0;
+        }
+        #main-content > .page-content {
+            height: 100%;
+            min-height: 0;
+            overflow: hidden;
+        }
+        .agent-chat-layout {
+            height: 100%;
+            min-height: 0;
+        }
+        .agent-chat-layout > .col-lg-9,
+        .agent-chat-layout > .col-lg-3 {
+            min-height: 0;
+        }
+        .agent-chat-layout > .col-lg-9 {
+            display: flex;
+            flex-direction: column;
+        }
+        .agent-chat-layout > .col-lg-9 > .card {
+            flex: 1 1 auto;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+        }
+        .agent-chat-layout .chat-container {
+            flex: 1 1 auto;
+            height: auto;
+            min-height: 0;
+        }
+        .agent-chat-layout .chat-input-area {
+            flex: 0 0 auto;
+        }
+        .agent-chat-layout > .col-lg-3 {
+            overflow-x: hidden;
+            overflow-y: auto;
+        }
     }
 
     /* ===== Bubbles ===== */
@@ -596,7 +643,7 @@
 {% endblock %}
 
 {% block content %}
-<div class="row g-3">
+<div class="row g-3 agent-chat-layout">
     <div class="col-lg-9">
         <div class="card">
             <div class="card-header d-flex justify-content-between align-items-center">
