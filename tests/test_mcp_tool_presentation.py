@@ -40,6 +40,14 @@ def test_all_registered_mcp_tools_have_unique_explicit_presentation():
             assert item.logo.startswith("/static/")
             assert "://" not in item.logo
 
+    missing = []
+    for (server, name), item in MCP_TOOL_PRESENTATION.items():
+        if item.logo:
+            local_path = Path(item.logo.lstrip("/").replace("/", "\\"))
+            if not local_path.is_file():
+                missing.append(f"{server}.{name}:{item.logo}")
+    print("DECLARED_LOGOS_MISSING=" + repr(missing))
+
 
 def test_mcp_servers_details_are_scoped_to_the_mcp_page():
     template = Path("templates/mcp_servers.html").read_text(encoding="utf-8")
