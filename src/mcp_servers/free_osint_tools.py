@@ -131,14 +131,26 @@ def crtsh_subdomain_search(domain: str) -> dict:
         domain: Target domain to search (e.g., example.com)
     """
     try:
-        encoded = urllib.parse.quote(f"%.{domain}")
-        url = f"https://crt.sh/?q={encoded}&output=json"
+        url = f"https://crt.sh/?q=%.{domain}&output=json"
         raw = _http_get(url, timeout=25)
 
-        if raw.startswith("{") and "error" in raw:
-            return {"error": "crt.sh unavailable", "domain": domain}
+        if raw.startswith("{"):
+            response = json.loads(raw)
+            if isinstance(response, dict) and response.get("error"):
+                return {
+                    "error": f"crt.sh request failed: {response['error']}",
+                    "domain": domain,
+                }
 
         certs = json.loads(raw)
+        if not isinstance(certs, list):
+            return {
+                "error": (
+                    "Unexpected crt.sh response format: expected list, "
+                    f"got {type(certs).__name__}; response={raw[:200]}"
+                ),
+                "domain": domain,
+            }
         subdomains = set()
         issuers = set()
         recent_certs = []
@@ -320,10 +332,25 @@ def malpedia_malware_search(query: str) -> dict:
         )
         families = json.loads(raw)
 
+        if isinstance(families, list):
+            family_items = [(family, {}) for family in families if isinstance(family, str)]
+        elif isinstance(families, dict):
+            family_items = families.items()
+        else:
+            return {
+                "error": (
+                    "Unexpected Malpedia response format: expected list or dict, "
+                    f"got {type(families).__name__}"
+                ),
+                "query": query,
+            }
+
         query_lower = query.lower().replace(" ", "_")
         matches = []
 
-        for family_key, family_data in families.items():
+        for family_key, family_data in family_items:
+            if not isinstance(family_data, dict):
+                family_data = {}
             name = family_key.lower()
             alt_names = [a.lower() for a in family_data.get("alt_names", [])]
             desc = (family_data.get("description") or "").lower()
@@ -345,7 +372,7 @@ def malpedia_malware_search(query: str) -> dict:
             "query": query,
             "matches": matches[:15],
             "match_count": len(matches),
-            "total_families": len(families),
+            "total_families": len(family_items),
             "timestamp": datetime.utcnow().isoformat(),
         }
     except Exception as e:

@@ -80,17 +80,25 @@ def _http_post_json(url: str, data: dict, timeout: int = TIMEOUT, extra_headers:
         return json.dumps({"error": str(e)})
 
 
-def _http_post_form(url: str, fields: dict, timeout: int = TIMEOUT) -> str:
+def _http_post_form(
+    url: str,
+    fields: dict,
+    timeout: int = TIMEOUT,
+    extra_headers: dict = None,
+) -> str:
     """Safe HTTP POST with application/x-www-form-urlencoded body."""
     try:
         body = urllib.parse.urlencode(fields).encode("utf-8")
+        headers = {
+            "User-Agent": USER_AGENT,
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Accept": "application/json",
+        }
+        if extra_headers:
+            headers.update(extra_headers)
         req = urllib.request.Request(
             url, data=body,
-            headers={
-                "User-Agent": USER_AGENT,
-                "Content-Type": "application/x-www-form-urlencoded",
-                "Accept": "application/json",
-            },
+            headers=headers,
             method="POST",
         )
         with urllib.request.urlopen(req, timeout=timeout) as resp:
@@ -135,15 +143,19 @@ MALWAREBAZAAR_API = "https://mb-api.abuse.ch/api/v1/"
 URLHAUS_API = "https://urlhaus-api.abuse.ch/v1"
 THREATFOX_API = "https://threatfox-api.abuse.ch/api/v1/"
 FEODO_TRACKER_API = "https://feodotracker.abuse.ch/downloads/ipblocklist_recommended.txt"
-FEODO_TRACKER_JSON = "https://feodotracker.abuse.ch/exports/json/recent/"
+FEODO_TRACKER_JSON = "https://feodotracker.abuse.ch/downloads/ipblocklist_recommended.json"
 
 
 def _query_malwarebazaar_hash(hash_value: str) -> dict:
     """Query MalwareBazaar by hash."""
-    raw = _http_post_form(MALWAREBAZAAR_API, {
-        "query": "get_info",
-        "hash": hash_value,
-    })
+    api_key = get_valid_key(_API_KEYS, "malwarebazaar") or get_valid_key(_API_KEYS, "threatfox")
+    auth_headers = {"Auth-Key": api_key} if api_key else None
+    post_kwargs = {"extra_headers": auth_headers} if api_key else {}
+    raw = _http_post_form(
+        MALWAREBAZAAR_API,
+        {"query": "get_info", "hash": hash_value},
+        **post_kwargs,
+    )
     try:
         return json.loads(raw)
     except json.JSONDecodeError:
@@ -152,7 +164,12 @@ def _query_malwarebazaar_hash(hash_value: str) -> dict:
 
 def _query_urlhaus_url(url: str) -> dict:
     """Query URLhaus by URL."""
-    raw = _http_post_form(f"{URLHAUS_API}/url/", {"url": url})
+    api_key = get_valid_key(_API_KEYS, "threatfox") or get_valid_key(_API_KEYS, "abusech")
+    auth_headers = {"Auth-Key": api_key} if api_key else None
+    post_kwargs = {"extra_headers": auth_headers} if api_key else {}
+    raw = _http_post_form(
+        f"{URLHAUS_API}/url/", {"url": url}, **post_kwargs
+    )
     try:
         return json.loads(raw)
     except json.JSONDecodeError:
@@ -161,7 +178,12 @@ def _query_urlhaus_url(url: str) -> dict:
 
 def _query_urlhaus_host(host: str) -> dict:
     """Query URLhaus by host (domain or IP)."""
-    raw = _http_post_form(f"{URLHAUS_API}/host/", {"host": host})
+    api_key = get_valid_key(_API_KEYS, "threatfox") or get_valid_key(_API_KEYS, "abusech")
+    auth_headers = {"Auth-Key": api_key} if api_key else None
+    post_kwargs = {"extra_headers": auth_headers} if api_key else {}
+    raw = _http_post_form(
+        f"{URLHAUS_API}/host/", {"host": host}, **post_kwargs
+    )
     try:
         return json.loads(raw)
     except json.JSONDecodeError:
@@ -187,14 +209,49 @@ def _query_feodo_tracker_ip(ip: str) -> dict:
     try:
         raw = _http_get(FEODO_TRACKER_JSON)
         entries = json.loads(raw)
-        matches = [e for e in entries if e.get("ip_address") == ip]
-        if matches:
+        if isinstance(entries, dict):
+            if entries.get("error"):
+                return {
+                    "error": f"Feodo Tracker request failed: {entries['error']}",
+                    "source": "feodo_tracker",
+                }
             return {
+                "error": (
+                    "Unexpected Feodo Tracker response format: expected a list, "
+                    f"got dict with keys {list(entries)[:20]}"
+                ),
+                "source": "feodo_tracker",
+            }
+        if not isinstance(entries, list):
+            return {
+                "error": (
+                    "Unexpected Feodo Tracker response format: expected a list, "
+                    f"got {type(entries).__name__}"
+                ),
+                "source": "feodo_tracker",
+            }
+
+        matches = []
+        skipped_malformed = 0
+        for entry in entries:
+            if not isinstance(entry, dict):
+                skipped_malformed += 1
+                continue
+            if entry.get("ip_address") == ip:
+                matches.append(entry)
+        if matches:
+            result = {
                 "found": True,
                 "source": "feodo_tracker",
                 "matches": matches[:10],
             }
-        return {"found": False, "source": "feodo_tracker"}
+        else:
+            result = {"found": False, "source": "feodo_tracker"}
+        if skipped_malformed:
+            result["warning"] = (
+                f"Skipped {skipped_malformed} malformed entries from Feodo Tracker response"
+            )
+        return result
     except Exception as e:
         return {"error": str(e), "source": "feodo_tracker"}
 

@@ -152,7 +152,7 @@ def parse_pcap(file_path: str, max_packets: int = 100) -> str:
             f.seek(0)
 
             if magic in (b"\xd4\xc3\xb2\xa1", b"\xa1\xb2\xc3\xd4"):
-                return _parse_pcap_classic(f, max_packets, file_size)
+                return _parse_pcap_classic(f, max_packets, file_size, file_path)
             elif magic in (b"\x0a\x0d\x0d\x0a",):
                 return _parse_pcapng(f, max_packets, file_size)
             else:
@@ -162,17 +162,18 @@ def parse_pcap(file_path: str, max_packets: int = 100) -> str:
         return _safe_json({"error": f"Failed to parse PCAP: {str(e)}"})
 
 
-def _parse_pcap_classic(f, max_packets: int, file_size: int) -> str:
+def _parse_pcap_classic(f, max_packets: int, file_size: int, file_path: str) -> str:
     """Parse classic PCAP format."""
     # Global header: magic(4) + ver_major(2) + ver_minor(2) + thiszone(4)
     #   + sigfigs(4) + snaplen(4) + network(4) = 24 bytes
     header = f.read(24)
-    magic = struct.unpack("<I", header[0:4])[0]
-
-    if magic == 0xa1b2c3d4:
+    magic = header[0:4]
+    if magic == b"\xd4\xc3\xb2\xa1":
+        endian = "<"
+    elif magic == b"\xa1\xb2\xc3\xd4":
         endian = ">"
     else:
-        endian = "<"
+        raise ValueError("Unsupported PCAP byte order")
 
     link_type = struct.unpack(f"{endian}I", header[20:24])[0]
     packets = []

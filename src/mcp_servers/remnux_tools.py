@@ -908,62 +908,69 @@ def oleobj_extract(file_path: str) -> str:
     }
 
     try:
-        ole_objects = list(oleobj_module.find_ole(resolved))
+        with open(resolved, "rb") as ole_file:
+            data = ole_file.read()
+        object_index = 0
+        for ole_data in oleobj_module.find_ole(resolved, data):
+            if ole_data is None:
+                continue
 
-        for ole_index, (source_path, field_name, ole_data) in enumerate(ole_objects):
-            obj_info = {
-                "index": ole_index,
-                "source_path": str(source_path) if source_path else "",
-                "field_name": str(field_name) if field_name else "",
-            }
+            # find_ole() yields OleFileIO containers.  The embedded package
+            # metadata and payload are stored in the Ole10Native stream.
+            for stream_path in ole_data.listdir():
+                if not stream_path or str(stream_path[-1]).lower() != "\x01ole10native":
+                    continue
 
-            try:
-                raw = None
-                if hasattr(ole_data, "read"):
-                    raw = ole_data.read()
-                    ole_data.seek(0)
-                elif hasattr(ole_data, "oledata"):
-                    raw_attr = ole_data.oledata
-                    if isinstance(raw_attr, bytes):
-                        raw = raw_attr
+                obj_info = {
+                    "index": object_index,
+                    "source_path": "",
+                    "field_name": "",
+                }
+                object_index += 1
+                stream = None
 
-                if raw is not None:
-                    obj_info["size"] = len(raw)
-                    obj_info["entropy"] = _calculate_entropy(raw)
-                    obj_info["md5"] = hashlib.md5(raw).hexdigest()
+                try:
+                    stream = ole_data.openstream(stream_path)
+                    package = oleobj_module.OleNativeStream(stream)
+                    obj_info["source_path"] = str(package.src_path or "")
+                    obj_info["field_name"] = str(package.filename or "")
 
-                    # Check for PE header
-                    if raw[:2] == b"MZ":
-                        obj_info["contains_pe"] = True
-                        result["warnings"].append(
-                            "Object #{} contains embedded PE executable".format(ole_index))
+                    raw = None
+                    if not package.is_link and package.actual_size:
+                        raw = stream.read(package.actual_size)
 
-                    # Check for common magic bytes
-                    if raw[:4] == b"\xd0\xcf\x11\xe0":
-                        obj_info["type"] = "OLE Compound File"
-                    elif raw[:2] == b"PK":
-                        obj_info["type"] = "ZIP/OOXML archive"
-                    elif raw[:5] == b"{\\rtf":
-                        obj_info["type"] = "RTF document"
+                    if raw is not None:
+                        obj_info["size"] = len(raw)
+                        obj_info["entropy"] = _calculate_entropy(raw)
+                        obj_info["md5"] = hashlib.md5(raw).hexdigest()
+
+                        if raw[:2] == b"MZ":
+                            obj_info["contains_pe"] = True
+                            result["warnings"].append(
+                                "Object #{} contains embedded PE executable".format(
+                                    obj_info["index"]
+                                )
+                            )
+
+                        if raw[:4] == b"\xd0\xcf\x11\xe0":
+                            obj_info["type"] = "OLE Compound File"
+                        elif raw[:2] == b"PK":
+                            obj_info["type"] = "ZIP/OOXML archive"
+                        elif raw[:5] == b"{\\rtf":
+                            obj_info["type"] = "RTF document"
+                        else:
+                            obj_info["type"] = "unknown"
                     else:
-                        obj_info["type"] = "unknown"
-                else:
-                    obj_info["note"] = "Could not extract raw data"
+                        obj_info["note"] = "Linked OLE object has no embedded data"
 
-            except Exception as e:
-                obj_info["extraction_error"] = str(e)
+                except Exception as e:
+                    obj_info["extraction_error"] = str(e)
+                finally:
+                    if stream is not None:
+                        stream.close()
 
-            # Try to get filename/path from OLE Package
-            for attr in ("filename", "src_path", "temp_path", "olepkgdata"):
-                val = getattr(ole_data, attr, None)
-                if val:
-                    if isinstance(val, bytes):
-                        obj_info[attr] = val.decode("utf-8", errors="replace")
-                    else:
-                        obj_info[attr] = str(val)
-
-            result["objects"].append(obj_info)
-            result["object_count"] += 1
+                result["objects"].append(obj_info)
+                result["object_count"] += 1
 
     except Exception as e:
         result["error"] = "OLE object extraction failed: {}".format(str(e))

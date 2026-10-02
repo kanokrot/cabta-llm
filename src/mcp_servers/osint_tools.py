@@ -366,10 +366,39 @@ def subdomain_enumerate(domain: str) -> str:
         data = _safe_request(f"https://crt.sh/?q=%.{domain}&output=json", timeout=20)
         entries = json.loads(data)
         if not isinstance(entries, list):
-            return json.dumps({
-                "error": f"Unexpected response format from crt.sh (expected list, got {type(entries).__name__})",
-                "domain": domain,
-            })
+            if isinstance(entries, dict):
+                time.sleep(2)
+                retry_data = _safe_request(
+                    f"https://crt.sh/?q=%.{domain}&output=json", timeout=20
+                )
+                try:
+                    retry_entries = json.loads(retry_data)
+                except json.JSONDecodeError:
+                    return json.dumps({
+                        "error": (
+                            "Unexpected response format from crt.sh after one retry "
+                            f"(non-JSON; keys={list(entries)[:20]}; "
+                            f"response={retry_data[:200]})"
+                        ),
+                        "domain": domain,
+                    })
+                if isinstance(retry_entries, list):
+                    entries = retry_entries
+                else:
+                    return json.dumps({
+                        "error": (
+                            "Unexpected response format from crt.sh after one retry "
+                            f"(expected list, got {type(retry_entries).__name__}; "
+                            f"keys={list(retry_entries)[:20] if isinstance(retry_entries, dict) else []}; "
+                            f"response={retry_data[:200]})"
+                        ),
+                        "domain": domain,
+                    })
+            else:
+                return json.dumps({
+                    "error": f"Unexpected response format from crt.sh (expected list, got {type(entries).__name__})",
+                    "domain": domain,
+                })
         subdomains = set()
         skipped_malformed = 0
         for entry in entries:
