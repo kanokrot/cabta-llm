@@ -28,10 +28,13 @@ import re
 import urllib.request
 import urllib.parse
 import itertools
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from typing import Optional
 
 from mcp.server.fastmcp import FastMCP
+
+from . import _dns_helper
 
 logger = logging.getLogger(__name__)
 
@@ -653,16 +656,27 @@ def typosquat_detect(domain: str) -> dict:
 
         permutations.discard(domain.lower())
 
-        # Check which ones resolve
+        # Check which ones resolve.  Keep the old socket path if dnspython is
+        # unavailable, but avoid serial DNS waits when the helper is present.
+        to_check = sorted(permutations)[:100]
         resolving = []
-        checked = 0
-        for perm in sorted(permutations)[:100]:  # Cap DNS checks
-            checked += 1
-            try:
-                ip = socket.gethostbyname(perm)
-                resolving.append({"domain": perm, "ip": ip})
-            except socket.gaierror:
-                pass
+        resolver_labels = []
+        checked = len(to_check)
+        if _dns_helper.dns_available():
+            with ThreadPoolExecutor(max_workers=8) as executor:
+                queries = list(executor.map(lambda candidate: (candidate, _dns_helper.resolve_record(candidate, "A")), to_check))
+            for perm, query in queries:
+                resolver_labels.append(query.resolver)
+                if query.answers:
+                    resolving.append({"domain": perm, "ip": query.answers[0]})
+        else:
+            for perm in to_check:
+                try:
+                    ip = socket.gethostbyname(perm)
+                    resolving.append({"domain": perm, "ip": ip})
+                except socket.gaierror:
+                    pass
+            resolver_labels.append("system")
 
         return {
             "source": "Typosquat Detector",
@@ -677,6 +691,7 @@ def typosquat_detect(domain: str) -> dict:
                 else "LOW"
             ),
             "timestamp": datetime.utcnow().isoformat(),
+            "resolver": _dns_helper.combine_resolvers(resolver_labels),
         }
     except Exception as e:
         return {"error": str(e), "domain": domain}
