@@ -29,6 +29,8 @@ from typing import Optional
 
 from mcp.server.fastmcp import FastMCP
 
+from . import _dns_helper
+
 logger = logging.getLogger(__name__)
 
 mcp = FastMCP("network-tools")
@@ -936,7 +938,7 @@ def analyze_suricata_alerts(eve_json_path: str, max_alerts: int = 200) -> str:
 @mcp.tool()
 def dns_lookup(domain: str, record_types: str = "A,AAAA,MX,NS,TXT") -> str:
     """Perform DNS lookups for a domain. Returns results for requested record types.
-    Uses socket for A/AAAA records and nslookup/subprocess for other types.
+    Uses the shared dnspython resolver with a legacy socket/nslookup fallback.
     """
     try:
         results = {
@@ -944,35 +946,40 @@ def dns_lookup(domain: str, record_types: str = "A,AAAA,MX,NS,TXT") -> str:
             "records": {},
         }
 
-        requested_types = [t.strip().upper() for t in record_types.split(",")]
+        requested_types = [t.strip().upper() for t in record_types.split(",") if t.strip()]
+        supported = {"A", "AAAA", "MX", "NS", "TXT", "CNAME", "SOA", "PTR", "SRV"}
+        resolver_labels = []
 
-        for rtype in requested_types:
-            try:
-                if rtype == "A":
-                    addrs = socket.getaddrinfo(domain, None, socket.AF_INET, socket.SOCK_STREAM)
-                    ips = list(set(addr[4][0] for addr in addrs))
-                    results["records"]["A"] = ips
-
-                elif rtype == "AAAA":
-                    try:
-                        addrs = socket.getaddrinfo(domain, None, socket.AF_INET6, socket.SOCK_STREAM)
-                        ips = list(set(addr[4][0] for addr in addrs))
-                        results["records"]["AAAA"] = ips
-                    except socket.gaierror:
-                        results["records"]["AAAA"] = []
-
-                elif rtype in ("MX", "NS", "TXT", "CNAME", "SOA", "PTR", "SRV"):
-                    # Use nslookup for record types beyond A/AAAA
-                    records = _dns_nslookup(domain, rtype)
-                    results["records"][rtype] = records
-
-                else:
+        if _dns_helper.dns_available():
+            query_types = [rtype for rtype in requested_types if rtype in supported]
+            queried = _dns_helper.resolve_many(domain, query_types)
+            query_map = {rtype: query for rtype, query in queried}
+            for rtype in requested_types:
+                if rtype not in supported:
                     results["records"][rtype] = f"Unsupported record type: {rtype}"
+                    continue
+                query = query_map[rtype]
+                resolver_labels.append(query.resolver)
+                if query.answers:
+                    results["records"][rtype] = query.answers
+                elif query.status == "error":
+                    results["records"][rtype] = [query.error or f"DNS lookup failed for {rtype}"]
+                else:
+                    results["records"][rtype] = [f"No {rtype} records found (or parsing returned empty)"]
+        else:
+            for rtype in requested_types:
+                try:
+                    records, resolver = _legacy_dns_lookup_record(domain, rtype)
+                    results["records"][rtype] = records
+                    resolver_labels.append(resolver)
+                except socket.gaierror as e:
+                    results["records"][rtype] = f"Lookup failed: {str(e)}"
+                    resolver_labels.append("nslookup")
+                except Exception as e:
+                    results["records"][rtype] = f"Error: {str(e)}"
+                    resolver_labels.append("nslookup")
 
-            except socket.gaierror as e:
-                results["records"][rtype] = f"Lookup failed: {str(e)}"
-            except Exception as e:
-                results["records"][rtype] = f"Error: {str(e)}"
+        results["resolver"] = _dns_helper.combine_resolvers(resolver_labels)
 
         return _safe_json(results)
 
@@ -980,8 +987,8 @@ def dns_lookup(domain: str, record_types: str = "A,AAAA,MX,NS,TXT") -> str:
         return _safe_json({"error": f"DNS lookup failed: {str(e)}"})
 
 
-def _dns_nslookup(domain: str, record_type: str) -> list:
-    """Use nslookup subprocess for DNS record lookups."""
+def _legacy_dns_nslookup(domain: str, record_type: str) -> list:
+    """Original nslookup subprocess path used when dnspython is unavailable."""
     try:
         cmd = ["nslookup", "-type=" + record_type, domain]
         result = subprocess.run(
@@ -1021,6 +1028,39 @@ def _dns_nslookup(domain: str, record_type: str) -> list:
         return [f"nslookup not found on this system"]
     except Exception as e:
         return [f"Error: {str(e)}"]
+
+
+def _legacy_dns_lookup_record(domain: str, record_type: str) -> tuple[list, str]:
+    if record_type == "A":
+        addrs = socket.getaddrinfo(domain, None, socket.AF_INET, socket.SOCK_STREAM)
+        return list(set(addr[4][0] for addr in addrs)), "system"
+    if record_type == "AAAA":
+        try:
+            addrs = socket.getaddrinfo(domain, None, socket.AF_INET6, socket.SOCK_STREAM)
+            return list(set(addr[4][0] for addr in addrs)), "system"
+        except socket.gaierror:
+            return [], "system"
+    if record_type in ("MX", "NS", "TXT", "CNAME", "SOA", "PTR", "SRV"):
+        return _legacy_dns_nslookup(domain, record_type), "nslookup"
+    return f"Unsupported record type: {record_type}", "system"
+
+
+def _dns_nslookup_result(domain: str, record_type: str) -> tuple[list, str]:
+    """Resolve one record type with dnspython, retaining the old fallback."""
+    if not _dns_helper.dns_available():
+        return _legacy_dns_nslookup(domain, record_type), "nslookup"
+    query = _dns_helper.resolve_record(domain, record_type)
+    if query.answers:
+        return query.answers, query.resolver
+    if query.status == "error":
+        return [query.error or f"DNS lookup failed for {record_type}"], query.resolver
+    return [f"No {record_type} records found (or parsing returned empty)"], query.resolver
+
+
+def _dns_nslookup(domain: str, record_type: str) -> list:
+    """Compatibility wrapper returning only the existing record list."""
+    records, _resolver = _dns_nslookup_result(domain, record_type)
+    return records
 
 
 # ---------------------------------------------------------------------------
