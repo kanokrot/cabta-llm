@@ -90,6 +90,38 @@ def test_system_timeout_uses_fallback(monkeypatch):
     assert any(not item[0] for item in calls)
 
 
+def test_fallback_chain_respects_total_deadline(monkeypatch):
+    clock = {"value": 100.0}
+    lifetimes = []
+
+    class Resolver:
+        def __init__(self, configure=True):
+            self.configure = configure
+            self.nameservers = []
+            self.timeout = None
+            self.lifetime = None
+
+        def resolve(self, name, record_type, lifetime=None):
+            lifetimes.append((tuple(self.nameservers), lifetime))
+            clock["value"] += lifetime
+            raise dns.exception.Timeout()
+
+    monkeypatch.setenv("CABTA_DNS_TIMEOUT", "0.5")
+    monkeypatch.setenv("CABTA_DNS_TOTAL_TIMEOUT", "0.7")
+    monkeypatch.setenv("CABTA_DNS_FALLBACK_SERVERS", "1.1.1.1,8.8.8.8")
+    monkeypatch.setattr(_dns_helper.time, "monotonic", lambda: clock["value"])
+    monkeypatch.setattr(_dns_helper.dns.resolver, "Resolver", Resolver)
+    _dns_helper.reset_health_cache()
+
+    result = _dns_helper.resolve_record("example.com", "A")
+
+    assert result.status == "error"
+    assert sum(lifetime for _, lifetime in lifetimes) <= 0.7 + 1e-9
+    assert len(lifetimes) == 2
+    assert lifetimes[0][1] == 0.5
+    assert lifetimes[1][1] <= 0.2 + 1e-9
+
+
 @pytest.mark.parametrize("exc", [dns.resolver.NXDOMAIN(), dns.resolver.NoAnswer()])
 def test_terminal_dns_answer_does_not_use_fallback(monkeypatch, exc):
     calls = _fake_resolver(monkeypatch, exc, lambda *_: _answer())

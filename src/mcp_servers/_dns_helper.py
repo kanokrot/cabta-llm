@@ -27,6 +27,7 @@ except ImportError:  # pragma: no cover - exercised by the fallback test
 DEFAULT_FALLBACK_SERVERS = ("1.1.1.1", "8.8.8.8")
 SYSTEM_UNHEALTHY_SECONDS = 60.0
 DEFAULT_TIMEOUT_SECONDS = 3.0
+DEFAULT_TOTAL_TIMEOUT_SECONDS = 6.0
 
 _health_lock = threading.Lock()
 _system_unhealthy_until = 0.0
@@ -57,6 +58,15 @@ def _timeout_seconds() -> float:
     return max(0.1, value)
 
 
+def _total_timeout_seconds() -> float:
+    raw = os.getenv("CABTA_DNS_TOTAL_TIMEOUT", str(DEFAULT_TOTAL_TIMEOUT_SECONDS))
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        value = DEFAULT_TOTAL_TIMEOUT_SECONDS
+    return max(0.1, value)
+
+
 def _fallback_enabled() -> bool:
     return os.getenv("CABTA_DNS_FALLBACK", "1").strip() != "0"
 
@@ -68,6 +78,7 @@ def fallback_servers() -> list[str]:
 
 
 def _system_is_unhealthy(now: Optional[float] = None) -> bool:
+    """Return whether the system resolver failed within the last 60 seconds."""
     current = time.monotonic() if now is None else now
     with _health_lock:
         return current < _system_unhealthy_until
@@ -152,13 +163,13 @@ def _retryable_exception(exc: Exception) -> bool:
     return isinstance(exc, retryable)
 
 
-def _resolver(nameserver: Optional[str] = None):
+def _resolver(nameserver: Optional[str] = None, timeout: Optional[float] = None):
     resolver = dns.resolver.Resolver(configure=nameserver is None)
     if nameserver is not None:
         resolver.nameservers = [nameserver]
-    timeout = _timeout_seconds()
-    resolver.timeout = timeout
-    resolver.lifetime = timeout
+    query_timeout = _timeout_seconds() if timeout is None else max(0.001, timeout)
+    resolver.timeout = query_timeout
+    resolver.lifetime = query_timeout
     return resolver
 
 
@@ -172,8 +183,14 @@ def _answer_strings(answer) -> list[str]:
     return values
 
 
-def _query(resolver, name: str, record_type: str) -> list[str]:
-    answer = resolver.resolve(name, record_type, lifetime=_timeout_seconds())
+def _query(
+    resolver,
+    name: str,
+    record_type: str,
+    timeout: Optional[float] = None,
+) -> list[str]:
+    query_timeout = _timeout_seconds() if timeout is None else max(0.001, timeout)
+    answer = resolver.resolve(name, record_type, lifetime=query_timeout)
     return _answer_strings(answer)
 
 
@@ -190,8 +207,13 @@ def resolve_record(
     record_type: str = "A",
     *,
     address: Optional[str] = None,
+    timeout: Optional[float] = None,
 ) -> DNSQueryResult:
-    """Resolve one record, using the system resolver before public fallback."""
+    """Resolve one record with a deadline across system and fallback servers.
+
+    After a retryable system-resolver failure, the health cache skips the
+    system resolver for 60 seconds and later queries start at fallback.
+    """
 
     if not DNSPYTHON_AVAILABLE:
         return DNSQueryResult([], "nslookup", status="unavailable")
@@ -200,10 +222,23 @@ def resolve_record(
     rtype = record_type.upper()
     fallback_on = _fallback_enabled()
     system_name = "system"
+    per_query_timeout = _timeout_seconds() if timeout is None else max(0.1, float(timeout))
+    deadline = time.monotonic() + _total_timeout_seconds()
+    def query_with_deadline(nameserver: Optional[str]) -> list[str]:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise dns.exception.Timeout("DNS total timeout expired")
+        query_timeout = min(per_query_timeout, remaining)
+        return _query(
+            _resolver(nameserver, timeout=query_timeout),
+            normalized,
+            rtype,
+            timeout=query_timeout,
+        )
 
     if not (fallback_on and _system_is_unhealthy()):
         try:
-            values = _query(_resolver(), normalized, rtype)
+            values = query_with_deadline(None)
             _mark_system_healthy()
             return DNSQueryResult(values, system_name)
         except Exception as exc:
@@ -220,20 +255,28 @@ def resolve_record(
         last_error: Optional[Exception] = None
         servers = fallback_servers()
         for server in servers:
+            if deadline - time.monotonic() <= 0:
+                break
+            resolver_name = f"fallback:{server}"
             try:
-                values = _query(_resolver(server), normalized, rtype)
+                values = query_with_deadline(server)
                 _mark_system_healthy() if server == "system" else None
-                return DNSQueryResult(values, f"fallback:{server}")
+                return DNSQueryResult(values, resolver_name)
             except Exception as exc:
                 if _terminal_exception(exc):
-                    return _result_for_exception(exc, f"fallback:{server}")
+                    return _result_for_exception(exc, resolver_name)
                 last_error = exc
                 if not _retryable_exception(exc):
-                    return _result_for_exception(exc, f"fallback:{server}")
-        label = f"fallback:{servers[0]}" if servers else "system"
-        return _result_for_exception(last_error or RuntimeError("no fallback resolver"), label)
+                    return _result_for_exception(exc, resolver_name)
+        label = f"fallback:{servers[0]}" if servers else system_name
+        return _result_for_exception(last_error or RuntimeError("DNS total timeout expired"), label)
 
-    return DNSQueryResult([], system_name, status="error", error="fallback disabled or restricted")
+    return DNSQueryResult(
+        [],
+        system_name,
+        status="error",
+        error="fallback disabled or restricted",
+    )
 
 
 def resolve_ptr(ip: str) -> DNSQueryResult:
