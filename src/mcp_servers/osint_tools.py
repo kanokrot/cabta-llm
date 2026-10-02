@@ -17,11 +17,15 @@ import re
 import socket
 import ssl
 import struct
+import time
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
+
+from . import _dns_helper
 
 logger = logging.getLogger(__name__)
 
@@ -126,48 +130,58 @@ def dns_resolve(domain: str, record_types: str = "A,AAAA,MX,NS,TXT,CNAME") -> st
     """
     domain = domain.strip().lower()
     results = {"domain": domain, "records": {}}
+    requested = [rtype.strip().upper() for rtype in record_types.split(",") if rtype.strip()]
+    resolver_labels = []
 
-    # A record via socket
-    try:
-        ips = socket.getaddrinfo(domain, None)
-        ipv4 = list(set(addr[4][0] for addr in ips if addr[0] == socket.AF_INET))
-        ipv6 = list(set(addr[4][0] for addr in ips if addr[0] == socket.AF_INET6))
-        if ipv4:
-            results["records"]["A"] = ipv4
-        if ipv6:
-            results["records"]["AAAA"] = ipv6
-    except socket.gaierror as e:
-        results["records"]["A"] = {"error": str(e)}
-
-    # MX, NS, TXT via nslookup subprocess
-    import subprocess
-    for rtype in record_types.split(","):
-        rtype = rtype.strip().upper()
-        if rtype in ("A", "AAAA"):
-            continue  # Already done above
+    if _dns_helper.dns_available():
+        queried = _dns_helper.resolve_many(domain, requested)
+        for rtype, query in queried:
+            resolver_labels.append(query.resolver)
+            if query.answers:
+                results["records"][rtype] = query.answers
+            elif query.status == "error":
+                results["records"][rtype] = {"error": query.error or "DNS query failed"}
+    else:
+        # Preserve the original socket/nslookup path when dnspython is absent.
         try:
-            result = subprocess.run(
-                ["nslookup", "-type=" + rtype, domain],
-                capture_output=True, text=True, timeout=10
-            )
-            output = result.stdout
-            # Parse nslookup output
-            records = []
-            for line in output.split("\n"):
-                line = line.strip()
-                if rtype == "MX" and "mail exchanger" in line.lower():
-                    records.append(line.split("=")[-1].strip() if "=" in line else line)
-                elif rtype == "NS" and "nameserver" in line.lower():
-                    records.append(line.split("=")[-1].strip() if "=" in line else line)
-                elif rtype == "TXT" and ('"' in line or "text" in line.lower()):
-                    records.append(line.strip('"').strip())
-                elif rtype == "CNAME" and "canonical name" in line.lower():
-                    records.append(line.split("=")[-1].strip() if "=" in line else line)
-            if records:
-                results["records"][rtype] = records
-        except Exception as e:
-            results["records"][rtype] = {"error": str(e)}
+            ips = socket.getaddrinfo(domain, None)
+            ipv4 = list(set(addr[4][0] for addr in ips if addr[0] == socket.AF_INET))
+            ipv6 = list(set(addr[4][0] for addr in ips if addr[0] == socket.AF_INET6))
+            if ipv4 and "A" in requested:
+                results["records"]["A"] = ipv4
+            if ipv6 and "AAAA" in requested:
+                results["records"]["AAAA"] = ipv6
+        except socket.gaierror as e:
+            if "A" in requested:
+                results["records"]["A"] = {"error": str(e)}
 
+        for rtype in requested:
+            if rtype in ("A", "AAAA"):
+                continue
+            try:
+                result = subprocess.run(
+                    ["nslookup", "-type=" + rtype, domain],
+                    capture_output=True, text=True, timeout=10
+                )
+                output = result.stdout
+                records = []
+                for line in output.split("\n"):
+                    line = line.strip()
+                    if rtype == "MX" and "mail exchanger" in line.lower():
+                        records.append(line.split("=")[-1].strip() if "=" in line else line)
+                    elif rtype == "NS" and "nameserver" in line.lower():
+                        records.append(line.split("=")[-1].strip() if "=" in line else line)
+                    elif rtype == "TXT" and ('"' in line or "text" in line.lower()):
+                        records.append(line.strip('"').strip())
+                    elif rtype == "CNAME" and "canonical name" in line.lower():
+                        records.append(line.split("=")[-1].strip() if "=" in line else line)
+                if records:
+                    results["records"][rtype] = records
+            except Exception as e:
+                results["records"][rtype] = {"error": str(e)}
+        resolver_labels.append("nslookup")
+
+    results["resolver"] = _dns_helper.combine_resolvers(resolver_labels)
     return json.dumps(results, indent=2)
 
 
@@ -196,6 +210,29 @@ def reverse_dns(ip: str) -> str:
         ip: IP address to reverse-resolve
     """
     ip = ip.strip()
+    if _dns_helper.dns_available():
+        query = _dns_helper.resolve_ptr(ip)
+        if query.answers:
+            return json.dumps({
+                "ip": ip,
+                "hostname": query.answers[0],
+                "aliases": [],
+                "addresses": [ip],
+                "resolver": query.resolver,
+            }, indent=2)
+        if query.status in ("nxdomain", "noanswer"):
+            return json.dumps({
+                "ip": ip,
+                "hostname": None,
+                "error": query.error or "No PTR record found",
+                "resolver": query.resolver,
+            }, indent=2)
+        return json.dumps({
+            "ip": ip,
+            "error": query.error or "PTR lookup failed",
+            "resolver": query.resolver,
+        }, indent=2)
+
     try:
         hostname, aliases, addresses = socket.gethostbyaddr(ip)
         return json.dumps({
@@ -203,11 +240,12 @@ def reverse_dns(ip: str) -> str:
             "hostname": hostname,
             "aliases": aliases,
             "addresses": addresses,
+            "resolver": "system",
         }, indent=2)
     except socket.herror as e:
-        return json.dumps({"ip": ip, "hostname": None, "error": str(e)})
+        return json.dumps({"ip": ip, "hostname": None, "error": str(e), "resolver": "system"})
     except Exception as e:
-        return json.dumps({"ip": ip, "error": str(e)})
+        return json.dumps({"ip": ip, "error": str(e), "resolver": "system"})
 
 
 @mcp.tool()
@@ -359,12 +397,8 @@ def subdomain_enumerate(domain: str) -> str:
         return json.dumps({"error": f"Subdomain enumeration failed: {e}", "domain": domain})
 
 
-def _dns_query_txt(name: str, timeout: int = 10) -> tuple[list[str], bool]:
-    """Query TXT records via nslookup.
-    Returns (stdout_lines, query_succeeded). query_succeeded=False means
-    the query failed or timed out -- caller must not treat this as
-    a confirmed absence of the record.
-    """
+def _legacy_dns_query_txt(name: str, timeout: int = 10) -> tuple[list[str], bool, str]:
+    """Original nslookup TXT path used when dnspython is unavailable."""
     try:
         r = subprocess.run(
             ["nslookup", "-type=TXT", name],
@@ -373,10 +407,26 @@ def _dns_query_txt(name: str, timeout: int = 10) -> tuple[list[str], bool]:
         stdout_lower = r.stdout.lower()
         failure_markers = ("timed out", "timed-out", "server failed", "can" + chr(39) + "t find")
         if r.returncode != 0 or any(marker in stdout_lower for marker in failure_markers):
-            return [], False
-        return r.stdout.split(chr(10)), True
+            return [], False, "nslookup"
+        return r.stdout.split(chr(10)), True, "nslookup"
     except Exception:
-        return [], False
+        return [], False, "nslookup"
+
+
+def _dns_query_txt_result(name: str, timeout: int = 3) -> tuple[list[str], bool, str]:
+    """Return TXT lines, whether the query completed, and resolver label."""
+    if not _dns_helper.dns_available():
+        return _legacy_dns_query_txt(name, timeout=timeout)
+    query = _dns_helper.resolve_record(name, "TXT")
+    if query.status in ("ok", "nxdomain", "noanswer"):
+        return query.answers, True, query.resolver
+    return [], False, query.resolver
+
+
+def _dns_query_txt(name: str, timeout: int = 10) -> tuple[list[str], bool]:
+    """Compatibility wrapper for callers that only need lines and success."""
+    lines, ok, _resolver = _dns_query_txt_result(name, timeout=timeout)
+    return lines, ok
 
 
 @mcp.tool()
@@ -389,25 +439,52 @@ def email_security_check(domain: str) -> str:
     domain = domain.strip().lower()
     result = {"domain": domain, "checks": {}}
 
-    lines, ok = _dns_query_txt(domain)
+    query_names = {
+        "SPF": domain,
+        "DMARC": f"_dmarc.{domain}",
+    }
+    dkim_selectors = ["default", "google", "selector1", "selector2", "k1", "mail", "dkim"]
+    for selector in dkim_selectors:
+        query_names[f"DKIM:{selector}"] = f"{selector}._domainkey.{domain}"
+
+    query_results = {}
+    resolver_labels = []
+    executor = ThreadPoolExecutor(max_workers=8)
+    futures = {
+        key: executor.submit(_dns_query_txt_result, name, 5 if key.startswith("DKIM:") else 3)
+        for key, name in query_names.items()
+    }
+    deadline = time.monotonic() + 15.0
+    try:
+        for key in query_names:
+            future = futures[key]
+            remaining = max(0.0, deadline - time.monotonic())
+            try:
+                query_results[key] = future.result(timeout=remaining)
+            except Exception:
+                query_results[key] = ([], False, "system")
+            resolver_labels.append(query_results[key][2])
+    finally:
+        executor.shutdown(wait=False, cancel_futures=True)
+
+    lines, ok, _resolver = query_results["SPF"]
     if not ok:
         result["checks"]["SPF"] = {"found": None, "records": [], "error": "DNS query failed or timed out"}
     else:
         spf_records = [line.strip().strip(chr(34)) for line in lines if "v=spf1" in line.lower()]
         result["checks"]["SPF"] = {"found": bool(spf_records), "records": spf_records}
 
-    lines, ok = _dns_query_txt(f"_dmarc.{domain}")
+    lines, ok, _resolver = query_results["DMARC"]
     if not ok:
         result["checks"]["DMARC"] = {"found": None, "records": [], "error": "DNS query failed or timed out"}
     else:
         dmarc_records = [line.strip().strip(chr(34)) for line in lines if "v=dmarc1" in line.lower()]
         result["checks"]["DMARC"] = {"found": bool(dmarc_records), "records": dmarc_records}
 
-    dkim_selectors = ["default", "google", "selector1", "selector2", "k1", "mail", "dkim"]
     dkim_found = []
     dkim_query_failures = 0
     for selector in dkim_selectors:
-        lines, ok = _dns_query_txt(f"{selector}._domainkey.{domain}", timeout=5)
+        lines, ok, _resolver = query_results[f"DKIM:{selector}"]
         if not ok:
             dkim_query_failures += 1
             continue
@@ -440,6 +517,7 @@ def email_security_check(domain: str) -> str:
     if checks_inconclusive:
         result["score_note"] = f"{checks_inconclusive}/3 checks inconclusive due to DNS query failures"
 
+    result["resolver"] = _dns_helper.combine_resolvers(resolver_labels)
     return json.dumps(result, indent=2)
 
 
