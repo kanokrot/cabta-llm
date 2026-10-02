@@ -544,6 +544,10 @@ def serialize_tool_definition(tool: Any, role: str = THREAT_HUNTER) -> Optional[
         display_name = tool.get("display_name")
         ui_category = tool.get("ui_category")
         icon = tool.get("icon")
+        summary = tool.get("summary")
+        examples = tool.get("examples")
+        logo = tool.get("logo")
+        input_schema = tool.get("inputSchema", tool.get("parameters", {}))
     else:
         name = getattr(tool, "name", None)
         category = getattr(tool, "category", None)
@@ -554,6 +558,10 @@ def serialize_tool_definition(tool: Any, role: str = THREAT_HUNTER) -> Optional[
         display_name = getattr(tool, "display_name", None)
         ui_category = getattr(tool, "ui_category", None)
         icon = getattr(tool, "icon", None)
+        summary = getattr(tool, "summary", None)
+        examples = getattr(tool, "examples", None)
+        logo = getattr(tool, "logo", None)
+        input_schema = getattr(tool, "inputSchema", getattr(tool, "parameters", {}))
     if role != ADMIN and (dangerous or category in {"sandbox", "edr"}):
         return None
     if not isinstance(name, str) or not name:
@@ -567,6 +575,13 @@ def serialize_tool_definition(tool: Any, role: str = THREAT_HUNTER) -> Optional[
     display_name = display_name or presentation.display_name
     ui_category = ui_category or presentation.ui_category
     icon = icon or presentation.icon
+    summary = summary or presentation.summary
+    examples = examples or list(presentation.examples)
+    logo = logo or presentation.logo
+    if not isinstance(input_schema, Mapping):
+        input_schema = {}
+    if not isinstance(examples, list):
+        examples = list(examples) if isinstance(examples, (tuple, set)) else list(presentation.examples)
     return {
         "name": name, "description": _text(description, 1000) or "",
         "source": _text(source, 200), "category": _text(category, 100),
@@ -575,6 +590,10 @@ def serialize_tool_definition(tool: Any, role: str = THREAT_HUNTER) -> Optional[
         "display_name": _text(display_name, 200) or name,
         "ui_category": _text(ui_category, 100) or "Malware",
         "icon": _text(icon, 100) or "malware",
+        "summary": _text(summary, 1000) or "Tool description is not available from the registered metadata.",
+        "examples": [_text(item, 300) for item in examples[:4] if isinstance(item, str)],
+        "logo": _text(logo, 300) if isinstance(logo, str) else None,
+        "inputSchema": input_schema,
     }
 
 

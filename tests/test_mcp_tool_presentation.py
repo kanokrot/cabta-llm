@@ -2,6 +2,7 @@
 
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
+from pathlib import Path
 
 import pytest
 
@@ -31,6 +32,23 @@ def test_all_registered_mcp_tools_have_unique_explicit_presentation():
             if item_server == server
         ]
         assert len(names) == len(set(names)), server
+
+    for item in MCP_TOOL_PRESENTATION.values():
+        assert item.summary
+        assert 1 <= len(item.examples) <= 4
+        if item.logo:
+            assert item.logo.startswith("/static/")
+            assert "://" not in item.logo
+
+
+def test_mcp_servers_details_are_scoped_to_the_mcp_page():
+    template = Path("templates/mcp_servers.html").read_text(encoding="utf-8")
+    assert "toolDetailsModal" in template
+    assert "inputSchema" in template
+    assert "textContent" in template
+    assert "innerHTML" not in template.split("function showToolDetails", 1)[1].split("function checkServer", 1)[0]
+    assert "templates/agent_chat.html" not in template
+    assert "templates/agent_investigations.html" not in template
 
 
 def test_registry_and_llm_keep_the_technical_name():
@@ -94,6 +112,9 @@ def test_discovery_and_api_serialization_add_ui_fields_only():
     assert serialized["display_name"] == "DNS Lookup"
     assert serialized["ui_category"] == "Network"
     assert serialized["icon"] == "network"
+    assert serialized["summary"] == "Perform DNS lookups for the requested record types."
+    assert serialized["examples"]
+    assert serialized["inputSchema"] == {}
 
 
 def test_unmapped_tool_has_ui_fallback_without_changing_technical_name():

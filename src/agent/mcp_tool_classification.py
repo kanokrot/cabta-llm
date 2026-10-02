@@ -126,5 +126,8 @@ def decorate_mcp_tool(server_name: str, tool: dict[str, Any]) -> dict[str, Any]:
         "display_name": presentation.display_name,
         "ui_category": presentation.ui_category,
         "icon": presentation.icon,
+        "summary": presentation.summary,
+        "examples": list(presentation.examples),
+        "logo": presentation.logo,
     })
     return decorated
