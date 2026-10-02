@@ -720,7 +720,7 @@
                     </div>
                     <div class="mcp-stat-mini">
                         <span class="mcp-stat-val text-info" id="mcpToolCount">-</span>
-                        <span class="mcp-stat-lbl">Tools</span>
+                        <span class="mcp-stat-lbl">MCP TOOLS</span>
                     </div>
                 </div>
                 <div id="mcpServerList" style="max-height:180px;overflow-y:auto;">
@@ -732,7 +732,10 @@
         <!-- Tools -->
         <div class="card mt-2">
             <div class="card-header d-flex justify-content-between align-items-center py-2">
-                <h6 class="mb-0" style="font-size:0.85rem;"><i class="bi bi-tools me-2 text-accent"></i>Tools</h6>
+                <div>
+                    <h6 class="mb-0" style="font-size:0.85rem;"><i class="bi bi-tools me-2 text-accent"></i>Tools</h6>
+                    <small id="toolCountBreakdown" class="text-muted" style="font-size:0.65rem;">Loading...</small>
+                </div>
                 <span class="badge bg-accent" id="toolCountBadge" style="font-size:0.65rem;">0</span>
             </div>
             <div class="card-body p-0" style="max-height:200px;overflow-y:auto;">
@@ -845,6 +848,73 @@ var AgentChat = (function() {
             toolIconSvg(meta.icon, 'me-1') +
             '<span class="tool-friendly-name">' + esc(meta.display_name) + '</span>' +
             '</span> ' + serverBadge + toolSafetyBadges(meta);
+    }
+
+    function toolIconElement(iconKey, extraClass) {
+        var allowed = { network: true, osint: true, 'threat-intel': true, malware: true, forensics: true };
+        var safeKey = allowed[iconKey] ? iconKey : 'malware';
+        var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('class', 'mcp-tool-icon ' + (extraClass || ''));
+        svg.setAttribute('width', '16');
+        svg.setAttribute('height', '16');
+        svg.setAttribute('viewBox', '0 0 24 24');
+        svg.setAttribute('aria-hidden', 'true');
+        svg.setAttribute('focusable', 'false');
+        svg.style.verticalAlign = '-0.18em';
+        var use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+        use.setAttribute('href', '/static/img/mcp-tool-icons.svg#' + safeKey);
+        svg.appendChild(use);
+        return svg;
+    }
+
+    function appendToolIdentityDom(parent, toolName, source) {
+        var meta = getToolPresentation(toolName, source);
+        var server = meta.source && meta.source !== 'local' ? meta.source : '';
+        var identity = document.createElement('span');
+        identity.className = 'mcp-tool-identity';
+        identity.title = meta.name;
+        identity.appendChild(toolIconElement(meta.icon, 'me-1'));
+        var friendlyName = document.createElement('span');
+        friendlyName.className = 'tool-friendly-name';
+        friendlyName.textContent = meta.display_name;
+        identity.appendChild(friendlyName);
+        parent.appendChild(identity);
+
+        parent.appendChild(document.createTextNode(' '));
+        var sourceBadge = document.createElement('span');
+        sourceBadge.className = server ? 'source-badge source-badge-mcp' : 'source-badge source-badge-local';
+        var sourceIcon = document.createElement('i');
+        sourceIcon.className = server ? 'bi bi-plug' : 'bi bi-house';
+        sourceIcon.style.fontSize = '0.55rem';
+        sourceBadge.appendChild(sourceIcon);
+        sourceBadge.appendChild(document.createTextNode(server || 'LOCAL'));
+        parent.appendChild(sourceBadge);
+
+        if (meta.requires_approval || meta.is_dangerous) {
+            parent.appendChild(document.createTextNode(' '));
+            if (meta.requires_approval) {
+                var approval = document.createElement('span');
+                approval.className = 'badge bg-warning text-dark tool-safety-badge';
+                approval.textContent = 'APPROVAL';
+                parent.appendChild(approval);
+            }
+            if (meta.is_dangerous) {
+                var dangerous = document.createElement('span');
+                dangerous.className = 'badge bg-danger tool-safety-badge';
+                dangerous.textContent = 'DANGEROUS';
+                parent.appendChild(dangerous);
+            }
+        }
+    }
+
+    function truncateToolSummary(value, maxLength) {
+        var text = String(value || '').trim();
+        if (text.length <= maxLength) return text;
+        var sentence = text.match(/^.*?[.!?](?:\s|$)/);
+        if (sentence && sentence[0].trim().length <= maxLength) return sentence[0].trim();
+        var clipped = text.substring(0, maxLength + 1);
+        var boundary = clipped.lastIndexOf(' ');
+        return (boundary > 0 ? clipped.substring(0, boundary) : text.substring(0, maxLength)).trim() + '…';
     }
 
     function makePhaseBadge(phase) {
@@ -1209,6 +1279,9 @@ var AgentChat = (function() {
                 var container = document.getElementById('toolsList');
                 while (container.firstChild) container.removeChild(container.firstChild);
                 document.getElementById('toolCountBadge').textContent = tools.length;
+                var mcpCount = tools.filter(function(t) { return t.source !== 'local'; }).length;
+                var builtinCount = tools.length - mcpCount;
+                document.getElementById('toolCountBreakdown').textContent = mcpCount + ' MCP + ' + builtinCount + ' Built-in';
 
                 var categories = {};
                 tools.forEach(function(t) {
@@ -1228,23 +1301,39 @@ var AgentChat = (function() {
                     var header = document.createElement('div');
                     header.className = 'list-group-item bg-transparent border-0 py-1 px-3';
                     header.style.cssText = 'font-size:0.68rem;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-secondary);font-weight:700;margin-top:0.3rem;';
-                    header.innerHTML = '<i class="bi ' + (catIcons[cat] || 'bi-gear') + ' me-1"></i>' + esc(cat.replace(/_/g, ' ')) + ' <span class="badge bg-secondary" style="font-size:0.55rem;">' + categories[cat].length + '</span>';
+                    var categoryIcon = document.createElement('i');
+                    categoryIcon.className = 'bi ' + (catIcons[cat] || 'bi-gear') + ' me-1';
+                    header.appendChild(categoryIcon);
+                    header.appendChild(document.createTextNode(cat.replace(/_/g, ' ') + ' '));
+                    var categoryCount = document.createElement('span');
+                    categoryCount.className = 'badge bg-secondary';
+                    categoryCount.style.fontSize = '0.55rem';
+                    categoryCount.textContent = categories[cat].length;
+                    header.appendChild(categoryCount);
                     container.appendChild(header);
 
                     categories[cat].forEach(function(t) {
                         var item = document.createElement('div');
                         item.className = 'list-group-item bg-transparent py-1 px-3';
                         item.style.cssText = 'font-size:0.78rem;border-color:var(--border-color);';
-                        var nameHtml = toolIdentityHtml(t.name, t.source);
-                        var descText = (t.description || '').substring(0, 70);
-                        nameHtml += '<div style="font-size:0.68rem;color:var(--text-secondary);margin-top:1px;">' + esc(descText) + '</div>';
-                        item.innerHTML = nameHtml;
+                        appendToolIdentityDom(item, t.name, t.source);
+                        var summary = document.createElement('div');
+                        summary.style.cssText = 'font-size:0.68rem;color:var(--text-secondary);margin-top:1px;';
+                        summary.textContent = truncateToolSummary(t.summary || t.description, 70);
+                        item.appendChild(summary);
                         container.appendChild(item);
                     });
                 });
             })
             .catch(function() {
-                document.getElementById('toolsList').innerHTML = '<div class="text-center text-muted py-3"><small>Failed to load tools</small></div>';
+                var container = document.getElementById('toolsList');
+                while (container.firstChild) container.removeChild(container.firstChild);
+                var failure = document.createElement('div');
+                failure.className = 'text-center text-muted py-3';
+                var failureText = document.createElement('small');
+                failureText.textContent = 'Failed to load tools';
+                failure.appendChild(failureText);
+                container.appendChild(failure);
             });
     }
 
