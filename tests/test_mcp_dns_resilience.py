@@ -6,6 +6,8 @@ import dns.exception
 import dns.resolver
 import pytest
 
+from src.agent import mcp_client as mcp_client_module
+from src.agent.mcp_client import MCPClientManager, MCPConnection, MCPServerConfig
 from src.mcp_servers import _dns_helper
 
 
@@ -37,6 +39,42 @@ def _fake_resolver(monkeypatch, system_action, fallback_action=None, calls=None)
     monkeypatch.setattr(_dns_helper.dns.resolver, "Resolver", Resolver)
     _dns_helper.reset_health_cache()
     return calls
+
+
+@pytest.mark.asyncio
+async def test_stdio_child_gets_dns_env_without_parent_secret(monkeypatch):
+    captured = {}
+
+    class FakeParameters:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+    class FakeOwner:
+        def __init__(self, params):
+            self.params = params
+
+        async def start(self):
+            return None
+
+    monkeypatch.setenv("CABTA_DNS_TIMEOUT", "5")
+    monkeypatch.setenv("MCP_PARENT_SECRET", "must-not-reach-child")
+    monkeypatch.setattr("mcp.client.stdio.StdioServerParameters", FakeParameters)
+    monkeypatch.setattr(mcp_client_module, "_StdioSessionOwner", FakeOwner)
+
+    config = MCPServerConfig(
+        name="dns-test",
+        transport="stdio",
+        command="python",
+        args=["-m", "example_server"],
+        env={"MCP_CONFIG_VALUE": "allowed"},
+    )
+    connection = MCPConnection(config=config)
+
+    await MCPClientManager()._connect_stdio(connection)
+
+    assert captured["env"]["CABTA_DNS_TIMEOUT"] == "5"
+    assert captured["env"]["MCP_CONFIG_VALUE"] == "allowed"
+    assert "MCP_PARENT_SECRET" not in captured["env"]
 
 
 def test_system_timeout_uses_fallback(monkeypatch):

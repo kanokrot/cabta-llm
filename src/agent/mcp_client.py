@@ -187,6 +187,31 @@ class MCPClientManager:
     #  Connect / disconnect
     # ------------------------------------------------------------------ #
 
+    @staticmethod
+    def _build_stdio_env(config_env: Optional[Dict[str, str]]) -> Dict[str, str]:
+        """Build the least-privilege environment for a stdio MCP child."""
+        try:
+            from mcp.client.stdio import DEFAULT_INHERITED_ENV_VARS
+        except ImportError:  # pragma: no cover - only used without the SDK
+            DEFAULT_INHERITED_ENV_VARS = (
+                "APPDATA", "HOMEDRIVE", "HOMEPATH", "LOCALAPPDATA", "PATH",
+                "PATHEXT", "PROCESSOR_ARCHITECTURE", "SYSTEMDRIVE", "SYSTEMROOT",
+                "TEMP", "USERNAME", "USERPROFILE",
+            )
+
+        config_env = config_env or {}
+        allowed_names = set(DEFAULT_INHERITED_ENV_VARS)
+        allowed_names.update(name for name in os.environ if name.startswith("CABTA_DNS_"))
+        allowed_names.update(str(name) for name in config_env)
+
+        env = {
+            name: os.environ[name]
+            for name in allowed_names
+            if name in os.environ
+        }
+        env.update({str(name): str(value) for name, value in config_env.items() if value is not None})
+        return env
+
     async def connect(self, config: MCPServerConfig) -> bool:
         """
         Connect to an MCP server and discover its tools.
@@ -337,10 +362,9 @@ class MCPClientManager:
         if command in ("python", "python3"):
             command = sys.executable
 
-        # Build environment
-        env = os.environ.copy()
-        if cfg.env:
-            env.update(cfg.env)
+        # Build a least-privilege environment.  Do not pass the entire parent
+        # environment, which may contain API keys or unrelated secrets.
+        env = self._build_stdio_env(cfg.env)
 
         cmd_args = cfg.args or []
 
@@ -351,7 +375,7 @@ class MCPClientManager:
             params = StdioServerParameters(
                 command=command,  # <-- ใช้ command ที่ผ่านการ resolve แล้ว
                 args=cmd_args,
-                env=cfg.env,
+                env=env,
                 cwd=str(PROJECT_ROOT),
             )
 
