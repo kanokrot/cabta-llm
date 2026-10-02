@@ -5,7 +5,7 @@ servers.  Callers decide how an empty answer or an exception maps to their
 existing public response schema.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import ipaddress
 import os
 import socket
@@ -41,6 +41,7 @@ class DNSQueryResult:
     resolver: str
     status: str = "ok"
     error: Optional[str] = None
+    attempted_resolvers: list[str] = field(default_factory=list)
 
 
 def dns_available() -> bool:
@@ -194,12 +195,23 @@ def _query(
     return _answer_strings(answer)
 
 
-def _result_for_exception(exc: Exception, resolver_name: str) -> DNSQueryResult:
+def _result_for_exception(
+    exc: Exception,
+    resolver_name: str,
+    attempted_resolvers: Optional[list[str]] = None,
+) -> DNSQueryResult:
+    attempted = list(attempted_resolvers or [resolver_name])
     if DNSPYTHON_AVAILABLE and isinstance(exc, dns.resolver.NXDOMAIN):
-        return DNSQueryResult([], resolver_name, status="nxdomain")
+        return DNSQueryResult([], resolver_name, status="nxdomain", attempted_resolvers=attempted)
     if DNSPYTHON_AVAILABLE and isinstance(exc, dns.resolver.NoAnswer):
-        return DNSQueryResult([], resolver_name, status="noanswer")
-    return DNSQueryResult([], resolver_name, status="error", error=str(exc))
+        return DNSQueryResult([], resolver_name, status="noanswer", attempted_resolvers=attempted)
+    return DNSQueryResult(
+        [],
+        resolver_name,
+        status="error",
+        error=str(exc),
+        attempted_resolvers=attempted,
+    )
 
 
 def resolve_record(
@@ -224,6 +236,7 @@ def resolve_record(
     system_name = "system"
     per_query_timeout = _timeout_seconds() if timeout is None else max(0.1, float(timeout))
     deadline = time.monotonic() + _total_timeout_seconds()
+    attempted_resolvers: list[str] = []
     def query_with_deadline(nameserver: Optional[str]) -> list[str]:
         remaining = deadline - time.monotonic()
         if remaining <= 0:
@@ -237,19 +250,20 @@ def resolve_record(
         )
 
     if not (fallback_on and _system_is_unhealthy()):
+        attempted_resolvers.append(system_name)
         try:
             values = query_with_deadline(None)
             _mark_system_healthy()
-            return DNSQueryResult(values, system_name)
+            return DNSQueryResult(values, system_name, attempted_resolvers=attempted_resolvers)
         except Exception as exc:
             if _terminal_exception(exc):
                 _mark_system_healthy()
-                return _result_for_exception(exc, system_name)
+                return _result_for_exception(exc, system_name, attempted_resolvers)
             if not _retryable_exception(exc):
-                return _result_for_exception(exc, system_name)
+                return _result_for_exception(exc, system_name, attempted_resolvers)
             _mark_system_unhealthy()
             if not fallback_on or not fallback_allowed(normalized, rtype, address):
-                return _result_for_exception(exc, system_name)
+                return _result_for_exception(exc, system_name, attempted_resolvers)
 
     if fallback_on and fallback_allowed(normalized, rtype, address):
         last_error: Optional[Exception] = None
@@ -258,24 +272,34 @@ def resolve_record(
             if deadline - time.monotonic() <= 0:
                 break
             resolver_name = f"fallback:{server}"
+            attempted_resolvers.append(resolver_name)
             try:
                 values = query_with_deadline(server)
                 _mark_system_healthy() if server == "system" else None
-                return DNSQueryResult(values, resolver_name)
+                return DNSQueryResult(
+                    values,
+                    resolver_name,
+                    attempted_resolvers=attempted_resolvers,
+                )
             except Exception as exc:
                 if _terminal_exception(exc):
-                    return _result_for_exception(exc, resolver_name)
+                    return _result_for_exception(exc, resolver_name, attempted_resolvers)
                 last_error = exc
                 if not _retryable_exception(exc):
-                    return _result_for_exception(exc, resolver_name)
-        label = f"fallback:{servers[0]}" if servers else system_name
-        return _result_for_exception(last_error or RuntimeError("DNS total timeout expired"), label)
+                    return _result_for_exception(exc, resolver_name, attempted_resolvers)
+        label = attempted_resolvers[-1] if attempted_resolvers else system_name
+        return _result_for_exception(
+            last_error or RuntimeError("DNS total timeout expired"),
+            label,
+            attempted_resolvers,
+        )
 
     return DNSQueryResult(
         [],
         system_name,
         status="error",
         error="fallback disabled or restricted",
+        attempted_resolvers=attempted_resolvers,
     )
 
 

@@ -122,6 +122,25 @@ def test_fallback_chain_respects_total_deadline(monkeypatch):
     assert lifetimes[1][1] <= 0.2 + 1e-9
 
 
+def test_fallback_error_labels_last_attempted_server(monkeypatch):
+    _fake_resolver(
+        monkeypatch,
+        dns.exception.Timeout(),
+        dns.exception.Timeout(),
+    )
+    monkeypatch.setenv("CABTA_DNS_FALLBACK_SERVERS", "1.1.1.1,8.8.8.8")
+    monkeypatch.setenv("CABTA_DNS_TOTAL_TIMEOUT", "6")
+
+    result = _dns_helper.resolve_record("example.com", "A")
+
+    assert result.resolver == "fallback:8.8.8.8"
+    assert result.attempted_resolvers == [
+        "system",
+        "fallback:1.1.1.1",
+        "fallback:8.8.8.8",
+    ]
+
+
 @pytest.mark.parametrize("exc", [dns.resolver.NXDOMAIN(), dns.resolver.NoAnswer()])
 def test_terminal_dns_answer_does_not_use_fallback(monkeypatch, exc):
     calls = _fake_resolver(monkeypatch, exc, lambda *_: _answer())
