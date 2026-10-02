@@ -557,6 +557,52 @@
 var MCPServers = (function () {
     'use strict';
 
+    function toolIconClass(iconKey) {
+        var icons = {
+            network: 'bi-diagram-3',
+            osint: 'bi-binoculars',
+            'threat-intel': 'bi-shield-exclamation',
+            malware: 'bi-bug',
+            forensics: 'bi-fingerprint'
+        };
+        return 'bi ' + (icons[iconKey] || 'bi-wrench');
+    }
+
+    function toolIdentity(t) {
+        var wrap = document.createElement('span');
+        wrap.className = 'mcp-tool-identity';
+        wrap.title = t.name || '';
+
+        var icon = document.createElement('i');
+        icon.className = toolIconClass(t.icon);
+        icon.setAttribute('aria-hidden', 'true');
+        wrap.appendChild(icon);
+
+        var label = document.createElement('strong');
+        label.className = 'tool-friendly-name ms-1';
+        label.textContent = t.display_name || t.name || 'Unknown';
+        wrap.appendChild(label);
+
+        var server = document.createElement('span');
+        server.className = 'source-badge source-badge-mcp ms-2';
+        server.textContent = t.source || 'MCP';
+        wrap.appendChild(server);
+
+        if (t.requires_approval) {
+            var approval = document.createElement('span');
+            approval.className = 'badge bg-warning text-dark ms-1 tool-safety-badge';
+            approval.textContent = 'APPROVAL';
+            wrap.appendChild(approval);
+        }
+        if (t.is_dangerous) {
+            var dangerous = document.createElement('span');
+            dangerous.className = 'badge bg-danger ms-1 tool-safety-badge';
+            dangerous.textContent = 'DANGEROUS';
+            wrap.appendChild(dangerous);
+        }
+        return wrap;
+    }
+
     /* ── Category filtering ──────────────────────────────────── */
     var categoryFilters = document.getElementById('categoryFilters');
     if (categoryFilters) {
@@ -710,10 +756,7 @@ var MCPServers = (function () {
             tools.forEach(function(t) {
                 var chip = document.createElement('span');
                 chip.className = 'tool-chip';
-                var chipIcon = document.createElement('i');
-                chipIcon.className = 'bi bi-wrench';
-                chip.appendChild(chipIcon);
-                chip.appendChild(document.createTextNode(t.name || t));
+                chip.appendChild(toolIdentity(t));
                 if (t.description) chip.title = t.description;
                 container.appendChild(chip);
             });
@@ -955,9 +998,7 @@ var MCPServers = (function () {
                 item.style.borderColor = 'var(--border-color)';
                 item.style.color = 'var(--text-primary)';
 
-                var nameEl = document.createElement('strong');
-                nameEl.textContent = t.name || 'Unknown';
-                item.appendChild(nameEl);
+                item.appendChild(toolIdentity(t));
 
                 if (t.description) {
                     item.appendChild(document.createElement('br'));

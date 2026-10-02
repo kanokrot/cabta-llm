@@ -947,6 +947,7 @@ var Investigations = (function() {
     var _selectedIds = [];
     var _currentDetailSid = null;
     var _tags = [];
+    var _toolPresentationByName = {};
 
     // Helper: create an element with classes and optional text
     function el(tag, className, text) {
@@ -961,6 +962,56 @@ var Investigations = (function() {
         var i = document.createElement('i');
         i.className = cls;
         return i;
+    }
+
+    function toolIconClass(iconKey) {
+        var icons = {
+            network: 'bi-diagram-3',
+            osint: 'bi-binoculars',
+            'threat-intel': 'bi-shield-exclamation',
+            malware: 'bi-bug',
+            forensics: 'bi-fingerprint'
+        };
+        return 'bi ' + (icons[iconKey] || 'bi-wrench');
+    }
+
+    function getToolPresentation(toolName) {
+        var meta = _toolPresentationByName[toolName] || {};
+        var server = meta.source || (toolName && toolName.indexOf('.') > 0 ? toolName.split('.')[0] : '');
+        return {
+            name: toolName || 'Tool',
+            display_name: meta.display_name || (toolName || 'Tool').replace(/_/g, ' ').replace(/\b\w/g, function(c) { return c.toUpperCase(); }),
+            icon: meta.icon || 'malware',
+            source: server,
+            requires_approval: Boolean(meta.requires_approval),
+            is_dangerous: Boolean(meta.is_dangerous)
+        };
+    }
+
+    function createToolBadge(toolName, extraClass) {
+        var meta = getToolPresentation(toolName);
+        var badge = el('span', extraClass || 'tool-presentation-badge');
+        badge.title = meta.name;
+        badge.appendChild(icon(toolIconClass(meta.icon) + ' me-1'));
+        badge.appendChild(document.createTextNode(meta.display_name));
+        if (meta.source && meta.source !== 'local') {
+            var server = el('span', 'source-badge source-badge-mcp ms-1', meta.source);
+            badge.appendChild(server);
+        }
+        if (meta.requires_approval) badge.appendChild(el('span', 'badge bg-warning text-dark ms-1 tool-safety-badge', 'APPROVAL'));
+        if (meta.is_dangerous) badge.appendChild(el('span', 'badge bg-danger ms-1 tool-safety-badge', 'DANGEROUS'));
+        return badge;
+    }
+
+    function loadToolPresentations() {
+        return fetch('/api/agent/tools')
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                (data.tools || []).forEach(function(tool) {
+                    if (tool.name) _toolPresentationByName[tool.name] = tool;
+                });
+            })
+            .catch(function() {});
     }
 
     // Helper: create a status badge element
@@ -2293,20 +2344,10 @@ var Investigations = (function() {
 
                         // Tool name
                         if (toolName) {
-                            var toolBadge = document.createElement('span');
-                            toolBadge.style.cssText = 'font-size:0.75rem; color:#d2a8ff; font-weight:600;';
-                            toolBadge.innerHTML = '<i class="bi bi-wrench me-1"></i>' + toolName;
-                            headerDiv.appendChild(toolBadge);
+                            headerDiv.appendChild(createToolBadge(toolName));
 
                             // Source badge
-                            if (isMcp) {
-                                var serverName = toolName.split('.')[0];
-                                var srcBadge = el('span', 'mcp-server-badge');
-                                srcBadge.innerHTML = '<i class="bi bi-cloud-fill"></i>';
-                                srcBadge.appendChild(document.createTextNode(serverName));
-                                srcBadge.style.margin = '0';
-                                headerDiv.appendChild(srcBadge);
-                            } else {
+                            if (!isMcp) {
                                 var srcBadge = document.createElement('span');
                                 srcBadge.style.cssText = 'font-size:0.65rem; padding:1px 6px; border-radius:3px; background:rgba(63,185,80,0.15); color:#3fb950;';
                                 srcBadge.textContent = 'local';
@@ -2469,10 +2510,7 @@ var Investigations = (function() {
                         var fMeta = el('div', 'finding-meta');
                         fMeta.appendChild(el('span', '', '#' + (fidx + 1)));
                         if (fTool) {
-                            var fToolBadge = el('span', 'finding-tool-badge');
-                            fToolBadge.appendChild(icon('bi bi-wrench me-1'));
-                            fToolBadge.appendChild(document.createTextNode(fTool));
-                            fMeta.appendChild(fToolBadge);
+                            fMeta.appendChild(createToolBadge(fTool, 'finding-tool-badge'));
                         }
                         if (typeof finding === 'object' && finding.severity) {
                             var sevBadge = el('span', 'verdict-badge verdict-' + (fSeverity === 'danger' ? 'malicious' : fSeverity === 'warning' ? 'suspicious' : 'clean'));
@@ -2717,6 +2755,7 @@ var Investigations = (function() {
 
     // ── Init ──
     document.addEventListener('DOMContentLoaded', function() {
+        loadToolPresentations();
         loadSessions();
         loadPlaybooks();
 

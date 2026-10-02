@@ -781,6 +781,7 @@ var AgentChat = (function() {
     var currentPhase = 'think';
     var toolStartTime = null;
     var toolElapsedTimer = null;
+    var toolPresentationByName = {};
 
     // ===== Tool Source Detection =====
     function isToolMCP(toolName) {
@@ -793,8 +794,9 @@ var AgentChat = (function() {
 
     function getMCPServerName(toolName) {
         if (!toolName) return '';
-        var parts = toolName.replace(/^mcp[_:.]/, '').split(/[_:.]/);
-        return parts.length > 1 ? parts[0] : '';
+        var normalized = toolName.replace(/^mcp:/, '');
+        var dot = normalized.indexOf('.');
+        return dot > 0 ? normalized.substring(0, dot) : '';
     }
 
     function makeSourceBadge(toolName) {
@@ -803,6 +805,51 @@ var AgentChat = (function() {
             return '<span class="source-badge source-badge-mcp"><i class="bi bi-plug" style="font-size:0.55rem;"></i>MCP' + (srv ? ':' + esc(srv) : '') + '</span>';
         }
         return '<span class="source-badge source-badge-local"><i class="bi bi-house" style="font-size:0.55rem;"></i>LOCAL</span>';
+    }
+
+    function getToolPresentation(toolName, source) {
+        var technicalName = typeof toolName === 'string' ? toolName : '';
+        var known = toolPresentationByName[technicalName] || {};
+        var server = source || known.source || getMCPServerName(technicalName);
+        return {
+            name: technicalName,
+            display_name: known.display_name || technicalName || 'Tool',
+            ui_category: known.ui_category || known.category || 'Malware',
+            icon: known.icon || 'malware',
+            source: server,
+            requires_approval: Boolean(known.requires_approval),
+            is_dangerous: Boolean(known.is_dangerous)
+        };
+    }
+
+    function toolIconClass(iconKey) {
+        var icons = {
+            network: 'bi-diagram-3',
+            osint: 'bi-binoculars',
+            'threat-intel': 'bi-shield-exclamation',
+            malware: 'bi-bug',
+            forensics: 'bi-fingerprint'
+        };
+        return 'bi ' + (icons[iconKey] || 'bi-wrench');
+    }
+
+    function toolSafetyBadges(meta) {
+        var html = '';
+        if (meta.requires_approval) html += ' <span class="badge bg-warning text-dark tool-safety-badge">APPROVAL</span>';
+        if (meta.is_dangerous) html += ' <span class="badge bg-danger tool-safety-badge">DANGEROUS</span>';
+        return html;
+    }
+
+    function toolIdentityHtml(toolName, source) {
+        var meta = getToolPresentation(toolName, source);
+        var server = meta.source && meta.source !== 'local' ? meta.source : '';
+        var serverBadge = server
+            ? '<span class="source-badge source-badge-mcp"><i class="bi bi-plug" style="font-size:0.55rem;"></i>' + esc(server) + '</span>'
+            : '<span class="source-badge source-badge-local"><i class="bi bi-house" style="font-size:0.55rem;"></i>LOCAL</span>';
+        return '<span class="mcp-tool-identity" title="' + esc(meta.name) + '">' +
+            '<i class="' + toolIconClass(meta.icon) + ' me-1" aria-hidden="true"></i>' +
+            '<span class="tool-friendly-name">' + esc(meta.display_name) + '</span>' +
+            '</span> ' + serverBadge + toolSafetyBadges(meta);
     }
 
     function makePhaseBadge(phase) {
@@ -1170,16 +1217,16 @@ var AgentChat = (function() {
 
                 var categories = {};
                 tools.forEach(function(t) {
-                    var cat = t.category || 'other';
+                    if (t.name) toolPresentationByName[t.name] = t;
+                    var cat = t.ui_category || t.category || 'other';
                     if (!categories[cat]) categories[cat] = [];
                     categories[cat].push(t);
                 });
 
                 var catIcons = {
-                    'threat_intel': 'bi-globe', 'analysis': 'bi-search', 'detection': 'bi-shield-check',
-                    'sandbox': 'bi-box', 'forensics': 'bi-fingerprint', 'edr': 'bi-pc-display',
-                    'mcp': 'bi-plug', 'network': 'bi-diagram-3', 'osint': 'bi-eye',
-                    'vulnerability': 'bi-bug', 'reverse_engineering': 'bi-cpu', 'other': 'bi-gear'
+                    'Threat Intel': 'bi-shield-exclamation', 'Malware': 'bi-bug',
+                    'Forensics': 'bi-fingerprint', 'Network': 'bi-diagram-3',
+                    'OSINT': 'bi-binoculars', 'other': 'bi-gear'
                 };
 
                 Object.keys(categories).sort().forEach(function(cat) {
@@ -1193,9 +1240,7 @@ var AgentChat = (function() {
                         var item = document.createElement('div');
                         item.className = 'list-group-item bg-transparent py-1 px-3';
                         item.style.cssText = 'font-size:0.78rem;border-color:var(--border-color);';
-                        var nameHtml = '<span style="color:var(--color-accent);font-weight:600;">' + esc(t.name) + '</span>';
-                        if (t.requires_approval) nameHtml += ' <span class="badge bg-warning" style="font-size:0.55rem;">APPROVAL</span>';
-                        if (t.is_dangerous) nameHtml += ' <span class="badge bg-danger" style="font-size:0.55rem;">SANDBOX</span>';
+                        var nameHtml = toolIdentityHtml(t.name, t.source);
                         var descText = (t.description || '').substring(0, 70);
                         nameHtml += '<div style="font-size:0.68rem;color:var(--text-secondary);margin-top:1px;">' + esc(descText) + '</div>';
                         item.innerHTML = nameHtml;
@@ -1653,17 +1698,10 @@ var AgentChat = (function() {
             try { argsStr = typeof args === 'string' ? args : JSON.stringify(args, null, 2); } catch(e) { argsStr = String(args); }
         }
 
-        var sourceBadge = '';
-        if (source) {
-            sourceBadge = source === 'local' ? '<span class="source-badge source-badge-local"><i class="bi bi-house" style="font-size:0.55rem;"></i>LOCAL</span> ' : '<span class="source-badge source-badge-mcp"><i class="bi bi-plug" style="font-size:0.55rem;"></i>' + esc(source) + '</span> ';
-        } else {
-            sourceBadge = makeSourceBadge(name) + ' ';
-        }
-
         var stepLabel = '<span style="font-size:0.65rem;color:var(--text-muted);margin-left:0.4rem;">Step ' + currentStep + '/' + maxSteps + '</span>';
 
         var html = '<div class="tool-call-block"><div class="tool-call-header" onclick="document.getElementById(\'' + blockId + '\').classList.toggle(\'show\')">';
-        html += '<div class="d-flex align-items-center gap-2">' + sourceBadge + '<i class="bi bi-wrench me-1"></i><span class="tool-name">' + esc(name || 'tool') + '</span>' + stepLabel + '</div>';
+        html += '<div class="d-flex align-items-center gap-2">' + toolIdentityHtml(name || 'tool', source) + stepLabel + '</div>';
         html += '<div class="tool-status d-flex align-items-center gap-2"><div class="lti-spinner" style="width:10px;height:10px;border-width:1.5px;"></div><i class="bi bi-chevron-down" style="font-size:0.65rem;"></i></div>';
         html += '</div>';
         if (argsStr) {
@@ -1687,14 +1725,6 @@ var AgentChat = (function() {
 
         var previewText = preview || '';
 
-        // Build source badge
-        var sourceBadge = '';
-        if (source) {
-            sourceBadge = source === 'local' ? '<span class="source-badge source-badge-local"><i class="bi bi-house" style="font-size:0.55rem;"></i>LOCAL</span>' : '<span class="source-badge source-badge-mcp"><i class="bi bi-plug" style="font-size:0.55rem;"></i>' + esc(source) + '</span>';
-        } else {
-            sourceBadge = makeSourceBadge(toolName);
-        }
-
         var durationHtml = duration ? '<span class="trc-duration"><i class="bi bi-clock" style="font-size:0.6rem;"></i> ' + esc(String(duration)) + '</span>' : '';
 
         var richContent = renderToolResultRich(toolName, previewText);
@@ -1703,8 +1733,7 @@ var AgentChat = (function() {
         html += '<div class="tool-result-card-header" onclick="var b=document.getElementById(\'' + blockId + '\');b.classList.toggle(\'collapsed\');">';
         html += '<div class="trc-left">';
         html += '<i class="bi bi-check-circle-fill text-success"></i>';
-        html += sourceBadge;
-        html += '<span style="font-weight:700;color:var(--color-accent);font-size:0.82rem;">' + esc(toolName) + '</span>';
+        html += toolIdentityHtml(toolName, source);
         html += '<span class="text-muted" style="font-size:0.68rem;">result</span>';
         html += '</div>';
         html += '<div class="trc-right">';
@@ -1762,8 +1791,7 @@ var AgentChat = (function() {
             html += '<div class="summary-tools">';
             uniqueTools.forEach(function(t) {
                 var badgeCls = isToolMCP(t) ? 'background:rgba(56,189,248,0.1);color:#38bdf8;border-color:rgba(56,189,248,0.2);' : '';
-                var icon = isToolMCP(t) ? '<i class="bi bi-plug" style="font-size:0.55rem;margin-right:2px;"></i>' : '<i class="bi bi-house" style="font-size:0.55rem;margin-right:2px;"></i>';
-                html += '<span class="tool-tag" style="' + badgeCls + '">' + icon + esc(t) + '</span>';
+                html += '<span class="tool-tag" style="' + badgeCls + '">' + toolIdentityHtml(t) + '</span>';
             });
             html += '</div>';
         }
@@ -1775,7 +1803,7 @@ var AgentChat = (function() {
     function showApproval(msg) {
         pendingApprovalId = msg.approval_id || msg.id;
         var detail = document.getElementById('approvalDetail');
-        detail.innerHTML = '<div class="tool-name" style="font-size:0.9rem;">' + esc(msg.tool || msg.action || 'Action') + '</div><div class="mt-1 text-muted" style="font-size:0.82rem;">' + esc(msg.description || msg.content || '') + '</div>';
+        detail.innerHTML = '<div class="tool-name" style="font-size:0.9rem;">' + toolIdentityHtml(msg.tool || msg.action || 'Action') + '</div><div class="mt-1 text-muted" style="font-size:0.82rem;">' + esc(msg.description || msg.content || '') + '</div>';
         document.getElementById('approvalOverlay').classList.add('show');
     }
 
@@ -1808,7 +1836,7 @@ var AgentChat = (function() {
         var el = document.getElementById('currentToolName');
         if (el) {
             if (name) {
-                el.innerHTML = makeSourceBadge(name) + ' <span style="color:var(--color-warning);">Running: ' + esc(name) + '</span>';
+                el.innerHTML = toolIdentityHtml(name) + ' <span style="color:var(--color-warning);">Running</span>';
             } else {
                 el.innerHTML = '';
             }
