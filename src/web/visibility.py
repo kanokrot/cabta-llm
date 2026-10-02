@@ -532,6 +532,7 @@ def serialize_chat_session(session: Mapping[str, Any], steps: Optional[Iterable[
 
 def serialize_tool_definition(tool: Any, role: str = THREAT_HUNTER) -> Optional[dict[str, Any]]:
     from src.agent.mcp_tool_presentation import get_mcp_tool_presentation
+    from src.agent.local_tool_presentation import get_local_tool_presentation
 
     unavailable_summary = "Tool description is not available from the registered metadata."
 
@@ -574,9 +575,16 @@ def serialize_tool_definition(tool: Any, role: str = THREAT_HUNTER) -> Optional[
         raw_tool_name,
         category if isinstance(category, str) else "",
     )
-    display_name = display_name or presentation.display_name
+    local_presentation = (
+        get_local_tool_presentation(name) if source == "local" else None
+    )
+    if local_presentation is not None:
+        display_name = display_name or local_presentation.display_name
+        icon = icon or local_presentation.icon
+    else:
+        display_name = display_name or presentation.display_name
+        icon = icon or presentation.icon
     ui_category = ui_category or presentation.ui_category
-    icon = icon or presentation.icon
     if source == "local":
         # Local ToolDefinition currently has no separate summary field.  Do not
         # expose the MCP presentation fallback when a local description exists.
