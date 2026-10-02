@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from typing import Any, Dict, Iterable, Mapping, Optional
 
+from src.agent.mcp_tool_presentation import get_mcp_tool_presentation
+
 
 SOC = "SOC Analyst Tier 1-2"
 INCIDENT_RESPONDER = "Incident Responder"
@@ -539,6 +541,9 @@ def serialize_tool_definition(tool: Any, role: str = THREAT_HUNTER) -> Optional[
         description = tool.get("description", "")
         source = tool.get("source", "")
         requires_approval = bool(tool.get("requires_approval", False))
+        display_name = tool.get("display_name")
+        ui_category = tool.get("ui_category")
+        icon = tool.get("icon")
     else:
         name = getattr(tool, "name", None)
         category = getattr(tool, "category", None)
@@ -546,15 +551,30 @@ def serialize_tool_definition(tool: Any, role: str = THREAT_HUNTER) -> Optional[
         description = getattr(tool, "description", "")
         source = getattr(tool, "source", "")
         requires_approval = bool(getattr(tool, "requires_approval", False))
+        display_name = getattr(tool, "display_name", None)
+        ui_category = getattr(tool, "ui_category", None)
+        icon = getattr(tool, "icon", None)
     if role != ADMIN and (dangerous or category in {"sandbox", "edr"}):
         return None
     if not isinstance(name, str) or not name:
         return None
+    raw_tool_name = name.rsplit(".", 1)[-1] if isinstance(source, str) and source != "local" else name
+    presentation = get_mcp_tool_presentation(
+        source,
+        raw_tool_name,
+        category if isinstance(category, str) else "",
+    )
+    display_name = display_name or presentation.display_name
+    ui_category = ui_category or presentation.ui_category
+    icon = icon or presentation.icon
     return {
         "name": name, "description": _text(description, 1000) or "",
         "source": _text(source, 200), "category": _text(category, 100),
         "requires_approval": requires_approval,
         "is_dangerous": dangerous,
+        "display_name": _text(display_name, 200) or name,
+        "ui_category": _text(ui_category, 100) or "Malware",
+        "icon": _text(icon, 100) or "malware",
     }
 
 

@@ -11,6 +11,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from .mcp_tool_presentation import get_mcp_tool_presentation
+
 
 @dataclass(frozen=True)
 class MCPToolClassification:
@@ -113,5 +115,16 @@ def decorate_mcp_tool(server_name: str, tool: dict[str, Any]) -> dict[str, Any]:
         "inputSchema": tool.get("inputSchema", tool.get("parameters", {}))
         if isinstance(tool, dict) else {},
     }
-    decorated.update(classify_mcp_tool(server_name, name))
+    classification = classify_mcp_tool(server_name, name)
+    decorated.update(classification)
+    presentation = get_mcp_tool_presentation(
+        server_name,
+        name,
+        classification["category"],
+    )
+    decorated.update({
+        "display_name": presentation.display_name,
+        "ui_category": presentation.ui_category,
+        "icon": presentation.icon,
+    })
     return decorated
