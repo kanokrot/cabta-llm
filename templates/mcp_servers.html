@@ -628,7 +628,7 @@ var MCPServers = (function () {
         img.alt = '';
         img.src = logo;
         img.addEventListener('error', function () {
-            if (img.parentNode) img.parentNode.removeChild(img);
+            if (img.parentNode) img.parentNode.replaceChild(toolIconSvg(t.icon), img);
         });
         return img;
     }
