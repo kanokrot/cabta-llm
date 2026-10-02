@@ -964,15 +964,21 @@ var Investigations = (function() {
         return i;
     }
 
-    function toolIconClass(iconKey) {
-        var icons = {
-            network: 'bi-diagram-3',
-            osint: 'bi-binoculars',
-            'threat-intel': 'bi-shield-exclamation',
-            malware: 'bi-bug',
-            forensics: 'bi-fingerprint'
-        };
-        return 'bi ' + (icons[iconKey] || 'bi-wrench');
+    function toolIconSvg(iconKey) {
+        var allowed = { network: true, osint: true, 'threat-intel': true, malware: true, forensics: true };
+        var safeKey = allowed[iconKey] ? iconKey : 'malware';
+        var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.classList.add('mcp-tool-icon');
+        svg.setAttribute('width', '16');
+        svg.setAttribute('height', '16');
+        svg.setAttribute('viewBox', '0 0 24 24');
+        svg.style.verticalAlign = '-0.18em';
+        svg.setAttribute('aria-hidden', 'true');
+        svg.setAttribute('focusable', 'false');
+        var use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+        use.setAttribute('href', '/static/img/mcp-tool-icons.svg#' + safeKey);
+        svg.appendChild(use);
+        return svg;
     }
 
     function getToolPresentation(toolName) {
@@ -992,7 +998,7 @@ var Investigations = (function() {
         var meta = getToolPresentation(toolName);
         var badge = el('span', extraClass || 'tool-presentation-badge');
         badge.title = meta.name;
-        badge.appendChild(icon(toolIconClass(meta.icon) + ' me-1'));
+        badge.appendChild(toolIconSvg(meta.icon));
         badge.appendChild(document.createTextNode(meta.display_name));
         if (meta.source && meta.source !== 'local') {
             var server = el('span', 'source-badge source-badge-mcp ms-1', meta.source);

@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none">
+  <symbol id="network" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="5" r="2.5"/><circle cx="5" cy="19" r="2.5"/><circle cx="19" cy="19" r="2.5"/>
+    <path d="M12 7.5v4M10.1 13.2 6.9 17M13.9 13.2l3.2 3.8"/>
+  </symbol>
+  <symbol id="osint" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5M10.5 7v7M7 10.5h7"/>
+  </symbol>
+  <symbol id="threat-intel" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 3 20 6v5c0 5-3.3 8.4-8 10-4.7-1.6-8-5-8-10V6l8-3Z"/><path d="m9 12 2 2 4-4"/>
+  </symbol>
+  <symbol id="malware" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M8 8h8v8H8zM10 3v5M14 3v5M10 16v5M14 16v5M3 10h5M3 14h5M16 10h5M16 14h5"/>
+    <path d="m10 10 4 4m0-4-4 4"/>
+  </symbol>
+  <symbol id="forensics" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 3v4M8.5 5.5l2.5 2.5M15.5 5.5 13 8M5 12h4M15 12h4M8 17l3-3M16 17l-3-3"/>
+    <circle cx="12" cy="12" r="3"/><path d="M12 15v6"/>
+  </symbol>
+</svg>
