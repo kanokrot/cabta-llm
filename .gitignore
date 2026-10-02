@@ -137,3 +137,6 @@ evidence/source_weights_2026-09-16
 
 # pytest temp dirs
 .pytest_tmp*/
+
+# pytest temp dirs
+.pytest_tmp*/
