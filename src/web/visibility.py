@@ -5,8 +5,6 @@ from __future__ import annotations
 import json
 from typing import Any, Dict, Iterable, Mapping, Optional
 
-from src.agent.mcp_tool_presentation import get_mcp_tool_presentation
-
 
 SOC = "SOC Analyst Tier 1-2"
 INCIDENT_RESPONDER = "Incident Responder"
@@ -533,6 +531,8 @@ def serialize_chat_session(session: Mapping[str, Any], steps: Optional[Iterable[
 
 
 def serialize_tool_definition(tool: Any, role: str = THREAT_HUNTER) -> Optional[dict[str, Any]]:
+    from src.agent.mcp_tool_presentation import get_mcp_tool_presentation
+
     authorize_flow(role, "agent")
     if isinstance(tool, Mapping):
         name = tool.get("name")
