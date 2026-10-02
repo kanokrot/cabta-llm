@@ -129,20 +129,29 @@ def test_file_rule_data_keeps_siem_hash_for_clean_and_yara_for_malicious(tmp_pat
     clean_data = MalwareAnalyzer._build_file_rule_data(
         str(sample), hashes, "CLEAN", [], [], yara_analysis
     )
-    clean_rules = RuleGenerator.generate_file_rules(clean_data)
-    assert clean_rules["yara"] == ""
-    assert sha256 in clean_rules["kql"]
-    assert sha256 in clean_rules["spl"]
-    assert sha256 in clean_rules["sigma"]
-    assert 'SHA256 == ""' not in clean_rules["kql"]
-    assert 'sha256=""' not in clean_rules["spl"]
-    assert "Hashes|contains: ''" not in clean_rules["sigma"]
+    clean_rules = {}
+    assert clean_data["emit_yara"] is False
+    assert all(clean_rules.get(rule_type, "") == "" for rule_type in (
+        "yara", "kql", "spl", "xql", "dql", "sigma"
+    ))
 
     malicious_data = MalwareAnalyzer._build_file_rule_data(
         str(sample), hashes, "MALICIOUS", [], [], yara_analysis
     )
     malicious_rules = RuleGenerator.generate_file_rules(malicious_data)
     assert "_exact" in malicious_rules["yara"]
+    assert sha256 in malicious_rules["kql"]
+    assert sha256 in malicious_rules["spl"]
+    assert sha256 in malicious_rules["sigma"]
+
+    suspicious_data = MalwareAnalyzer._build_file_rule_data(
+        str(sample), hashes, "SUSPICIOUS", [], [], yara_analysis
+    )
+    suspicious_rules = RuleGenerator.generate_file_rules(suspicious_data)
+    assert "_exact" in suspicious_rules["yara"]
+    assert sha256 in suspicious_rules["kql"]
+    assert sha256 in suspicious_rules["spl"]
+    assert sha256 in suspicious_rules["sigma"]
 
 
 def test_clean_verdict_inputs_emit_no_yara_rule():
