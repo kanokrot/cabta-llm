@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import inspect
 
 import yara
 
@@ -119,7 +120,7 @@ def test_rule_ioc_filter_drops_absent_and_clean_values(tmp_path):
     assert actual == [ascii_ioc, wide_ioc]
 
 
-def test_file_rule_data_keeps_siem_hash_for_clean_and_yara_for_malicious(tmp_path):
+def test_file_rule_data_emits_yara_flag_by_verdict(tmp_path):
     sample = tmp_path / "sample.exe"
     sample.write_bytes(b"sample bytes")
     sha256 = hashlib.sha256(sample.read_bytes()).hexdigest()
@@ -129,11 +130,7 @@ def test_file_rule_data_keeps_siem_hash_for_clean_and_yara_for_malicious(tmp_pat
     clean_data = MalwareAnalyzer._build_file_rule_data(
         str(sample), hashes, "CLEAN", [], [], yara_analysis
     )
-    clean_rules = {}
     assert clean_data["emit_yara"] is False
-    assert all(clean_rules.get(rule_type, "") == "" for rule_type in (
-        "yara", "kql", "spl", "xql", "dql", "sigma"
-    ))
 
     malicious_data = MalwareAnalyzer._build_file_rule_data(
         str(sample), hashes, "MALICIOUS", [], [], yara_analysis
@@ -152,6 +149,44 @@ def test_file_rule_data_keeps_siem_hash_for_clean_and_yara_for_malicious(tmp_pat
     assert sha256 in suspicious_rules["kql"]
     assert sha256 in suspicious_rules["spl"]
     assert sha256 in suspicious_rules["sigma"]
+
+
+def test_build_detection_rules_clean_returns_empty(tmp_path):
+    sample = tmp_path / "clean.exe"
+    sample.write_bytes(b"clean sample bytes")
+    hashes = {
+        "sha256": hashlib.sha256(sample.read_bytes()).hexdigest(),
+        "md5": "b" * 32,
+    }
+
+    result = MalwareAnalyzer._build_detection_rules(
+        str(sample), hashes, "CLEAN", [], [], {"tags": []}
+    )
+
+    assert result == {}
+
+
+def test_build_detection_rules_non_clean_preserves_rules(tmp_path):
+    sample = tmp_path / "sample.exe"
+    sample.write_bytes(b"sample bytes")
+    sha256 = hashlib.sha256(sample.read_bytes()).hexdigest()
+    hashes = {"sha256": sha256, "md5": "b" * 32}
+
+    for verdict in ("MALICIOUS", "SUSPICIOUS"):
+        result = MalwareAnalyzer._build_detection_rules(
+            str(sample), hashes, verdict, [], [], {"tags": []}
+        )
+        assert "_exact" in result["yara"]
+        assert sha256 in result["kql"]
+        assert sha256 in result["spl"]
+        assert sha256 in result["sigma"]
+
+
+def test_analyze_wires_detection_rule_helper():
+    source = inspect.getsource(MalwareAnalyzer.analyze)
+
+    assert "_build_detection_rules(" in source
+    assert "RuleGenerator.generate_file_rules(" not in source
 
 
 def test_clean_verdict_inputs_emit_no_yara_rule():
