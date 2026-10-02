@@ -533,6 +533,8 @@ def serialize_chat_session(session: Mapping[str, Any], steps: Optional[Iterable[
 def serialize_tool_definition(tool: Any, role: str = THREAT_HUNTER) -> Optional[dict[str, Any]]:
     from src.agent.mcp_tool_presentation import get_mcp_tool_presentation
 
+    unavailable_summary = "Tool description is not available from the registered metadata."
+
     authorize_flow(role, "agent")
     if isinstance(tool, Mapping):
         name = tool.get("name")
@@ -575,7 +577,13 @@ def serialize_tool_definition(tool: Any, role: str = THREAT_HUNTER) -> Optional[
     display_name = display_name or presentation.display_name
     ui_category = ui_category or presentation.ui_category
     icon = icon or presentation.icon
-    summary = summary or presentation.summary
+    if source == "local":
+        # Local ToolDefinition currently has no separate summary field.  Do not
+        # expose the MCP presentation fallback when a local description exists.
+        if not summary or summary == unavailable_summary:
+            summary = description
+    else:
+        summary = summary or presentation.summary
     examples = examples or list(presentation.examples)
     logo = logo or presentation.logo
     if not isinstance(input_schema, Mapping):
@@ -590,7 +598,7 @@ def serialize_tool_definition(tool: Any, role: str = THREAT_HUNTER) -> Optional[
         "display_name": _text(display_name, 200) or name,
         "ui_category": _text(ui_category, 100) or "Malware",
         "icon": _text(icon, 100) or "malware",
-        "summary": _text(summary, 1000) or "Tool description is not available from the registered metadata.",
+        "summary": _text(summary, 1000) or ("" if source == "local" else unavailable_summary),
         "examples": [_text(item, 300) for item in examples[:4] if isinstance(item, str)],
         "logo": _text(logo, 300) if isinstance(logo, str) else None,
         "inputSchema": input_schema,
