@@ -122,19 +122,65 @@ def test_sigma_pysigma_rejects_invalid_rules(invalid_case):
 
 
 @requires_pysigma
-def test_sigma_unknown_condition_is_currently_only_parsed():
+def test_sigma_unknown_condition_is_rejected():
     document = yaml.safe_load(
         RuleGenerator.generate_ioc_rules(
             '203.0.113.42', 'ipv4', {}
         )['sigma']
     )
-    # from_yaml currently does not reject a condition naming an unknown selection.
     document['detection']['condition'] = 'selection_missing'
 
     result = validate_rule('sigma', yaml.safe_dump(document, sort_keys=False))
 
+    assert result['valid'] is False
+    assert result['status'] == 'pysigma_rejected'
+    assert 'Sigma condition references undefined selection: selection_missing' in result['errors']
+
+
+def _sigma_with_condition(condition, selections):
+    document = {
+        'title': 'Condition test',
+        'logsource': {'category': 'process_creation'},
+        'detection': dict(selections, condition=condition),
+    }
+    return yaml.safe_dump(document, sort_keys=False)
+
+
+def test_sigma_condition_references_existing_selections():
+    content = _sigma_with_condition(
+        'selection_a and not selection_b',
+        {
+            'selection_a': {'Image': 'cmd.exe'},
+            'selection_b': {'Image': 'powershell.exe'},
+        },
+    )
+    result = validate_rule('sigma', content)
     assert result['valid'] is True
-    assert result['status'] == 'pysigma_parsed'
+
+
+def test_sigma_condition_one_of_wildcard_requires_matching_selection():
+    valid = validate_rule(
+        'sigma',
+        _sigma_with_condition(
+            '1 of sel_*',
+            {
+                'sel_a': {'Image': 'cmd.exe'},
+                'sel_b': {'Image': 'powershell.exe'},
+            },
+        ),
+    )
+    assert valid['valid'] is True
+
+    invalid = validate_rule(
+        'sigma',
+        _sigma_with_condition(
+            '1 of sel_*',
+            {'selection_a': {'Image': 'cmd.exe'}},
+        ),
+    )
+    assert invalid['valid'] is False
+    assert invalid['status'] == 'pysigma_rejected'
+    assert 'Sigma condition references undefined selection: sel_*' in invalid['errors']
 
 
 def test_sigma_yaml_syntax_error_is_syntax_only():
