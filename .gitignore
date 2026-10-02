@@ -134,3 +134,6 @@ evidence/*
 !evidence/operational_metrics_2026-09-27/
 evidence/source_weights_2026-09-16
 !.env.example
+
+# pytest temp dirs
+.pytest_tmp*/
