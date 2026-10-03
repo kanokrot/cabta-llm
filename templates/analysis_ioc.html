@@ -773,6 +773,117 @@
     .bulk-summary-stat { display: flex; align-items: center; gap: 0.3rem; }
     .bulk-summary-stat .dot { width: 8px; height: 8px; border-radius: 50%; }
 
+    /* ── IOC Progress Card ── */
+    .ioc-progress-area {
+        width: 100%;
+    }
+    .ioc-progress-card {
+        border-color: var(--border-color);
+        background: var(--bg-card);
+    }
+    .ioc-progress-header {
+        flex-direction: column;
+        gap: 0.65rem;
+        padding: 1.25rem 1rem;
+        text-align: center;
+    }
+    .ioc-progress-header > i {
+        color: var(--color-accent);
+        font-size: 1.35rem;
+    }
+    .ioc-progress-title {
+        color: var(--text-primary);
+        font-weight: 600;
+    }
+    .ioc-progress-ioc {
+        display: inline-block;
+        max-width: 100%;
+        overflow-wrap: anywhere;
+        padding: 0.35rem 0.7rem;
+        border: 1px solid var(--border-color);
+        border-radius: 0.5rem;
+        background: var(--bg-card);
+        color: var(--text-primary);
+        font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+        font-size: 0.85rem;
+    }
+    .ioc-progress-body {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.9rem;
+        padding: 1.5rem 1rem;
+        text-align: center;
+    }
+    .ioc-progress-spinner {
+        width: 3rem;
+        height: 3rem;
+        border-width: 0.3em;
+        color: var(--color-accent);
+    }
+    .ioc-progress-status {
+        min-height: 1.5rem;
+        color: var(--text-secondary);
+        font-size: 0.95rem;
+    }
+    .ioc-progress-track {
+        width: min(100%, 42rem);
+        height: 1.5rem;
+        background-color: var(--border-color);
+    }
+    .ioc-progress-track .progress-bar {
+        background-color: var(--color-accent);
+        color: var(--text-primary);
+    }
+    .ioc-progress-track .progress-bar.bg-danger {
+        background-color: var(--color-danger) !important;
+    }
+    .ioc-progress-log {
+        width: min(100%, 42rem);
+        color: var(--text-secondary);
+        text-align: left;
+    }
+    .ioc-progress-log summary {
+        min-height: 44px;
+        padding: 0.65rem 0.75rem;
+        border: 1px solid var(--border-color);
+        border-radius: 0.5rem;
+        color: var(--text-secondary);
+        cursor: pointer;
+        font-size: 0.82rem;
+        font-weight: 600;
+        list-style-position: inside;
+    }
+    .ioc-progress-log summary:hover,
+    .ioc-progress-log summary:focus-visible {
+        color: var(--text-primary);
+    }
+    .ioc-progress-log-list {
+        margin: 0.75rem 0 0;
+        padding-left: 1.25rem;
+        color: var(--text-muted);
+    }
+    .ioc-progress-log-count {
+        display: inline-block;
+        margin-left: 0.45rem;
+        padding: 0.1rem 0.35rem;
+        border: 1px solid var(--border-color);
+        border-radius: 0.35rem;
+        color: var(--color-accent);
+        font-size: 0.72rem;
+        font-weight: 600;
+        vertical-align: middle;
+    }
+    @media (prefers-reduced-motion: reduce) {
+        .ioc-progress-spinner,
+        .ioc-progress-track .progress-bar-animated {
+            animation: none;
+        }
+        .ioc-progress-track .progress-bar {
+            transition: none;
+        }
+    }
+
     /* ── Responsive ── */
     @media (max-width: 991.98px) {
         .verdict-banner { padding: 1rem; gap: 0.75rem; }
@@ -948,26 +1059,28 @@
 </div>
 
 <!-- Progress Area (hidden by default) -->
-<div id="iocProgressArea" class="mt-4" style="display: none;">
-    <div class="card">
-        <div class="card-header d-flex align-items-center">
-            <i class="bi bi-hourglass-split me-2 text-accent"></i>
-            <h5 class="mb-0">Analysis in Progress</h5>
+<div id="iocProgressArea" class="mt-4 ioc-progress-area" style="display: none;">
+    <div class="card ioc-progress-card">
+        <div class="card-header d-flex align-items-center ioc-progress-header">
+            <i class="bi bi-hourglass-split" aria-hidden="true"></i>
+            <h5 id="progressTitle" class="mb-0 ioc-progress-title">Analysis in Progress</h5>
+            <code id="progressIocValue" class="ioc-progress-ioc"></code>
         </div>
-        <div class="card-body">
-            <div class="d-flex align-items-center mb-2">
-                <strong id="progressStatus">Initializing...</strong>
-                <div class="spinner-border spinner-border-sm ms-auto" role="status" id="progressSpinner">
-                    <span class="visually-hidden">Loading...</span>
-                </div>
+        <div class="card-body ioc-progress-body">
+            <div class="spinner-border ioc-progress-spinner" role="status" id="progressSpinner">
+                <span class="visually-hidden">Loading...</span>
             </div>
-            <div class="progress" style="height: 24px;">
+            <div id="progressStatus" class="ioc-progress-status" role="status" aria-live="polite">Initializing...</div>
+            <div class="progress ioc-progress-track">
                 <div id="iocProgressBar" class="progress-bar progress-bar-striped progress-bar-animated"
                      role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
                     0%
                 </div>
             </div>
-            <ul id="progressLog" class="list-unstyled mt-3 mb-0 small text-muted"></ul>
+            <details class="ioc-progress-log">
+                <summary>Technical log</summary>
+                <ul id="progressLog" class="ioc-progress-log-list list-unstyled small"></ul>
+            </details>
         </div>
     </div>
 </div>
@@ -1028,6 +1141,9 @@
     var progressStatus = document.getElementById('progressStatus');
     var progressLog = document.getElementById('progressLog');
     var progressSpinner = document.getElementById('progressSpinner');
+    var progressTitle = document.getElementById('progressTitle');
+    var progressIocValue = document.getElementById('progressIocValue');
+    var progressLogDetails = progressLog.closest('details');
     var resultsArea = document.getElementById('iocResults');
     var resultsBody = document.getElementById('iocResultsBody');
     var btnExportJson = document.getElementById('btnExportJson');
@@ -1037,6 +1153,11 @@
     var lastResultData = null;
     var analysisId = null;
     var currentMode = 'single'; /* 'single' or 'bulk' */
+    var runId = 0;
+    var lastProgressMessage = null;
+    var progressMessageCount = 0;
+    var lastProgressLogItem = null;
+    var lastProgressCountBadge = null;
 
     /* ========================================================
        HTML HELPERS
@@ -2114,9 +2235,24 @@
         progressBar.textContent = pct + '%';
         if (message) {
             progressStatus.textContent = message;
-            var li = document.createElement('li');
-            li.textContent = message;
-            progressLog.appendChild(li);
+            if (message === lastProgressMessage) {
+                progressMessageCount += 1;
+                if (lastProgressLogItem) {
+                    if (!lastProgressCountBadge) {
+                        lastProgressCountBadge = document.createElement('span');
+                        lastProgressCountBadge.className = 'ioc-progress-log-count';
+                        lastProgressLogItem.appendChild(lastProgressCountBadge);
+                    }
+                    lastProgressCountBadge.textContent = 'x' + progressMessageCount;
+                }
+            } else {
+                lastProgressMessage = message;
+                progressMessageCount = 1;
+                lastProgressCountBadge = null;
+                lastProgressLogItem = document.createElement('li');
+                lastProgressLogItem.textContent = message;
+                progressLog.appendChild(lastProgressLogItem);
+            }
         }
     }
 
@@ -2142,20 +2278,32 @@
         }
         if (!iocValue) return;
 
+        var capturedRunId = ++runId;
+
         progressArea.style.display = 'block';
         resultsArea.style.display = 'none';
         while (progressLog.firstChild) { progressLog.removeChild(progressLog.firstChild); }
+        lastProgressMessage = null;
+        progressMessageCount = 0;
+        lastProgressLogItem = null;
+        lastProgressCountBadge = null;
+        progressTitle.textContent = 'Analyzing indicator';
+        progressIocValue.textContent = iocValue;
+        progressLogDetails.open = false;
         progressBar.classList.remove('bg-danger');
         progressSpinner.style.display = '';
         setProgress(0, 'Submitting IOC...');
 
         window.startIOCAnalysis(iocValue, iocType || 'auto', {
             onProgress: function (data) {
+                if (capturedRunId !== runId) return;
                 setProgress(data.percent || 0, data.message || '');
             },
             onComplete: function (data) {
+                if (capturedRunId !== runId) return;
                 lastResultData = data;
                 setProgress(100, 'Analysis complete.');
+                progressTitle.textContent = 'Analysis complete';
                 progressSpinner.style.display = 'none';
                 resultsArea.style.display = 'block';
                 showViewFullReportButton(data && data.analysis_id);
@@ -2171,7 +2319,10 @@
                 }
             },
             onError: function (err) {
+                if (capturedRunId !== runId) return;
                 setProgress(0, 'Error: ' + (err.message || err));
+                progressTitle.textContent = 'Analysis failed';
+                progressLogDetails.open = true;
                 progressBar.classList.add('bg-danger');
                 progressSpinner.style.display = 'none';
             }
@@ -2198,6 +2349,7 @@
     var params = new URLSearchParams(window.location.search);
     analysisId = params.get('id');
     if (analysisId) {
+        var capturedAutoLoadRunId = ++runId;
         progressArea.style.display = 'block';
         setProgress(5, 'Loading analysis...');
         progressSpinner.style.display = '';
@@ -2207,13 +2359,16 @@
         fetch('/api/analysis/' + safeId + '/status')
             .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
             .then(function (statusData) {
+                if (capturedAutoLoadRunId !== runId) return;
                 if (statusData.status === 'completed' || statusData.status === 'complete') {
                     return fetch('/api/analysis/' + safeId)
                         .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
                         .then(function (fullResult) {
+                            if (capturedAutoLoadRunId !== runId) return;
                             var innerResult = fullResult.result ? (typeof fullResult.result === 'string' ? JSON.parse(fullResult.result) : fullResult.result) : fullResult;
                             lastResultData = innerResult;
                             setProgress(100, 'Analysis loaded.');
+                            progressTitle.textContent = 'Analysis complete';
                             progressSpinner.style.display = 'none';
                             resultsArea.style.display = 'block';
                             showViewFullReportButton(analysisId);
@@ -2222,6 +2377,8 @@
                 }
                 if (statusData.status === 'failed' || statusData.status === 'error') {
                     setProgress(0, 'Analysis failed: ' + (statusData.current_step || 'Unknown error'));
+                    progressTitle.textContent = 'Analysis failed';
+                    progressLogDetails.open = true;
                     progressBar.classList.add('bg-danger');
                     progressSpinner.style.display = 'none';
                     return;
@@ -2229,7 +2386,10 @@
                 setProgress(statusData.progress || 10, statusData.current_step || 'Resuming...');
             })
             .catch(function (err) {
+                if (capturedAutoLoadRunId !== runId) return;
                 setProgress(0, 'Error loading analysis: ' + err.message);
+                progressTitle.textContent = 'Analysis failed';
+                progressLogDetails.open = true;
                 progressBar.classList.add('bg-danger');
                 progressSpinner.style.display = 'none';
             });
