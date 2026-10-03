@@ -815,6 +815,13 @@
         padding: 1.5rem 1rem;
         text-align: center;
     }
+    .ioc-progress-status-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        width: min(100%, 42rem);
+    }
     .ioc-progress-spinner {
         width: 3rem;
         height: 3rem;
@@ -828,7 +835,7 @@
     }
     .ioc-progress-track {
         width: min(100%, 42rem);
-        height: 1.5rem;
+        height: 10px;
         background-color: var(--border-color);
     }
     .ioc-progress-track .progress-bar {
@@ -874,12 +881,188 @@
         font-weight: 600;
         vertical-align: middle;
     }
+    .ioc-progress-percent {
+        flex-shrink: 0;
+        color: var(--text-primary);
+        font-size: 0.9rem;
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+    }
+
+    /* ── IOC Form Controls ── */
+    .ioc-form-input {
+        min-height: 56px;
+        font-size: 1.05rem;
+    }
+    .ioc-type-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+    .ioc-type-chip {
+        min-height: 44px;
+        padding: 0.55rem 0.85rem;
+        border: 1px solid var(--border-color);
+        border-radius: 999px;
+        background: var(--bg-card);
+        color: var(--text-secondary);
+        cursor: pointer;
+        font-size: 0.82rem;
+        font-weight: 600;
+        transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+    }
+    .ioc-type-chip:hover,
+    .ioc-type-chip:focus-visible {
+        border-color: var(--border-strong);
+        color: var(--text-primary);
+    }
+    .ioc-type-chip:focus-visible {
+        outline: 3px solid var(--color-accent);
+        outline-offset: 2px;
+    }
+    .ioc-type-chip[aria-pressed="true"] {
+        border-color: var(--color-accent);
+        background: var(--color-accent);
+        color: var(--bg-card);
+    }
+    .ioc-type-hint {
+        min-height: 1.25rem;
+        color: var(--text-muted);
+        font-size: 0.78rem;
+    }
+
+    /* ── IOC Sources ── */
+    .ioc-source-group {
+        display: grid;
+        grid-template-columns: minmax(9.5rem, auto) minmax(0, 1fr);
+        align-items: start;
+        gap: 0.75rem;
+        padding: 0.7rem 0;
+        border-bottom: 1px solid var(--border-color);
+    }
+    .ioc-source-group:last-of-type {
+        border-bottom: none;
+    }
+    .ioc-source-heading {
+        display: flex;
+        align-items: center;
+        gap: 0.45rem;
+        color: var(--text-primary);
+        font-size: 0.78rem;
+        font-weight: 700;
+    }
+    .ioc-source-dot {
+        width: 8px;
+        height: 8px;
+        flex-shrink: 0;
+        border-radius: 50%;
+        background: var(--color-accent);
+    }
+    .ioc-source-dot-premium { background: var(--color-warning); }
+    .ioc-source-dot-free { background: var(--color-accent); }
+    .ioc-source-dot-osint { background: var(--color-success); }
+    .ioc-source-dot-extended { background: var(--color-danger); }
+    .ioc-source-names {
+        min-width: 0;
+        color: var(--text-secondary);
+        font-size: 0.78rem;
+        line-height: 1.55;
+        overflow-wrap: anywhere;
+    }
+    .ioc-sources-note {
+        margin-top: 0.85rem;
+        color: var(--text-muted);
+        font-size: 0.75rem;
+    }
+
+    /* ── IOC History Table ── */
+    .ioc-history-table {
+        width: 100%;
+        overflow-x: auto;
+    }
+    .ioc-history-header,
+    .ioc-history-row {
+        display: grid;
+        grid-template-columns: minmax(0, 2.2fr) minmax(4.5rem, 0.85fr) minmax(5.5rem, 1fr) minmax(3.5rem, 0.6fr) minmax(4.8rem, 0.85fr);
+        align-items: center;
+        gap: 0.6rem;
+        min-width: 34rem;
+    }
+    .ioc-history-header {
+        padding: 0.45rem 0.65rem;
+        color: var(--text-muted);
+        font-size: 0.68rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+    }
+    .ioc-history-row {
+        min-height: 44px;
+        padding: 0.45rem 0.65rem;
+        border-top: 1px solid var(--border-color);
+        color: var(--text-secondary);
+        cursor: pointer;
+        transition: background-color 0.15s ease;
+    }
+    .ioc-history-row:hover,
+    .ioc-history-row:focus-visible {
+        background: var(--bg-card);
+        color: var(--text-primary);
+    }
+    .ioc-history-row:focus-visible {
+        outline: 2px solid var(--color-accent);
+        outline-offset: -2px;
+    }
+    .ioc-history-cell {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 0.76rem;
+    }
+    .ioc-history-ioc {
+        color: var(--text-primary);
+        font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+    }
+    .ioc-history-badge {
+        display: inline-block;
+        max-width: 100%;
+        overflow: hidden;
+        padding: 0.18rem 0.4rem;
+        border: 1px solid var(--border-color);
+        border-radius: 0.35rem;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 0.68rem;
+        font-weight: 700;
+    }
+    .ioc-history-verdict-malicious { color: var(--color-danger); }
+    .ioc-history-verdict-suspicious { color: var(--color-warning); }
+    .ioc-history-verdict-clean { color: var(--color-success); }
+    .ioc-history-verdict-unknown { color: var(--text-muted); }
+    .ioc-history-score {
+        color: var(--text-primary);
+        font-variant-numeric: tabular-nums;
+    }
+    .ioc-history-time {
+        color: var(--text-muted);
+    }
+    .ioc-history-empty {
+        padding: 1rem 0.65rem;
+        color: var(--text-muted);
+        font-size: 0.82rem;
+        text-align: center;
+    }
     @media (prefers-reduced-motion: reduce) {
         .ioc-progress-spinner,
         .ioc-progress-track .progress-bar-animated {
             animation: none;
         }
         .ioc-progress-track .progress-bar {
+            transition: none;
+        }
+        .ioc-type-chip,
+        .ioc-history-row {
             transition: none;
         }
     }
@@ -921,11 +1104,12 @@
                             <label for="iocValue" class="form-label">IOC Value</label>
                             <div class="input-group">
                                 <span class="input-group-text"><i class="bi bi-crosshair"></i></span>
-                                <input type="text" id="iocValue" name="ioc_value" class="form-control" required
+                                <input type="text" id="iocValue" name="ioc_value" class="form-control ioc-form-input" required
                                        placeholder="e.g. 8.8.8.8, evil.com, d41d8cd98f00b204...">
                             </div>
-                            <div class="form-text">
-                                Enter an IP address, domain, URL, file hash, email address, or CVE ID.
+                            <div class="form-text d-flex justify-content-between align-items-start gap-2">
+                                <span>Enter an IP address, domain, URL, file hash, email address, or CVE ID.</span>
+                                <span id="iocTypeHint" class="ioc-type-hint text-end" hidden></span>
                             </div>
                         </div>
                     </div>
@@ -944,17 +1128,27 @@
 
                     <div class="mb-3">
                         <label for="iocType" class="form-label">IOC Type</label>
-                        <select id="iocType" name="ioc_type" class="form-select">
+                        <select id="iocType" name="ioc_type" class="form-select visually-hidden ioc-type-select">
                             <option value="auto">Auto-detect</option>
                             <option value="ip">IP Address</option>
                             <option value="domain">Domain</option>
                             <option value="url">URL</option>
+                            <option value="hash">Hash</option>
                             <option value="hash_md5">MD5 Hash</option>
                             <option value="hash_sha1">SHA1 Hash</option>
                             <option value="hash_sha256">SHA256 Hash</option>
                             <option value="email">Email Address</option>
                             <option value="cve">CVE ID</option>
                         </select>
+                        <div class="ioc-type-chips" role="group" aria-label="IOC type">
+                            <button type="button" class="ioc-type-chip" data-ioc-type="auto" aria-pressed="true">Auto-detect</button>
+                            <button type="button" class="ioc-type-chip" data-ioc-type="ip" aria-pressed="false">IP</button>
+                            <button type="button" class="ioc-type-chip" data-ioc-type="domain" aria-pressed="false">Domain</button>
+                            <button type="button" class="ioc-type-chip" data-ioc-type="url" aria-pressed="false">URL</button>
+                            <button type="button" class="ioc-type-chip" data-ioc-type="hash" aria-pressed="false">Hash</button>
+                            <button type="button" class="ioc-type-chip" data-ioc-type="email" aria-pressed="false">Email</button>
+                            <button type="button" class="ioc-type-chip" data-ioc-type="cve" aria-pressed="false">CVE</button>
+                        </div>
                     </div>
 
                     <!-- Single submit -->
@@ -974,85 +1168,49 @@
                 </div>
             </div>
         </div>
+
+    <!-- Recent Lookups -->
+    <div class="card mt-3">
+        <div class="card-header d-flex align-items-center justify-content-between">
+            <div class="d-flex align-items-center">
+                <i class="bi bi-clock-history me-2 text-accent"></i>
+                <h5 class="mb-0">Recent Lookups</h5>
+            </div>
+            <button id="btnClearHistory" class="btn btn-sm btn-ghost text-muted" onclick="clearIOCHistory()" title="Clear history">
+                <i class="bi bi-trash3"></i>
+            </button>
+        </div>
+        <div class="card-body p-2" id="iocHistoryList">
+            <div class="ioc-history-empty">No recent lookups</div>
+        </div>
+    </div>
     </div>
 
-    <!-- Intelligence Sources & History -->
+    <!-- Intelligence Sources -->
     <div class="col-lg-5">
-        <!-- Enhanced Intelligence Sources -->
         <div class="card mb-3">
             <div class="card-header d-flex align-items-center">
                 <i class="bi bi-info-circle me-2 text-accent"></i>
                 <h5 class="mb-0">Intelligence Sources</h5>
             </div>
             <div class="card-body py-3">
-                <!-- Premium APIs -->
-                <div class="source-category">
-                    <div class="source-category-title"><i class="bi bi-star-fill me-1" style="color:#ffc107"></i> Premium APIs</div>
-                    <div class="d-flex flex-wrap">
-                        <span class="source-item"><span class="source-dot dot-premium"></span>VirusTotal</span>
-                        <span class="source-item"><span class="source-dot dot-premium"></span>AbuseIPDB</span>
-                        <span class="source-item"><span class="source-dot dot-premium"></span>Shodan</span>
-                        <span class="source-item"><span class="source-dot dot-premium"></span>AlienVault OTX</span>
-                        <span class="source-item"><span class="source-dot dot-premium"></span>GreyNoise</span>
-                    </div>
+                <div class="ioc-source-group">
+                    <div class="ioc-source-heading"><span class="ioc-source-dot ioc-source-dot-premium"></span>Premium APIs</div>
+                    <div class="ioc-source-names">VirusTotal, AbuseIPDB, Shodan, AlienVault OTX, GreyNoise</div>
                 </div>
-                <!-- Free Threat Intel -->
-                <div class="source-category">
-                    <div class="source-category-title"><i class="bi bi-shield-check me-1" style="color:#0dcaf0"></i> Free Threat Intel</div>
-                    <div class="d-flex flex-wrap">
-                        <span class="source-item"><span class="source-dot dot-free"></span>URLhaus</span>
-                        <span class="source-item"><span class="source-dot dot-free"></span>MalwareBazaar</span>
-                        <span class="source-item"><span class="source-dot dot-free"></span>ThreatFox</span>
-                        <span class="source-item"><span class="source-dot dot-free"></span>Feodo Tracker</span>
-                        <span class="source-item"><span class="source-dot dot-free"></span>OpenPhish</span>
-                        <span class="source-item"><span class="source-dot dot-free"></span>CIRCL MISP</span>
-                    </div>
+                <div class="ioc-source-group">
+                    <div class="ioc-source-heading"><span class="ioc-source-dot ioc-source-dot-free"></span>Free Threat Intel</div>
+                    <div class="ioc-source-names">URLhaus, MalwareBazaar, ThreatFox, Feodo Tracker, OpenPhish, CIRCL MISP</div>
                 </div>
-                <!-- OSINT & Enrichment -->
-                <div class="source-category">
-                    <div class="source-category-title"><i class="bi bi-globe me-1" style="color:#198754"></i> OSINT &amp; Enrichment</div>
-                    <div class="d-flex flex-wrap">
-                        <span class="source-item"><span class="source-dot dot-osint"></span>WHOIS</span>
-                        <span class="source-item"><span class="source-dot dot-osint"></span>DNS</span>
-                        <span class="source-item"><span class="source-dot dot-osint"></span>GeoIP</span>
-                        <span class="source-item"><span class="source-dot dot-osint"></span>SSL Certs</span>
-                        <span class="source-item"><span class="source-dot dot-osint"></span>Reverse DNS</span>
-                        <span class="source-item"><span class="source-dot dot-osint"></span>Subdomain Enum</span>
-                    </div>
+                <div class="ioc-source-group">
+                    <div class="ioc-source-heading"><span class="ioc-source-dot ioc-source-dot-osint"></span>OSINT &amp; Enrichment</div>
+                    <div class="ioc-source-names">WHOIS, DNS, GeoIP, SSL Certs, Reverse DNS, Subdomain Enum</div>
                 </div>
-                <!-- Free OSINT Extended -->
-                <div class="source-category mb-0">
-                    <div class="source-category-title"><i class="bi bi-eye-fill me-1" style="color:#e040fb"></i> Free OSINT Extended</div>
-                    <div class="d-flex flex-wrap">
-                        <span class="source-item"><span class="source-dot dot-extended"></span>Shodan InternetDB</span>
-                        <span class="source-item"><span class="source-dot dot-extended"></span>Malpedia</span>
-                        <span class="source-item"><span class="source-dot dot-extended"></span>HudsonRock</span>
-                        <span class="source-item"><span class="source-dot dot-extended"></span>EPSS</span>
-                        <span class="source-item"><span class="source-dot dot-extended"></span>Ransomwatch</span>
-                        <span class="source-item"><span class="source-dot dot-extended"></span>Typosquat Detection</span>
-                        <span class="source-item"><span class="source-dot dot-extended"></span>Dark Web Search</span>
-                        <span class="source-item"><span class="source-dot dot-extended"></span>Paste Monitoring</span>
-                    </div>
+                <div class="ioc-source-group">
+                    <div class="ioc-source-heading"><span class="ioc-source-dot ioc-source-dot-extended"></span>Free OSINT Extended</div>
+                    <div class="ioc-source-names">Shodan InternetDB, Malpedia, HudsonRock, EPSS, Ransomwatch, Typosquat Detection, Dark Web Search, Paste Monitoring</div>
                 </div>
-            </div>
-        </div>
-
-        <!-- IOC History Sidebar -->
-        <div class="card">
-            <div class="card-header d-flex align-items-center justify-content-between">
-                <div class="d-flex align-items-center">
-                    <i class="bi bi-clock-history me-2 text-accent"></i>
-                    <h5 class="mb-0">Recent Lookups</h5>
-                </div>
-                <button class="btn btn-sm btn-ghost text-muted" onclick="clearIOCHistory()" title="Clear history">
-                    <i class="bi bi-trash3"></i>
-                </button>
-            </div>
-            <div class="card-body p-2" id="iocHistoryList">
-                <div class="text-center text-muted py-3" style="font-size:0.82rem;">
-                    <i class="bi bi-clock d-block mb-1" style="font-size:1.2rem;opacity:0.4"></i>
-                    No recent lookups
-                </div>
+                <div class="ioc-sources-note">Sources queried depend on the indicator type.</div>
             </div>
         </div>
     </div>
@@ -1070,11 +1228,13 @@
             <div class="spinner-border ioc-progress-spinner" role="status" id="progressSpinner">
                 <span class="visually-hidden">Loading...</span>
             </div>
-            <div id="progressStatus" class="ioc-progress-status" role="status" aria-live="polite">Initializing...</div>
+            <div class="ioc-progress-status-row">
+                <div id="progressStatus" class="ioc-progress-status" role="status" aria-live="polite">Initializing...</div>
+                <span id="progressPercent" class="ioc-progress-percent">0%</span>
+            </div>
             <div class="progress ioc-progress-track">
                 <div id="iocProgressBar" class="progress-bar progress-bar-striped progress-bar-animated"
                      role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
-                    0%
                 </div>
             </div>
             <details class="ioc-progress-log">
@@ -1139,6 +1299,7 @@
     var progressArea = document.getElementById('iocProgressArea');
     var progressBar = document.getElementById('iocProgressBar');
     var progressStatus = document.getElementById('progressStatus');
+    var progressPercent = document.getElementById('progressPercent');
     var progressLog = document.getElementById('progressLog');
     var progressSpinner = document.getElementById('progressSpinner');
     var progressTitle = document.getElementById('progressTitle');
@@ -1149,6 +1310,10 @@
     var btnExportJson = document.getElementById('btnExportJson');
     var btnPrintReport = document.getElementById('btnPrintReport');
     var btnViewFullReport = document.getElementById('btnViewFullReport');
+    var iocValueInput = document.getElementById('iocValue');
+    var iocTypeSelect = document.getElementById('iocType');
+    var iocTypeHint = document.getElementById('iocTypeHint');
+    var iocTypeChips = document.querySelectorAll('.ioc-type-chip');
 
     var lastResultData = null;
     var analysisId = null;
@@ -1207,6 +1372,44 @@
             iocInput.setAttribute('required', '');
         }
     };
+
+    function inferIOCType(value) {
+        if (/^https?:\/\/\S+$/i.test(value)) return 'URL';
+        if (/^CVE-\d{4}-\d{4,}$/i.test(value)) return 'CVE';
+        if (/^(?:\d{1,3}\.){3}\d{1,3}$/.test(value)) return 'IP';
+        if (/^[a-f0-9]{32}$/i.test(value)) return 'MD5 Hash';
+        if (/^[a-f0-9]{40}$/i.test(value)) return 'SHA1 Hash';
+        if (/^[a-f0-9]{64}$/i.test(value)) return 'SHA256 Hash';
+        if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return 'Email';
+        if (/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i.test(value)) return 'Domain';
+        return '';
+    }
+
+    function updateIOCTypeHint() {
+        var value = iocValueInput.value.trim();
+        var inferred = iocTypeSelect.value === 'auto' && value ? inferIOCType(value) : '';
+        iocTypeHint.textContent = inferred ? 'Looks like: ' + inferred : '';
+        iocTypeHint.hidden = !inferred;
+    }
+
+    function syncIOCTypeControls(type) {
+        var chipType = type.indexOf('hash_') === 0 ? 'hash' : type;
+        iocTypeChips.forEach(function (chip) {
+            chip.setAttribute('aria-pressed', chip.getAttribute('data-ioc-type') === chipType ? 'true' : 'false');
+        });
+        updateIOCTypeHint();
+    }
+
+    iocTypeChips.forEach(function (chip) {
+        chip.addEventListener('click', function () {
+            iocTypeSelect.value = chip.getAttribute('data-ioc-type');
+            syncIOCTypeControls(iocTypeSelect.value);
+        });
+    });
+    iocTypeSelect.addEventListener('change', function () {
+        syncIOCTypeControls(iocTypeSelect.value);
+    });
+    iocValueInput.addEventListener('input', updateIOCTypeHint);
 
     /* Bulk textarea counter */
     var bulkTA = document.getElementById('bulkIOCValue');
@@ -1410,6 +1613,66 @@
         renderIOCHistory();
     }
 
+    function getHistoryOutcome(data) {
+        var score = null;
+        if (data && data.threat_score !== undefined && data.threat_score !== null) {
+            score = parseInt(data.threat_score, 10);
+        } else if (data && data.score !== undefined) {
+            score = parseInt(data.score, 10);
+        } else if (data && data.risk_score !== undefined) {
+            score = parseInt(data.risk_score, 10);
+        }
+        if (isNaN(score)) score = null;
+
+        var verdict = data && data.verdict ? String(data.verdict).toLowerCase() : '';
+        if (!verdict) {
+            if (score !== null && score >= 70) verdict = 'malicious';
+            else if (score !== null && score >= 40) verdict = 'suspicious';
+            else if (score !== null && (score > 0 || (data.sources && Object.keys(data.sources).length > 0))) verdict = 'clean';
+        }
+        return { verdict: verdict, score: score };
+    }
+
+    function updateHistoryOutcome(value, data) {
+        var hist = getIOCHistory();
+        var outcome = getHistoryOutcome(data);
+        var changed = false;
+        hist.forEach(function (item) {
+            if (item.value === value) {
+                item.verdict = outcome.verdict;
+                item.score = outcome.score;
+                changed = true;
+            }
+        });
+        if (changed) {
+            try { localStorage.setItem(HISTORY_KEY, JSON.stringify(hist)); } catch (e) { /* quota exceeded - ignore */ }
+            renderIOCHistory();
+        }
+    }
+
+    function historyTypeLabel(type) {
+        var labels = {
+            auto: 'Auto',
+            ip: 'IP',
+            domain: 'Domain',
+            url: 'URL',
+            hash: 'Hash',
+            hash_md5: 'Hash',
+            hash_sha1: 'Hash',
+            hash_sha256: 'Hash',
+            email: 'Email',
+            cve: 'CVE'
+        };
+        return labels[type] || type || 'Auto';
+    }
+
+    function makeHistoryCell(className, text) {
+        var cell = document.createElement('span');
+        cell.className = 'ioc-history-cell ' + className;
+        cell.textContent = text;
+        return cell;
+    }
+
     window.clearIOCHistory = function () {
         try { localStorage.removeItem(HISTORY_KEY); } catch (e) { /* ignore */ }
         renderIOCHistory();
@@ -1423,52 +1686,62 @@
             /* Safe: static content only */
             container.textContent = '';
             var emptyDiv = document.createElement('div');
-            emptyDiv.className = 'text-center text-muted py-3';
-            emptyDiv.style.fontSize = '0.82rem';
-            var iconEl = document.createElement('i');
-            iconEl.className = 'bi bi-clock d-block mb-1';
-            iconEl.style.fontSize = '1.2rem';
-            iconEl.style.opacity = '0.4';
-            emptyDiv.appendChild(iconEl);
-            emptyDiv.appendChild(document.createTextNode('No recent lookups'));
+            emptyDiv.className = 'ioc-history-empty';
+            emptyDiv.textContent = 'No recent lookups';
             container.appendChild(emptyDiv);
             return;
         }
         /* Build history items using DOM methods for safety */
         container.textContent = '';
+        var table = document.createElement('div');
+        table.className = 'ioc-history-table';
+        var header = document.createElement('div');
+        header.className = 'ioc-history-header';
+        header.setAttribute('aria-hidden', 'true');
+        ['IOC', 'Type', 'Verdict', 'Score', 'When'].forEach(function (label) {
+            header.appendChild(makeHistoryCell('', label));
+        });
+        table.appendChild(header);
         hist.forEach(function (h) {
-            var truncVal = h.value.length > 28 ? h.value.substring(0, 28) + '...' : h.value;
+            var value = String(h.value || '');
+            var truncVal = value.length > 28 ? value.substring(0, 28) + '...' : value;
             var ago = timeAgo(h.ts);
 
             var item = document.createElement('div');
-            item.className = 'ioc-history-item';
-            item.title = h.value;
+            item.className = 'ioc-history-row';
+            item.setAttribute('role', 'button');
+            item.setAttribute('tabindex', '0');
+            item.title = value;
             item.addEventListener('click', (function(val, typ) {
                 return function() { window.reAnalyzeIOC(val, typ); };
-            })(h.value, h.type));
+            })(value, h.type));
+            item.addEventListener('keydown', (function(val, typ) {
+                return function (e) {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        window.reAnalyzeIOC(val, typ);
+                    }
+                };
+            })(value, h.type));
 
-            var valSpan = document.createElement('span');
-            valSpan.className = 'ioc-history-value';
-            valSpan.textContent = truncVal;
-
-            var badgeSpan = document.createElement('span');
-            badgeSpan.className = 'ioc-type-badge';
-            badgeSpan.textContent = h.type;
-
-            var timeSpan = document.createElement('span');
-            timeSpan.className = 'ioc-history-time';
-            timeSpan.textContent = ago;
-
-            item.appendChild(valSpan);
-            item.appendChild(badgeSpan);
-            item.appendChild(timeSpan);
-            container.appendChild(item);
+            var verdict = h.verdict ? String(h.verdict).toLowerCase() : '';
+            var verdictLabel = verdict ? verdict.charAt(0).toUpperCase() + verdict.slice(1) : '-';
+            var verdictClass = verdict === 'malicious' || verdict === 'suspicious' || verdict === 'clean' ? verdict : 'unknown';
+            var verdictCell = makeHistoryCell('ioc-history-badge ioc-history-verdict-' + verdictClass, verdictLabel);
+            item.appendChild(makeHistoryCell('ioc-history-ioc', truncVal));
+            item.appendChild(makeHistoryCell('ioc-history-type', historyTypeLabel(h.type)));
+            item.appendChild(verdictCell);
+            item.appendChild(makeHistoryCell('ioc-history-score', h.score !== undefined && h.score !== null ? String(h.score) : '-'));
+            item.appendChild(makeHistoryCell('ioc-history-time', ago));
+            table.appendChild(item);
         });
+        container.appendChild(table);
     }
 
     window.reAnalyzeIOC = function (value, type) {
-        document.getElementById('iocValue').value = value;
-        document.getElementById('iocType').value = type || 'auto';
+        iocValueInput.value = value;
+        iocTypeSelect.value = type || 'auto';
+        syncIOCTypeControls(iocTypeSelect.value);
         if (currentMode === 'bulk') window.setIOCMode('single');
         runAnalysis(value, type);
     };
@@ -2232,7 +2505,7 @@
     function setProgress(pct, message) {
         progressBar.style.width = pct + '%';
         progressBar.setAttribute('aria-valuenow', pct);
-        progressBar.textContent = pct + '%';
+        progressPercent.textContent = pct + '%';
         if (message) {
             progressStatus.textContent = message;
             if (message === lastProgressMessage) {
@@ -2302,6 +2575,7 @@
             onComplete: function (data) {
                 if (capturedRunId !== runId) return;
                 lastResultData = data;
+                updateHistoryOutcome(iocValue, data);
                 setProgress(100, 'Analysis complete.');
                 progressTitle.textContent = 'Analysis complete';
                 progressSpinner.style.display = 'none';
@@ -2329,17 +2603,24 @@
         });
     }
 
+    function scrollToProgressArea() {
+        if (!progressArea || !progressArea.scrollIntoView) return;
+        var reducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        progressArea.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'start' });
+    }
+
     /* ========================================================
        FORM SUBMIT HANDLER
     ======================================================== */
     if (form) {
         form.addEventListener('submit', function (e) {
             e.preventDefault();
-            var iocValue = document.getElementById('iocValue').value.trim();
-            var iocType = document.getElementById('iocType').value;
+            var iocValue = iocValueInput.value.trim();
+            var iocType = iocTypeSelect.value;
             if (!iocValue) return;
             saveIOCHistory(iocValue, iocType);
             runAnalysis(iocValue, iocType);
+            scrollToProgressArea();
         });
     }
 
