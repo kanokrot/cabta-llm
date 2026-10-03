@@ -914,6 +914,7 @@ pre code {
 
 .form-control:focus,
 .form-select:focus {
+    color: var(--text-primary);
     border-color: var(--color-primary);
     box-shadow: 0 0 0 3px rgba(0, 212, 255, 0.12);
     background: var(--bg-primary);
@@ -921,6 +922,7 @@ pre code {
 
 [data-theme="light"] .form-control:focus,
 [data-theme="light"] .form-select:focus {
+    color: var(--text-primary);
     box-shadow: 0 0 0 3px rgba(8, 145, 178, 0.12);
 }
 
