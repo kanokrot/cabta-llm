@@ -1988,7 +1988,8 @@
     }
 
     function ruleEditorCard(button) {
-        return button.closest('[data-analysis-id][data-rule-type]');
+        return button.closest('.rule-wrapper') ||
+            button.closest('[data-analysis-id][data-rule-type]');
     }
 
     function clearRuleValidationErrors(card) {
