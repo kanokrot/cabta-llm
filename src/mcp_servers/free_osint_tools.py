@@ -689,30 +689,40 @@ def typosquat_detect(domain: str) -> dict:
         resolving = []
         resolver_labels = []
         checked = len(to_check)
+        failed_query_count = 0
+        dns_limitations = []
         if _dns_helper.dns_available():
             with ThreadPoolExecutor(max_workers=8) as executor:
                 queries = list(executor.map(lambda candidate: (candidate, _dns_helper.resolve_record(candidate, "A")), to_check))
             for perm, query in queries:
                 resolver_labels.append(query.resolver)
+                if query.status in ("error", "unavailable"):
+                    failed_query_count += 1
                 if query.answers:
                     resolving.append({"domain": perm, "ip": query.answers[0]})
         else:
+            dns_limitations.append(
+                "The socket fallback cannot distinguish DNS timeouts from NXDOMAIN."
+            )
             for perm in to_check:
                 try:
                     ip = socket.gethostbyname(perm)
                     resolving.append({"domain": perm, "ip": ip})
                 except socket.gaierror:
-                    pass
+                    failed_query_count += 1
             resolver_labels.append("system")
 
-        return {
+        dns_unavailable = checked > 0 and failed_query_count == checked
+        result = {
             "source": "Typosquat Detector",
             "target_domain": domain,
             "total_permutations": len(permutations),
             "checked": checked,
             "resolving_domains": resolving,
             "resolving_count": len(resolving),
-            "risk_level": (
+            "failed_query_count": failed_query_count,
+            "dns_unavailable": dns_unavailable,
+            "risk_level": "UNKNOWN" if dns_unavailable else (
                 "HIGH" if len(resolving) > 10
                 else "MEDIUM" if len(resolving) > 3
                 else "LOW"
@@ -720,6 +730,14 @@ def typosquat_detect(domain: str) -> dict:
             "timestamp": datetime.utcnow().isoformat(),
             "resolver": _dns_helper.combine_resolvers(resolver_labels),
         }
+        if dns_unavailable:
+            result["message"] = (
+                "DNS resolution failed or was unavailable for all checked "
+                "typosquat queries; risk level is UNKNOWN."
+            )
+        if dns_limitations:
+            result["dns_limitations"] = dns_limitations
+        return result
     except Exception as e:
         return {"error": str(e), "domain": domain}
 
