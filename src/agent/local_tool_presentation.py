@@ -9,25 +9,26 @@ from dataclasses import dataclass
 class LocalToolPresentation:
     display_name: str
     icon: str
+    ui_category: str
 
 
 # The SVG icon set has no dedicated IOC, rules, sandbox, EDR, or MITRE icons.
 # Use the closest existing security category icon without changing tool IDs.
 LOCAL_TOOL_PRESENTATION: dict[str, LocalToolPresentation] = {
-    "investigate_ioc": LocalToolPresentation("IOC Investigation", "threat-intel"),
-    "analyze_malware": LocalToolPresentation("Malware Analysis", "malware"),
-    "analyze_email": LocalToolPresentation("Email Analysis", "malware"),
-    "extract_iocs": LocalToolPresentation("IOC Extractor", "threat-intel"),
-    "generate_rules": LocalToolPresentation("Rule Generator", "malware"),
-    "yara_scan": LocalToolPresentation("YARA Scanner", "malware"),
-    "search_threat_intel": LocalToolPresentation("Threat Intel Search", "threat-intel"),
-    "sandbox_submit": LocalToolPresentation("Sandbox Submit", "malware"),
-    "correlate_findings": LocalToolPresentation("MITRE Correlation", "malware"),
-    "recall_ioc": LocalToolPresentation("IOC Recall", "threat-intel"),
-    "isolate_device": LocalToolPresentation("Device Isolation", "malware"),
-    "block_ip": LocalToolPresentation("IP Block", "network"),
-    "extract_file_hash_pairs": LocalToolPresentation("File Hash Pairs", "forensics"),
-    "quarantine_file": LocalToolPresentation("File Quarantine", "malware"),
+    "investigate_ioc": LocalToolPresentation("IOC Investigation", "threat-intel", "Threat Intel"),
+    "analyze_malware": LocalToolPresentation("Malware Analysis", "malware", "Malware"),
+    "analyze_email": LocalToolPresentation("Email Analysis", "malware", "Malware"),
+    "extract_iocs": LocalToolPresentation("IOC Extractor", "threat-intel", "Threat Intel"),
+    "generate_rules": LocalToolPresentation("Rule Generator", "malware", "Malware"),
+    "yara_scan": LocalToolPresentation("YARA Scanner", "malware", "Malware"),
+    "search_threat_intel": LocalToolPresentation("Threat Intel Search", "threat-intel", "Threat Intel"),
+    "sandbox_submit": LocalToolPresentation("Sandbox Submit", "malware", "Malware"),
+    "correlate_findings": LocalToolPresentation("MITRE Correlation", "malware", "Forensics"),
+    "recall_ioc": LocalToolPresentation("IOC Recall", "threat-intel", "Threat Intel"),
+    "isolate_device": LocalToolPresentation("Device Isolation", "malware", "Response"),
+    "block_ip": LocalToolPresentation("IP Block", "network", "Response"),
+    "extract_file_hash_pairs": LocalToolPresentation("File Hash Pairs", "forensics", "Forensics"),
+    "quarantine_file": LocalToolPresentation("File Quarantine", "malware", "Response"),
 }
 
 

@@ -11,20 +11,20 @@ from src.web.visibility import serialize_tool_definition
 
 
 EXPECTED_LOCAL_TOOLS = {
-    "investigate_ioc": ("IOC Investigation", "threat-intel"),
-    "analyze_malware": ("Malware Analysis", "malware"),
-    "analyze_email": ("Email Analysis", "malware"),
-    "extract_iocs": ("IOC Extractor", "threat-intel"),
-    "generate_rules": ("Rule Generator", "malware"),
-    "yara_scan": ("YARA Scanner", "malware"),
-    "search_threat_intel": ("Threat Intel Search", "threat-intel"),
-    "sandbox_submit": ("Sandbox Submit", "malware"),
-    "correlate_findings": ("MITRE Correlation", "malware"),
-    "recall_ioc": ("IOC Recall", "threat-intel"),
-    "isolate_device": ("Device Isolation", "malware"),
-    "block_ip": ("IP Block", "network"),
-    "extract_file_hash_pairs": ("File Hash Pairs", "forensics"),
-    "quarantine_file": ("File Quarantine", "malware"),
+    "investigate_ioc": ("IOC Investigation", "threat-intel", "Threat Intel"),
+    "analyze_malware": ("Malware Analysis", "malware", "Malware"),
+    "analyze_email": ("Email Analysis", "malware", "Malware"),
+    "extract_iocs": ("IOC Extractor", "threat-intel", "Threat Intel"),
+    "generate_rules": ("Rule Generator", "malware", "Malware"),
+    "yara_scan": ("YARA Scanner", "malware", "Malware"),
+    "search_threat_intel": ("Threat Intel Search", "threat-intel", "Threat Intel"),
+    "sandbox_submit": ("Sandbox Submit", "malware", "Malware"),
+    "correlate_findings": ("MITRE Correlation", "malware", "Forensics"),
+    "recall_ioc": ("IOC Recall", "threat-intel", "Threat Intel"),
+    "isolate_device": ("Device Isolation", "malware", "Response"),
+    "block_ip": ("IP Block", "network", "Response"),
+    "extract_file_hash_pairs": ("File Hash Pairs", "forensics", "Forensics"),
+    "quarantine_file": ("File Quarantine", "malware", "Response"),
 }
 
 
@@ -35,11 +35,15 @@ def test_local_presentation_has_exactly_14_unique_names_and_valid_icons():
     assert set(LOCAL_TOOL_PRESENTATION) == set(EXPECTED_LOCAL_TOOLS)
     assert len({item.display_name for item in LOCAL_TOOL_PRESENTATION.values()}) == 14
 
-    for name, (display_name, icon) in EXPECTED_LOCAL_TOOLS.items():
+    allowed_categories = {"Network", "OSINT", "Forensics", "Malware", "Threat Intel", "Response"}
+    for name, (display_name, icon, ui_category) in EXPECTED_LOCAL_TOOLS.items():
         item = LOCAL_TOOL_PRESENTATION[name]
-        assert (item.display_name, item.icon) == (display_name, icon)
+        assert (item.display_name, item.icon, item.ui_category) == (
+            display_name, icon, ui_category
+        )
         assert 1 <= len(item.display_name.split()) <= 3
         assert item.icon in valid_icons
+        assert item.ui_category in allowed_categories
 
 
 def test_local_presentation_serialization_preserves_technical_names():
@@ -59,10 +63,11 @@ def test_local_presentation_serialization_preserves_technical_names():
     by_name = {item["name"]: item for item in serialized if item is not None}
 
     assert set(by_name) == set(EXPECTED_LOCAL_TOOLS)
-    for technical_name, (display_name, icon) in EXPECTED_LOCAL_TOOLS.items():
+    for technical_name, (display_name, icon, ui_category) in EXPECTED_LOCAL_TOOLS.items():
         assert by_name[technical_name]["name"] == technical_name
         assert by_name[technical_name]["display_name"] == display_name
         assert by_name[technical_name]["icon"] == icon
+        assert by_name[technical_name]["ui_category"] == ui_category
 
 
 def test_unmapped_local_tool_keeps_the_existing_fallback():

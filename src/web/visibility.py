@@ -581,6 +581,7 @@ def serialize_tool_definition(tool: Any, role: str = THREAT_HUNTER) -> Optional[
     if local_presentation is not None:
         display_name = display_name or local_presentation.display_name
         icon = icon or local_presentation.icon
+        ui_category = local_presentation.ui_category or ui_category
     else:
         display_name = display_name or presentation.display_name
         icon = icon or presentation.icon
