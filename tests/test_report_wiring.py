@@ -7,6 +7,44 @@ import pytest
 
 from src.agent.playbook_engine import PlaybookEngine
 from src.agent.agent_store import AgentStore
+from src.web.visibility import serialize_agent_session, serialize_chat_session
+
+
+def test_serialize_agent_session_reports_only_has_report_boolean():
+    full_report = {"ioc": "evil.example", "verdict": "MALICIOUS", "secret": "not exposed"}
+
+    serialized = serialize_agent_session({
+        "id": "session-with-report",
+        "metadata": {"ioc_investigation_result": full_report},
+    })
+
+    assert serialized["has_report"] is True
+    assert "metadata" not in serialized
+    assert "ioc_investigation_result" not in serialized
+    assert "not exposed" not in repr(serialized)
+
+
+@pytest.mark.parametrize(
+    "session",
+    [
+        {"id": "session-without-metadata"},
+        {"id": "session-with-null-metadata", "metadata": None},
+        {"id": "session-with-invalid-metadata", "metadata": "not-a-dict"},
+    ],
+)
+def test_serialize_agent_session_has_report_false_without_mapping_metadata(session):
+    serialized = serialize_agent_session(session)
+
+    assert serialized["has_report"] is False
+
+
+def test_serialize_chat_session_includes_has_report_boolean():
+    serialized = serialize_chat_session({
+        "id": "chat-session",
+        "metadata": {"ioc_investigation_result": {"verdict": "CLEAN"}},
+    })
+
+    assert serialized["has_report"] is True
 
 
 class _DummyCfg:

@@ -514,6 +514,11 @@ def serialize_agent_session(session: Mapping[str, Any], steps: Optional[Iterable
                             live_state: Optional[Mapping[str, Any]] = None, role: str = THREAT_HUNTER) -> dict[str, Any]:
     authorize_flow(role, "agent")
     output = _safe_session(session)
+    metadata = session.get("metadata")
+    output["has_report"] = (
+        bool(metadata.get("ioc_investigation_result"))
+        if isinstance(metadata, Mapping) else False
+    )
     if steps is not None:
         output["steps"] = [serialize_agent_step(step, role=role) for step in list(steps)[:500]]
     if isinstance(live_state, Mapping):
