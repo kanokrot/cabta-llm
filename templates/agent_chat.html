@@ -1944,24 +1944,19 @@ var AgentChat = (function() {
 
     // ===== Verdict Detection =====
 // ===== Verdict Detection =====
+    function normalizeVerdict(value) {
+        if (typeof value !== 'string') return null;
+        var normalized = value.trim().toUpperCase();
+        if (['MALICIOUS', 'SUSPICIOUS', 'CLEAN', 'UNKNOWN'].indexOf(normalized) === -1) return null;
+        return normalized.toLowerCase();
+    }
+
     function detectVerdict(text) {
-    if (!text) return null;
-
-    // [FIX] เช็ค label "Verdict: X" ก่อนเป็นอันดับแรก — แม่นกว่าและไม่โดน
-    // คำปฏิเสธหลอก เช่น "none of these appear to be malicious"
-    // ต้องรองรับ "unknown" ด้วย ไม่งั้น backend ที่ตั้งใจส่ง verdict=UNKNOWN
-    // (เช่น กรณี findings มีแต่ tool error ไม่มีหลักฐานจริง) จะไม่ match
-    // label นี้ แล้วหลุดไป fallback keyword scan ซึ่งอาจ mis-detect เป็น
-    // suspicious/malicious จากคำอื่นในข้อความ (เช่น "risk", "anomal")
-    var labelMatch = text.match(/verdict[:\s\*]+\s*(malicious|suspicious|clean|unknown)/i);
-    if (labelMatch) return labelMatch[1].toLowerCase();
-
-    // Fallback: keyword scan แบบเดิม (ใช้เมื่อไม่มี label ชัดเจน)
-    var lower = text.toLowerCase();
-    if (lower.match(/\b(malicious|zararli|kotu|infected|trojan|ransomware|backdoor)\b/)) return 'malicious';
-    if (lower.match(/\b(suspicious|supheli|potentially|anomal|risk)\b/)) return 'suspicious';
-    if (lower.match(/\b(clean|temiz|benign|safe|legitimate|harmless)\b/)) return 'clean';
-    return null;
+        if (!text) return null;
+        var direct = normalizeVerdict(text);
+        if (direct) return direct;
+        var labelMatch = text.match(/(?:verdict|assessment|classification)[:\s\*]+\s*(malicious|suspicious|clean|unknown)/i);
+        return labelMatch ? labelMatch[1].toLowerCase() : null;
     }
 
     // ===== Timer =====
@@ -2500,7 +2495,7 @@ var AgentChat = (function() {
                 if (!history.length) restoreEmptyState();
                 history.forEach(function(m) {
                     if (m.role === 'user') addBubble(m.content, 'user');
-                    else addBubble(m.content, 'agent');
+                    else addBubble(m.content, 'agent', false, m.verdict);
                 });
                 if (data.steps) {
                     updateProgress(data.current_step || (data.steps.length || 0), data.max_steps || 50);
@@ -2616,27 +2611,37 @@ var AgentChat = (function() {
             case 'session_state':
                 if (msg.session) {
                     maxSteps = msg.session.max_steps || 50;
-                    var steps = msg.steps || [];
+                    var steps = msg.session.steps || msg.steps || [];
                     currentStep = steps.length;
                     updateProgress(currentStep, maxSteps);
                     if (msg.session.goal) addBubble(msg.session.goal, 'user');
+                    var restoredAgentHistory = (msg.session.history || []).filter(function(m) { return m.role === 'agent'; });
                     steps.forEach(function(s) {
                         if (s.step_type === 'tool_call' && s.tool_name) {
                             addToolCall(s.tool_name, s.tool_params ? JSON.parse(s.tool_params || '{}') : null);
-                        } else if (s.step_type === 'final_answer') {
-                            addBubble(s.data || 'Investigation complete.', 'agent');
                         }
+                    });
+                    if (restoredAgentHistory.length) {
+                        restoredAgentHistory.forEach(function(m) {
+                            addBubble(m.content, 'agent', false, m.verdict);
+                        });
+                    } else {
+                        steps.forEach(function(s) {
+                            if (s.step_type === 'final_answer') {
+                                addBubble(s.data || s.summary || 'Investigation complete.', 'agent', false, s.verdict);
+                            }
+                        });
                     });
                 }
                 break;
             case 'message': case 'response':
-                addBubble(msg.content, 'agent'); break;
+                addBubble(msg.content, 'agent', false, msg.verdict); break;
             case 'approval_required': case 'approval_needed':
                 showApproval(msg); break;
             case 'completed':
                 stopTimer();
                 hideLiveToolIndicator();
-                addBubble(msg.summary || 'Investigation completed.', 'agent');
+                addBubble(msg.summary || 'Investigation completed.', 'agent', false, msg.verdict);
                 addInvestigationSummary(msg);
                 updateProgress(maxSteps, maxSteps);
                 document.getElementById('exportDropdownWrap').style.display = 'inline-flex';
@@ -2669,7 +2674,7 @@ var AgentChat = (function() {
                 addBubble('Investigation cancelled.', 'system');
                 loadSessions(); break;
             case 'complete':
-                addBubble(msg.content || 'Investigation complete.', 'agent'); break;
+                addBubble(msg.content || 'Investigation complete.', 'agent', false, msg.verdict); break;
             case 'error':
                 addBubble('Error: ' + (msg.content || msg.error || msg.message), 'system'); break;
             case 'heartbeat': break;
@@ -2751,7 +2756,7 @@ var AgentChat = (function() {
             .then(function(r) { return r.json(); })
             .then(function(data) {
                 btn.disabled = false;
-                if (data.response) addBubble(data.response, 'agent');
+                if (data.response) addBubble(data.response, 'agent', false, data.verdict);
                 scrollToBottom();
             })
             .catch(function(err) {
@@ -2768,7 +2773,7 @@ var AgentChat = (function() {
         if (emptyState) emptyState.remove();
     }
 
-    function addBubble(text, type, trustedHtml = false) {
+    function addBubble(text, type, trustedHtml = false, verdictOverride = null) {
         var msgs = document.getElementById('chatMessages');
         removeEmptyState();
         var div = document.createElement('div');
@@ -2777,7 +2782,9 @@ var AgentChat = (function() {
             div.innerHTML = '<div class="bubble-label">You</div>' + esc(text);
         } else if (type === 'agent') {
             div.className = 'chat-bubble chat-bubble-agent';
-            var verdict = detectVerdict(text);
+            var verdict = verdictOverride === null || verdictOverride === undefined
+                ? detectVerdict(text)
+                : normalizeVerdict(verdictOverride);
             var verdictHtml = '';
             if (verdict) {
                 var vIcon = verdict === 'malicious' ? 'bi-exclamation-triangle-fill' : verdict === 'suspicious' ? 'bi-exclamation-circle-fill' : verdict === 'unknown' ? 'bi-question-circle-fill' : 'bi-check-circle-fill';

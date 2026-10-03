@@ -104,7 +104,14 @@ def test_agent_chat_layout_preserves_required_hooks_and_adds_redesign() -> None:
     assert "document.fonts.ready.then(fitChatHeight);" in template
     assert template.count("data.has_report === true") == 2
     assert "data.metadata.ioc_investigation_result" not in template
-    assert "function addBubble(text, type, trustedHtml = false)" in template
+    assert "function addBubble(text, type, trustedHtml = false, verdictOverride = null)" in template
+    assert "else addBubble(m.content, 'agent', false, m.verdict);" in template
+    assert "var restoredAgentHistory = (msg.session.history || []).filter" in template
+    assert "function normalizeVerdict(value)" in template
+    assert r"\b(malicious|zararli|kotu|infected|trojan|ransomware|backdoor)\b" not in template
+    assert r"\b(suspicious|supheli|potentially|anomal|risk)\b" not in template
+    assert r"\b(clean|temiz|benign|safe|legitimate|harmless)\b" not in template
+    assert "detectVerdict(verdict) || 'info'" in template
     assert "if (trustedHtml) div.innerHTML = text || '';" in template
     assert "else div.textContent = text || '';" in template
     hero_css = re.search(r"\.agent-empty-state \{([\s\S]*?)\n    \}", template)
