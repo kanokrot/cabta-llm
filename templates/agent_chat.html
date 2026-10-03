@@ -396,8 +396,8 @@
         text-transform: uppercase;
         letter-spacing: 0.4px;
     }
-    .source-badge-local { background: rgba(34,197,94,0.15); color: #22c55e; border: 1px solid rgba(34,197,94,0.25); }
-    .source-badge-mcp { background: rgba(56,189,248,0.15); color: #38bdf8; border: 1px solid rgba(56,189,248,0.25); }
+    .source-badge-local { background: var(--bg-tertiary); color: var(--color-success); border: 1px solid var(--color-success); }
+    .source-badge-mcp { background: var(--bg-tertiary); color: var(--color-info); border: 1px solid var(--color-info); }
     .phase-badge {
         display: inline-flex;
         align-items: center;
@@ -592,6 +592,22 @@
         pointer-events: none;
     }
     .copy-toast.show { opacity: 1; }
+
+    /* ===== Tool Category Colors ===== */
+    .tool-category-row { border-left: 3px solid transparent !important; }
+    .tool-category-icon { color: currentColor; }
+    .tool-category-row.tool-category-network { border-left-color: var(--color-info) !important; }
+    .tool-category-row.tool-category-osint { border-left-color: var(--color-primary) !important; }
+    .tool-category-row.tool-category-threat-intel { border-left-color: var(--color-accent) !important; }
+    .tool-category-row.tool-category-forensics { border-left-color: var(--color-success) !important; }
+    .tool-category-row.tool-category-malware { border-left-color: var(--color-warning) !important; }
+    .tool-category-row.tool-category-response { border-left-color: var(--color-danger) !important; }
+    .tool-category-icon.tool-category-network { color: var(--color-info); }
+    .tool-category-icon.tool-category-osint { color: var(--color-primary); }
+    .tool-category-icon.tool-category-threat-intel { color: var(--color-accent); }
+    .tool-category-icon.tool-category-forensics { color: var(--color-success); }
+    .tool-category-icon.tool-category-malware { color: var(--color-warning); }
+    .tool-category-icon.tool-category-response { color: var(--color-danger); }
 
     /* ===== Agent Status Strip ===== */
     .agent-status-bar {
@@ -909,11 +925,34 @@ var AgentChat = (function() {
             name: technicalName,
             display_name: known.display_name || technicalName || 'Tool',
             ui_category: known.ui_category || known.category || 'Malware',
+            category: known.category || '',
             icon: known.icon || 'malware',
             source: server,
             requires_approval: Boolean(known.requires_approval),
             is_dangerous: Boolean(known.is_dangerous)
         };
+    }
+
+    function toolCategoryClass(meta) {
+        var category = meta.ui_category || meta.category || 'Malware';
+        var categoryKeys = {
+            'Network': 'network',
+            'network': 'network',
+            'OSINT': 'osint',
+            'osint': 'osint',
+            'Forensics': 'forensics',
+            'forensics': 'forensics',
+            'Malware': 'malware',
+            'malware': 'malware',
+            'Threat Intel': 'threat-intel',
+            'threat_intel': 'threat-intel',
+            'threat-intel': 'threat-intel',
+            'Response': 'response',
+            'response': 'response',
+            'edr': 'response',
+            'sandbox': 'response'
+        };
+        return 'tool-category-' + (categoryKeys[category] || 'malware');
     }
 
     function toolIconSvg(iconKey, extraClass) {
@@ -932,11 +971,12 @@ var AgentChat = (function() {
     function toolIdentityHtml(toolName, source) {
         var meta = getToolPresentation(toolName, source);
         var server = meta.source && meta.source !== 'local' ? meta.source : '';
+        var categoryClass = toolCategoryClass(meta);
         var serverBadge = server
             ? '<span class="source-badge source-badge-mcp"><i class="bi bi-plug" style="font-size:0.55rem;"></i>' + esc(server) + '</span>'
             : '<span class="source-badge source-badge-local"><i class="bi bi-house" style="font-size:0.55rem;"></i>LOCAL</span>';
         return '<span class="mcp-tool-identity" title="' + esc(meta.name) + '">' +
-            toolIconSvg(meta.icon, 'me-1') +
+            toolIconSvg(meta.icon, 'me-1 tool-category-icon ' + categoryClass) +
             '<span class="tool-friendly-name">' + esc(meta.display_name) + '</span>' +
             '</span> ' + serverBadge + toolSafetyBadges(meta);
     }
@@ -961,10 +1001,12 @@ var AgentChat = (function() {
     function appendToolIdentityDom(parent, toolName, source) {
         var meta = getToolPresentation(toolName, source);
         var server = meta.source && meta.source !== 'local' ? meta.source : '';
+        var categoryClass = toolCategoryClass(meta);
+        parent.classList.add('tool-category-row', categoryClass);
         var identity = document.createElement('span');
         identity.className = 'mcp-tool-identity';
         identity.title = meta.name;
-        identity.appendChild(toolIconElement(meta.icon, 'me-1'));
+        identity.appendChild(toolIconElement(meta.icon, 'me-1 tool-category-icon ' + categoryClass));
         var friendlyName = document.createElement('span');
         friendlyName.className = 'tool-friendly-name';
         friendlyName.textContent = meta.display_name;
