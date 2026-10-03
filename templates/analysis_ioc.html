@@ -177,7 +177,7 @@
         flex: 1;
         border: none;
         background: transparent;
-        color: var(--bs-secondary-color);
+        color: var(--text-secondary);
         padding: 0.4rem 0.75rem;
         border-radius: 6px;
         font-size: 0.82rem;
@@ -186,9 +186,9 @@
         transition: all 0.2s;
     }
     .mode-toggle-btn.active {
-        background: var(--bs-primary);
-        color: #fff;
-        box-shadow: 0 2px 8px rgba(var(--bs-primary-rgb), 0.3);
+        background: var(--color-accent);
+        color: var(--bg-card);
+        box-shadow: 0 2px 8px color-mix(in srgb, var(--color-accent) 30%, transparent);
     }
     .bulk-textarea {
         font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
@@ -775,21 +775,22 @@
 
     /* ── IOC Progress Card ── */
     .ioc-progress-area {
-        width: 100%;
+        width: min(100%, 720px);
+        margin: 1.5rem auto 0;
     }
     .ioc-progress-card {
         border-color: var(--border-color);
         background: var(--bg-card);
+        border-radius: 16px;
+        overflow: hidden;
     }
     .ioc-progress-header {
         flex-direction: column;
         gap: 0.65rem;
         padding: 1.25rem 1rem;
+        border-bottom: none;
+        background: var(--bg-card);
         text-align: center;
-    }
-    .ioc-progress-header > i {
-        color: var(--color-accent);
-        font-size: 1.35rem;
     }
     .ioc-progress-title {
         color: var(--text-primary);
@@ -827,6 +828,19 @@
         height: 3rem;
         border-width: 0.3em;
         color: var(--color-accent);
+    }
+    .ioc-progress-state-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 3rem;
+        height: 3rem;
+        color: var(--color-success);
+        font-size: 3rem;
+        line-height: 1;
+    }
+    .ioc-progress-state-icon.ioc-progress-state-error {
+        color: var(--color-danger);
     }
     .ioc-progress-status {
         min-height: 1.5rem;
@@ -889,6 +903,102 @@
         font-variant-numeric: tabular-nums;
     }
 
+    /* ── IOC Card Polish ── */
+    .ioc-form-card,
+    .ioc-source-card,
+    .ioc-history-card {
+        border-color: var(--border-color);
+        border-radius: 16px;
+        background: var(--bg-card);
+        overflow: hidden;
+    }
+    .ioc-form-card > .card-body,
+    .ioc-source-card > .card-body,
+    .ioc-history-card > .card-body {
+        padding: 1.5rem;
+    }
+    .ioc-card-title {
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        gap: 0.55rem;
+        margin-bottom: 1.25rem;
+        color: var(--text-primary);
+    }
+    .ioc-card-title-label {
+        color: var(--text-muted);
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+    }
+    .ioc-card-title > i {
+        color: var(--color-accent);
+    }
+    .ioc-input-wrap {
+        position: relative;
+    }
+    .ioc-input-wrap > i {
+        position: absolute;
+        top: 50%;
+        left: 1rem;
+        z-index: 2;
+        color: var(--color-accent);
+        pointer-events: none;
+        transform: translateY(-50%);
+    }
+    .ioc-form-input {
+        min-height: 56px;
+        padding-right: 10.5rem;
+        padding-left: 3rem;
+        border: 1px solid var(--color-accent);
+        border-radius: 12px;
+        background: var(--bg-card);
+        color: var(--text-primary);
+        font-size: 1.05rem;
+    }
+    .ioc-form-input:focus {
+        border-color: var(--color-accent);
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 18%, transparent);
+        background: var(--bg-card);
+    }
+    .ioc-type-hint {
+        position: absolute;
+        top: 50%;
+        right: 0.75rem;
+        max-width: 45%;
+        overflow: hidden;
+        padding: 0.3rem 0.55rem;
+        border: 1px solid color-mix(in srgb, var(--color-accent) 45%, transparent);
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+        color: var(--text-secondary);
+        font-size: 0.72rem;
+        line-height: 1.2;
+        text-overflow: ellipsis;
+        transform: translateY(-50%);
+        white-space: nowrap;
+    }
+    .ioc-form-footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        margin-top: 1rem;
+    }
+    .ioc-form-note {
+        color: var(--text-muted);
+        font-size: 0.75rem;
+    }
+    .ioc-form-submit {
+        min-height: 44px;
+        flex-shrink: 0;
+    }
+    .ioc-history-clear {
+        min-width: 44px;
+        min-height: 44px;
+    }
+
     /* ── IOC Form Controls ── */
     .ioc-form-input {
         min-height: 56px;
@@ -903,7 +1013,7 @@
         min-height: 44px;
         padding: 0.55rem 0.85rem;
         border: 1px solid var(--border-color);
-        border-radius: 999px;
+        border-radius: 8px;
         background: var(--bg-card);
         color: var(--text-secondary);
         cursor: pointer;
@@ -922,8 +1032,8 @@
     }
     .ioc-type-chip[aria-pressed="true"] {
         border-color: var(--color-accent);
-        background: var(--color-accent);
-        color: var(--bg-card);
+        background: color-mix(in srgb, var(--color-accent) 16%, transparent);
+        color: var(--text-primary);
     }
     .ioc-type-hint {
         min-height: 1.25rem;
@@ -933,10 +1043,7 @@
 
     /* ── IOC Sources ── */
     .ioc-source-group {
-        display: grid;
-        grid-template-columns: minmax(9.5rem, auto) minmax(0, 1fr);
-        align-items: start;
-        gap: 0.75rem;
+        display: block;
         padding: 0.7rem 0;
         border-bottom: 1px solid var(--border-color);
     }
@@ -947,9 +1054,12 @@
         display: flex;
         align-items: center;
         gap: 0.45rem;
+        margin-bottom: 0.25rem;
         color: var(--text-primary);
         font-size: 0.78rem;
         font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
     }
     .ioc-source-dot {
         width: 8px;
@@ -961,7 +1071,7 @@
     .ioc-source-dot-premium { background: var(--color-warning); }
     .ioc-source-dot-free { background: var(--color-accent); }
     .ioc-source-dot-osint { background: var(--color-success); }
-    .ioc-source-dot-extended { background: var(--color-danger); }
+    .ioc-source-dot-extended { background: var(--color-accent); }
     .ioc-source-names {
         min-width: 0;
         color: var(--text-secondary);
@@ -1028,22 +1138,42 @@
         display: inline-block;
         max-width: 100%;
         overflow: hidden;
-        padding: 0.18rem 0.4rem;
-        border: 1px solid var(--border-color);
-        border-radius: 0.35rem;
         text-overflow: ellipsis;
         white-space: nowrap;
         font-size: 0.68rem;
         font-weight: 700;
     }
-    .ioc-history-verdict-malicious { color: var(--color-danger); }
-    .ioc-history-verdict-suspicious { color: var(--color-warning); }
-    .ioc-history-verdict-clean { color: var(--color-success); }
-    .ioc-history-verdict-unknown { color: var(--text-muted); }
+    .ioc-history-verdict-pill {
+        padding: 0.18rem 0.4rem;
+        border: 1px solid currentColor;
+        border-radius: 999px;
+    }
+    .ioc-history-tone-danger {
+        border-color: var(--color-danger);
+        background: color-mix(in srgb, var(--color-danger) 18%, transparent);
+        color: var(--color-danger);
+    }
+    .ioc-history-tone-warning {
+        border-color: var(--color-warning);
+        background: color-mix(in srgb, var(--color-warning) 18%, transparent);
+        color: var(--color-warning);
+    }
+    .ioc-history-tone-success {
+        border-color: var(--color-success);
+        background: color-mix(in srgb, var(--color-success) 18%, transparent);
+        color: var(--color-success);
+    }
+    .ioc-history-tone-neutral {
+        color: var(--text-muted);
+    }
     .ioc-history-score {
         color: var(--text-primary);
         font-variant-numeric: tabular-nums;
     }
+    .ioc-history-score-tone-danger { color: var(--color-danger); }
+    .ioc-history-score-tone-warning { color: var(--color-warning); }
+    .ioc-history-score-tone-success { color: var(--color-success); }
+    .ioc-history-score-tone-neutral { color: var(--text-muted); }
     .ioc-history-time {
         color: var(--text-muted);
     }
@@ -1052,6 +1182,25 @@
         color: var(--text-muted);
         font-size: 0.82rem;
         text-align: center;
+    }
+    @media (max-width: 575.98px) {
+        .ioc-form-footer {
+            align-items: stretch;
+            flex-direction: column;
+        }
+        .ioc-form-submit {
+            width: 100%;
+        }
+        .ioc-form-note {
+            text-align: center;
+        }
+        .ioc-form-input {
+            padding-right: 0.85rem;
+        }
+        .ioc-type-hint {
+            right: 0.55rem;
+            max-width: 55%;
+        }
     }
     @media (prefers-reduced-motion: reduce) {
         .ioc-progress-spinner,
@@ -1081,12 +1230,12 @@
 <div class="row g-4">
     <!-- IOC Submit Form -->
     <div class="col-lg-7">
-        <div class="card">
-            <div class="card-header d-flex align-items-center">
-                <i class="bi bi-search me-2 text-accent"></i>
-                <h5 class="mb-0">Submit IOC for Analysis</h5>
-            </div>
+        <div class="card ioc-form-card">
             <div class="card-body">
+                <div class="ioc-card-title">
+                    <i class="bi bi-search" aria-hidden="true"></i>
+                    <span class="ioc-card-title-label">Submit IOC for Analysis</span>
+                </div>
                 <!-- Mode Toggle -->
                 <div class="mode-toggle-wrap">
                     <button type="button" class="mode-toggle-btn active" id="btnModeSingle" onclick="setIOCMode('single')">
@@ -1102,15 +1251,13 @@
                     <div id="singleMode">
                         <div class="mb-3">
                             <label for="iocValue" class="form-label">IOC Value</label>
-                            <div class="input-group">
-                                <span class="input-group-text"><i class="bi bi-crosshair"></i></span>
+                            <div class="ioc-input-wrap">
+                                <i class="bi bi-crosshair" aria-hidden="true"></i>
                                 <input type="text" id="iocValue" name="ioc_value" class="form-control ioc-form-input" required
                                        placeholder="e.g. 8.8.8.8, evil.com, d41d8cd98f00b204...">
-                            </div>
-                            <div class="form-text d-flex justify-content-between align-items-start gap-2">
-                                <span>Enter an IP address, domain, URL, file hash, email address, or CVE ID.</span>
                                 <span id="iocTypeHint" class="ioc-type-hint text-end" hidden></span>
                             </div>
+                            <div class="form-text">Enter an IP address, domain, URL, file hash, email address, or CVE ID.</div>
                         </div>
                     </div>
 
@@ -1151,10 +1298,12 @@
                         </div>
                     </div>
 
-                    <!-- Single submit -->
-                    <button type="submit" id="iocSubmitBtn" class="btn btn-primary w-100">
-                        <i class="bi bi-send me-2"></i>Analyze IOC
-                    </button>
+                    <div class="ioc-form-footer">
+                        <div class="ioc-form-note">Sources queried depend on the indicator type.</div>
+                        <button type="submit" id="iocSubmitBtn" class="btn btn-primary ioc-form-submit">
+                            <i class="bi bi-send me-2"></i>Analyze IOC
+                        </button>
+                    </div>
                     <!-- Bulk submit (hidden by default) -->
                     <button type="button" id="bulkSubmitBtn" class="btn btn-primary w-100" style="display:none;" onclick="processBulkIOCs()">
                         <i class="bi bi-collection me-2"></i>Process Bulk IOCs
@@ -1170,30 +1319,31 @@
         </div>
 
     <!-- Recent Lookups -->
-    <div class="card mt-3">
-        <div class="card-header d-flex align-items-center justify-content-between">
-            <div class="d-flex align-items-center">
-                <i class="bi bi-clock-history me-2 text-accent"></i>
-                <h5 class="mb-0">Recent Lookups</h5>
+    <div class="card mt-3 ioc-history-card">
+        <div class="card-body">
+            <div class="ioc-card-title">
+                <i class="bi bi-clock-history" aria-hidden="true"></i>
+                <span class="ioc-card-title-label">Recent Lookups</span>
+                <button id="btnClearHistory" class="btn btn-sm btn-ghost text-muted ioc-history-clear ms-auto" onclick="clearIOCHistory()" title="Clear history">
+                    <i class="bi bi-trash3"></i>
+                </button>
             </div>
-            <button id="btnClearHistory" class="btn btn-sm btn-ghost text-muted" onclick="clearIOCHistory()" title="Clear history">
-                <i class="bi bi-trash3"></i>
-            </button>
-        </div>
-        <div class="card-body p-2" id="iocHistoryList">
-            <div class="ioc-history-empty">No recent lookups</div>
+            <div id="iocHistoryList">
+                <div class="ioc-history-empty">No recent lookups</div>
+            </div>
         </div>
     </div>
     </div>
 
     <!-- Intelligence Sources -->
     <div class="col-lg-5">
-        <div class="card mb-3">
-            <div class="card-header d-flex align-items-center">
-                <i class="bi bi-info-circle me-2 text-accent"></i>
-                <h5 class="mb-0">Intelligence Sources</h5>
-            </div>
-            <div class="card-body py-3">
+        <!-- Sources queried depend on the indicator type. The visible note is in the form footer. -->
+        <div class="card mb-3 ioc-source-card">
+            <div class="card-body">
+                <div class="ioc-card-title">
+                    <i class="bi bi-info-circle" aria-hidden="true"></i>
+                    <span class="ioc-card-title-label">Intelligence Sources</span>
+                </div>
                 <div class="ioc-source-group">
                     <div class="ioc-source-heading"><span class="ioc-source-dot ioc-source-dot-premium"></span>Premium APIs</div>
                     <div class="ioc-source-names">VirusTotal, AbuseIPDB, Shodan, AlienVault OTX, GreyNoise</div>
@@ -1210,7 +1360,6 @@
                     <div class="ioc-source-heading"><span class="ioc-source-dot ioc-source-dot-extended"></span>Free OSINT Extended</div>
                     <div class="ioc-source-names">Shodan InternetDB, Malpedia, HudsonRock, EPSS, Ransomwatch, Typosquat Detection, Dark Web Search, Paste Monitoring</div>
                 </div>
-                <div class="ioc-sources-note">Sources queried depend on the indicator type.</div>
             </div>
         </div>
     </div>
@@ -1219,8 +1368,7 @@
 <!-- Progress Area (hidden by default) -->
 <div id="iocProgressArea" class="mt-4 ioc-progress-area" style="display: none;">
     <div class="card ioc-progress-card">
-        <div class="card-header d-flex align-items-center ioc-progress-header">
-            <i class="bi bi-hourglass-split" aria-hidden="true"></i>
+        <div class="ioc-progress-header">
             <h5 id="progressTitle" class="mb-0 ioc-progress-title">Analysis in Progress</h5>
             <code id="progressIocValue" class="ioc-progress-ioc"></code>
         </div>
@@ -1323,6 +1471,28 @@
     var progressMessageCount = 0;
     var lastProgressLogItem = null;
     var lastProgressCountBadge = null;
+
+    function setProgressVisual(state) {
+        progressSpinner.textContent = '';
+        if (state === 'running') {
+            progressSpinner.className = 'spinner-border ioc-progress-spinner';
+            progressSpinner.setAttribute('role', 'status');
+            progressSpinner.setAttribute('aria-label', 'Loading');
+            var loadingText = document.createElement('span');
+            loadingText.className = 'visually-hidden';
+            loadingText.textContent = 'Loading...';
+            progressSpinner.appendChild(loadingText);
+            return;
+        }
+
+        progressSpinner.className = 'ioc-progress-state-icon' + (state === 'error' ? ' ioc-progress-state-error' : '');
+        progressSpinner.setAttribute('role', 'img');
+        progressSpinner.setAttribute('aria-label', state === 'error' ? 'Analysis failed' : 'Analysis complete');
+        var stateIcon = document.createElement('i');
+        stateIcon.className = state === 'error' ? 'bi bi-x-circle-fill' : 'bi bi-check-circle-fill';
+        stateIcon.setAttribute('aria-hidden', 'true');
+        progressSpinner.appendChild(stateIcon);
+    }
 
     /* ========================================================
        HTML HELPERS
@@ -1666,6 +1836,13 @@
         return labels[type] || type || 'Auto';
     }
 
+    function historyVerdictTone(verdict) {
+        if (verdict === 'malicious' || verdict === 'high') return 'danger';
+        if (verdict === 'suspicious') return 'warning';
+        if (verdict === 'clean' || verdict === 'benign') return 'success';
+        return 'neutral';
+    }
+
     function makeHistoryCell(className, text) {
         var cell = document.createElement('span');
         cell.className = 'ioc-history-cell ' + className;
@@ -1726,12 +1903,14 @@
 
             var verdict = h.verdict ? String(h.verdict).toLowerCase() : '';
             var verdictLabel = verdict ? verdict.charAt(0).toUpperCase() + verdict.slice(1) : '-';
-            var verdictClass = verdict === 'malicious' || verdict === 'suspicious' || verdict === 'clean' ? verdict : 'unknown';
-            var verdictCell = makeHistoryCell('ioc-history-badge ioc-history-verdict-' + verdictClass, verdictLabel);
+            var verdictTone = historyVerdictTone(verdict);
+            var verdictClasses = 'ioc-history-badge ioc-history-tone-' + verdictTone;
+            if (verdictTone !== 'neutral') verdictClasses += ' ioc-history-verdict-pill';
+            var verdictCell = makeHistoryCell(verdictClasses, verdictLabel);
             item.appendChild(makeHistoryCell('ioc-history-ioc', truncVal));
             item.appendChild(makeHistoryCell('ioc-history-type', historyTypeLabel(h.type)));
             item.appendChild(verdictCell);
-            item.appendChild(makeHistoryCell('ioc-history-score', h.score !== undefined && h.score !== null ? String(h.score) : '-'));
+            item.appendChild(makeHistoryCell('ioc-history-score ioc-history-score-tone-' + verdictTone, h.score !== undefined && h.score !== null ? String(h.score) : '-'));
             item.appendChild(makeHistoryCell('ioc-history-time', ago));
             table.appendChild(item);
         });
@@ -2564,6 +2743,7 @@
         progressIocValue.textContent = iocValue;
         progressLogDetails.open = false;
         progressBar.classList.remove('bg-danger');
+        setProgressVisual('running');
         progressSpinner.style.display = '';
         setProgress(0, 'Submitting IOC...');
 
@@ -2578,7 +2758,8 @@
                 updateHistoryOutcome(iocValue, data);
                 setProgress(100, 'Analysis complete.');
                 progressTitle.textContent = 'Analysis complete';
-                progressSpinner.style.display = 'none';
+                setProgressVisual('success');
+                progressSpinner.style.display = '';
                 resultsArea.style.display = 'block';
                 showViewFullReportButton(data && data.analysis_id);
 
@@ -2598,7 +2779,8 @@
                 progressTitle.textContent = 'Analysis failed';
                 progressLogDetails.open = true;
                 progressBar.classList.add('bg-danger');
-                progressSpinner.style.display = 'none';
+                setProgressVisual('error');
+                progressSpinner.style.display = '';
             }
         });
     }
@@ -2633,6 +2815,7 @@
         var capturedAutoLoadRunId = ++runId;
         progressArea.style.display = 'block';
         setProgress(5, 'Loading analysis...');
+        setProgressVisual('running');
         progressSpinner.style.display = '';
 
         var safeId = encodeURIComponent(analysisId);
@@ -2650,7 +2833,8 @@
                             lastResultData = innerResult;
                             setProgress(100, 'Analysis loaded.');
                             progressTitle.textContent = 'Analysis complete';
-                            progressSpinner.style.display = 'none';
+                            setProgressVisual('success');
+                            progressSpinner.style.display = '';
                             resultsArea.style.display = 'block';
                             showViewFullReportButton(analysisId);
                             renderSanitizedResult(resultsBody, renderStructuredResult(innerResult));
@@ -2661,7 +2845,8 @@
                     progressTitle.textContent = 'Analysis failed';
                     progressLogDetails.open = true;
                     progressBar.classList.add('bg-danger');
-                    progressSpinner.style.display = 'none';
+                    setProgressVisual('error');
+                    progressSpinner.style.display = '';
                     return;
                 }
                 setProgress(statusData.progress || 10, statusData.current_step || 'Resuming...');
@@ -2672,7 +2857,8 @@
                 progressTitle.textContent = 'Analysis failed';
                 progressLogDetails.open = true;
                 progressBar.classList.add('bg-danger');
-                progressSpinner.style.display = 'none';
+                setProgressVisual('error');
+                progressSpinner.style.display = '';
             });
     }
 
