@@ -63,7 +63,7 @@ def test_agent_session_history_contains_goal_and_final_answer() -> None:
 
     assert serialized["history"] == [
         {"role": "user", "content": "Investigate 8.8.8.8"},
-        {"role": "agent", "content": "IOC is clean"},
+        {"role": "agent", "content": "IOC is clean", "verdict": "CLEAN"},
     ]
 
 
@@ -97,6 +97,57 @@ def test_agent_session_history_handles_invalid_final_answer_json() -> None:
     )
 
     assert serialized["history"][-1] == {"role": "agent", "content": "plain answer"}
+
+
+def test_agent_session_history_normalizes_allowed_verdict() -> None:
+    serialized = serialize_agent_session(
+        _agent_session("Investigate an IOC"),
+        steps=[
+            {
+                "step_number": 1,
+                "step_type": "final_answer",
+                "content": '{"answer":"Done","verdict":"  suspicious  "}',
+            },
+        ],
+    )
+
+    assert serialized["history"][-1] == {
+        "role": "agent",
+        "content": "Done",
+        "verdict": "SUSPICIOUS",
+    }
+
+
+def test_agent_session_history_omits_invalid_verdict() -> None:
+    serialized = serialize_agent_session(
+        _agent_session("Investigate an IOC"),
+        steps=[
+            {
+                "step_number": 1,
+                "step_type": "final_answer",
+                "content": '{"answer":"Done","verdict":"<script>alert(1)</script>"}',
+            },
+        ],
+    )
+
+    assert serialized["history"][-1] == {"role": "agent", "content": "Done"}
+    assert "<script>" not in str(serialized["history"][-1])
+
+
+def test_agent_session_history_omits_missing_verdict_key() -> None:
+    serialized = serialize_agent_session(
+        _agent_session("Investigate an IOC"),
+        steps=[
+            {
+                "step_number": 1,
+                "step_type": "final_answer",
+                "content": '{"answer":"Done"}',
+            },
+        ],
+    )
+
+    assert serialized["history"][-1] == {"role": "agent", "content": "Done"}
+    assert "verdict" not in serialized["history"][-1]
 
 
 def test_agent_session_history_is_empty_without_goal_or_chat_steps() -> None:

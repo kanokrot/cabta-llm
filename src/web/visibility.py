@@ -525,6 +525,27 @@ def _agent_history_content(step: Mapping[str, Any]) -> Optional[str]:
     return raw_content
 
 
+def _agent_history_verdict(step: Mapping[str, Any]) -> Optional[str]:
+    if step.get("step_type") != "final_answer":
+        return None
+    raw_content = _text(step.get("content"), 4000)
+    if raw_content is None:
+        return None
+    try:
+        decision = json.loads(raw_content)
+    except (TypeError, json.JSONDecodeError):
+        return None
+    if not isinstance(decision, Mapping):
+        return None
+    verdict = decision.get("verdict")
+    if not isinstance(verdict, str):
+        return None
+    normalized = verdict.strip().upper()
+    if normalized in {"MALICIOUS", "SUSPICIOUS", "CLEAN", "UNKNOWN"}:
+        return normalized
+    return None
+
+
 def serialize_agent_session(session: Mapping[str, Any], steps: Optional[Iterable[Mapping[str, Any]]] = None,
                             live_state: Optional[Mapping[str, Any]] = None, role: str = THREAT_HUNTER) -> dict[str, Any]:
     authorize_flow(role, "agent")
@@ -551,7 +572,11 @@ def serialize_agent_session(session: Mapping[str, Any], steps: Optional[Iterable
                 continue
             content = _agent_history_content(step)
             if content is not None:
-                history.append({"role": "agent", "content": content})
+                history_item = {"role": "agent", "content": content}
+                verdict = _agent_history_verdict(step)
+                if verdict is not None:
+                    history_item["verdict"] = verdict
+                history.append(history_item)
     output["history"] = history
     if isinstance(live_state, Mapping):
         output["live_state"] = {
