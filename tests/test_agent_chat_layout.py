@@ -124,6 +124,14 @@ def test_agent_chat_layout_preserves_required_hooks_and_adds_redesign() -> None:
     assert "icon.className = 'bi ' + iconClass + ' me-2';" in template
     assert '<div class="agent-chat-shell">' in template
     assert '<div class="agent-chat-header">' in template
+    assert "flex-wrap: wrap;" in template
+    assert "border-radius: 999px;" in template
+    assert "color-mix(in srgb, var(--color-warning) 14%, var(--bg-secondary))" in template
+    assert "agent-status-item:has(.agent-status-warning)" in template
+    assert "#exportDropdownBtn" in template
+    assert "height: 32px;" in template
+    assert "border-style: dashed;" in template
+    assert "content: '>';" in template
     assert '<div class="card">\n            <div class="card-header' not in template
     assert "function fitChatHeight()" in template
     assert "window.addEventListener('resize'" in template
