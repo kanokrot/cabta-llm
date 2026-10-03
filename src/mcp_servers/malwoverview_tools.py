@@ -10,6 +10,7 @@ Usage:
 """
 
 import hashlib
+import ipaddress
 import json
 import logging
 import os
@@ -204,6 +205,40 @@ def _query_threatfox_ioc(ioc: str) -> dict:
         return {"error": "Invalid JSON from ThreatFox", "raw": raw[:500]}
 
 
+def _normalize_ipv4_host(value: str) -> str | None:
+    host = value.split(':', 1)[0]
+    try:
+        ip = ipaddress.ip_address(host)
+        return str(ip) if ip.version == 4 else None
+    except ValueError:
+        return None
+
+
+def _threatfox_exact_matches(data: object, ioc: str) -> list[dict]:
+    if not isinstance(data, list):
+        return []
+
+    matches = []
+    for entry in data:
+        if not isinstance(entry, dict):
+            continue
+        returned_ioc = entry.get("ioc", "")
+        ioc_type = str(entry.get("ioc_type", "")).lower()
+        comparable_ioc = returned_ioc
+        if ioc_type in ("ipv4", "ip", "ip:port"):
+            comparable_ioc = _normalize_ipv4_host(returned_ioc)
+        if comparable_ioc is None:
+            continue
+        exact_match = (
+            comparable_ioc.lower() == ioc.lower()
+            if ioc_type == "domain"
+            else comparable_ioc == ioc
+        )
+        if exact_match:
+            matches.append(entry)
+    return matches
+
+
 def _query_feodo_tracker_ip(ip: str) -> dict:
     """Check IP against Feodo Tracker blocklist."""
     try:
@@ -315,13 +350,17 @@ def malwoverview_hash_lookup(hash_value: str) -> str:
 
         # Query ThreatFox
         tf_result = _query_threatfox_ioc(hash_value)
-        if tf_result.get("query_status") == "ok" and tf_result.get("data"):
+        tf_matches = _threatfox_exact_matches(tf_result.get("data"), hash_value)
+        if tf_result.get("query_status") == "ok" and tf_matches:
             results["sources"]["threatfox"] = {
                 "found": True,
-                "entries": tf_result["data"][:5],
+                "entries": tf_matches[:5],
             }
         else:
-            results["sources"]["threatfox"] = {"found": False}
+            results["sources"]["threatfox"] = {
+                "found": False,
+                "message": "No exact match in ThreatFox",
+            }
 
         # Determine verdict
         found_anywhere = any(
@@ -387,10 +426,11 @@ def malwoverview_domain_check(domain: str) -> str:
 
         # ThreatFox IOC search
         tf_result = _query_threatfox_ioc(domain)
-        if tf_result.get("query_status") == "ok" and tf_result.get("data"):
+        tf_matches = _threatfox_exact_matches(tf_result.get("data"), domain)
+        if tf_result.get("query_status") == "ok" and tf_matches:
             results["sources"]["threatfox"] = {
                 "found": True,
-                "ioc_count": len(tf_result["data"]),
+                "ioc_count": len(tf_matches),
                 "entries": [
                     {
                         "ioc": e.get("ioc"),
@@ -401,11 +441,14 @@ def malwoverview_domain_check(domain: str) -> str:
                         "last_seen": e.get("last_seen_utc"),
                         "tags": e.get("tags"),
                     }
-                    for e in tf_result["data"][:10]
+                    for e in tf_matches[:10]
                 ],
             }
         else:
-            results["sources"]["threatfox"] = {"found": False}
+            results["sources"]["threatfox"] = {
+                "found": False,
+                "message": "No exact match in ThreatFox",
+            }
 
         # Try malwoverview CLI
         cli_result = _run_malwoverview("-d", domain)
@@ -479,7 +522,8 @@ def malwoverview_ip_check(ip: str) -> str:
 
         # ThreatFox
         tf_result = _query_threatfox_ioc(ip)
-        if tf_result.get("query_status") == "ok" and tf_result.get("data"):
+        tf_matches = _threatfox_exact_matches(tf_result.get("data"), ip)
+        if tf_result.get("query_status") == "ok" and tf_matches:
             results["sources"]["threatfox"] = {
                 "found": True,
                 "entries": [
@@ -490,11 +534,14 @@ def malwoverview_ip_check(ip: str) -> str:
                         "confidence_level": e.get("confidence_level"),
                         "tags": e.get("tags"),
                     }
-                    for e in tf_result["data"][:10]
+                    for e in tf_matches[:10]
                 ],
             }
         else:
-            results["sources"]["threatfox"] = {"found": False}
+            results["sources"]["threatfox"] = {
+                "found": False,
+                "message": "No exact match in ThreatFox",
+            }
 
         # Try malwoverview CLI
         cli_result = _run_malwoverview("-i", ip)
@@ -573,13 +620,17 @@ def malwoverview_url_check(url: str) -> str:
 
         if host:
             tf_result = _query_threatfox_ioc(host)
-            if tf_result.get("query_status") == "ok" and tf_result.get("data"):
+            tf_matches = _threatfox_exact_matches(tf_result.get("data"), host)
+            if tf_result.get("query_status") == "ok" and tf_matches:
                 results["sources"]["threatfox"] = {
                     "found": True,
-                    "entries": tf_result["data"][:5],
+                    "entries": tf_matches[:5],
                 }
             else:
-                results["sources"]["threatfox"] = {"found": False}
+                results["sources"]["threatfox"] = {
+                    "found": False,
+                    "message": "No exact match in ThreatFox",
+                }
 
         # Try malwoverview CLI
         cli_result = _run_malwoverview("-u", url)
@@ -734,13 +785,17 @@ def malwoverview_triage(file_path: str) -> str:
 
         # Check ThreatFox by SHA256
         tf_result = _query_threatfox_ioc(hashes["sha256"])
-        if tf_result.get("query_status") == "ok" and tf_result.get("data"):
+        tf_matches = _threatfox_exact_matches(tf_result.get("data"), hashes["sha256"])
+        if tf_result.get("query_status") == "ok" and tf_matches:
             results["sources"]["threatfox"] = {
                 "found": True,
-                "entries": tf_result["data"][:5],
+                "entries": tf_matches[:5],
             }
         else:
-            results["sources"]["threatfox"] = {"found": False}
+            results["sources"]["threatfox"] = {
+                "found": False,
+                "message": "No exact match in ThreatFox",
+            }
 
         # Also try MD5 on MalwareBazaar if SHA256 was not found
         if not results["sources"]["malwarebazaar"].get("found"):
