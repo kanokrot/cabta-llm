@@ -738,7 +738,7 @@
     .tool-category-icon-frame.tool-category-forensics { --tool-category-color: var(--color-success); }
     .tool-category-icon-frame.tool-category-malware { --tool-category-color: var(--color-warning); }
     .tool-category-icon-frame.tool-category-response { --tool-category-color: var(--color-danger); }
-    @supports (background: color-mix(in srgb, red 10%, transparent)) {
+    @supports (background: color-mix(in srgb, var(--color-primary) 10%, transparent)) {
         .tool-category-icon-frame {
             background: color-mix(in srgb, var(--tool-category-color) 16%, transparent);
         }
@@ -759,6 +759,58 @@
         background-color: var(--color-danger) !important;
         color: var(--bg-primary) !important;
         border: 1px solid var(--color-danger);
+    }
+    .tool-filter-controls {
+        display: flex;
+        flex-direction: column;
+        gap: 0.4rem;
+        margin-bottom: 0.55rem;
+    }
+    .tool-filter-search {
+        width: 100%;
+        padding: 0.35rem 0.5rem;
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+        background: var(--bg-tertiary);
+        color: var(--text-primary);
+        font-size: 0.72rem;
+    }
+    .tool-filter-search::placeholder { color: var(--text-muted); }
+    .tool-filter-search:focus {
+        border-color: var(--color-accent);
+        outline: 0;
+        box-shadow: 0 0 0 0.12rem var(--hover-overlay);
+    }
+    .tool-category-filters {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.3rem;
+    }
+    .tool-category-filter {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+        padding: 0.2rem 0.4rem;
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+        background: var(--bg-tertiary);
+        color: var(--text-secondary);
+        font-size: 0.64rem;
+    }
+    .tool-category-filter:hover,
+    .tool-category-filter:focus-visible {
+        border-color: var(--color-accent);
+        color: var(--color-accent);
+        outline: none;
+    }
+    .tool-category-filter[aria-pressed="true"] {
+        border-color: var(--color-primary);
+        background: var(--color-primary);
+        color: var(--bg-primary);
+    }
+    .tool-category-filter-count {
+        font-size: 0.58rem;
+        opacity: 0.85;
     }
 
     /* ===== Agent Status Strip ===== */
@@ -920,6 +972,12 @@
                     <span><i class="bi bi-tools me-1 text-accent"></i>Tools</span>
                     <small id="toolCountBreakdown" hidden>–</small>
                 </div>
+                <div class="tool-filter-controls">
+                    <label class="visually-hidden" for="toolSearchInput">Search tools</label>
+                    <input type="search" id="toolSearchInput" class="tool-filter-search"
+                        placeholder="Search tools" autocomplete="off">
+                    <div id="toolCategoryFilters" class="tool-category-filters" role="group" aria-label="Filter tools by category"></div>
+                </div>
                 <div id="toolsList" class="list-group list-group-flush">
                     <div class="text-center text-muted py-3"><small>Loading tools...</small></div>
                 </div>
@@ -992,6 +1050,9 @@ var AgentChat = (function() {
     var toolStartTime = null;
     var toolElapsedTimer = null;
     var toolPresentationByName = {};
+    var loadedTools = [];
+    var selectedToolCategory = '';
+    var toolSearchQuery = '';
     var agentStatus = {
         serverOnline: null,
         serverTotal: null,
@@ -1581,6 +1642,7 @@ var AgentChat = (function() {
     // ===== Init =====
     function init() {
         renderAgentStatus();
+        initToolFilters();
         loadSessions();
         loadTools();
         loadPlaybooks();
@@ -1620,13 +1682,141 @@ var AgentChat = (function() {
             .catch(function() {});
     }
 
+    function getToolCategory(tool) {
+        return tool.ui_category || tool.category || 'other';
+    }
+
+    function getToolCategoryLabel(category) {
+        return String(category).replace(/_/g, ' ');
+    }
+
+    function toolMatchesFilters(tool) {
+        var presentation = getToolPresentation(tool.name, tool.source);
+        var searchText = [
+            presentation.display_name,
+            tool.name,
+            tool.summary || tool.description || ''
+        ].join(' ').toLowerCase();
+        var matchesSearch = !toolSearchQuery || searchText.indexOf(toolSearchQuery) !== -1;
+        var matchesCategory = !selectedToolCategory || getToolCategory(tool) === selectedToolCategory;
+        return matchesSearch && matchesCategory;
+    }
+
+    function updateToolFilterButtons() {
+        var buttons = document.querySelectorAll('#toolCategoryFilters [data-tool-category]');
+        buttons.forEach(function(button) {
+            button.setAttribute('aria-pressed', button.getAttribute('data-tool-category') === selectedToolCategory ? 'true' : 'false');
+        });
+    }
+
+    function renderToolCategoryFilters() {
+        var container = document.getElementById('toolCategoryFilters');
+        if (!container) return;
+        while (container.firstChild) container.removeChild(container.firstChild);
+
+        var counts = {};
+        loadedTools.forEach(function(tool) {
+            var category = getToolCategory(tool);
+            counts[category] = (counts[category] || 0) + 1;
+        });
+        var categories = Object.keys(counts).sort();
+        var filterCategories = [''].concat(categories);
+        filterCategories.forEach(function(category) {
+            var button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'tool-category-filter';
+            button.setAttribute('data-tool-category', category);
+            button.setAttribute('aria-pressed', category === selectedToolCategory ? 'true' : 'false');
+            button.textContent = category ? getToolCategoryLabel(category) : 'All';
+            var count = document.createElement('span');
+            count.className = 'tool-category-filter-count';
+            count.textContent = category ? counts[category] : loadedTools.length;
+            button.appendChild(count);
+            button.addEventListener('click', function() {
+                selectedToolCategory = category;
+                updateToolFilterButtons();
+                renderToolsList();
+            });
+            container.appendChild(button);
+        });
+    }
+
+    function renderToolsList() {
+        var container = document.getElementById('toolsList');
+        if (!container) return;
+        while (container.firstChild) container.removeChild(container.firstChild);
+
+        var visibleTools = loadedTools.filter(toolMatchesFilters);
+        if (!visibleTools.length) {
+            var empty = document.createElement('div');
+            empty.className = 'text-center text-muted py-3';
+            empty.textContent = 'No tools match';
+            container.appendChild(empty);
+            return;
+        }
+
+        var categories = {};
+        visibleTools.forEach(function(tool) {
+            var category = getToolCategory(tool);
+            if (!categories[category]) categories[category] = [];
+            categories[category].push(tool);
+        });
+
+        var catIcons = {
+            'Threat Intel': 'bi-shield-exclamation', 'Malware': 'bi-bug',
+            'Forensics': 'bi-fingerprint', 'Network': 'bi-diagram-3',
+            'OSINT': 'bi-binoculars', 'other': 'bi-gear'
+        };
+
+        Object.keys(categories).sort().forEach(function(category) {
+            var header = document.createElement('div');
+            header.className = 'list-group-item bg-transparent border-0 py-1 px-3';
+            header.style.cssText = 'font-size:0.68rem;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-secondary);font-weight:700;margin-top:0.3rem;';
+            var categoryIcon = document.createElement('i');
+            categoryIcon.className = 'bi ' + (catIcons[category] || 'bi-gear') + ' me-1';
+            header.appendChild(categoryIcon);
+            header.appendChild(document.createTextNode(getToolCategoryLabel(category) + ' '));
+            var categoryCount = document.createElement('span');
+            categoryCount.className = 'badge bg-secondary';
+            categoryCount.style.fontSize = '0.55rem';
+            categoryCount.textContent = categories[category].length;
+            header.appendChild(categoryCount);
+            container.appendChild(header);
+
+            categories[category].forEach(function(tool) {
+                var item = document.createElement('div');
+                item.className = 'list-group-item bg-transparent tool-category-list-item';
+                item.style.cssText = 'font-size:0.78rem;border-color:var(--border-color);';
+                appendToolIdentityDom(item, tool.name, tool.source);
+                var summary = document.createElement('div');
+                summary.className = 'tool-summary';
+                summary.style.marginTop = '1px';
+                summary.textContent = truncateToolSummary(tool.summary || tool.description, 70);
+                item.appendChild(summary);
+                container.appendChild(item);
+            });
+        });
+    }
+
+    function initToolFilters() {
+        var searchInput = document.getElementById('toolSearchInput');
+        if (!searchInput) return;
+        searchInput.addEventListener('input', function() {
+            toolSearchQuery = searchInput.value.trim().toLowerCase();
+            renderToolsList();
+        });
+    }
+
     function loadTools() {
         fetch('/api/agent/tools')
             .then(function(r) { return r.json(); })
             .then(function(data) {
                 var tools = data.tools || [];
-                var container = document.getElementById('toolsList');
-                while (container.firstChild) container.removeChild(container.firstChild);
+                loadedTools = tools;
+                selectedToolCategory = '';
+                toolSearchQuery = '';
+                var searchInput = document.getElementById('toolSearchInput');
+                if (searchInput) searchInput.value = '';
                 document.getElementById('toolCountBadge').textContent = tools.length;
                 var mcpCount = tools.filter(function(t) { return t.source !== 'local'; }).length;
                 var builtinCount = tools.length - mcpCount;
@@ -1636,50 +1826,15 @@ var AgentChat = (function() {
                 agentStatus.builtinTools = builtinCount;
                 renderAgentStatus();
 
-                var categories = {};
                 tools.forEach(function(t) {
                     if (t.name) toolPresentationByName[t.name] = t;
-                    var cat = t.ui_category || t.category || 'other';
-                    if (!categories[cat]) categories[cat] = [];
-                    categories[cat].push(t);
                 });
-
-                var catIcons = {
-                    'Threat Intel': 'bi-shield-exclamation', 'Malware': 'bi-bug',
-                    'Forensics': 'bi-fingerprint', 'Network': 'bi-diagram-3',
-                    'OSINT': 'bi-binoculars', 'other': 'bi-gear'
-                };
-
-                Object.keys(categories).sort().forEach(function(cat) {
-                    var header = document.createElement('div');
-                    header.className = 'list-group-item bg-transparent border-0 py-1 px-3';
-                    header.style.cssText = 'font-size:0.68rem;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-secondary);font-weight:700;margin-top:0.3rem;';
-                    var categoryIcon = document.createElement('i');
-                    categoryIcon.className = 'bi ' + (catIcons[cat] || 'bi-gear') + ' me-1';
-                    header.appendChild(categoryIcon);
-                    header.appendChild(document.createTextNode(cat.replace(/_/g, ' ') + ' '));
-                    var categoryCount = document.createElement('span');
-                    categoryCount.className = 'badge bg-secondary';
-                    categoryCount.style.fontSize = '0.55rem';
-                    categoryCount.textContent = categories[cat].length;
-                    header.appendChild(categoryCount);
-                    container.appendChild(header);
-
-                    categories[cat].forEach(function(t) {
-                        var item = document.createElement('div');
-                        item.className = 'list-group-item bg-transparent tool-category-list-item';
-                        item.style.cssText = 'font-size:0.78rem;border-color:var(--border-color);';
-                        appendToolIdentityDom(item, t.name, t.source);
-                        var summary = document.createElement('div');
-                        summary.className = 'tool-summary';
-                        summary.style.marginTop = '1px';
-                        summary.textContent = truncateToolSummary(t.summary || t.description, 70);
-                        item.appendChild(summary);
-                        container.appendChild(item);
-                    });
-                });
+                renderToolCategoryFilters();
+                renderToolsList();
             })
             .catch(function() {
+                loadedTools = [];
+                renderToolCategoryFilters();
                 agentStatus.toolTotal = null;
                 agentStatus.mcpTools = null;
                 agentStatus.builtinTools = null;
