@@ -2508,10 +2508,9 @@ var AgentChat = (function() {
                 if (data.status === 'completed') {
                     document.getElementById('exportDropdownWrap').style.display = 'inline-flex';
                 }
-                var histReportPath = data.metadata && data.metadata.ioc_investigation_result;
                 var exportHtmlItemHist = document.getElementById('exportHtmlItem');
-                if (histReportPath) {
-                    reportPath = histReportPath;
+                if (data.has_report === true) {
+                    reportPath = true;
                     exportHtmlItemHist.classList.remove('disabled');
                     exportHtmlItemHist.removeAttribute('aria-disabled');
                 } else {
@@ -2645,12 +2644,16 @@ var AgentChat = (function() {
                 fetch('/api/agent/sessions/' + encodeURIComponent(sessionId))
                     .then(function(r) { return r.json(); })
                     .then(function(data) {
-                        var rp = data.metadata && data.metadata.ioc_investigation_result;
-                        if (rp) {
-                            reportPath = rp;
+                        if (data.has_report === true) {
+                            reportPath = true;
                             var exportHtmlItemLive = document.getElementById('exportHtmlItem');
                             exportHtmlItemLive.classList.remove('disabled');
                             exportHtmlItemLive.removeAttribute('aria-disabled');
+                        } else {
+                            reportPath = null;
+                            var exportHtmlItemLive = document.getElementById('exportHtmlItem');
+                            exportHtmlItemLive.classList.add('disabled');
+                            exportHtmlItemLive.setAttribute('aria-disabled', 'true');
                         }
                     })
                     .catch(function() {});

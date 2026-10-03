@@ -102,6 +102,8 @@ def test_agent_chat_layout_preserves_required_hooks_and_adds_redesign() -> None:
     assert "window.addEventListener('resize'" in template
     assert "fitChatHeight();" in template
     assert "document.fonts.ready.then(fitChatHeight);" in template
+    assert template.count("data.has_report === true") == 2
+    assert "data.metadata.ioc_investigation_result" not in template
     hero_css = re.search(r"\.agent-empty-state \{([\s\S]*?)\n    \}", template)
     assert hero_css
     assert "justify-content: flex-start;" in hero_css.group(1)
