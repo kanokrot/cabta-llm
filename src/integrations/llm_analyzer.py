@@ -71,6 +71,7 @@ class LLMAnalyzer:
         self.vllm_model = llm_config.get('vllm_model')
 
         self.timeout = aiohttp.ClientTimeout(total=120)  # Longer timeout for local LLM
+        self.vllm_timeout = aiohttp.ClientTimeout(total=45, connect=10)
 
         _model_map = {'ollama': self.ollama_model, 'vllm': self.vllm_model, 'anthropic': self.anthropic_model}
         logger.info(f"[LLM] Provider: {self.provider} | Model: {_model_map.get(self.provider, self.anthropic_model)}")
@@ -675,7 +676,7 @@ Be specific and reference the tool findings in your analysis."""
                     ]
                 }
 
-                async with aiohttp.ClientSession(timeout=self.timeout) as session:
+                async with aiohttp.ClientSession(timeout=self.vllm_timeout) as session:
                     async with session.post(
                         f'{self.vllm_base_url}/v1/chat/completions',
                         headers=headers,
@@ -707,9 +708,10 @@ Be specific and reference the tool findings in your analysis."""
                             logger.error(f"[LLM] vLLM API error {response.status}: {body[:200]}")
                             return None
 
-            except aiohttp.ClientConnectorError:
+            except aiohttp.ClientConnectorError as e:
                 logger.error(
-                    f"[LLM] Cannot connect to vLLM at {self.vllm_base_url}. "
+                    f"[LLM] vLLM API call failed: {type(e).__name__}: {e!r}; "
+                    f"Cannot connect to vLLM at {self.vllm_base_url}. "
                     "Is the vLLM server running?"
                 )
                 if attempt == 0:
@@ -718,14 +720,14 @@ Be specific and reference the tool findings in your analysis."""
                     raise
                 return None
             except asyncio.TimeoutError as e:
-                logger.error(f"[LLM] vLLM API call failed: {e}")
+                logger.error(f"[LLM] vLLM API call failed: {type(e).__name__}: {e!r}")
                 if attempt == 0:
                     continue
                 if raise_on_failure:
                     raise
                 return None
             except Exception as e:
-                logger.error(f"[LLM] vLLM API call failed: {e}")
+                logger.error(f"[LLM] vLLM API call failed: {type(e).__name__}: {e!r}")
                 if raise_on_failure:
                     raise
                 return None
