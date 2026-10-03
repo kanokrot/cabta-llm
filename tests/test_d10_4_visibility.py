@@ -17,7 +17,7 @@ from src.web import websocket as websocket_routes
 from src.web.auth import get_current_user
 from src.web.routes import cases as cases_routes
 from src.web.routes import playbooks as playbooks_routes
-from src.web.visibility import VisibilityError
+from src.web.visibility import VisibilityError, serialize_agent_session, serialize_chat_session
 
 
 SOC = "SOC Analyst Tier 1-2"
@@ -43,6 +43,75 @@ class _FakeWebSocket:
 
     async def send_json(self, payload: dict) -> None:
         self.sent.append(payload)
+
+
+def _agent_session(goal=None) -> dict:
+    return {"id": "session-1", "goal": goal}
+
+
+def test_agent_session_history_contains_goal_and_final_answer() -> None:
+    serialized = serialize_agent_session(
+        _agent_session("Investigate 8.8.8.8"),
+        steps=[
+            {
+                "step_number": 2,
+                "step_type": "final_answer",
+                "content": '{"action":"final_answer","answer":"IOC is clean","verdict":"CLEAN"}',
+            },
+        ],
+    )
+
+    assert serialized["history"] == [
+        {"role": "user", "content": "Investigate 8.8.8.8"},
+        {"role": "agent", "content": "IOC is clean"},
+    ]
+
+
+def test_agent_session_history_excludes_non_chat_steps_and_tool_results() -> None:
+    serialized = serialize_agent_session(
+        _agent_session("Investigate an IOC"),
+        steps=[
+            {"step_number": 1, "step_type": "thinking", "content": "private reasoning"},
+            {
+                "step_number": 2,
+                "step_type": "tool_call",
+                "content": "tool params",
+                "tool_result": "SECRET_TOOL_RESULT",
+            },
+            {"step_number": 3, "step_type": "error", "content": "Tool failed"},
+        ],
+    )
+
+    assert serialized["history"] == [
+        {"role": "user", "content": "Investigate an IOC"},
+        {"role": "agent", "content": "Tool failed"},
+    ]
+    assert "private reasoning" not in str(serialized["history"])
+    assert "SECRET_TOOL_RESULT" not in str(serialized)
+
+
+def test_agent_session_history_handles_invalid_final_answer_json() -> None:
+    serialized = serialize_agent_session(
+        _agent_session("Investigate an IOC"),
+        steps=[{"step_number": 1, "step_type": "final_answer", "content": "plain answer"}],
+    )
+
+    assert serialized["history"][-1] == {"role": "agent", "content": "plain answer"}
+
+
+def test_agent_session_history_is_empty_without_goal_or_chat_steps() -> None:
+    serialized = serialize_agent_session(_agent_session(), steps=[])
+
+    assert serialized["history"] == []
+
+
+def test_chat_session_serializer_includes_history() -> None:
+    serialized = serialize_chat_session(
+        _agent_session("Chat goal"),
+        steps=[{"step_number": 1, "step_type": "final_answer", "content": '{"answer":"Done"}'}],
+    )
+
+    assert serialized["history"][-1] == {"role": "agent", "content": "Done"}
 
 
 # ---------------------------------------------------------------------------

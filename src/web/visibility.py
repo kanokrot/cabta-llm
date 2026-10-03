@@ -510,6 +510,21 @@ def serialize_agent_step(step: Mapping[str, Any], role: str = THREAT_HUNTER) -> 
     return {key: value for key, value in output.items() if value is not None}
 
 
+def _agent_history_content(step: Mapping[str, Any]) -> Optional[str]:
+    raw_content = _text(step.get("content"), 4000)
+    if raw_content is None:
+        return None
+    if step.get("step_type") != "final_answer":
+        return raw_content
+    try:
+        decision = json.loads(raw_content)
+    except (TypeError, json.JSONDecodeError):
+        return raw_content
+    if isinstance(decision, Mapping):
+        return _text(decision.get("answer"), 4000)
+    return raw_content
+
+
 def serialize_agent_session(session: Mapping[str, Any], steps: Optional[Iterable[Mapping[str, Any]]] = None,
                             live_state: Optional[Mapping[str, Any]] = None, role: str = THREAT_HUNTER) -> dict[str, Any]:
     authorize_flow(role, "agent")
@@ -519,8 +534,25 @@ def serialize_agent_session(session: Mapping[str, Any], steps: Optional[Iterable
         bool(metadata.get("ioc_investigation_result"))
         if isinstance(metadata, Mapping) else False
     )
+    history = []
+    goal = _text(session.get("goal"), 4000)
+    if goal:
+        history.append({"role": "user", "content": goal})
     if steps is not None:
-        output["steps"] = [serialize_agent_step(step, role=role) for step in list(steps)[:500]]
+        raw_steps = list(steps)[:500]
+        output["steps"] = [serialize_agent_step(step, role=role) for step in raw_steps]
+        ordered_steps = sorted(
+            raw_steps,
+            key=lambda step: step.get("step_number")
+            if isinstance(step.get("step_number"), (int, float)) else float("inf"),
+        )
+        for step in ordered_steps:
+            if step.get("step_type") not in {"final_answer", "error"}:
+                continue
+            content = _agent_history_content(step)
+            if content is not None:
+                history.append({"role": "agent", "content": content})
+    output["history"] = history
     if isinstance(live_state, Mapping):
         output["live_state"] = {
             key: live_state[key] for key in ("phase", "step_count", "max_steps", "current_tool")
