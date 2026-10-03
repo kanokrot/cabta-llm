@@ -8,37 +8,54 @@
 
 {% block extra_head %}
 <style>
-    /* ── Verdict Banners ── */
-    .verdict-banner {
-        border-radius: 12px;
-        padding: 1.5rem 2rem;
+    /* ── IOC Results Hero ── */
+    .ioc-results-hero {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        align-items: center;
+        gap: 1.5rem;
+        margin-bottom: 1.5rem;
+        padding: 1.5rem;
+        border: 1px solid var(--border-color);
+        border-radius: 16px;
+        background: var(--bg-card);
+    }
+    .ioc-results-hero.ioc-hero-tone-danger {
+        border-color: color-mix(in srgb, var(--color-danger) 45%, transparent);
+        background: color-mix(in srgb, var(--color-danger) 10%, var(--bg-card));
+    }
+    .ioc-results-hero.ioc-hero-tone-warning {
+        border-color: color-mix(in srgb, var(--color-warning) 45%, transparent);
+        background: color-mix(in srgb, var(--color-warning) 10%, var(--bg-card));
+    }
+    .ioc-results-hero.ioc-hero-tone-success {
+        border-color: color-mix(in srgb, var(--color-success) 45%, transparent);
+        background: color-mix(in srgb, var(--color-success) 10%, var(--bg-card));
+    }
+    .ioc-results-hero.ioc-hero-tone-neutral {
+        border-color: var(--border-strong);
+        background: var(--bg-card);
+    }
+    .ioc-hero-gauge {
+        min-width: 9rem;
+    }
+    .ioc-hero-content {
+        min-width: 0;
+    }
+    .ioc-hero-verdict {
         display: flex;
         align-items: center;
-        gap: 1.25rem;
-        margin-bottom: 1.5rem;
-        color: #fff;
-        font-weight: 600;
-    }
-    .verdict-banner.verdict-malicious {
-        background: linear-gradient(135deg, #dc3545 0%, #a71d2a 100%);
-        box-shadow: 0 4px 24px rgba(220, 53, 69, 0.35);
-    }
-    .verdict-banner.verdict-suspicious {
-        background: linear-gradient(135deg, #fd7e14 0%, #c35a02 100%);
-        box-shadow: 0 4px 24px rgba(253, 126, 20, 0.30);
-    }
-    .verdict-banner.verdict-clean {
-        background: linear-gradient(135deg, #198754 0%, #0f5132 100%);
-        box-shadow: 0 4px 24px rgba(25, 135, 84, 0.30);
-    }
-    .verdict-banner.verdict-unknown {
-        background: linear-gradient(135deg, #6c757d 0%, #495057 100%);
-        box-shadow: 0 4px 24px rgba(108, 117, 125, 0.25);
+        gap: 0.7rem;
+        color: var(--text-primary);
     }
     .verdict-icon {
-        font-size: 2.5rem;
+        color: var(--text-secondary);
+        font-size: 2rem;
         line-height: 1;
     }
+    .ioc-hero-tone-danger .verdict-icon { color: var(--color-danger); }
+    .ioc-hero-tone-warning .verdict-icon { color: var(--color-warning); }
+    .ioc-hero-tone-success .verdict-icon { color: var(--color-success); }
     .verdict-label {
         font-size: 1.35rem;
         letter-spacing: 0.5px;
@@ -47,6 +64,75 @@
         font-size: 0.85rem;
         opacity: 0.85;
         font-weight: 400;
+    }
+    .ioc-hero-identity {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 0.55rem;
+        margin-top: 1rem;
+    }
+    .ioc-hero-value-row {
+        display: flex;
+        align-items: center;
+        min-width: 0;
+        max-width: 100%;
+        gap: 0.45rem;
+    }
+    .ioc-hero-ioc-value {
+        max-width: min(100%, 34rem);
+        overflow-wrap: anywhere;
+        padding: 0.45rem 0.65rem;
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        background: var(--bg-card);
+        color: var(--text-primary);
+        font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+        font-size: 0.82rem;
+    }
+    .ioc-hero-copy {
+        min-width: 44px;
+        min-height: 44px;
+        flex-shrink: 0;
+    }
+    .ioc-hero-type {
+        border: 1px solid var(--border-color);
+        border-radius: 999px;
+        background: var(--bg-card);
+        color: var(--text-secondary);
+        font-size: 0.7rem;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+    }
+    .ioc-results-hero .ioc-hero-type {
+        padding: 0.3rem 0.55rem;
+        border-radius: 999px;
+    }
+    .ioc-hero-stats {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(7rem, 1fr));
+        gap: 0.6rem;
+        margin-top: 1rem;
+    }
+    .ioc-hero-stat {
+        padding: 0.65rem 0.75rem;
+        border: 1px solid var(--border-color);
+        border-radius: 10px;
+        background: color-mix(in srgb, var(--bg-card) 75%, transparent);
+    }
+    .ioc-hero-stat-value {
+        color: var(--text-primary);
+        font-size: 1.25rem;
+        font-weight: 700;
+        line-height: 1.1;
+    }
+    .ioc-hero-stat-label {
+        margin-top: 0.25rem;
+        color: var(--text-muted);
+        font-size: 0.68rem;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
     }
 
     /* ── Threat Score Gauge ── */
@@ -63,7 +149,7 @@
     }
     .threat-gauge-bg {
         fill: none;
-        stroke: rgba(255,255,255,0.08);
+        stroke: color-mix(in srgb, var(--text-muted) 20%, transparent);
         stroke-width: 10;
     }
     .threat-gauge-fg {
@@ -77,7 +163,7 @@
     .threat-gauge-text {
         font-size: 1.6rem;
         font-weight: 700;
-        fill: var(--bs-body-color);
+        fill: var(--text-primary);
     }
     .threat-gauge-label {
         font-size: 0.7rem;
@@ -775,19 +861,35 @@
 
     /* ── IOC Progress Card ── */
     .ioc-progress-area {
-        width: min(100%, 720px);
-        margin: 1.5rem auto 0;
+        width: min(calc(100% - 2rem), 520px);
+        max-width: 520px;
+        margin: auto;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        color: var(--text-primary);
+        box-sizing: border-box;
+    }
+    .ioc-progress-area:not([open]) {
+        display: none;
+    }
+    .ioc-progress-area::backdrop {
+        background: color-mix(in srgb, var(--bg-card) 72%, transparent);
     }
     .ioc-progress-card {
+        width: 100%;
+        margin: 0;
         border-color: var(--border-color);
         background: var(--bg-card);
         border-radius: 16px;
         overflow: hidden;
     }
     .ioc-progress-header {
+        width: 100%;
+        min-width: 0;
         flex-direction: column;
         gap: 0.65rem;
-        padding: 1.25rem 1rem;
+        padding: 40px 40px 0;
         border-bottom: none;
         background: var(--bg-card);
         text-align: center;
@@ -797,9 +899,11 @@
         font-weight: 600;
     }
     .ioc-progress-ioc {
+        min-width: 0;
         display: inline-block;
         max-width: 100%;
         overflow-wrap: anywhere;
+        word-break: break-word;
         padding: 0.35rem 0.7rem;
         border: 1px solid var(--border-color);
         border-radius: 0.5rem;
@@ -809,14 +913,18 @@
         font-size: 0.85rem;
     }
     .ioc-progress-body {
+        width: 100%;
+        min-width: 0;
         display: flex;
         flex-direction: column;
         align-items: center;
         gap: 0.9rem;
-        padding: 1.5rem 1rem;
+        padding: 24px 40px 28px;
+        box-sizing: border-box;
         text-align: center;
     }
     .ioc-progress-status-row {
+        min-width: 0;
         display: flex;
         align-items: center;
         justify-content: space-between;
@@ -824,10 +932,11 @@
         width: min(100%, 42rem);
     }
     .ioc-progress-spinner {
-        width: 3rem;
-        height: 3rem;
+        width: 4rem;
+        height: 4rem;
         border-width: 0.3em;
-        color: var(--color-accent);
+        border-color: currentColor;
+        color: var(--color-accent) !important;
     }
     .ioc-progress-state-icon {
         display: inline-flex;
@@ -843,6 +952,15 @@
         color: var(--color-danger);
     }
     .ioc-progress-status {
+        min-width: 0;
+        max-width: 100%;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+        overflow: hidden;
+        text-align: left;
         min-height: 1.5rem;
         color: var(--text-secondary);
         font-size: 0.95rem;
@@ -901,6 +1019,27 @@
         font-size: 0.9rem;
         font-weight: 700;
         font-variant-numeric: tabular-nums;
+    }
+    .ioc-progress-footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        width: min(100%, 42rem);
+        margin-top: 0.25rem;
+        color: var(--text-muted);
+        font-size: 0.78rem;
+        text-align: left;
+    }
+    .ioc-progress-footer > span {
+        min-width: 0;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+    }
+    .ioc-progress-hide {
+        min-width: 44px;
+        min-height: 44px;
+        flex-shrink: 0;
     }
 
     /* ── IOC Card Polish ── */
@@ -1201,11 +1340,27 @@
             right: 0.55rem;
             max-width: 55%;
         }
+        .ioc-results-hero {
+            grid-template-columns: 1fr;
+            justify-items: stretch;
+        }
+        .ioc-hero-gauge {
+            justify-self: center;
+        }
+        .ioc-progress-footer {
+            align-items: stretch;
+            flex-direction: column;
+        }
+        .ioc-progress-hide {
+            width: 100%;
+        }
     }
     @media (prefers-reduced-motion: reduce) {
         .ioc-progress-spinner,
-        .ioc-progress-track .progress-bar-animated {
+        .ioc-progress-track .progress-bar-animated,
+        .threat-gauge-fg {
             animation: none;
+            transition: none;
         }
         .ioc-progress-track .progress-bar {
             transition: none;
@@ -1366,7 +1521,7 @@
 </div>
 
 <!-- Progress Area (hidden by default) -->
-<div id="iocProgressArea" class="mt-4 ioc-progress-area" style="display: none;">
+<dialog id="iocProgressArea" class="ioc-progress-area" aria-labelledby="progressTitle">
     <div class="card ioc-progress-card">
         <div class="ioc-progress-header">
             <h5 id="progressTitle" class="mb-0 ioc-progress-title">Analysis in Progress</h5>
@@ -1389,9 +1544,13 @@
                 <summary>Technical log</summary>
                 <ul id="progressLog" class="ioc-progress-log-list list-unstyled small"></ul>
             </details>
+            <div class="ioc-progress-footer">
+                <span>Results appear on the page when ready.</span>
+                <button type="button" id="progressHideButton" class="btn btn-outline-secondary ioc-progress-hide">Hide</button>
+            </div>
         </div>
     </div>
-</div>
+</dialog>
 
 <!-- Results Container (hidden by default) -->
 <div id="iocResults" class="mt-4" style="display: none;">
@@ -1455,6 +1614,8 @@
     var progressLogDetails = progressLog.closest('details');
     var resultsArea = document.getElementById('iocResults');
     var resultsBody = document.getElementById('iocResultsBody');
+    var iocSubmitBtn = document.getElementById('iocSubmitBtn');
+    var progressHideButton = document.getElementById('progressHideButton');
     var btnExportJson = document.getElementById('btnExportJson');
     var btnPrintReport = document.getElementById('btnPrintReport');
     var btnViewFullReport = document.getElementById('btnViewFullReport');
@@ -1471,6 +1632,7 @@
     var progressMessageCount = 0;
     var lastProgressLogItem = null;
     var lastProgressCountBadge = null;
+    var restoreFocusOnProgressClose = true;
 
     function setProgressVisual(state) {
         progressSpinner.textContent = '';
@@ -1492,6 +1654,48 @@
         stateIcon.className = state === 'error' ? 'bi bi-x-circle-fill' : 'bi bi-check-circle-fill';
         stateIcon.setAttribute('aria-hidden', 'true');
         progressSpinner.appendChild(stateIcon);
+    }
+
+    function openProgressDialog() {
+        restoreFocusOnProgressClose = true;
+        if (typeof progressArea.showModal === 'function') {
+            if (!progressArea.open) progressArea.showModal();
+        } else {
+            progressArea.setAttribute('open', '');
+            progressArea.style.display = 'block';
+        }
+    }
+
+    function closeProgressDialog(restoreFocus) {
+        restoreFocusOnProgressClose = restoreFocus !== false;
+        if (typeof progressArea.close === 'function') {
+            if (progressArea.open) progressArea.close();
+        } else {
+            progressArea.removeAttribute('open');
+            progressArea.style.display = '';
+            if (restoreFocusOnProgressClose && iocSubmitBtn) iocSubmitBtn.focus();
+        }
+    }
+
+    function scrollToResultsArea() {
+        if (!resultsArea || !resultsArea.scrollIntoView) return;
+        var reducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        resultsArea.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'start' });
+    }
+
+    if (progressHideButton) {
+        progressHideButton.addEventListener('click', function () {
+            closeProgressDialog(true);
+        });
+    }
+    if (progressArea) {
+        progressArea.addEventListener('click', function (event) {
+            if (event.target === progressArea) closeProgressDialog(true);
+        });
+        progressArea.addEventListener('close', function () {
+            if (restoreFocusOnProgressClose && iocSubmitBtn) iocSubmitBtn.focus();
+            restoreFocusOnProgressClose = true;
+        });
     }
 
     /* ========================================================
@@ -1619,7 +1823,7 @@
         var summaryBar = document.getElementById('bulkSummaryBar');
         cardsContainer.textContent = '';
         bulkArea.style.display = 'block';
-        progressArea.style.display = 'none';
+        closeProgressDialog(false);
         resultsArea.style.display = 'none';
 
         function updateSummary() {
@@ -2353,22 +2557,66 @@
             verdict = 'clean';
         }
 
-        if (verdict === 'malicious') {
+        var displayVerdict = verdict === 'high' ? 'malicious' : (verdict === 'benign' ? 'clean' : verdict);
+        if (displayVerdict === 'malicious') {
             verdictLabel = 'Malicious'; verdictSub = 'This indicator has been assessed as malicious';
             verdictIcon = 'bi-shield-fill-exclamation';
-        } else if (verdict === 'suspicious') {
+        } else if (displayVerdict === 'suspicious') {
             verdictLabel = 'Suspicious'; verdictSub = 'This indicator shows suspicious activity, manual review recommended';
             verdictIcon = 'bi-exclamation-triangle-fill';
-        } else if (verdict === 'clean') {
+        } else if (displayVerdict === 'clean') {
             verdictLabel = 'Clean'; verdictSub = 'No significant threat indicators detected';
             verdictIcon = 'bi-shield-fill-check';
         }
 
-        /* --- Verdict Banner --- */
-        html += '<div class="verdict-banner verdict-' + escAttr(verdict) + '">' +
-            '<span class="verdict-icon"><i class="bi ' + escAttr(verdictIcon) + '"></i></span>' +
+        var verdictTone = historyVerdictTone(verdict);
+        var gaugeColor = verdictTone === 'danger' ? 'var(--color-danger)' :
+            (verdictTone === 'warning' ? 'var(--color-warning)' :
+            (verdictTone === 'success' ? 'var(--color-success)' : 'var(--text-muted)'));
+        var dashOffset = 283 - (283 * Math.min(Math.max(score, 0), 100) / 100);
+        var iocVal = data.ioc_value || data.ioc || data.indicator || '-';
+        var iocType = data.ioc_type || data.type || 'unknown';
+        var firstSeen = data.first_seen || data.firstSeen || '-';
+        var lastSeen = data.last_seen || data.lastSeen || '-';
+        var hasSeenData = (firstSeen !== '' && firstSeen !== '-') || (lastSeen !== '' && lastSeen !== '-');
+
+        var sourcesChecked = (data.sources_checked !== undefined && data.sources_checked !== null)
+            ? data.sources_checked : (data.sources ? Object.keys(data.sources).length : 0);
+        var sourcesFlagged = data.sources_flagged || 0;
+        if (!data.sources_flagged && data.sources && typeof data.sources === 'object') {
+            Object.keys(data.sources).forEach(function(sn) {
+                var sd = data.sources[sn];
+                if (sd && (sd.malicious || sd.detected || (sd.found === true && sd.malicious !== false))) sourcesFlagged++;
+            });
+        }
+
+        html += '<div class="ioc-results-hero ioc-hero-tone-' + escAttr(verdictTone) + '">' +
+            '<div class="ioc-hero-gauge"><div class="threat-gauge-wrap">' +
+            '<svg class="threat-gauge-svg" viewBox="0 0 100 100" aria-label="Threat score ' + escAttr(String(score)) + '">' +
+            '<circle class="threat-gauge-bg" cx="50" cy="50" r="45"></circle>' +
+            '<circle class="threat-gauge-fg" cx="50" cy="50" r="45" style="stroke:' + escAttr(gaugeColor) + ';stroke-dashoffset:' + escAttr(String(dashOffset)) + '"></circle>' +
+            '<text class="threat-gauge-text" x="50" y="50" text-anchor="middle" dominant-baseline="central" transform="rotate(90,50,50)">' + escHtml(String(score)) + '</text>' +
+            '</svg>' +
+            '<div class="threat-gauge-label">Threat Score</div>' +
+            '</div></div>' +
+            '<div class="ioc-hero-content">' +
+            '<div class="ioc-hero-verdict"><span class="verdict-icon"><i class="bi ' + escAttr(verdictIcon) + '" aria-hidden="true"></i></span>' +
             '<div><div class="verdict-label">' + escHtml(verdictLabel) + '</div>' +
-            '<div class="verdict-sublabel">' + escHtml(verdictSub) + '</div></div></div>';
+            '<div class="verdict-sublabel">' + escHtml(verdictSub) + '</div></div></div>' +
+            '<div class="ioc-hero-identity"><div class="ioc-hero-value-row">' +
+            '<code class="ioc-hero-ioc-value ioc-detail-value" title="' + escAttr(iocVal) + '">' + escHtml(iocVal) + '</code>' +
+            '<button class="btn btn-outline-secondary ioc-hero-copy btn-copy-ioc" type="button" onclick="copyIOCToClipboard(\'' + escAttr(iocVal) + '\')" aria-label="Copy IOC value" title="Copy IOC value">' +
+            '<i class="bi bi-clipboard" aria-hidden="true"></i></button></div>' +
+            '<span class="badge ioc-hero-type ioc-type-badge">' + escHtml(iocType) + '</span></div>' +
+            '<div class="ioc-hero-stats">' +
+            '<div class="ioc-hero-stat"><div class="ioc-hero-stat-value">' + escHtml(String(sourcesChecked)) + '</div><div class="ioc-hero-stat-label">Sources checked</div></div>' +
+            '<div class="ioc-hero-stat"><div class="ioc-hero-stat-value">' + escHtml(String(sourcesFlagged)) + '</div><div class="ioc-hero-stat-label">Sources flagged</div></div>' +
+            '</div>';
+        if (hasSeenData) {
+            html += '<div class="ioc-detail-row"><span class="ioc-detail-label">First Seen</span><span>' + escHtml(firstSeen) + '</span></div>' +
+                '<div class="ioc-detail-row"><span class="ioc-detail-label">Last Seen</span><span>' + escHtml(lastSeen) + '</span></div>';
+        }
+        html += renderMalwareFamily(data) + '</div></div>';
 
         /* --- C2 ALERT (Critical - prominent) ---
          * Gated on score/verdict too: a single weak substring match (e.g. Shodan
@@ -2396,58 +2644,6 @@
             }
             html += '</div>';
         }
-
-        /* --- Score Gauge + IOC Details + Scoring Summary Row --- */
-        html += '<div class="row g-3 mb-3">';
-
-        /* Threat Score Gauge */
-        var gaugeColor = score >= 70 ? '#dc3545' : (score >= 40 ? '#fd7e14' : '#198754');
-        var dashOffset = 283 - (283 * Math.min(Math.max(score, 0), 100) / 100);
-        html += '<div class="col-auto"><div class="threat-gauge-wrap">' +
-            '<svg class="threat-gauge-svg" viewBox="0 0 100 100">' +
-            '<circle class="threat-gauge-bg" cx="50" cy="50" r="45"></circle>' +
-            '<circle class="threat-gauge-fg" cx="50" cy="50" r="45" style="stroke:' + escAttr(gaugeColor) + ';stroke-dashoffset:' + escAttr(String(dashOffset)) + '"></circle>' +
-            '<text class="threat-gauge-text" x="50" y="50" text-anchor="middle" dominant-baseline="central" transform="rotate(90,50,50)">' + escHtml(String(score)) + '</text>' +
-            '</svg>' +
-            '<div class="threat-gauge-label">Threat Score</div>' +
-            '</div></div>';
-
-        /* IOC Details Card */
-        var iocVal = data.ioc_value || data.ioc || data.indicator || '-';
-        var iocType = data.ioc_type || data.type || 'unknown';
-        var firstSeen = data.first_seen || data.firstSeen || '-';
-        var lastSeen = data.last_seen || data.lastSeen || '-';
-
-        html += '<div class="col"><div class="ioc-detail-card">' +
-            '<div class="ioc-detail-row"><span class="ioc-detail-label">Type</span><span class="ioc-type-badge">' + escHtml(iocType) + '</span></div>' +
-            '<div class="ioc-detail-row"><span class="ioc-detail-label">Value</span>' +
-            '<span class="ioc-detail-value">' + escHtml(iocVal) + '</span>' +
-            '<button class="btn btn-sm btn-outline-secondary btn-copy-ioc ms-2" onclick="copyIOCToClipboard(\'' + escAttr(iocVal) + '\')" title="Copy">' +
-            '<i class="bi bi-clipboard"></i></button></div>' +
-            '<div class="ioc-detail-row"><span class="ioc-detail-label">First Seen</span><span>' + escHtml(firstSeen) + '</span></div>' +
-            '<div class="ioc-detail-row"><span class="ioc-detail-label">Last Seen</span><span>' + escHtml(lastSeen) + '</span></div>' +
-            renderMalwareFamily(data) +
-            '</div></div>';
-
-        html += '</div>'; /* close row */
-
-        /* --- Scoring Summary Card (sources_checked vs sources_flagged) --- */
-        var sourcesChecked = (data.sources_checked !== undefined && data.sources_checked !== null)
-            ? data.sources_checked : (data.sources ? Object.keys(data.sources).length : 0);
-        var sourcesFlagged = data.sources_flagged || 0;
-        if (!data.sources_flagged && data.sources && typeof data.sources === 'object') {
-            Object.keys(data.sources).forEach(function(sn) {
-                var sd = data.sources[sn];
-                if (sd && (sd.malicious || sd.detected || (sd.found === true && sd.malicious !== false))) sourcesFlagged++;
-            });
-        }
-        html += '<div class="scoring-summary-card">' +
-            '<h6 class="mb-3"><i class="bi bi-bar-chart-line me-2"></i>Scoring Summary</h6>' +
-            '<div class="row g-2 text-center">' +
-            '<div class="col"><div class="scoring-stat"><div class="scoring-stat-value" style="color:' + escAttr(gaugeColor) + '">' + escHtml(String(score)) + '</div><div class="scoring-stat-label">Threat Score</div></div></div>' +
-            '<div class="col"><div class="scoring-stat"><div class="scoring-stat-value text-info">' + escHtml(String(sourcesChecked)) + '</div><div class="scoring-stat-label">Sources Checked</div></div></div>' +
-            '<div class="col"><div class="scoring-stat"><div class="scoring-stat-value text-danger">' + escHtml(String(sourcesFlagged)) + '</div><div class="scoring-stat-label">Sources Flagged</div></div></div>' +
-            '</div>';
 
         html += renderCoverageSection(data);
 
@@ -2732,7 +2928,6 @@
 
         var capturedRunId = ++runId;
 
-        progressArea.style.display = 'block';
         resultsArea.style.display = 'none';
         while (progressLog.firstChild) { progressLog.removeChild(progressLog.firstChild); }
         lastProgressMessage = null;
@@ -2742,7 +2937,9 @@
         progressTitle.textContent = 'Analyzing indicator';
         progressIocValue.textContent = iocValue;
         progressLogDetails.open = false;
+        progressHideButton.textContent = 'Hide';
         progressBar.classList.remove('bg-danger');
+        openProgressDialog();
         setProgressVisual('running');
         progressSpinner.style.display = '';
         setProgress(0, 'Submitting IOC...');
@@ -2762,6 +2959,11 @@
                 progressSpinner.style.display = '';
                 resultsArea.style.display = 'block';
                 showViewFullReportButton(data && data.analysis_id);
+                setTimeout(function () {
+                    if (capturedRunId !== runId) return;
+                    closeProgressDialog(true);
+                    scrollToResultsArea();
+                }, 700);
 
                 /* Use structured renderer if data has structured fields, else fall back */
                 if (data && (data.sources || data.verdict || data.threat_score !== undefined || data.score !== undefined)) {
@@ -2779,16 +2981,11 @@
                 progressTitle.textContent = 'Analysis failed';
                 progressLogDetails.open = true;
                 progressBar.classList.add('bg-danger');
+                progressHideButton.textContent = 'Close';
                 setProgressVisual('error');
                 progressSpinner.style.display = '';
             }
         });
-    }
-
-    function scrollToProgressArea() {
-        if (!progressArea || !progressArea.scrollIntoView) return;
-        var reducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-        progressArea.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'start' });
     }
 
     /* ========================================================
@@ -2802,7 +2999,6 @@
             if (!iocValue) return;
             saveIOCHistory(iocValue, iocType);
             runAnalysis(iocValue, iocType);
-            scrollToProgressArea();
         });
     }
 
@@ -2813,7 +3009,9 @@
     analysisId = params.get('id');
     if (analysisId) {
         var capturedAutoLoadRunId = ++runId;
-        progressArea.style.display = 'block';
+        progressTitle.textContent = 'Analyzing indicator';
+        progressHideButton.textContent = 'Hide';
+        openProgressDialog();
         setProgress(5, 'Loading analysis...');
         setProgressVisual('running');
         progressSpinner.style.display = '';
@@ -2838,6 +3036,11 @@
                             resultsArea.style.display = 'block';
                             showViewFullReportButton(analysisId);
                             renderSanitizedResult(resultsBody, renderStructuredResult(innerResult));
+                            setTimeout(function () {
+                                if (capturedAutoLoadRunId !== runId) return;
+                                closeProgressDialog(true);
+                                scrollToResultsArea();
+                            }, 700);
                         });
                 }
                 if (statusData.status === 'failed' || statusData.status === 'error') {
@@ -2845,6 +3048,7 @@
                     progressTitle.textContent = 'Analysis failed';
                     progressLogDetails.open = true;
                     progressBar.classList.add('bg-danger');
+                    progressHideButton.textContent = 'Close';
                     setProgressVisual('error');
                     progressSpinner.style.display = '';
                     return;
@@ -2857,6 +3061,7 @@
                 progressTitle.textContent = 'Analysis failed';
                 progressLogDetails.open = true;
                 progressBar.classList.add('bg-danger');
+                progressHideButton.textContent = 'Close';
                 setProgressVisual('error');
                 progressSpinner.style.display = '';
             });

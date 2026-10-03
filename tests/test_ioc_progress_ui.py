@@ -12,7 +12,7 @@ def _template_text():
 
 
 def _progress_card(text):
-    start = text.index('<div id="iocProgressArea"')
+    start = text.index('<dialog id="iocProgressArea"')
     end = text.index("<!-- Results Container", start)
     return text[start:end]
 
