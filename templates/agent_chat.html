@@ -613,6 +613,11 @@
         font-size: 0.58rem;
         line-height: 1.1;
     }
+    .agent-sidebar-tab .badge.bg-accent {
+        background-color: var(--color-primary);
+        color: var(--bg-primary);
+        border: 1px solid var(--color-primary);
+    }
     .agent-tab-panel {
         flex: 1 1 auto;
         min-height: 0;
@@ -740,7 +745,7 @@
     </div>
     <div class="agent-status-item">
         <i class="bi bi-plug agent-status-icon" aria-hidden="true"></i>
-        <span id="agentStatusAgent" class="agent-status-value">–</span>
+        <span id="agentStatusAgent" class="agent-status-value">Disconnected</span>
     </div>
 </div>
 <div class="row g-3">
@@ -858,7 +863,7 @@
             <div id="agentPanelTools" class="agent-tab-panel" role="tabpanel" aria-labelledby="agentTabTools" hidden>
                 <div class="agent-tab-panel-heading">
                     <span><i class="bi bi-tools me-1 text-accent"></i>Tools</span>
-                    <small id="toolCountBreakdown">–</small>
+                    <small id="toolCountBreakdown" hidden>–</small>
                 </div>
                 <div id="toolsList" class="list-group list-group-flush">
                     <div class="text-center text-muted py-3"><small>Loading tools...</small></div>
@@ -938,7 +943,7 @@ var AgentChat = (function() {
         toolTotal: null,
         mcpTools: null,
         builtinTools: null,
-        connection: null
+        connection: 'Disconnected'
     };
 
     function renderAgentStatus() {
@@ -1498,6 +1503,7 @@ var AgentChat = (function() {
 
     // ===== Init =====
     function init() {
+        renderAgentStatus();
         loadSessions();
         loadTools();
         loadPlaybooks();
