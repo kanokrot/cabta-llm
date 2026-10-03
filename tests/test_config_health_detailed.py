@@ -261,6 +261,34 @@ def test_all_seven_sqlite_databases_healthy(monkeypatch):
     }
 
 
+def test_concurrent_probe_latency_is_per_probe():
+    async def slow_probe():
+        await asyncio.sleep(0.1)
+        return {"status": "healthy", "summary": "slow"}
+
+    async def instant_probe():
+        return {"status": "healthy", "summary": "instant"}
+
+    async def run_probes():
+        return await asyncio.gather(
+            hp._run_probe("llm", slow_probe()),
+            hp._run_probe("mcp", instant_probe()),
+        )
+
+    slow, instant = _run(run_probes())
+    assert slow["latency_ms"] >= 75
+    assert instant["latency_ms"] < slow["latency_ms"] / 2
+
+
+def test_run_probe_preserves_probe_latency():
+    async def fake_probe():
+        await asyncio.sleep(0.05)
+        return {"status": "healthy", "summary": "x", "latency_ms": 1.2}
+
+    result = _run(hp._run_probe("llm", fake_probe()))
+    assert result["latency_ms"] == 1.2
+
+
 def test_sqlite_success_and_exception_are_mocked(monkeypatch, tmp_path):
     db_path = tmp_path / "ok.db"
     import sqlite3

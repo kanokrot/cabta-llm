@@ -16,19 +16,40 @@
     }
 
     function label(value) {
-        var acronyms = {
+        var overrides = {
             llm: 'LLM',
             mcp: 'MCP',
             ioc: 'IOC',
+            osint: 'OSINT',
+            db: 'DB',
+            gb: 'GB',
             sqlite: 'SQLite',
             chromadb: 'ChromaDB',
-            vllm: 'vLLM'
+            vllm: 'vLLM',
+            virustotal: 'VirusTotal',
+            abuseipdb: 'AbuseIPDB',
+            alienvault: 'AlienVault',
+            threatfox: 'ThreatFox',
+            abusech: 'abuse.ch',
+            misp: 'MISP',
+            remnux: 'REMnux',
+            latency_ms: 'Latency (ms)',
+            free_gb: 'Free space (GB)',
+            free_percent: 'Free space (%)'
         };
         var raw = String(value || '');
-        if (acronyms[raw.toLowerCase()]) return acronyms[raw.toLowerCase()];
-        return raw.replace(/_/g, ' ').replace(/^\w/, function (letter) {
-            return letter.toUpperCase();
-        });
+        var normalized = raw.toLowerCase();
+        if (overrides[normalized]) return overrides[normalized];
+        var words = raw.replace(/_/g, ' ').trim().split(/\s+/);
+        if (!words[0]) return '';
+        return words.map(function (word, index) {
+            var override = overrides[word.toLowerCase()];
+            if (override) return override;
+            var lower = word.toLowerCase();
+            return index === 0 ? lower.replace(/^\w/, function (letter) {
+                return letter.toUpperCase();
+            }) : lower;
+        }).join(' ');
     }
 
     function statusClass(status) {
@@ -98,7 +119,11 @@
             });
             return;
         }
-        addMetaRow(parent, label(name), value);
+        addMetaRow(
+            parent,
+            label(name),
+            String(name).toLowerCase() === 'status' ? label(value) : value
+        );
     }
 
     function showHealthFields(data) {
@@ -145,12 +170,7 @@
         addMetaRow(meta, 'Version', data.version);
         addMetaRow(meta, 'Uptime', formatUptime(data.uptime_seconds));
         addMetaRow(meta, 'Duration', data.duration_ms == null ? '' : data.duration_ms + ' ms');
-        if (data.cached === true) {
-            var cachedBadge = document.createElement('span');
-            cachedBadge.className = 'badge bg-secondary';
-            cachedBadge.textContent = 'Cached';
-            meta.appendChild(cachedBadge);
-        }
+        addMetaRow(meta, 'Cached', data.cached === true);
         content.appendChild(meta);
 
         Object.entries(data.checks || {}).forEach(function (entry) {

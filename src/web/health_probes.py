@@ -83,6 +83,19 @@ def _status(status: str, summary: str, **values: Any) -> dict[str, Any]:
     return result
 
 
+def _timed_result(func: Callable[..., dict[str, Any]], *args: Any) -> dict[str, Any]:
+    started = time.perf_counter()
+    result = func(*args)
+    result["latency_ms"] = round((time.perf_counter() - started) * 1000, 1)
+    return result
+
+
+def _timed_value(func: Callable[..., Any], *args: Any) -> tuple[Any, float]:
+    started = time.perf_counter()
+    value = func(*args)
+    return value, round((time.perf_counter() - started) * 1000, 1)
+
+
 def aggregate_status(checks: dict[str, dict[str, Any]]) -> tuple[str, dict[str, int]]:
     """Aggregate statuses without treating non-probed states as unhealthy."""
     summary = {"healthy": 0, "degraded": 0, "unhealthy": 0}
@@ -225,7 +238,7 @@ def _probe_sqlite_sync() -> dict[str, Any]:
 
 
 async def _probe_sqlite() -> dict[str, Any]:
-    return await asyncio.to_thread(_probe_sqlite_sync)
+    return await asyncio.to_thread(_timed_result, _probe_sqlite_sync)
 
 
 def _llm_analyzer_from_app(app: Any) -> Any:
@@ -363,12 +376,13 @@ async def _probe_chromadb(app: Any) -> dict[str, Any]:
     if rag is None:
         return _status("not_loaded", "No RAG knowledge base instance is loaded")
     try:
-        result = await asyncio.to_thread(rag.status)
+        result, latency_ms = await asyncio.to_thread(_timed_value, rag.status)
         return _status(
             "healthy",
             "ChromaDB knowledge base status is available",
             collection=result.get("collection"),
             document_count=result.get("document_count"),
+            latency_ms=latency_ms,
         )
     except Exception as exc:
         return _status("unhealthy", "ChromaDB status probe failed", error=_safe_error(exc))
@@ -379,7 +393,9 @@ async def _probe_mcp(app: Any) -> dict[str, Any]:
     if client is None:
         return _status("not_initialized", "MCP client is not initialized")
     try:
-        runtime = await asyncio.to_thread(client.get_connection_status)
+        runtime, latency_ms = await asyncio.to_thread(
+            _timed_value, client.get_connection_status
+        )
         runtime = runtime if isinstance(runtime, dict) else {}
         total = len(runtime)
         connected = sum(1 for item in runtime.values() if item.get("connected"))
@@ -400,7 +416,14 @@ async def _probe_mcp(app: Any) -> dict[str, Any]:
         else:
             status = "degraded"
             summary = "Some registered MCP servers are disconnected"
-        return _status(status, summary, connected=connected, total=total, servers=servers)
+        return _status(
+            status,
+            summary,
+            connected=connected,
+            total=total,
+            servers=servers,
+            latency_ms=latency_ms,
+        )
     except Exception as exc:
         return _status("unhealthy", "MCP status probe failed", error=_safe_error(exc))
 
@@ -461,13 +484,14 @@ def _probe_threat_intel_sync(app: Any) -> dict[str, Any]:
 
 
 async def _probe_threat_intel(app: Any) -> dict[str, Any]:
-    return await asyncio.to_thread(_probe_threat_intel_sync, app)
+    return await asyncio.to_thread(_timed_result, _probe_threat_intel_sync, app)
 
 
 async def _probe_background(
     analysis_counts: dict[str, int],
     agent_store: Any,
 ) -> dict[str, Any]:
+    started = time.perf_counter()
     result: dict[str, Any] = {
         "status": "healthy",
         "summary": "Background work status is informational",
@@ -479,11 +503,15 @@ async def _probe_background(
     }
     if agent_store is None:
         result["agent_sessions"] = {"status": "not_initialized"}
+        result["latency_ms"] = round((time.perf_counter() - started) * 1000, 1)
         return result
     try:
-        result["agent_sessions"] = await asyncio.to_thread(agent_store.get_agent_stats)
+        result["agent_sessions"], result["latency_ms"] = await asyncio.to_thread(
+            _timed_value, agent_store.get_agent_stats
+        )
     except Exception as exc:
         result["agent_sessions"] = {"status": "unknown", "error": _safe_error(exc)}
+        result["latency_ms"] = round((time.perf_counter() - started) * 1000, 1)
     return result
 
 
@@ -507,7 +535,7 @@ def _probe_disk_sync() -> dict[str, Any]:
 
 
 async def _probe_disk() -> dict[str, Any]:
-    return await asyncio.to_thread(_probe_disk_sync)
+    return await asyncio.to_thread(_timed_result, _probe_disk_sync)
 
 
 async def _run_probe(name: str, probe: Awaitable[dict[str, Any]]) -> dict[str, Any]:
