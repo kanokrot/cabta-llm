@@ -393,6 +393,67 @@
         background: var(--bg-secondary);
         color: var(--text-muted);
     }
+    .agent-export-modal .modal-content {
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
+        color: var(--text-primary);
+    }
+    .agent-export-modal .modal-header,
+    .agent-export-modal .modal-footer {
+        border-color: var(--border-color);
+    }
+    .agent-export-session-summary,
+    .agent-export-note {
+        color: var(--text-muted);
+    }
+    .agent-export-option-list {
+        display: grid;
+        gap: 0.65rem;
+    }
+    .agent-export-option {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 0.7rem;
+        width: 100%;
+        padding: 0.75rem;
+        border: 1px solid var(--border-color);
+        border-radius: 10px;
+        background: var(--bg-secondary);
+        color: var(--text-primary);
+        text-align: left;
+    }
+    .agent-export-option:hover:not(.disabled):not(:disabled),
+    .agent-export-option:focus-visible {
+        border-color: var(--color-accent);
+        background: var(--bg-tertiary);
+        color: var(--text-primary);
+    }
+    .agent-export-option.is-selected {
+        border-color: var(--color-accent);
+        background: color-mix(in srgb, var(--color-accent) 12%, var(--bg-secondary));
+    }
+    .agent-export-option.disabled,
+    .agent-export-option:disabled {
+        opacity: 0.58;
+        cursor: not-allowed;
+    }
+    .agent-export-option-icon {
+        color: var(--color-accent);
+        font-size: 1.1rem;
+    }
+    .agent-export-option-copy {
+        display: grid;
+        gap: 0.2rem;
+    }
+    .agent-export-option-copy small,
+    .agent-export-option-help {
+        color: var(--text-muted);
+        font-size: 0.72rem;
+        line-height: 1.35;
+    }
+    .agent-export-option-help { display: none; }
+    .agent-export-option[aria-disabled="true"] .agent-export-option-help { display: block; }
+    .agent-export-footer-note { margin-right: auto; }
     .agent-chat-sidebar-drawer .tool-safety-badges {
         display: inline-flex;
         align-items: center;
@@ -1224,19 +1285,9 @@
                 <div class="agent-chat-header-actions">
                     <div class="dropdown" id="exportDropdownWrap" style="display:none;">
                         <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" id="exportDropdownBtn"
-                            data-bs-toggle="dropdown" aria-expanded="false" title="Export investigation">
+                            data-bs-toggle="modal" data-bs-target="#exportChatModal" aria-expanded="false" title="Export investigation">
                             <i class="bi bi-download me-1"></i>Export
                         </button>
-                        <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="exportDropdownBtn">
-                            <li><a class="dropdown-item" href="#" onclick="AgentChat.exportSession(); return false;">
-                                <i class="bi bi-filetype-json me-2"></i>Export as JSON</a></li>
-                            <li><a class="dropdown-item disabled" href="#" id="exportHtmlItem" aria-disabled="true"
-                                onclick="AgentChat.exportReportHTML(); return false;">
-                                <i class="bi bi-filetype-html me-2"></i>Export as HTML Report</a></li>
-                            <li><a class="dropdown-item disabled" href="#" aria-disabled="true" tabindex="-1">
-                                <i class="bi bi-filetype-pdf me-2"></i>Export as PDF
-                                <span class="badge bg-secondary ms-1" style="font-size:0.6rem;">Coming soon</span></a></li>
-                        </ul>
                     </div>
                     <div class="agent-card-header-status">
                         <div class="agent-status-item">
@@ -1403,6 +1454,53 @@
     </div>
 </div>
 
+<!-- Export Chat Modal -->
+<div class="modal fade agent-export-modal" id="exportChatModal" tabindex="-1"
+    aria-labelledby="exportChatModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="exportChatModalLabel">Export chat</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p id="exportChatSessionSummary" class="agent-export-session-summary small mb-3"></p>
+                <div class="agent-export-option-list" role="radiogroup" aria-label="Export format">
+                    <button type="button" class="agent-export-option is-selected" role="radio"
+                        aria-checked="true" data-export-format="json">
+                        <i class="bi bi-filetype-json agent-export-option-icon" aria-hidden="true"></i>
+                        <span class="agent-export-option-copy">
+                            <strong>JSON</strong>
+                            <small>Export the session data as JSON.</small>
+                        </span>
+                    </button>
+                    <button type="button" id="exportHtmlItem" class="agent-export-option disabled" role="radio"
+                        aria-checked="false" aria-disabled="true" data-export-format="html">
+                        <i class="bi bi-filetype-html agent-export-option-icon" aria-hidden="true"></i>
+                        <span class="agent-export-option-copy">
+                            <strong>HTML report</strong>
+                            <small class="agent-export-option-help">Available after an investigation report is generated for this session.</small>
+                        </span>
+                    </button>
+                    <button type="button" class="agent-export-option" role="radio" disabled
+                        aria-checked="false" aria-disabled="true" data-export-format="pdf">
+                        <i class="bi bi-filetype-pdf agent-export-option-icon" aria-hidden="true"></i>
+                        <span class="agent-export-option-copy">
+                            <strong>PDF <span class="badge bg-secondary">Coming soon</span></strong>
+                            <small>PDF export is not available yet.</small>
+                        </span>
+                    </button>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <small class="agent-export-note agent-export-footer-note">Exports include only what you can see with your role.</small>
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-accent" id="exportDownloadButton">Download JSON</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Approval Dialog -->
 <div id="approvalOverlay" class="approval-overlay">
     <div class="approval-dialog">
@@ -1431,6 +1529,7 @@ var AgentChat = (function() {
     var ws = null;
     var pendingApprovalId = null;
     var reportPath = null;
+    var selectedExportFormat = 'json';
     var maxSteps = 0;
     var currentStep = 0;
     var startTime = null;
@@ -2077,6 +2176,7 @@ var AgentChat = (function() {
         restoreEmptyState();
         renderAgentStatus();
         mirrorSidebarCounts();
+        initExportModal();
         initToolFilters();
         loadSessions();
         loadTools();
@@ -2505,6 +2605,71 @@ var AgentChat = (function() {
             .catch(function() {});
     }
 
+    function setExportHtmlAvailability(available) {
+        reportPath = available ? true : null;
+        var item = document.getElementById('exportHtmlItem');
+        if (!item) return;
+        item.classList.toggle('disabled', !available);
+        if (available) item.removeAttribute('aria-disabled');
+        else item.setAttribute('aria-disabled', 'true');
+    }
+
+    function updateExportModalSummary() {
+        var summary = document.getElementById('exportChatSessionSummary');
+        if (!summary) return;
+        var current = loadedSessions.find(function(s) {
+            return String(s.session_id || s.id) === String(sessionId);
+        });
+        var name = current && current.goal ? String(current.goal) : (sessionId ? 'Session ' + sessionId : 'Current session');
+        if (name.length > 64) name = name.substring(0, 61) + '...';
+        summary.textContent = 'Session: ' + name + ' · ' + (currentStep || 0) + ' steps';
+    }
+
+    function selectExportFormat(format) {
+        if (format === 'html') {
+            var htmlItem = document.getElementById('exportHtmlItem');
+            if (!reportPath || !htmlItem || htmlItem.classList.contains('disabled') || htmlItem.getAttribute('aria-disabled') === 'true') return;
+        }
+        if (format !== 'json' && format !== 'html') return;
+        selectedExportFormat = format;
+        document.querySelectorAll('.agent-export-option[data-export-format]').forEach(function(option) {
+            var selected = option.getAttribute('data-export-format') === format;
+            option.classList.toggle('is-selected', selected);
+            option.setAttribute('aria-checked', selected ? 'true' : 'false');
+        });
+        var downloadButton = document.getElementById('exportDownloadButton');
+        if (downloadButton) downloadButton.textContent = format === 'html' ? 'Download HTML report' : 'Download JSON';
+    }
+
+    function prepareExportModal() {
+        updateExportModalSummary();
+        selectExportFormat('json');
+    }
+
+    function downloadSelectedExport() {
+        if (selectedExportFormat === 'html' && reportPath) exportReportHTML();
+        else exportSession();
+        var modal = document.getElementById('exportChatModal');
+        if (modal && window.bootstrap) bootstrap.Modal.getOrCreateInstance(modal).hide();
+    }
+
+    function initExportModal() {
+        var modal = document.getElementById('exportChatModal');
+        var trigger = document.getElementById('exportDropdownBtn');
+        if (!modal) return;
+        modal.addEventListener('show.bs.modal', prepareExportModal);
+        modal.addEventListener('hidden.bs.modal', function() {
+            if (trigger) trigger.focus();
+        });
+        modal.querySelectorAll('.agent-export-option[data-export-format]').forEach(function(option) {
+            option.addEventListener('click', function() {
+                selectExportFormat(option.getAttribute('data-export-format'));
+            });
+        });
+        var downloadButton = document.getElementById('exportDownloadButton');
+        if (downloadButton) downloadButton.addEventListener('click', downloadSelectedExport);
+    }
+
     function restoreEmptyState() {
         var msgs = document.getElementById('chatMessages');
         var template = document.getElementById('agentEmptyStateTemplate');
@@ -2527,9 +2692,7 @@ var AgentChat = (function() {
             el.removeAttribute('aria-current');
         });
         document.getElementById('exportDropdownWrap').style.display = 'none';
-        document.getElementById('exportHtmlItem').classList.add('disabled');
-        document.getElementById('exportHtmlItem').setAttribute('aria-disabled', 'true');
-        reportPath = null;
+        setExportHtmlAvailability(false);
         document.getElementById('elapsedTime').textContent = '';
         restoreEmptyState();
         updateProgress(0, 0);
@@ -2574,16 +2737,7 @@ var AgentChat = (function() {
                 if (data.status === 'completed') {
                     document.getElementById('exportDropdownWrap').style.display = 'inline-flex';
                 }
-                var exportHtmlItemHist = document.getElementById('exportHtmlItem');
-                if (data.has_report === true) {
-                    reportPath = true;
-                    exportHtmlItemHist.classList.remove('disabled');
-                    exportHtmlItemHist.removeAttribute('aria-disabled');
-                } else {
-                    reportPath = null;
-                    exportHtmlItemHist.classList.add('disabled');
-                    exportHtmlItemHist.setAttribute('aria-disabled', 'true');
-                }
+                setExportHtmlAvailability(data.has_report === true);
             })
             .catch(function() {});
     }
@@ -2720,17 +2874,7 @@ var AgentChat = (function() {
                 fetch('/api/agent/sessions/' + encodeURIComponent(sessionId))
                     .then(function(r) { return r.json(); })
                     .then(function(data) {
-                        if (data.has_report === true) {
-                            reportPath = true;
-                            var exportHtmlItemLive = document.getElementById('exportHtmlItem');
-                            exportHtmlItemLive.classList.remove('disabled');
-                            exportHtmlItemLive.removeAttribute('aria-disabled');
-                        } else {
-                            reportPath = null;
-                            var exportHtmlItemLive = document.getElementById('exportHtmlItem');
-                            exportHtmlItemLive.classList.add('disabled');
-                            exportHtmlItemLive.setAttribute('aria-disabled', 'true');
-                        }
+                        setExportHtmlAvailability(data.has_report === true);
                     })
                     .catch(function() {});
                 break;

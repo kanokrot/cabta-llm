@@ -82,6 +82,23 @@ def test_agent_chat_layout_preserves_required_hooks_and_adds_redesign() -> None:
     assert ".sub-header { display: none; }" in template
     assert ".main-content { min-height: 0; }" in template
     assert template.count('id="exportDropdownWrap"') == 1
+    assert template.count('id="exportDropdownBtn"') == 1
+    assert template.count('id="exportHtmlItem"') == 1
+    assert template.count('id="exportChatModal"') == 1
+    assert 'data-bs-toggle="modal" data-bs-target="#exportChatModal"' in template
+    assert "Export chat" in template
+    assert "JSON" in template
+    assert "HTML report" in template
+    assert "PDF" in template
+    assert "Coming soon" in template
+    assert "Available after an investigation report is generated for this session." in template
+    assert "Exports include only what you can see with your role." in template
+    assert "Download JSON" in template
+    assert "Download HTML report" in template
+    assert "summary.textContent = 'Session: '" in template
+    assert "exportChatSessionSummary.innerHTML" not in template
+    assert "function setExportHtmlAvailability(available)" in template
+    assert "function downloadSelectedExport()" in template
     assert "document.querySelector('.agent-chat-layout')" in template
     assert "var SESSION_PREVIEW_COUNT = 8;" in template
     assert "var SESSION_FETCH_LIMIT = 50;" in template
