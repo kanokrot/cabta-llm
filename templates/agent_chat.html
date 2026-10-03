@@ -592,10 +592,49 @@
         pointer-events: none;
     }
     .copy-toast.show { opacity: 1; }
+
+    /* ===== Agent Status Strip ===== */
+    .agent-status-bar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.5rem 1rem;
+        padding: 0.5rem 0.75rem;
+        margin-bottom: 0.75rem;
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        background: var(--bg-secondary);
+        color: var(--text-secondary);
+        font-size: 0.78rem;
+    }
+    .agent-status-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        min-width: 0;
+    }
+    .agent-status-icon { color: var(--color-accent); }
+    .agent-status-value { color: var(--text-primary); font-weight: 600; }
+    .agent-status-detail { color: var(--text-secondary); }
 </style>
 {% endblock %}
 
 {% block content %}
+<div id="agentStatusBar" class="agent-status-bar" aria-live="polite">
+    <div class="agent-status-item">
+        <i class="bi bi-hdd-network agent-status-icon" aria-hidden="true"></i>
+        <span id="agentStatusServers" class="agent-status-value">–</span>
+    </div>
+    <div class="agent-status-item">
+        <i class="bi bi-tools agent-status-icon" aria-hidden="true"></i>
+        <span id="agentStatusTools" class="agent-status-value">–</span>
+        <span id="agentStatusToolBreakdown" class="agent-status-detail">–</span>
+    </div>
+    <div class="agent-status-item">
+        <i class="bi bi-plug agent-status-icon" aria-hidden="true"></i>
+        <span id="agentStatusAgent" class="agent-status-value">–</span>
+    </div>
+</div>
 <div class="row g-3">
     <div class="col-lg-9">
         <div class="card">
@@ -734,9 +773,9 @@
             <div class="card-header d-flex justify-content-between align-items-center py-2">
                 <div>
                     <h6 class="mb-0" style="font-size:0.85rem;"><i class="bi bi-tools me-2 text-accent"></i>Tools</h6>
-                    <small id="toolCountBreakdown" class="text-muted" style="font-size:0.65rem;">Loading...</small>
+                    <small id="toolCountBreakdown" class="text-muted" style="font-size:0.65rem;">–</small>
                 </div>
-                <span class="badge bg-accent" id="toolCountBadge" style="font-size:0.65rem;">0</span>
+                <span class="badge bg-accent" id="toolCountBadge" style="font-size:0.65rem;">–</span>
             </div>
             <div class="card-body p-0" style="max-height:200px;overflow-y:auto;">
                 <div id="toolsList" class="list-group list-group-flush">
@@ -785,6 +824,58 @@ var AgentChat = (function() {
     var toolStartTime = null;
     var toolElapsedTimer = null;
     var toolPresentationByName = {};
+    var agentStatus = {
+        serverOnline: null,
+        serverTotal: null,
+        toolTotal: null,
+        mcpTools: null,
+        builtinTools: null,
+        connection: null
+    };
+
+    function renderAgentStatus() {
+        var serverEl = document.getElementById('agentStatusServers');
+        var toolEl = document.getElementById('agentStatusTools');
+        var breakdownEl = document.getElementById('agentStatusToolBreakdown');
+        var connectionEl = document.getElementById('agentStatusAgent');
+        var hasServerStatus = typeof agentStatus.serverOnline === 'number' &&
+            typeof agentStatus.serverTotal === 'number';
+        var hasToolStatus = typeof agentStatus.toolTotal === 'number' &&
+            typeof agentStatus.mcpTools === 'number' &&
+            typeof agentStatus.builtinTools === 'number';
+
+        if (serverEl) {
+            serverEl.textContent = hasServerStatus
+                ? agentStatus.serverOnline + '/' + agentStatus.serverTotal + ' servers online'
+                : '–';
+        }
+        if (toolEl) {
+            toolEl.textContent = hasToolStatus ? agentStatus.toolTotal + ' tools' : '–';
+        }
+        if (breakdownEl) {
+            breakdownEl.textContent = hasToolStatus
+                ? '(' + agentStatus.mcpTools + ' MCP + ' + agentStatus.builtinTools + ' Built-in)'
+                : '–';
+        }
+        if (connectionEl) connectionEl.textContent = agentStatus.connection || '–';
+    }
+
+    function setConnectionStatus(label, badgeClass) {
+        var container = document.getElementById('connectionStatus');
+        if (container) {
+            while (container.firstChild) container.removeChild(container.firstChild);
+            var badge = document.createElement('span');
+            badge.className = 'badge ' + badgeClass;
+            var icon = document.createElement('i');
+            icon.className = 'bi bi-circle-fill me-1';
+            icon.style.fontSize = '0.45rem';
+            badge.appendChild(icon);
+            badge.appendChild(document.createTextNode(label));
+            container.appendChild(badge);
+        }
+        agentStatus.connection = label;
+        renderAgentStatus();
+    }
 
     // ===== Tool Source Detection =====
     function isToolMCP(toolName) {
@@ -1282,6 +1373,10 @@ var AgentChat = (function() {
                 var mcpCount = tools.filter(function(t) { return t.source !== 'local'; }).length;
                 var builtinCount = tools.length - mcpCount;
                 document.getElementById('toolCountBreakdown').textContent = mcpCount + ' MCP + ' + builtinCount + ' Built-in';
+                agentStatus.toolTotal = tools.length;
+                agentStatus.mcpTools = mcpCount;
+                agentStatus.builtinTools = builtinCount;
+                renderAgentStatus();
 
                 var categories = {};
                 tools.forEach(function(t) {
@@ -1326,6 +1421,10 @@ var AgentChat = (function() {
                 });
             })
             .catch(function() {
+                agentStatus.toolTotal = null;
+                agentStatus.mcpTools = null;
+                agentStatus.builtinTools = null;
+                renderAgentStatus();
                 var container = document.getElementById('toolsList');
                 while (container.firstChild) container.removeChild(container.firstChild);
                 var failure = document.createElement('div');
@@ -1500,16 +1599,16 @@ var AgentChat = (function() {
         ws = new WebSocket(proto + '//' + location.host + '/ws/agent/' + encodeURIComponent(id));
 
         ws.onopen = function() {
-            document.getElementById('connectionStatus').innerHTML = '<span class="badge bg-success"><i class="bi bi-circle-fill me-1" style="font-size:0.45rem;"></i>Connected</span>';
+            setConnectionStatus('Connected', 'bg-success');
         };
         ws.onmessage = function(evt) {
             try { handleWSMessage(JSON.parse(evt.data)); } catch(e) {}
         };
         ws.onclose = function() {
-            document.getElementById('connectionStatus').innerHTML = '<span class="badge bg-secondary"><i class="bi bi-circle-fill me-1" style="font-size:0.45rem;"></i>Disconnected</span>';
+            setConnectionStatus('Disconnected', 'bg-secondary');
         };
         ws.onerror = function() {
-            document.getElementById('connectionStatus').innerHTML = '<span class="badge bg-danger"><i class="bi bi-circle-fill me-1" style="font-size:0.45rem;"></i>Error</span>';
+            setConnectionStatus('Error', 'bg-danger');
         };
     }
 
@@ -1991,6 +2090,9 @@ var AgentChat = (function() {
                 while (listEl.firstChild) listEl.removeChild(listEl.firstChild);
 
                 if (!Array.isArray(servers) || servers.length === 0) {
+                    agentStatus.serverOnline = 0;
+                    agentStatus.serverTotal = 0;
+                    renderAgentStatus();
                     var emptyMsg = document.createElement('div');
                     emptyMsg.className = 'text-center text-muted py-2';
                     var emptySmall = document.createElement('small');
@@ -2032,8 +2134,14 @@ var AgentChat = (function() {
                 if (onlineEl) onlineEl.textContent = online;
                 if (offlineEl) offlineEl.textContent = offline;
                 if (toolEl) toolEl.textContent = totalTools;
+                agentStatus.serverOnline = online;
+                agentStatus.serverTotal = servers.length;
+                renderAgentStatus();
             })
             .catch(function() {
+                agentStatus.serverOnline = null;
+                agentStatus.serverTotal = null;
+                renderAgentStatus();
                 var listEl = document.getElementById('mcpServerList');
                 if (!listEl) return;
                 while (listEl.firstChild) listEl.removeChild(listEl.firstChild);
