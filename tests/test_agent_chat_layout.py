@@ -1,7 +1,34 @@
 from __future__ import annotations
 
 import re
+import shutil
+import subprocess
 from pathlib import Path
+
+import pytest
+
+
+def test_agent_chat_inline_script_passes_node_check(tmp_path: Path) -> None:
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not available in PATH")
+
+    template = (Path(__file__).parents[1] / "templates" / "agent_chat.html").read_text(
+        encoding="utf-8"
+    )
+    scripts = re.findall(r"<script(?:\s[^>]*)?>([\s\S]*?)</script>", template, re.IGNORECASE)
+    script = max(scripts, key=len)
+    script = re.sub(r"\{\{[\s\S]*?\}\}", "0", script)
+    script = re.sub(r"\{%[\s\S]*?%\}", "", script)
+    script_path = tmp_path / "agent-chat-inline.js"
+    script_path.write_text(script, encoding="utf-8")
+
+    result = subprocess.run(
+        [node, "--check", str(script_path)],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
 
 
 def test_agent_chat_layout_preserves_required_hooks_and_adds_redesign() -> None:
