@@ -33,63 +33,6 @@
 
 {% block extra_head %}
 <style>
-    /* ===== MCP Status Panel ===== */
-    .mcp-stat-mini {
-        flex: 1;
-        text-align: center;
-        padding: 0.3rem 0.25rem;
-        background: var(--bg-primary);
-        border-radius: 6px;
-        border: 1px solid var(--border-color);
-    }
-    .mcp-stat-val {
-        display: block;
-        font-size: 1rem;
-        font-weight: 700;
-        color: var(--color-success);
-        line-height: 1.2;
-    }
-    .mcp-stat-lbl {
-        display: block;
-        font-size: 0.6rem;
-        color: var(--text-muted);
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-    }
-    .mcp-srv-item {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        padding: 0.3rem 0.4rem;
-        border-radius: 5px;
-        font-size: 0.75rem;
-        transition: background 0.15s;
-    }
-    .mcp-srv-item:hover {
-        background: var(--hover-overlay);
-    }
-    .mcp-srv-dot {
-        width: 7px;
-        height: 7px;
-        border-radius: 50%;
-        flex-shrink: 0;
-    }
-    .mcp-srv-dot.online { background: #10b981; box-shadow: 0 0 6px rgba(16,185,129,0.4); }
-    .mcp-srv-dot.offline { background: #64748b; }
-    .mcp-srv-dot.error { background: #f43f5e; }
-    .mcp-srv-name {
-        flex: 1;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        color: var(--text-secondary);
-    }
-    .mcp-srv-tools {
-        font-size: 0.65rem;
-        color: var(--text-muted);
-        flex-shrink: 0;
-    }
-
     /* ===== Full-width override for chat page ===== */
     .page-content {
         max-width: 100% !important;
@@ -766,6 +709,15 @@
         gap: 0.4rem;
         margin-bottom: 0.55rem;
     }
+    .tool-count-summary {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.35rem;
+        margin-bottom: 0.35rem;
+        color: var(--text-secondary);
+        font-size: 0.68rem;
+    }
+    .tool-count-total { color: var(--text-primary); font-weight: 600; }
     .tool-filter-search {
         width: 100%;
         padding: 0.35rem 0.5rem;
@@ -835,7 +787,9 @@
     }
     .agent-status-icon { color: var(--color-accent); }
     .agent-status-value { color: var(--text-primary); font-weight: 600; }
-    .agent-status-detail { color: var(--text-secondary); }
+    .agent-status-warning { color: var(--color-warning) !important; }
+    .agent-status-link { text-decoration: none; }
+    .agent-status-link:hover { text-decoration: underline; }
 </style>
 {% endblock %}
 
@@ -843,12 +797,11 @@
 <div id="agentStatusBar" class="agent-status-bar" aria-live="polite">
     <div class="agent-status-item">
         <i class="bi bi-hdd-network agent-status-icon" aria-hidden="true"></i>
+        {% if nav_role == 'admin' %}
+        <a href="/mcp/servers" id="agentStatusServers" class="agent-status-value agent-status-link">–</a>
+        {% else %}
         <span id="agentStatusServers" class="agent-status-value">–</span>
-    </div>
-    <div class="agent-status-item">
-        <i class="bi bi-tools agent-status-icon" aria-hidden="true"></i>
-        <span id="agentStatusTools" class="agent-status-value">–</span>
-        <span id="agentStatusToolBreakdown" class="agent-status-detail">–</span>
+        {% endif %}
     </div>
     <div class="agent-status-item">
         <i class="bi bi-plug agent-status-icon" aria-hidden="true"></i>
@@ -931,11 +884,6 @@
                     <span>Tools</span>
                     <span class="badge bg-accent" id="toolCountBadge">–</span>
                 </button>
-                <button type="button" class="agent-sidebar-tab" id="agentTabStatus" role="tab"
-                    aria-controls="mcpStatusPanel" aria-selected="false" tabindex="-1" data-agent-tab="status">
-                    <i class="bi bi-hdd-network" aria-hidden="true"></i>
-                    <span>Status</span>
-                </button>
             </div>
 
             <div id="agentPanelPlaybooks" class="agent-tab-panel" role="tabpanel" aria-labelledby="agentTabPlaybooks">
@@ -972,6 +920,10 @@
                     <span><i class="bi bi-tools me-1 text-accent"></i>Tools</span>
                     <small id="toolCountBreakdown" hidden>–</small>
                 </div>
+                <div class="tool-count-summary">
+                    <span id="toolTotalSummary" class="tool-count-total">–</span>
+                    <span id="toolCountSummaryBreakdown">–</span>
+                </div>
                 <div class="tool-filter-controls">
                     <label class="visually-hidden" for="toolSearchInput">Search tools</label>
                     <input type="search" id="toolSearchInput" class="tool-filter-search"
@@ -983,31 +935,6 @@
                 </div>
             </div>
 
-            <div id="mcpStatusPanel" class="agent-tab-panel" role="tabpanel" aria-labelledby="agentTabStatus" hidden>
-                <div class="agent-tab-panel-heading">
-                    <span><i class="bi bi-hdd-network me-1 text-accent"></i>System Status</span>
-                    <button type="button" class="btn btn-sm p-0 border-0" onclick="AgentChat.refreshMCPStatus()" title="Refresh status" style="color:var(--text-secondary);font-size:0.8rem;">
-                        <i class="bi bi-arrow-clockwise"></i>
-                    </button>
-                </div>
-                <div class="d-flex align-items-center gap-2 mb-2">
-                    <div class="mcp-stat-mini">
-                        <span class="mcp-stat-val" id="mcpOnlineCount">-</span>
-                        <span class="mcp-stat-lbl">Online</span>
-                    </div>
-                    <div class="mcp-stat-mini">
-                        <span class="mcp-stat-val text-muted" id="mcpOfflineCount">-</span>
-                        <span class="mcp-stat-lbl">Offline</span>
-                    </div>
-                    <div class="mcp-stat-mini">
-                        <span class="mcp-stat-val text-info" id="mcpToolCount">-</span>
-                        <span class="mcp-stat-lbl">MCP TOOLS</span>
-                    </div>
-                </div>
-                <div id="mcpServerList">
-                    <div class="text-center text-muted py-2"><small>Loading...</small></div>
-                </div>
-            </div>
         </div>
     </div>
 </div>
@@ -1056,34 +983,21 @@ var AgentChat = (function() {
     var agentStatus = {
         serverOnline: null,
         serverTotal: null,
-        toolTotal: null,
-        mcpTools: null,
-        builtinTools: null,
         connection: 'Disconnected'
     };
 
     function renderAgentStatus() {
         var serverEl = document.getElementById('agentStatusServers');
-        var toolEl = document.getElementById('agentStatusTools');
-        var breakdownEl = document.getElementById('agentStatusToolBreakdown');
         var connectionEl = document.getElementById('agentStatusAgent');
         var hasServerStatus = typeof agentStatus.serverOnline === 'number' &&
             typeof agentStatus.serverTotal === 'number';
-        var hasToolStatus = typeof agentStatus.toolTotal === 'number' &&
-            typeof agentStatus.mcpTools === 'number' &&
-            typeof agentStatus.builtinTools === 'number';
 
         if (serverEl) {
+            var offline = hasServerStatus ? agentStatus.serverTotal - agentStatus.serverOnline : 0;
+            serverEl.classList.toggle('agent-status-warning', hasServerStatus && offline > 0);
             serverEl.textContent = hasServerStatus
-                ? agentStatus.serverOnline + '/' + agentStatus.serverTotal + ' servers online'
-                : '–';
-        }
-        if (toolEl) {
-            toolEl.textContent = hasToolStatus ? agentStatus.toolTotal + ' tools' : '–';
-        }
-        if (breakdownEl) {
-            breakdownEl.textContent = hasToolStatus
-                ? '(' + agentStatus.mcpTools + ' MCP + ' + agentStatus.builtinTools + ' Built-in)'
+                ? agentStatus.serverOnline + '/' + agentStatus.serverTotal + ' servers online' +
+                    (offline > 0 ? ' (' + offline + ' offline)' : '')
                 : '–';
         }
         if (connectionEl) connectionEl.textContent = agentStatus.connection || '–';
@@ -1107,6 +1021,7 @@ var AgentChat = (function() {
     }
 
     function setAgentSidebarTab(tabName, focusTab) {
+        if (tabName === 'status') tabName = 'tools';
         var tabs = Array.prototype.slice.call(document.querySelectorAll('#agentSidebarTabs [role="tab"]'));
         var target = tabs.find(function(tab) { return tab.getAttribute('data-agent-tab') === tabName; });
         if (!target) return;
@@ -1821,10 +1736,8 @@ var AgentChat = (function() {
                 var mcpCount = tools.filter(function(t) { return t.source !== 'local'; }).length;
                 var builtinCount = tools.length - mcpCount;
                 document.getElementById('toolCountBreakdown').textContent = mcpCount + ' MCP + ' + builtinCount + ' Built-in';
-                agentStatus.toolTotal = tools.length;
-                agentStatus.mcpTools = mcpCount;
-                agentStatus.builtinTools = builtinCount;
-                renderAgentStatus();
+                document.getElementById('toolTotalSummary').textContent = tools.length + ' tools';
+                document.getElementById('toolCountSummaryBreakdown').textContent = mcpCount + ' MCP + ' + builtinCount + ' Built-in';
 
                 tools.forEach(function(t) {
                     if (t.name) toolPresentationByName[t.name] = t;
@@ -1835,10 +1748,10 @@ var AgentChat = (function() {
             .catch(function() {
                 loadedTools = [];
                 renderToolCategoryFilters();
-                agentStatus.toolTotal = null;
-                agentStatus.mcpTools = null;
-                agentStatus.builtinTools = null;
-                renderAgentStatus();
+                var totalEl = document.getElementById('toolTotalSummary');
+                var breakdownEl = document.getElementById('toolCountSummaryBreakdown');
+                if (totalEl) totalEl.textContent = '–';
+                if (breakdownEl) breakdownEl.textContent = '–';
                 var container = document.getElementById('toolsList');
                 while (container.firstChild) container.removeChild(container.firstChild);
                 var failure = document.createElement('div');
@@ -2517,58 +2430,17 @@ var AgentChat = (function() {
         fetch('/api/mcp/servers')
             .then(function(r) { return r.json(); })
             .then(function(data) {
-                var servers = data.servers || data || [];
-                var online = 0, offline = 0, totalTools = 0;
-                var listEl = document.getElementById('mcpServerList');
-                if (!listEl) return;
-                // Clear previous items safely
-                while (listEl.firstChild) listEl.removeChild(listEl.firstChild);
-
-                if (!Array.isArray(servers) || servers.length === 0) {
-                    agentStatus.serverOnline = 0;
-                    agentStatus.serverTotal = 0;
-                    renderAgentStatus();
-                    var emptyMsg = document.createElement('div');
-                    emptyMsg.className = 'text-center text-muted py-2';
-                    var emptySmall = document.createElement('small');
-                    emptySmall.textContent = 'No MCP servers configured';
-                    emptyMsg.appendChild(emptySmall);
-                    listEl.appendChild(emptyMsg);
-                    return;
-                }
+                var servers = (data && data.servers) || data || [];
+                if (!Array.isArray(servers)) servers = [];
+                var online = 0;
 
                 servers.forEach(function(srv) {
+                    srv = srv || {};
                     var live = srv.live_status || {};
                     var isOnline = live.connected === true || srv.status === 'connected';
-                    var toolCount = (live.tools && live.tools.length) || srv.tool_count || 0;
-                    if (isOnline) { online++; totalTools += toolCount; }
-                    else { offline++; }
-
-                    var item = document.createElement('div');
-                    item.className = 'mcp-srv-item';
-                    var dot = document.createElement('span');
-                    dot.className = 'mcp-srv-dot ' + (isOnline ? 'online' : 'offline');
-                    var name = document.createElement('span');
-                    name.className = 'mcp-srv-name';
-                    name.textContent = srv.name || srv.server_name || 'Unknown';
-                    name.title = name.textContent;
-                    item.appendChild(dot);
-                    item.appendChild(name);
-                    if (toolCount > 0) {
-                        var tools = document.createElement('span');
-                        tools.className = 'mcp-srv-tools';
-                        tools.textContent = toolCount + ' tools';
-                        item.appendChild(tools);
-                    }
-                    listEl.appendChild(item);
+                    if (isOnline) online++;
                 });
 
-                var onlineEl = document.getElementById('mcpOnlineCount');
-                var offlineEl = document.getElementById('mcpOfflineCount');
-                var toolEl = document.getElementById('mcpToolCount');
-                if (onlineEl) onlineEl.textContent = online;
-                if (offlineEl) offlineEl.textContent = offline;
-                if (toolEl) toolEl.textContent = totalTools;
                 agentStatus.serverOnline = online;
                 agentStatus.serverTotal = servers.length;
                 renderAgentStatus();
@@ -2577,15 +2449,6 @@ var AgentChat = (function() {
                 agentStatus.serverOnline = null;
                 agentStatus.serverTotal = null;
                 renderAgentStatus();
-                var listEl = document.getElementById('mcpServerList');
-                if (!listEl) return;
-                while (listEl.firstChild) listEl.removeChild(listEl.firstChild);
-                var errMsg = document.createElement('div');
-                errMsg.className = 'text-center text-muted py-2';
-                var errSmall = document.createElement('small');
-                errSmall.textContent = 'Failed to load status';
-                errMsg.appendChild(errSmall);
-                listEl.appendChild(errMsg);
             });
     }
 
