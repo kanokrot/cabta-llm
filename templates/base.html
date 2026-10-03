@@ -137,6 +137,10 @@
             opacity: 0.7;
         }
 
+        .cabta-navbar .dropdown-header {
+            color: var(--text-muted);
+        }
+
         /* Right-side controls */
         .navbar-controls {
             display: flex;
@@ -395,35 +399,6 @@
 
                     <span class="nav-divider"></span>
 
-                    {% if nav_role in ['Incident Responder', 'Threat Hunter', 'admin'] %}
-                    <!-- Agent dropdown -->
-                    <div class="d-lg-none nav-section-label">AGENT</div>
-                    <div class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle {% if request.url.path.startswith('/agent') and request.url.path != '/agent/chat' %}active-section{% endif %}"
-                           href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                            <i class="bi bi-robot me-1"></i>Agent
-                        </a>
-                        <ul class="dropdown-menu">
-                            {% if nav_role in ['Threat Hunter', 'admin'] %}
-                            <li>
-                                <a class="dropdown-item {% if request.url.path == '/agent/investigations' %}active{% endif %}" href="/agent/investigations">
-                                    <i class="bi bi-binoculars"></i> Investigations
-                                </a>
-                            </li>
-                            {% endif %}
-                            {% if nav_role in ['Incident Responder', 'admin'] %}
-                            <li>
-                                <a class="dropdown-item {% if request.url.path == '/agent/playbooks' %}active{% endif %}" href="/agent/playbooks">
-                                    <i class="bi bi-journal-code"></i> Playbooks
-                                </a>
-                            </li>
-                            {% endif %}
-                        </ul>
-                    </div>
-
-                    <span class="nav-divider"></span>
-                    {% endif %}
-
                     {% if nav_role in ['SOC Analyst Tier 1-2', 'admin'] %}
                     <!-- Analysis dropdown -->
                     <div class="d-lg-none nav-section-label">ANALYSIS</div>
@@ -454,14 +429,38 @@
                     <span class="nav-divider"></span>
                     {% endif %}
 
-                    <!-- Management dropdown -->
-                    <div class="d-lg-none nav-section-label">MANAGEMENT</div>
+                    <!-- SOC Room -->
+                    <a href="/soc-operations" class="nav-link {% if request.url.path == '/soc-operations' %}active{% endif %}">
+                        <i class="bi bi-display me-1"></i>SOC Room
+                    </a>
+
+                    <!-- More dropdown -->
                     <div class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle {% if request.url.path in ['/history', '/cases'] or request.url.path.startswith('/cases') %}active-section{% endif %}"
+                        <a class="nav-link dropdown-toggle {% if (request.url.path.startswith('/agent') and request.url.path != '/agent/chat') or request.url.path == '/history' or request.url.path.startswith('/cases') or request.url.path == '/management' or request.url.path == '/tickets' or request.url.path == '/mcp/servers' or request.url.path == '/settings' %}active-section{% endif %}"
                            href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                            <i class="bi bi-folder2-open me-1"></i>Management
+                            <i class="bi bi-three-dots me-1"></i>More
                         </a>
                         <ul class="dropdown-menu">
+                            {% if nav_role in ['Incident Responder', 'Threat Hunter', 'admin'] %}
+                            <li><h6 class="dropdown-header">Agent</h6></li>
+                            {% if nav_role in ['Threat Hunter', 'admin'] %}
+                            <li>
+                                <a class="dropdown-item {% if request.url.path == '/agent/investigations' %}active{% endif %}" href="/agent/investigations">
+                                    <i class="bi bi-binoculars"></i> Investigations
+                                </a>
+                            </li>
+                            {% endif %}
+                            {% if nav_role in ['Incident Responder', 'admin'] %}
+                            <li>
+                                <a class="dropdown-item {% if request.url.path == '/agent/playbooks' %}active{% endif %}" href="/agent/playbooks">
+                                    <i class="bi bi-journal-code"></i> Playbooks
+                                </a>
+                            </li>
+                            {% endif %}
+                            <li><hr class="dropdown-divider"></li>
+                            {% endif %}
+
+                            <li><h6 class="dropdown-header">Management</h6></li>
                             <li>
                                 <a class="dropdown-item {% if request.url.path == '/history' %}active{% endif %}" href="/history">
                                     <i class="bi bi-clock-history"></i> Analysis History
@@ -484,20 +483,10 @@
                                     <i class="bi bi-ticket-perforated"></i> Incident Tickets
                                 </a>
                             </li>
-                        </ul>
-                    </div>
 
-                    <span class="nav-divider"></span>
-
-                    {% if nav_role == 'admin' %}
-                    <!-- System dropdown -->
-                    <div class="d-lg-none nav-section-label">SYSTEM</div>
-                    <div class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle {% if request.url.path in ['/mcp/servers', '/settings'] %}active-section{% endif %}"
-                           href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                            <i class="bi bi-gear me-1"></i>System
-                        </a>
-                        <ul class="dropdown-menu">
+                            {% if nav_role == 'admin' %}
+                            <li><hr class="dropdown-divider"></li>
+                            <li><h6 class="dropdown-header"><i class="bi bi-gear me-1"></i>System</h6></li>
                             <li>
                                 <a class="dropdown-item {% if request.url.path == '/mcp/servers' %}active{% endif %}" href="/mcp/servers">
                                     <i class="bi bi-hdd-network"></i> MCP Servers
@@ -508,16 +497,9 @@
                                     <i class="bi bi-sliders"></i> Settings
                                 </a>
                             </li>
+                            {% endif %}
                         </ul>
                     </div>
-
-                    <span class="nav-divider"></span>
-                    {% endif %}
-
-                    <!-- SOC Room -->
-                    <a href="/soc-operations" class="nav-link {% if request.url.path == '/soc-operations' %}active{% endif %}">
-                        <i class="bi bi-display me-1"></i>SOC Room
-                    </a>
 
                 </div>
             </div>

@@ -6,31 +6,6 @@
 {% block page_title %}Agent Chat{% endblock %}
 {% block page_subtitle %}<span class="page-subtitle">AI Security Analyst</span>{% endblock %}
 
-{% block header_actions %}
-<button class="btn btn-sm btn-accent" onclick="AgentChat.newSession()">
-    <i class="bi bi-plus-lg me-1"></i>New Chat
-</button>
-<div class="dropdown" id="exportDropdownWrap" style="display:none;">
-    <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" id="exportDropdownBtn"
-        data-bs-toggle="dropdown" aria-expanded="false" title="Export investigation">
-        <i class="bi bi-download me-1"></i>Export
-    </button>
-    <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="exportDropdownBtn">
-        <li><a class="dropdown-item" href="#" onclick="AgentChat.exportSession(); return false;">
-            <i class="bi bi-filetype-json me-2"></i>Export as JSON</a></li>
-        <li><a class="dropdown-item disabled" href="#" id="exportHtmlItem" aria-disabled="true"
-            onclick="AgentChat.exportReportHTML(); return false;">
-            <i class="bi bi-filetype-html me-2"></i>Export as HTML Report</a></li>
-        <li><a class="dropdown-item disabled" href="#" aria-disabled="true" tabindex="-1">
-            <i class="bi bi-filetype-pdf me-2"></i>Export as PDF
-            <span class="badge bg-secondary ms-1" style="font-size:0.6rem;">Coming soon</span></a></li>
-    </ul>
-</div>
-<select id="sessionSelect" class="form-select form-select-sm" style="width:auto;min-width:180px;" onchange="AgentChat.switchSession(this.value)">
-    <option value="">-- New Session --</option>
-</select>
-{% endblock %}
-
 {% block extra_head %}
 <style>
     /* ===== Full-width override for chat page ===== */
@@ -38,23 +13,352 @@
         max-width: 100% !important;
         padding: 0.75rem !important;
     }
+    .main-content { min-height: 0; }
+    .main-content { padding-top: 56px !important; }
+    .sub-header { display: none; }
 
     /* ===== Layout ===== */
-    :root { --agent-chat-panel-height: calc(100vh - 150px); }
+    :root { --agent-chat-offset: 170px; --agent-chat-panel-height: calc(100dvh - var(--agent-chat-offset)); }
+    .agent-chat-layout {
+        display: flex;
+        gap: 1rem;
+        width: 100%;
+        max-width: 1240px;
+        margin-inline: auto;
+        height: var(--agent-chat-panel-height);
+        min-height: 0;
+    }
+    .agent-chat-sidebar {
+        --bs-offcanvas-width: 264px;
+        display: flex;
+        flex-direction: column;
+        flex: 0 0 264px;
+        width: 264px;
+        height: 100%;
+        background: var(--bg-secondary);
+        color: var(--text-primary);
+        border: 1px solid var(--border-color);
+        border-radius: 12px;
+        overflow: hidden;
+    }
+    .agent-chat-sidebar .offcanvas-header {
+        border-bottom: 1px solid var(--border-color);
+    }
+    .agent-chat-sidebar .offcanvas-body {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+        flex: 1 1 auto;
+        min-height: 0;
+        padding: 1rem;
+        overflow: hidden;
+    }
+    .agent-chat-new-button {
+        width: 100%;
+        min-height: 44px;
+    }
+    .agent-chat-session-label {
+        color: var(--text-muted);
+        font-size: 0.68rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+    }
+    .agent-session-list {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-y: auto;
+        scrollbar-width: thin;
+        scrollbar-color: var(--border-strong) transparent;
+    }
+    #sessionList {
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+    }
+    .agent-session-item {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        width: 100%;
+        min-width: 0;
+        min-height: 40px;
+        padding: 0.35rem 0.65rem;
+        border: 0;
+        border-radius: 8px;
+        background: transparent;
+        color: var(--text-primary);
+        text-align: left;
+    }
+    .agent-session-item:hover,
+    .agent-session-item:focus-visible,
+    .agent-session-item.active {
+        background: var(--bg-tertiary);
+        color: var(--text-primary);
+    }
+    .agent-session-item.active {
+        color: var(--color-accent);
+        font-weight: 600;
+    }
+    .agent-session-label {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .agent-session-status {
+        flex: 0 0 auto;
+        color: var(--text-muted);
+        font-size: 0.62rem;
+        font-weight: 600;
+        line-height: 1.2;
+    }
+    .agent-session-status-failed {
+        color: var(--color-danger);
+    }
+    #sessionViewAllButton {
+        flex: 0 0 auto;
+        width: 100%;
+        min-height: 40px;
+        color: var(--text-secondary);
+        border-color: var(--border-color);
+    }
+    #sessionViewAllButton:hover,
+    #sessionViewAllButton:focus-visible {
+        color: var(--text-primary);
+        border-color: var(--color-accent);
+    }
+    .agent-chat-main-col {
+        flex: 1 1 auto;
+        min-width: 0;
+        max-width: 900px;
+        margin-inline: auto;
+        height: 100%;
+        min-height: 0;
+    }
+    .agent-chat-shell {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        min-height: 0;
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
+        border-radius: 12px;
+        overflow: hidden;
+    }
+    .agent-chat-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex: 0 0 auto;
+        gap: 0.75rem;
+        height: 56px;
+        padding: 0 1rem;
+        border-bottom: 1px solid var(--border-color);
+    }
+    .agent-chat-header-title {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        min-width: 0;
+    }
+    .agent-chat-header-title h6 {
+        white-space: nowrap;
+    }
+    .agent-chat-header-actions {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 0.45rem;
+        min-width: 0;
+    }
     .chat-container {
         display: flex;
         flex-direction: column;
-        height: var(--agent-chat-panel-height);
-        min-height: 400px;
+        flex: 1 1 auto;
+        height: auto;
+        min-height: 0;
     }
     .chat-messages {
         flex: 1;
+        min-height: 0;
         overflow-y: auto;
         padding: 1rem;
         display: flex;
         flex-direction: column;
         gap: 0.75rem;
         scroll-behavior: smooth;
+    }
+
+    .agent-chat-composer-tools {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+    }
+    .agent-chat-sidebar-launchers {
+        display: inline-flex;
+        gap: 0.35rem;
+    }
+    .agent-chat-sidebar-launcher {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+        color: var(--text-secondary);
+        border-color: var(--border-color);
+        font-size: 0.68rem;
+    }
+    .agent-chat-sidebar-launcher:hover,
+    .agent-chat-sidebar-launcher:focus-visible {
+        color: var(--text-primary);
+        border-color: var(--color-accent);
+    }
+    .agent-chat-sidebar-drawer {
+        --bs-offcanvas-width: min(92vw, 420px);
+        background: var(--bg-secondary);
+        color: var(--text-primary);
+    }
+    .agent-chat-sidebar-drawer .offcanvas-header {
+        border-bottom: 1px solid var(--border-color);
+    }
+    .agent-chat-sidebar-drawer .offcanvas-body {
+        padding: 0;
+    }
+    .agent-chat-sidebar-drawer .agent-sidebar-tabs {
+        height: 100%;
+        min-height: 100%;
+        border: 0;
+        border-radius: 0;
+    }
+    .agent-chat-sidebar-drawer .agent-tab-panel {
+        overflow-y: auto;
+    }
+
+    .agent-empty-state {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: flex-start;
+        margin-block: auto;
+        padding: clamp(1.25rem, 5vw, 3rem) 0.5rem;
+        text-align: center;
+    }
+    .agent-empty-state-logo {
+        width: 58px;
+        height: 58px;
+        margin-bottom: 0.65rem;
+        filter: drop-shadow(0 0 8px var(--color-primary));
+    }
+    .agent-empty-state-title {
+        margin: 0;
+        color: var(--text-primary);
+        font-size: clamp(1.2rem, 2vw, 1.5rem);
+        font-weight: 700;
+    }
+    .agent-empty-state-subtitle {
+        max-width: 520px;
+        margin: 0.35rem auto 1.25rem;
+        color: var(--text-secondary);
+        font-size: 0.82rem;
+    }
+    .agent-starter-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 0.55rem;
+        width: 100%;
+        max-width: 760px;
+    }
+    .agent-starter-card {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        min-width: 0;
+        min-height: 88px;
+        padding: 0.7rem;
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        background: var(--bg-secondary);
+        color: var(--text-primary);
+        text-align: left;
+        transition: border-color 0.15s, background 0.15s, transform 0.15s;
+    }
+    .agent-starter-card:hover,
+    .agent-starter-card:focus-visible {
+        border-color: var(--color-accent);
+        background: var(--bg-tertiary);
+        color: var(--text-primary);
+        transform: translateY(-1px);
+    }
+    .agent-starter-card-title {
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+        font-size: 0.76rem;
+        font-weight: 700;
+    }
+    .agent-starter-card-description {
+        margin-top: 0.3rem;
+        color: var(--text-secondary);
+        font-size: 0.66rem;
+        line-height: 1.35;
+    }
+    .agent-card-header-status {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 0.45rem;
+        min-width: 0;
+    }
+    .agent-card-header-status .agent-status-item {
+        white-space: nowrap;
+    }
+    .agent-card-header-status .agent-status-value {
+        font-size: 0.68rem;
+    }
+    .agent-card-header-status .agent-status-link {
+        color: var(--text-secondary);
+    }
+    .agent-card-header-status .agent-status-link:hover {
+        color: var(--color-accent);
+    }
+    .agent-chat-sidebar-drawer .tool-safety-badges {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.15rem;
+        vertical-align: middle;
+    }
+    .agent-chat-sidebar-drawer .tool-safety-badge {
+        padding: 0.16rem 0.28rem;
+        font-size: 0.5rem;
+        line-height: 1;
+        letter-spacing: 0.03em;
+    }
+    .agent-playbook-detail-modal .modal-content {
+        background: var(--bg-secondary);
+        color: var(--text-primary);
+        border-color: var(--border-color);
+    }
+    .agent-playbook-detail-modal .modal-header,
+    .agent-playbook-detail-modal .modal-footer {
+        border-color: var(--border-color);
+    }
+    .agent-playbook-detail-modal .playbook-detail-description {
+        white-space: pre-wrap;
+        color: var(--text-secondary);
+    }
+
+    @media (max-width: 767.98px) {
+        .agent-starter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 479.98px) {
+        .agent-starter-grid { grid-template-columns: 1fr; }
+        .agent-card-header-status { gap: 0.25rem; }
+        .agent-card-header-status .agent-status-value { font-size: 0.62rem; }
+    }
+    @media (max-height: 760px) {
+        .agent-empty-state-logo { display: none; }
+        .agent-empty-state { padding-block: 0.75rem; }
     }
 
     /* ===== Bubbles ===== */
@@ -577,39 +881,30 @@
         font-size: 0.72rem;
         font-weight: 600;
     }
-    .agent-quick-actions {
-        margin-bottom: 0.6rem;
-        padding-bottom: 0.55rem;
-        border-bottom: 1px solid var(--border-color);
-    }
-    .agent-quick-actions-title {
-        margin-bottom: 0.35rem;
-        color: var(--text-secondary);
-        font-size: 0.72rem;
-        font-weight: 600;
-    }
-    .agent-quick-action-grid {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 0.35rem;
-    }
-    .agent-quick-action-grid .btn {
-        min-width: 0;
-        padding: 0.3rem 0.35rem;
-        font-size: 0.68rem;
-    }
-
     /* ===== Responsive ===== */
     @media (max-width: 768px) {
-        :root { --agent-chat-panel-height: calc(100vh - 200px); }
+        :root { --agent-chat-offset: 200px; --agent-chat-panel-height: calc(100dvh - var(--agent-chat-offset)); }
         .chat-bubble { max-width: 95%; }
         .chat-bubble-agent { max-width: 95%; }
         .summary-stats { grid-template-columns: repeat(2, 1fr); }
     }
     @media (max-width: 991.98px) {
+        .agent-chat-layout { align-items: stretch; }
+        .agent-chat-sidebar {
+            flex: 0 0 auto;
+            width: var(--bs-offcanvas-width);
+            height: 100%;
+            border: 0;
+            border-radius: 0;
+        }
+        .agent-chat-main-col { max-width: none; }
+        .agent-chat-header-title { flex: 1 1 auto; }
+        .agent-chat-header-actions { flex: 0 0 auto; }
+    }
+    @media (max-width: 991.98px) {
         .agent-sidebar-tabs {
-            height: auto;
-            min-height: 420px;
+        height: auto;
+        min-height: 420px;
         }
     }
 
@@ -794,29 +1089,95 @@
 {% endblock %}
 
 {% block content %}
-<div id="agentStatusBar" class="agent-status-bar" aria-live="polite">
-    <div class="agent-status-item">
-        <i class="bi bi-hdd-network agent-status-icon" aria-hidden="true"></i>
-        {% if nav_role == 'admin' %}
-        <a href="/mcp/servers" id="agentStatusServers" class="agent-status-value agent-status-link">–</a>
-        {% else %}
-        <span id="agentStatusServers" class="agent-status-value">–</span>
-        {% endif %}
+<template id="agentEmptyStateTemplate">
+    <div id="agentEmptyState" class="agent-empty-state">
+        <img src="/static/img/logo.svg" alt="" class="agent-empty-state-logo">
+        <h2 class="agent-empty-state-title">Cyan Agent</h2>
+        <p class="agent-empty-state-subtitle">Your AI security analyst for fast, guided investigations.</p>
+        <div class="agent-starter-grid" aria-label="Starter actions">
+            <button type="button" class="agent-starter-card" onclick="AgentChat.quickAction('Investigate the IOC: ')" title="IOC Investigation">
+                <span class="agent-starter-card-title"><i class="bi bi-search text-info" aria-hidden="true"></i>IOC Investigation</span>
+                <span class="agent-starter-card-description">Investigate an IP, domain, URL, or hash.</span>
+            </button>
+            <button type="button" class="agent-starter-card" onclick="AgentChat.quickAction('Analyze the malware file at: ')" title="Malware Analysis">
+                <span class="agent-starter-card-title"><i class="bi bi-bug text-danger" aria-hidden="true"></i>Malware Analysis</span>
+                <span class="agent-starter-card-description">Analyze a suspicious file and its behavior.</span>
+            </button>
+            <button type="button" class="agent-starter-card" onclick="AgentChat.quickAction('Analyze the phishing email at: ')" title="Email Forensics">
+                <span class="agent-starter-card-title"><i class="bi bi-envelope-exclamation text-warning" aria-hidden="true"></i>Email Forensics</span>
+                <span class="agent-starter-card-description">Inspect a suspicious or phishing email.</span>
+            </button>
+            <button type="button" class="agent-starter-card" onclick="AgentChat.quickAction('Hunt for threats matching: ')" title="Threat Hunt">
+                <span class="agent-starter-card-title"><i class="bi bi-binoculars text-success" aria-hidden="true"></i>Threat Hunt</span>
+                <span class="agent-starter-card-description">Search for matching indicators and activity.</span>
+            </button>
+            <button type="button" class="agent-starter-card" onclick="AgentChat.quickAction('Triage the alert: ')" title="Alert Triage">
+                <span class="agent-starter-card-title"><i class="bi bi-bell text-accent" aria-hidden="true"></i>Alert Triage</span>
+                <span class="agent-starter-card-description">Triage an alert and prioritize the response.</span>
+            </button>
+            <button type="button" class="agent-starter-card" onclick="AgentChat.quickAction('Generate detection rules for: ')" title="Detection Rules">
+                <span class="agent-starter-card-title"><i class="bi bi-shield-check text-accent" aria-hidden="true"></i>Detection Rules</span>
+                <span class="agent-starter-card-description">Create detection rules from observed threats.</span>
+            </button>
+        </div>
     </div>
-    <div class="agent-status-item">
-        <i class="bi bi-plug agent-status-icon" aria-hidden="true"></i>
-        <span id="agentStatusAgent" class="agent-status-value">Disconnected</span>
-    </div>
-</div>
-<div class="row g-3">
-    <div class="col-lg-9">
-        <div class="card">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <h6 class="mb-0"><img src="/static/img/logo.svg" alt="" style="width:22px;height:22px;margin-right:8px;vertical-align:middle;filter:drop-shadow(0 0 4px rgba(0,212,255,0.5));">Cyan Agent</h6>
-                <div class="d-flex align-items-center gap-2">
-                    <span id="elapsedTime" class="text-muted" style="font-size:0.72rem;"></span>
-                    <div id="connectionStatus">
-                        <span class="badge bg-secondary"><i class="bi bi-circle-fill me-1" style="font-size:0.45rem;"></i>Disconnected</span>
+</template>
+<div class="agent-chat-layout">
+    <aside class="agent-chat-sidebar offcanvas-lg offcanvas-start" id="agentSessionsSidebar" tabindex="-1" aria-labelledby="agentSessionsLabel">
+        <div class="offcanvas-header d-lg-none">
+            <h5 class="offcanvas-title" id="agentSessionsLabel">Chats</h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+        </div>
+        <div class="offcanvas-body">
+            <button type="button" class="btn btn-accent agent-chat-new-button" onclick="AgentChat.newSession()">
+                <i class="bi bi-plus-lg me-1"></i>New chat
+            </button>
+            <div class="agent-chat-session-label">Recent</div>
+            <div class="agent-session-list">
+                <div id="sessionList" role="list"></div>
+            </div>
+            <button type="button" id="sessionViewAllButton" class="btn btn-outline-secondary btn-sm"
+                aria-expanded="false" aria-controls="sessionList" style="display:none;"></button>
+        </div>
+    </aside>
+
+    <div class="agent-chat-main-col">
+        <div class="agent-chat-shell">
+            <div class="agent-chat-header">
+                <div class="agent-chat-header-title">
+                    <button type="button" class="btn btn-outline-secondary btn-sm d-lg-none" data-bs-toggle="offcanvas" data-bs-target="#agentSessionsSidebar" aria-controls="agentSessionsSidebar">
+                        <i class="bi bi-list" aria-hidden="true"></i><span>Chats</span>
+                    </button>
+                    <h6 class="mb-0"><img src="/static/img/logo.svg" alt="" style="width:22px;height:22px;margin-right:8px;vertical-align:middle;filter:drop-shadow(0 0 4px rgba(0,212,255,0.5));">Cyan Agent</h6>
+                </div>
+                <div class="agent-chat-header-actions">
+                    <div class="dropdown" id="exportDropdownWrap" style="display:none;">
+                        <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" id="exportDropdownBtn"
+                            data-bs-toggle="dropdown" aria-expanded="false" title="Export investigation">
+                            <i class="bi bi-download me-1"></i>Export
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="exportDropdownBtn">
+                            <li><a class="dropdown-item" href="#" onclick="AgentChat.exportSession(); return false;">
+                                <i class="bi bi-filetype-json me-2"></i>Export as JSON</a></li>
+                            <li><a class="dropdown-item disabled" href="#" id="exportHtmlItem" aria-disabled="true"
+                                onclick="AgentChat.exportReportHTML(); return false;">
+                                <i class="bi bi-filetype-html me-2"></i>Export as HTML Report</a></li>
+                            <li><a class="dropdown-item disabled" href="#" aria-disabled="true" tabindex="-1">
+                                <i class="bi bi-filetype-pdf me-2"></i>Export as PDF
+                                <span class="badge bg-secondary ms-1" style="font-size:0.6rem;">Coming soon</span></a></li>
+                        </ul>
+                    </div>
+                    <div class="agent-card-header-status">
+                        <div class="agent-status-item">
+                            <i class="bi bi-hdd-network agent-status-icon" aria-hidden="true"></i>
+                            {% set server_status_tag = 'a' if nav_role == 'admin' else 'span' %}
+                            <{{ server_status_tag }}{% if nav_role == 'admin' %} href="/mcp/servers"{% endif %} id="agentStatusServers" class="agent-status-value{% if nav_role == 'admin' %} agent-status-link{% endif %}">–</{{ server_status_tag }}>
+                        </div>
+                        <span id="elapsedTime" class="text-muted" style="font-size:0.72rem;"></span>
+                        <span id="agentStatusAgent" class="agent-status-value d-none">Disconnected</span>
+                        <div id="connectionStatus" class="d-none" aria-live="polite">
+                            <span class="badge bg-secondary"><i class="bi bi-circle-fill me-1" style="font-size:0.45rem;"></i>Disconnected</span>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -843,14 +1204,19 @@
             </div>
 
             <div class="chat-container">
-                <div id="chatMessages" class="chat-messages">
-                    <div class="chat-bubble chat-bubble-system">
-                        <i class="bi bi-shield-lock me-1"></i>
-                        Blue Team Agent ready. Describe a security investigation goal, select a playbook, or use quick actions.
-                    </div>
-                </div>
+                <div id="chatMessages" class="chat-messages"></div>
 
                 <div class="chat-input-area">
+                    <div class="agent-chat-composer-tools mb-2">
+                        <div class="agent-chat-sidebar-launchers">
+                            <button type="button" class="btn btn-outline-secondary btn-sm agent-chat-sidebar-launcher" id="composerPlaybooksButton" onclick="AgentChat.openSidebar('playbooks')" aria-controls="agentSidebarDrawer">
+                                <i class="bi bi-journal-code" aria-hidden="true"></i>Playbooks <span id="composerPlaybookCount">0</span>
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm agent-chat-sidebar-launcher" id="composerToolsButton" onclick="AgentChat.openSidebar('tools')" aria-controls="agentSidebarDrawer">
+                                <i class="bi bi-tools" aria-hidden="true"></i>Tools <span id="composerToolCount">–</span>
+                            </button>
+                        </div>
+                    </div>
                     <div class="input-group">
                         <textarea id="chatInput" class="form-control" rows="2"
                             placeholder="e.g. Investigate IP 45.33.32.156 for C2 activity..."
@@ -867,9 +1233,15 @@
             </div>
         </div>
     </div>
+</div>
 
-    <!-- Right Sidebar -->
-    <div class="col-lg-3">
+<!-- Right Sidebar Drawer -->
+<div class="offcanvas offcanvas-end agent-chat-sidebar-drawer" tabindex="-1" id="agentSidebarDrawer" aria-labelledby="agentSidebarDrawerLabel">
+    <div class="offcanvas-header">
+        <h5 class="offcanvas-title" id="agentSidebarDrawerLabel">Agent Resources</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+    </div>
+    <div class="offcanvas-body">
         <div class="card agent-sidebar-tabs" id="agentSidebarTabs">
             <div class="agent-sidebar-tablist" role="tablist" aria-label="Agent sidebar sections">
                 <button type="button" class="agent-sidebar-tab" id="agentTabPlaybooks" role="tab"
@@ -887,29 +1259,6 @@
             </div>
 
             <div id="agentPanelPlaybooks" class="agent-tab-panel" role="tabpanel" aria-labelledby="agentTabPlaybooks">
-                <div class="agent-quick-actions">
-                    <div class="agent-quick-actions-title"><i class="bi bi-lightning me-1 text-accent"></i>Quick Actions</div>
-                    <div class="agent-quick-action-grid">
-                        <button type="button" class="btn btn-outline-secondary btn-sm text-start" onclick="AgentChat.quickAction('Investigate the IOC: ')" title="IOC Investigation">
-                            <i class="bi bi-search me-1 text-info"></i>IOC Investigation
-                        </button>
-                        <button type="button" class="btn btn-outline-secondary btn-sm text-start" onclick="AgentChat.quickAction('Analyze the malware file at: ')" title="Malware Analysis">
-                            <i class="bi bi-bug me-1 text-danger"></i>Malware Analysis
-                        </button>
-                        <button type="button" class="btn btn-outline-secondary btn-sm text-start" onclick="AgentChat.quickAction('Analyze the phishing email at: ')" title="Email Forensics">
-                            <i class="bi bi-envelope-exclamation me-1 text-warning"></i>Email Forensics
-                        </button>
-                        <button type="button" class="btn btn-outline-secondary btn-sm text-start" onclick="AgentChat.quickAction('Hunt for threats matching: ')" title="Threat Hunt">
-                            <i class="bi bi-binoculars me-1 text-success"></i>Threat Hunt
-                        </button>
-                        <button type="button" class="btn btn-outline-secondary btn-sm text-start" onclick="AgentChat.quickAction('Triage the alert: ')" title="Alert Triage">
-                            <i class="bi bi-bell me-1 text-accent"></i>Alert Triage
-                        </button>
-                        <button type="button" class="btn btn-outline-secondary btn-sm text-start" onclick="AgentChat.quickAction('Generate detection rules for: ')" title="Detection Rules">
-                            <i class="bi bi-shield-check me-1 text-accent"></i>Detection Rules
-                        </button>
-                    </div>
-                </div>
                 <div id="playbooksList" class="list-group list-group-flush">
                     <div class="text-center text-muted py-2"><small>Loading...</small></div>
                 </div>
@@ -935,6 +1284,50 @@
                 </div>
             </div>
 
+        </div>
+    </div>
+</div>
+
+<!-- Playbook Detail Modal -->
+<div class="modal fade agent-playbook-detail-modal" id="playbookDetailModal" tabindex="-1" aria-labelledby="playbookDetailModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="playbookDetailModalLabel">Playbook details</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <dl class="row mb-0">
+                    <div id="playbookDetailNameRow" class="col-12 mb-2">
+                        <dt class="text-muted small">Name</dt>
+                        <dd id="playbookDetailName" class="mb-0"></dd>
+                    </div>
+                    <div id="playbookDetailCategoryRow" class="col-sm-6 mb-2" hidden>
+                        <dt class="text-muted small">Category</dt>
+                        <dd id="playbookDetailCategory" class="mb-0"></dd>
+                    </div>
+                    <div id="playbookDetailStepCountRow" class="col-sm-6 mb-2" hidden>
+                        <dt class="text-muted small">Steps</dt>
+                        <dd id="playbookDetailStepCount" class="mb-0"></dd>
+                    </div>
+                    <div id="playbookDetailTriggerTypeRow" class="col-sm-6 mb-2" hidden>
+                        <dt class="text-muted small">Trigger type</dt>
+                        <dd id="playbookDetailTriggerType" class="mb-0"></dd>
+                    </div>
+                    <div id="playbookDetailSourceRow" class="col-sm-6 mb-2" hidden>
+                        <dt class="text-muted small">Source</dt>
+                        <dd id="playbookDetailSource" class="mb-0"></dd>
+                    </div>
+                    <div id="playbookDetailDescriptionRow" class="col-12 mt-2" hidden>
+                        <dt class="text-muted small">Description</dt>
+                        <dd id="playbookDetailDescription" class="playbook-detail-description mb-0"></dd>
+                    </div>
+                </dl>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-accent" id="playbookDetailUseButton" onclick="AgentChat.usePlaybookFromModal()">Use this playbook</button>
+            </div>
         </div>
     </div>
 </div>
@@ -978,6 +1371,10 @@ var AgentChat = (function() {
     var toolElapsedTimer = null;
     var toolPresentationByName = {};
     var loadedTools = [];
+    var SESSION_PREVIEW_COUNT = 8;
+    var SESSION_FETCH_LIMIT = 50;
+    var loadedSessions = [];
+    var sessionsExpanded = false;
     var selectedToolCategory = '';
     var toolSearchQuery = '';
     var agentStatus = {
@@ -991,6 +1388,7 @@ var AgentChat = (function() {
         var connectionEl = document.getElementById('agentStatusAgent');
         var hasServerStatus = typeof agentStatus.serverOnline === 'number' &&
             typeof agentStatus.serverTotal === 'number';
+        var connectionVisible = agentStatus.connection === 'Connected' || agentStatus.connection === 'Error';
 
         if (serverEl) {
             var offline = hasServerStatus ? agentStatus.serverTotal - agentStatus.serverOnline : 0;
@@ -1000,12 +1398,17 @@ var AgentChat = (function() {
                     (offline > 0 ? ' (' + offline + ' offline)' : '')
                 : '–';
         }
-        if (connectionEl) connectionEl.textContent = agentStatus.connection || '–';
+        if (connectionEl) {
+            connectionEl.textContent = agentStatus.connection || '–';
+            connectionEl.classList.toggle('d-none', !connectionVisible);
+        }
     }
 
     function setConnectionStatus(label, badgeClass) {
         var container = document.getElementById('connectionStatus');
         if (container) {
+            var visible = label === 'Connected' || label === 'Error';
+            container.classList.toggle('d-none', !visible);
             while (container.firstChild) container.removeChild(container.firstChild);
             var badge = document.createElement('span');
             badge.className = 'badge ' + badgeClass;
@@ -1018,6 +1421,15 @@ var AgentChat = (function() {
         }
         agentStatus.connection = label;
         renderAgentStatus();
+    }
+
+    function mirrorSidebarCounts() {
+        var playbookBadge = document.getElementById('playbookCountBadge');
+        var toolBadge = document.getElementById('toolCountBadge');
+        var playbookCount = document.getElementById('composerPlaybookCount');
+        var toolCount = document.getElementById('composerToolCount');
+        if (playbookBadge && playbookCount) playbookCount.textContent = playbookBadge.textContent;
+        if (toolBadge && toolCount) toolCount.textContent = toolBadge.textContent;
     }
 
     function setAgentSidebarTab(tabName, focusTab) {
@@ -1062,6 +1474,21 @@ var AgentChat = (function() {
         setAgentSidebarTab('playbooks', false);
     }
 
+    function openSidebar(tabName) {
+        setAgentSidebarTab(tabName, false);
+        var drawer = document.getElementById('agentSidebarDrawer');
+        if (drawer && window.bootstrap) {
+            bootstrap.Offcanvas.getOrCreateInstance(drawer).show();
+        }
+    }
+
+    function closeSidebar() {
+        var drawer = document.getElementById('agentSidebarDrawer');
+        if (drawer && window.bootstrap) {
+            bootstrap.Offcanvas.getOrCreateInstance(drawer).hide();
+        }
+    }
+
     // ===== Tool Source Detection =====
     function isToolMCP(toolName) {
         if (!toolName) return false;
@@ -1099,7 +1526,7 @@ var AgentChat = (function() {
             var label = srv ? 'MCP: ' + formatServerLabel(srv) : 'MCP';
             return '<span class="source-badge source-badge-mcp"><i class="bi bi-plug" style="font-size:0.55rem;"></i>' + esc(label) + '</span>';
         }
-        return '<span class="source-badge source-badge-local"><i class="bi bi-house" style="font-size:0.55rem;"></i>Built-in</span>';
+        return '';
     }
 
     function getToolPresentation(toolName, source) {
@@ -1147,10 +1574,10 @@ var AgentChat = (function() {
     }
 
     function toolSafetyBadges(meta) {
-        var html = '';
-        if (meta.requires_approval) html += ' <span class="badge bg-warning text-dark tool-safety-badge">APPROVAL</span>';
-        if (meta.is_dangerous) html += ' <span class="badge bg-danger tool-safety-badge">DANGEROUS</span>';
-        return html;
+        var badges = [];
+        if (meta.requires_approval) badges.push('<span class="badge bg-warning text-dark tool-safety-badge">APPROVAL</span>');
+        if (meta.is_dangerous) badges.push('<span class="badge bg-danger tool-safety-badge">DANGEROUS</span>');
+        return badges.length ? ' <span class="tool-safety-badges">' + badges.join('') + '</span>' : '';
     }
 
     function toolIdentityHtml(toolName, source) {
@@ -1160,13 +1587,13 @@ var AgentChat = (function() {
         var serverLabel = server ? 'MCP: ' + formatServerLabel(server) : 'Built-in';
         var serverBadge = server
             ? '<span class="source-badge source-badge-mcp"><i class="bi bi-plug" style="font-size:0.55rem;"></i>' + esc(serverLabel) + '</span>'
-            : '<span class="source-badge source-badge-local"><i class="bi bi-house" style="font-size:0.55rem;"></i>Built-in</span>';
+            : '';
         return '<span class="mcp-tool-identity" title="' + esc(meta.name) + '">' +
             '<span class="tool-category-icon-frame ' + categoryClass + '">' +
             toolIconSvg(meta.icon, 'tool-category-icon ' + categoryClass) +
             '</span>' +
             '<span class="tool-friendly-name">' + esc(meta.display_name) + '</span>' +
-            '</span> ' + serverBadge + toolSafetyBadges(meta);
+            '</span>' + (serverBadge ? ' ' + serverBadge : '') + toolSafetyBadges(meta);
     }
 
     function toolIconElement(iconKey, extraClass) {
@@ -1204,30 +1631,35 @@ var AgentChat = (function() {
         identity.appendChild(friendlyName);
         parent.appendChild(identity);
 
-        parent.appendChild(document.createTextNode(' '));
-        var sourceBadge = document.createElement('span');
-        sourceBadge.className = server ? 'source-badge source-badge-mcp' : 'source-badge source-badge-local';
-        var sourceIcon = document.createElement('i');
-        sourceIcon.className = server ? 'bi bi-plug' : 'bi bi-house';
-        sourceIcon.style.fontSize = '0.55rem';
-        sourceBadge.appendChild(sourceIcon);
-        sourceBadge.appendChild(document.createTextNode(server ? 'MCP: ' + formatServerLabel(server) : 'Built-in'));
-        parent.appendChild(sourceBadge);
+        if (server) {
+            parent.appendChild(document.createTextNode(' '));
+            var sourceBadge = document.createElement('span');
+            sourceBadge.className = 'source-badge source-badge-mcp';
+            var sourceIcon = document.createElement('i');
+            sourceIcon.className = 'bi bi-plug';
+            sourceIcon.style.fontSize = '0.55rem';
+            sourceBadge.appendChild(sourceIcon);
+            sourceBadge.appendChild(document.createTextNode('MCP: ' + formatServerLabel(server)));
+            parent.appendChild(sourceBadge);
+        }
 
         if (meta.requires_approval || meta.is_dangerous) {
             parent.appendChild(document.createTextNode(' '));
+            var safetyBadges = document.createElement('span');
+            safetyBadges.className = 'tool-safety-badges';
             if (meta.requires_approval) {
                 var approval = document.createElement('span');
                 approval.className = 'badge bg-warning text-dark tool-safety-badge';
                 approval.textContent = 'APPROVAL';
-                parent.appendChild(approval);
+                safetyBadges.appendChild(approval);
             }
             if (meta.is_dangerous) {
                 var dangerous = document.createElement('span');
                 dangerous.className = 'badge bg-danger tool-safety-badge';
                 dangerous.textContent = 'DANGEROUS';
-                parent.appendChild(dangerous);
+                safetyBadges.appendChild(dangerous);
             }
+            parent.appendChild(safetyBadges);
         }
     }
 
@@ -1552,11 +1984,33 @@ var AgentChat = (function() {
         if (elapsedTimer) { clearInterval(elapsedTimer); elapsedTimer = null; }
     }
 
+    function fitChatHeight() {
+        var el = document.querySelector('.agent-chat-layout');
+        if (!el) return;
+
+        var top = el.getBoundingClientRect().top;
+        var bottomGap = 8;
+        var ancestor = el.parentElement;
+        while (ancestor) {
+            var styles = window.getComputedStyle(ancestor);
+            bottomGap += parseFloat(styles.paddingBottom) || 0;
+            bottomGap += parseFloat(styles.marginBottom) || 0;
+            if (ancestor === document.body) break;
+            ancestor = ancestor.parentElement;
+        }
+
+        var height = Math.max(420, window.innerHeight - top - bottomGap);
+        el.style.height = height + 'px';
+    }
+
     var selectedPlaybook = null;
+    var activePlaybookDetail = null;
 
     // ===== Init =====
     function init() {
+        restoreEmptyState();
         renderAgentStatus();
+        mirrorSidebarCounts();
         initToolFilters();
         loadSessions();
         loadTools();
@@ -1738,6 +2192,7 @@ var AgentChat = (function() {
                 document.getElementById('toolCountBreakdown').textContent = mcpCount + ' MCP + ' + builtinCount + ' Built-in';
                 document.getElementById('toolTotalSummary').textContent = tools.length + ' tools';
                 document.getElementById('toolCountSummaryBreakdown').textContent = mcpCount + ' MCP + ' + builtinCount + ' Built-in';
+                mirrorSidebarCounts();
 
                 tools.forEach(function(t) {
                     if (t.name) toolPresentationByName[t.name] = t;
@@ -1760,6 +2215,7 @@ var AgentChat = (function() {
                 failureText.textContent = 'Failed to load tools';
                 failure.appendChild(failureText);
                 container.appendChild(failure);
+                mirrorSidebarCounts();
             });
     }
 
@@ -1771,15 +2227,16 @@ var AgentChat = (function() {
                 var container = document.getElementById('playbooksList');
                 while (container.firstChild) container.removeChild(container.firstChild);
                 document.getElementById('playbookCountBadge').textContent = playbooks.length;
+                mirrorSidebarCounts();
 
                 var pbIcons = {
                     'malware_analysis': 'bi-bug text-danger',
-                    'malware_deep_dive': 'bi-microscope text-danger',
+                    'malware_deep_dive': 'bi-bug-fill text-danger',
                     'exploit_reversing': 'bi-cpu text-warning',
                     'incident_response': 'bi-shield-exclamation text-danger',
                     'alert_triage': 'bi-bell text-warning',
-                    'email_investigation': 'bi-envelope-exclamation text-info',
-                    'phishing_investigation': 'bi-fish text-warning',
+                    'email_investigation': 'bi-envelope text-info',
+                    'phishing_investigation': 'bi-envelope-exclamation text-warning',
                     'ioc_triage': 'bi-search text-info',
                 };
 
@@ -1788,9 +2245,11 @@ var AgentChat = (function() {
                     item.className = 'list-group-item list-group-item-action bg-transparent py-2 px-3 playbook-item';
                     item.style.cssText = 'border-color:var(--border-color);font-size:0.82rem;';
                     item.id = 'pb-' + pb.id;
-                    item.onclick = function() { selectPlaybook(pb.id, pb.name); };
+                    item.onclick = function() { openPlaybookDetail(pb); };
 
-                    var iconClass = pbIcons[pb.id] || 'bi-journal-code text-accent';
+                    var defaultIconClass = 'bi-journal-code text-accent';
+                    var iconClass = pbIcons[pb.id] || defaultIconClass;
+                    if (!iconClass || iconClass.indexOf('bi-') === -1) iconClass = defaultIconClass;
                     var row = document.createElement('div');
                     row.className = 'd-flex align-items-center justify-content-between';
                     var label = document.createElement('div');
@@ -1807,12 +2266,6 @@ var AgentChat = (function() {
                     stepBadge.textContent = pb.step_count || 0;
                     row.appendChild(stepBadge);
                     item.appendChild(row);
-                    if (pb.description) {
-                        var description = document.createElement('div');
-                        description.style.cssText = 'font-size:0.7rem;color:var(--text-secondary);margin-top:2px;padding-left:1.5rem;';
-                        description.textContent = (pb.description || '').substring(0, 100);
-                        item.appendChild(description);
-                    }
                     container.appendChild(item);
                 });
             })
@@ -1825,7 +2278,64 @@ var AgentChat = (function() {
                 failureText.textContent = 'Failed to load';
                 failure.appendChild(failureText);
                 container.appendChild(failure);
+                mirrorSidebarCounts();
             });
+    }
+
+    function setPlaybookDetailField(rowId, valueId, value) {
+        var row = document.getElementById(rowId);
+        var field = document.getElementById(valueId);
+        var exists = value !== undefined && value !== null && value !== '';
+        if (row) row.hidden = !exists;
+        if (field) field.textContent = exists ? String(value) : '';
+    }
+
+    function showPlaybookDetailModal() {
+        var modal = document.getElementById('playbookDetailModal');
+        if (modal && window.bootstrap) {
+            bootstrap.Modal.getOrCreateInstance(modal).show();
+        }
+    }
+
+    function openPlaybookDetail(pb) {
+        activePlaybookDetail = pb;
+        var name = pb.name || pb.id || 'Playbook details';
+        document.getElementById('playbookDetailModalLabel').textContent = name;
+        setPlaybookDetailField('playbookDetailNameRow', 'playbookDetailName', name);
+        setPlaybookDetailField('playbookDetailCategoryRow', 'playbookDetailCategory', pb.category);
+        setPlaybookDetailField('playbookDetailStepCountRow', 'playbookDetailStepCount', pb.step_count);
+        setPlaybookDetailField('playbookDetailTriggerTypeRow', 'playbookDetailTriggerType', pb.trigger_type);
+        setPlaybookDetailField('playbookDetailSourceRow', 'playbookDetailSource', pb.source);
+        setPlaybookDetailField('playbookDetailDescriptionRow', 'playbookDetailDescription', pb.description);
+
+        var useButton = document.getElementById('playbookDetailUseButton');
+        if (useButton) useButton.textContent = selectedPlaybook === pb.id ? 'Deselect' : 'Use this playbook';
+
+        var drawer = document.getElementById('agentSidebarDrawer');
+        if (drawer && window.bootstrap && drawer.classList.contains('show')) {
+            var onDrawerHidden = function() {
+                drawer.removeEventListener('hidden.bs.offcanvas', onDrawerHidden);
+                showPlaybookDetailModal();
+            };
+            drawer.addEventListener('hidden.bs.offcanvas', onDrawerHidden);
+            bootstrap.Offcanvas.getOrCreateInstance(drawer).hide();
+        } else {
+            showPlaybookDetailModal();
+        }
+    }
+
+    function closePlaybookDetail() {
+        var modal = document.getElementById('playbookDetailModal');
+        if (modal && window.bootstrap) bootstrap.Modal.getOrCreateInstance(modal).hide();
+        activePlaybookDetail = null;
+    }
+
+    function usePlaybookFromModal() {
+        if (!activePlaybookDetail) return;
+        var pb = activePlaybookDetail;
+        selectPlaybook(pb.id, pb.name);
+        closePlaybookDetail();
+        closeSidebar();
     }
 
     function selectPlaybook(id, name) {
@@ -1843,6 +2353,7 @@ var AgentChat = (function() {
         input.focus();
         addBubble('<i class="bi bi-journal-code me-1 text-accent"></i>Playbook selected: <strong>' + esc(name || id) + '</strong>. Enter your target and press Enter to execute.', 'system');
         scrollToBottom();
+        closeSidebar();
     }
 
     function quickAction(prefix) {
@@ -1852,49 +2363,109 @@ var AgentChat = (function() {
         input.setSelectionRange(input.value.length, input.value.length);
     }
 
+    function renderSessionList() {
+        var list = document.getElementById('sessionList');
+        var viewAllButton = document.getElementById('sessionViewAllButton');
+        if (!list || !viewAllButton) return;
+
+        while (list.firstChild) list.removeChild(list.firstChild);
+        if (!loadedSessions.length) {
+            var empty = document.createElement('div');
+            empty.className = 'agent-chat-session-empty text-muted';
+            empty.textContent = 'No chats yet';
+            list.appendChild(empty);
+            viewAllButton.style.display = 'none';
+            viewAllButton.setAttribute('aria-expanded', 'false');
+            return;
+        }
+
+        var visibleSessions = loadedSessions.slice(0, sessionsExpanded ? loadedSessions.length : SESSION_PREVIEW_COUNT);
+        visibleSessions.forEach(function(s) {
+            var id = s.session_id || s.id;
+            var goal = s.goal || 'Session';
+            var button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'agent-session-item';
+            button.setAttribute('data-session-id', id);
+            button.title = String(goal);
+            if (String(id) === String(sessionId)) {
+                button.classList.add('active');
+                button.setAttribute('aria-current', 'true');
+            }
+            var label = document.createElement('span');
+            label.className = 'agent-session-label';
+            label.textContent = goal;
+            button.appendChild(label);
+            var status = s.status === 'active' ? 'running' : (s.status && s.status !== 'completed' ? s.status : '');
+            if (status) {
+                var statusBadge = document.createElement('span');
+                statusBadge.className = 'agent-session-status' + (status === 'failed' ? ' agent-session-status-failed' : '');
+                statusBadge.textContent = status;
+                button.appendChild(statusBadge);
+            }
+            button.addEventListener('click', function() { AgentChat.switchSession(id); });
+            list.appendChild(button);
+        });
+
+        if (loadedSessions.length > SESSION_PREVIEW_COUNT) {
+            viewAllButton.style.display = 'inline-flex';
+            viewAllButton.textContent = sessionsExpanded
+                ? 'Show less'
+                : 'View all (' + (loadedSessions.length >= SESSION_FETCH_LIMIT ? SESSION_FETCH_LIMIT + '+' : loadedSessions.length) + ')';
+            viewAllButton.setAttribute('aria-expanded', sessionsExpanded ? 'true' : 'false');
+            viewAllButton.onclick = function() {
+                sessionsExpanded = !sessionsExpanded;
+                renderSessionList();
+            };
+        } else {
+            viewAllButton.style.display = 'none';
+            viewAllButton.setAttribute('aria-expanded', 'false');
+        }
+    }
+
     function loadSessions() {
-        fetch('/api/agent/sessions')
+        fetch('/api/agent/sessions?limit=' + SESSION_FETCH_LIMIT)
             .then(function(r) { return r.json(); })
             .then(function(data) {
-                var sel = document.getElementById('sessionSelect');
-                while (sel.options.length > 1) sel.remove(1);
-                (data.sessions || data || []).forEach(function(s) {
-                    var opt = document.createElement('option');
-                    opt.value = s.session_id || s.id;
-                    var goal = (s.goal || 'Session').substring(0, 35);
-                    var statusBadge = s.status === 'completed' ? ' [done]' : s.status === 'active' ? ' [running]' : s.status ? ' [' + s.status + ']' : '';
-                    var toolCount = s.tool_count || s.tools_used || '';
-                    var mcpCount = s.mcp_tool_count || '';
-                    var meta = '';
-                    if (toolCount) meta += ' T:' + toolCount;
-                    if (mcpCount) meta += ' MCP:' + mcpCount;
-                    opt.textContent = goal + statusBadge + meta;
-                    sel.appendChild(opt);
+                var sessions = (data.sessions || data || []).slice();
+                sessions.sort(function(a, b) {
+                    var aDate = a.updated_at || a.created_at || '';
+                    var bDate = b.updated_at || b.created_at || '';
+                    return String(bDate).localeCompare(String(aDate));
                 });
+                loadedSessions = sessions;
+                renderSessionList();
             })
             .catch(function() {});
     }
 
+    function restoreEmptyState() {
+        var msgs = document.getElementById('chatMessages');
+        var template = document.getElementById('agentEmptyStateTemplate');
+        if (!msgs || !template) return;
+        while (msgs.firstChild) msgs.removeChild(msgs.firstChild);
+        msgs.appendChild(template.content.cloneNode(true));
+    }
+
     function newSession() {
         if (ws) ws.close();
+        setConnectionStatus('Disconnected', 'bg-secondary');
         sessionId = null;
         stopTimer();
         hideLiveToolIndicator();
         toolCallCounter = 0;
         investigationData = { tools_used: [], iocs_found: [], steps: [], mcp_tools: [] };
         currentPhase = 'think';
-        document.getElementById('sessionSelect').value = '';
+        document.querySelectorAll('.agent-session-item.active').forEach(function(el) {
+            el.classList.remove('active');
+            el.removeAttribute('aria-current');
+        });
         document.getElementById('exportDropdownWrap').style.display = 'none';
         document.getElementById('exportHtmlItem').classList.add('disabled');
         document.getElementById('exportHtmlItem').setAttribute('aria-disabled', 'true');
         reportPath = null;
         document.getElementById('elapsedTime').textContent = '';
-        var msgs = document.getElementById('chatMessages');
-        while (msgs.firstChild) msgs.removeChild(msgs.firstChild);
-        var welcome = document.createElement('div');
-        welcome.className = 'chat-bubble chat-bubble-system';
-        welcome.innerHTML = '<i class="bi bi-shield-lock me-1"></i>New session started. Describe your investigation goal.';
-        msgs.appendChild(welcome);
+        restoreEmptyState();
         updateProgress(0, 0);
         selectedPlaybook = null;
         document.querySelectorAll('.playbook-item').forEach(function(el) { el.classList.remove('selected'); });
@@ -1904,9 +2475,19 @@ var AgentChat = (function() {
     function switchSession(id) {
         if (!id) { newSession(); return; }
         sessionId = id;
+        document.querySelectorAll('.agent-session-item').forEach(function(el) {
+            var isActive = String(el.getAttribute('data-session-id')) === String(id);
+            el.classList.toggle('active', isActive);
+            if (isActive) el.setAttribute('aria-current', 'true');
+            else el.removeAttribute('aria-current');
+        });
         connectWebSocket(id);
         loadHistory(id);
         document.getElementById('exportDropdownWrap').style.display = 'inline-flex';
+        var sessionsDrawer = document.getElementById('agentSessionsSidebar');
+        if (sessionsDrawer && window.bootstrap && window.innerWidth < 992) {
+            bootstrap.Offcanvas.getOrCreateInstance(sessionsDrawer).hide();
+        }
     }
 
     function loadHistory(id) {
@@ -1916,6 +2497,7 @@ var AgentChat = (function() {
                 var msgs = document.getElementById('chatMessages');
                 while (msgs.firstChild) msgs.removeChild(msgs.firstChild);
                 var history = data.history || data.messages || [];
+                if (!history.length) restoreEmptyState();
                 history.forEach(function(m) {
                     if (m.role === 'user') addBubble(m.content, 'user');
                     else addBubble(m.content, 'agent');
@@ -2178,8 +2760,14 @@ var AgentChat = (function() {
     }
 
     // ===== Bubble Rendering =====
+    function removeEmptyState() {
+        var emptyState = document.getElementById('agentEmptyState');
+        if (emptyState) emptyState.remove();
+    }
+
     function addBubble(text, type) {
         var msgs = document.getElementById('chatMessages');
+        removeEmptyState();
         var div = document.createElement('div');
         if (type === 'user') {
             div.className = 'chat-bubble chat-bubble-user';
@@ -2202,6 +2790,7 @@ var AgentChat = (function() {
 
     function addPhaseIndicator(phase, text) {
         var msgs = document.getElementById('chatMessages');
+        removeEmptyState();
         // Remove last phase indicator to prevent clutter
         var lastChild = msgs.lastElementChild;
         if (lastChild && lastChild.querySelector('.phase-indicator')) {
@@ -2219,6 +2808,7 @@ var AgentChat = (function() {
     function addToolCall(name, args, source) {
         toolCallCounter++;
         var msgs = document.getElementById('chatMessages');
+        removeEmptyState();
         var div = document.createElement('div');
         div.className = 'chat-bubble chat-bubble-agent';
         div.style.cssText = 'padding:0.4rem 0.6rem;';
@@ -2249,6 +2839,7 @@ var AgentChat = (function() {
     function addToolResult(toolName, preview, source, duration) {
         toolCallCounter++;
         var msgs = document.getElementById('chatMessages');
+        removeEmptyState();
         var blockId = 'result-' + toolCallCounter;
         var div = document.createElement('div');
         div.className = 'chat-bubble chat-bubble-agent';
@@ -2288,6 +2879,7 @@ var AgentChat = (function() {
     // ===== Investigation Summary =====
     function addInvestigationSummary(msg) {
         var msgs = document.getElementById('chatMessages');
+        removeEmptyState();
         var div = document.createElement('div');
         div.className = 'investigation-summary';
         div.style.cssText = 'align-self:stretch;max-width:100%;';
@@ -2452,9 +3044,21 @@ var AgentChat = (function() {
             });
     }
 
+    var fitChatHeightFrame = null;
+    window.addEventListener('load', fitChatHeight);
+    window.addEventListener('resize', function() {
+        if (fitChatHeightFrame !== null) return;
+        fitChatHeightFrame = window.requestAnimationFrame(function() {
+            fitChatHeightFrame = null;
+            fitChatHeight();
+        });
+    });
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitChatHeight);
+
     document.addEventListener('DOMContentLoaded', function() {
         initAgentSidebarTabs();
         init();
+        fitChatHeight();
         refreshMCPStatus();
         // Auto-refresh MCP status every 30s
         setInterval(refreshMCPStatus, 30000);
@@ -2466,6 +3070,8 @@ var AgentChat = (function() {
         switchSession: switchSession,
         respondApproval: respondApproval,
         quickAction: quickAction,
+        usePlaybookFromModal: usePlaybookFromModal,
+        openSidebar: openSidebar,
         exportSession: exportSession,
         copyIOC: copyIOC,
         refreshMCPStatus: refreshMCPStatus,
