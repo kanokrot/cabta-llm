@@ -97,10 +97,11 @@
     }
 
     /* ===== Layout ===== */
+    :root { --agent-chat-panel-height: calc(100vh - 150px); }
     .chat-container {
         display: flex;
         flex-direction: column;
-        height: calc(100vh - 150px);
+        height: var(--agent-chat-panel-height);
         min-height: 400px;
     }
     .chat-messages {
@@ -566,12 +567,103 @@
         background: rgba(88,166,255,0.08) !important;
     }
 
+    /* ===== Right Sidebar Tabs ===== */
+    .agent-sidebar-tabs {
+        height: var(--agent-chat-panel-height);
+        min-height: 400px;
+        display: flex;
+        flex-direction: column;
+        background: var(--bg-secondary);
+        border-color: var(--border-color);
+    }
+    .agent-sidebar-tablist {
+        display: flex;
+        gap: 0.15rem;
+        padding: 0.35rem;
+        background: var(--bg-tertiary);
+        border-bottom: 1px solid var(--border-color);
+    }
+    .agent-sidebar-tab {
+        flex: 1 1 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.25rem;
+        min-width: 0;
+        padding: 0.4rem 0.25rem;
+        border: 0;
+        border-bottom: 2px solid transparent;
+        border-radius: 4px 4px 0 0;
+        background: transparent;
+        color: var(--text-secondary);
+        font-size: 0.72rem;
+        font-weight: 600;
+    }
+    .agent-sidebar-tab:hover,
+    .agent-sidebar-tab:focus-visible {
+        color: var(--color-accent);
+        outline: none;
+    }
+    .agent-sidebar-tab[aria-selected="true"] {
+        color: var(--color-accent);
+        border-bottom-color: var(--color-accent);
+        background: var(--bg-secondary);
+    }
+    .agent-sidebar-tab .badge {
+        font-size: 0.58rem;
+        line-height: 1.1;
+    }
+    .agent-tab-panel {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-y: auto;
+        padding: 0.5rem;
+    }
+    .agent-tab-panel[hidden] { display: none; }
+    .agent-tab-panel-heading {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem;
+        margin-bottom: 0.45rem;
+        color: var(--text-secondary);
+        font-size: 0.72rem;
+        font-weight: 600;
+    }
+    .agent-quick-actions {
+        margin-bottom: 0.6rem;
+        padding-bottom: 0.55rem;
+        border-bottom: 1px solid var(--border-color);
+    }
+    .agent-quick-actions-title {
+        margin-bottom: 0.35rem;
+        color: var(--text-secondary);
+        font-size: 0.72rem;
+        font-weight: 600;
+    }
+    .agent-quick-action-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.35rem;
+    }
+    .agent-quick-action-grid .btn {
+        min-width: 0;
+        padding: 0.3rem 0.35rem;
+        font-size: 0.68rem;
+    }
+
     /* ===== Responsive ===== */
     @media (max-width: 768px) {
-        .chat-container { height: calc(100vh - 200px); }
+        :root { --agent-chat-panel-height: calc(100vh - 200px); }
         .chat-bubble { max-width: 95%; }
         .chat-bubble-agent { max-width: 95%; }
         .summary-stats { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (max-width: 991.98px) {
+        .agent-sidebar-tabs {
+            height: auto;
+            min-height: 420px;
+        }
     }
 
     /* ===== Copy Toast ===== */
@@ -713,57 +805,73 @@
 
     <!-- Right Sidebar -->
     <div class="col-lg-3">
-        <!-- Playbooks -->
-        <div class="card">
-            <div class="card-header d-flex justify-content-between align-items-center py-2">
-                <h6 class="mb-0" style="font-size:0.85rem;"><i class="bi bi-journal-code me-2 text-accent"></i>Playbooks</h6>
-                <span class="badge bg-accent" id="playbookCountBadge" style="font-size:0.65rem;">0</span>
+        <div class="card agent-sidebar-tabs" id="agentSidebarTabs">
+            <div class="agent-sidebar-tablist" role="tablist" aria-label="Agent sidebar sections">
+                <button type="button" class="agent-sidebar-tab" id="agentTabPlaybooks" role="tab"
+                    aria-controls="agentPanelPlaybooks" aria-selected="true" tabindex="0" data-agent-tab="playbooks">
+                    <i class="bi bi-journal-code" aria-hidden="true"></i>
+                    <span>Playbooks</span>
+                    <span class="badge bg-accent" id="playbookCountBadge">0</span>
+                </button>
+                <button type="button" class="agent-sidebar-tab" id="agentTabTools" role="tab"
+                    aria-controls="agentPanelTools" aria-selected="false" tabindex="-1" data-agent-tab="tools">
+                    <i class="bi bi-tools" aria-hidden="true"></i>
+                    <span>Tools</span>
+                    <span class="badge bg-accent" id="toolCountBadge">–</span>
+                </button>
+                <button type="button" class="agent-sidebar-tab" id="agentTabStatus" role="tab"
+                    aria-controls="mcpStatusPanel" aria-selected="false" tabindex="-1" data-agent-tab="status">
+                    <i class="bi bi-hdd-network" aria-hidden="true"></i>
+                    <span>Status</span>
+                </button>
             </div>
-            <div class="card-body p-0" style="max-height:280px;overflow-y:auto;">
+
+            <div id="agentPanelPlaybooks" class="agent-tab-panel" role="tabpanel" aria-labelledby="agentTabPlaybooks">
+                <div class="agent-quick-actions">
+                    <div class="agent-quick-actions-title"><i class="bi bi-lightning me-1 text-accent"></i>Quick Actions</div>
+                    <div class="agent-quick-action-grid">
+                        <button type="button" class="btn btn-outline-secondary btn-sm text-start" onclick="AgentChat.quickAction('Investigate the IOC: ')" title="IOC Investigation">
+                            <i class="bi bi-search me-1 text-info"></i>IOC Investigation
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm text-start" onclick="AgentChat.quickAction('Analyze the malware file at: ')" title="Malware Analysis">
+                            <i class="bi bi-bug me-1 text-danger"></i>Malware Analysis
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm text-start" onclick="AgentChat.quickAction('Analyze the phishing email at: ')" title="Email Forensics">
+                            <i class="bi bi-envelope-exclamation me-1 text-warning"></i>Email Forensics
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm text-start" onclick="AgentChat.quickAction('Hunt for threats matching: ')" title="Threat Hunt">
+                            <i class="bi bi-binoculars me-1 text-success"></i>Threat Hunt
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm text-start" onclick="AgentChat.quickAction('Triage the alert: ')" title="Alert Triage">
+                            <i class="bi bi-bell me-1 text-accent"></i>Alert Triage
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm text-start" onclick="AgentChat.quickAction('Generate detection rules for: ')" title="Detection Rules">
+                            <i class="bi bi-shield-check me-1 text-accent"></i>Detection Rules
+                        </button>
+                    </div>
+                </div>
                 <div id="playbooksList" class="list-group list-group-flush">
                     <div class="text-center text-muted py-2"><small>Loading...</small></div>
                 </div>
             </div>
-        </div>
 
-        <!-- Quick Actions -->
-        <div class="card mt-2">
-            <div class="card-header py-2">
-                <h6 class="mb-0" style="font-size:0.85rem;"><i class="bi bi-lightning me-2 text-accent"></i>Quick Actions</h6>
-            </div>
-            <div class="card-body p-2">
-                <div class="d-grid gap-1">
-                    <button class="btn btn-outline-secondary btn-sm text-start" onclick="AgentChat.quickAction('Investigate the IOC: ')">
-                        <i class="bi bi-search me-2 text-info"></i>IOC Investigation
-                    </button>
-                    <button class="btn btn-outline-secondary btn-sm text-start" onclick="AgentChat.quickAction('Analyze the malware file at: ')">
-                        <i class="bi bi-bug me-2 text-danger"></i>Malware Analysis
-                    </button>
-                    <button class="btn btn-outline-secondary btn-sm text-start" onclick="AgentChat.quickAction('Analyze the phishing email at: ')">
-                        <i class="bi bi-envelope-exclamation me-2 text-warning"></i>Email Forensics
-                    </button>
-                    <button class="btn btn-outline-secondary btn-sm text-start" onclick="AgentChat.quickAction('Hunt for threats matching: ')">
-                        <i class="bi bi-binoculars me-2 text-success"></i>Threat Hunt
-                    </button>
-                    <button class="btn btn-outline-secondary btn-sm text-start" onclick="AgentChat.quickAction('Triage the alert: ')">
-                        <i class="bi bi-bell me-2 text-accent"></i>Alert Triage
-                    </button>
-                    <button class="btn btn-outline-secondary btn-sm text-start" onclick="AgentChat.quickAction('Generate detection rules for: ')">
-                        <i class="bi bi-shield-check me-2 text-accent"></i>Detection Rules
-                    </button>
+            <div id="agentPanelTools" class="agent-tab-panel" role="tabpanel" aria-labelledby="agentTabTools" hidden>
+                <div class="agent-tab-panel-heading">
+                    <span><i class="bi bi-tools me-1 text-accent"></i>Tools</span>
+                    <small id="toolCountBreakdown">–</small>
+                </div>
+                <div id="toolsList" class="list-group list-group-flush">
+                    <div class="text-center text-muted py-3"><small>Loading tools...</small></div>
                 </div>
             </div>
-        </div>
 
-        <!-- MCP Server Status -->
-        <div class="card mt-2">
-            <div class="card-header d-flex justify-content-between align-items-center py-2">
-                <h6 class="mb-0" style="font-size:0.85rem;"><i class="bi bi-hdd-network me-2 text-accent"></i>System Status</h6>
-                <button class="btn btn-sm p-0 border-0" onclick="AgentChat.refreshMCPStatus()" title="Refresh status" style="color:var(--text-secondary);font-size:0.8rem;">
-                    <i class="bi bi-arrow-clockwise"></i>
-                </button>
-            </div>
-            <div class="card-body p-2" id="mcpStatusPanel">
+            <div id="mcpStatusPanel" class="agent-tab-panel" role="tabpanel" aria-labelledby="agentTabStatus" hidden>
+                <div class="agent-tab-panel-heading">
+                    <span><i class="bi bi-hdd-network me-1 text-accent"></i>System Status</span>
+                    <button type="button" class="btn btn-sm p-0 border-0" onclick="AgentChat.refreshMCPStatus()" title="Refresh status" style="color:var(--text-secondary);font-size:0.8rem;">
+                        <i class="bi bi-arrow-clockwise"></i>
+                    </button>
+                </div>
                 <div class="d-flex align-items-center gap-2 mb-2">
                     <div class="mcp-stat-mini">
                         <span class="mcp-stat-val" id="mcpOnlineCount">-</span>
@@ -778,24 +886,8 @@
                         <span class="mcp-stat-lbl">MCP TOOLS</span>
                     </div>
                 </div>
-                <div id="mcpServerList" style="max-height:180px;overflow-y:auto;">
+                <div id="mcpServerList">
                     <div class="text-center text-muted py-2"><small>Loading...</small></div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Tools -->
-        <div class="card mt-2">
-            <div class="card-header d-flex justify-content-between align-items-center py-2">
-                <div>
-                    <h6 class="mb-0" style="font-size:0.85rem;"><i class="bi bi-tools me-2 text-accent"></i>Tools</h6>
-                    <small id="toolCountBreakdown" class="text-muted" style="font-size:0.65rem;">–</small>
-                </div>
-                <span class="badge bg-accent" id="toolCountBadge" style="font-size:0.65rem;">–</span>
-            </div>
-            <div class="card-body p-0" style="max-height:200px;overflow-y:auto;">
-                <div id="toolsList" class="list-group list-group-flush">
-                    <div class="text-center text-muted py-3"><small>Loading tools...</small></div>
                 </div>
             </div>
         </div>
@@ -891,6 +983,47 @@ var AgentChat = (function() {
         }
         agentStatus.connection = label;
         renderAgentStatus();
+    }
+
+    function setAgentSidebarTab(tabName, focusTab) {
+        var tabs = Array.prototype.slice.call(document.querySelectorAll('#agentSidebarTabs [role="tab"]'));
+        var target = tabs.find(function(tab) { return tab.getAttribute('data-agent-tab') === tabName; });
+        if (!target) return;
+
+        tabs.forEach(function(tab) {
+            var selected = tab === target;
+            tab.classList.toggle('active', selected);
+            tab.setAttribute('aria-selected', selected ? 'true' : 'false');
+            tab.setAttribute('tabindex', selected ? '0' : '-1');
+            var panel = document.getElementById(tab.getAttribute('aria-controls'));
+            if (panel) panel.hidden = !selected;
+        });
+        if (focusTab) target.focus();
+    }
+
+    function initAgentSidebarTabs() {
+        var tabs = Array.prototype.slice.call(document.querySelectorAll('#agentSidebarTabs [role="tab"]'));
+        tabs.forEach(function(tab, index) {
+            tab.addEventListener('click', function() {
+                setAgentSidebarTab(tab.getAttribute('data-agent-tab'), false);
+            });
+            tab.addEventListener('keydown', function(evt) {
+                var nextIndex = index;
+                if (evt.key === 'ArrowRight' || evt.key === 'ArrowDown') nextIndex = (index + 1) % tabs.length;
+                else if (evt.key === 'ArrowLeft' || evt.key === 'ArrowUp') nextIndex = (index - 1 + tabs.length) % tabs.length;
+                else if (evt.key === 'Home') nextIndex = 0;
+                else if (evt.key === 'End') nextIndex = tabs.length - 1;
+                else if (evt.key === 'Enter' || evt.key === ' ') {
+                    evt.preventDefault();
+                    setAgentSidebarTab(tab.getAttribute('data-agent-tab'), false);
+                    return;
+                } else return;
+
+                evt.preventDefault();
+                setAgentSidebarTab(tabs[nextIndex].getAttribute('data-agent-tab'), true);
+            });
+        });
+        setAgentSidebarTab('playbooks', false);
     }
 
     // ===== Tool Source Detection =====
@@ -1506,19 +1639,40 @@ var AgentChat = (function() {
                     item.onclick = function() { selectPlaybook(pb.id, pb.name); };
 
                     var iconClass = pbIcons[pb.id] || 'bi-journal-code text-accent';
-                    var html = '<div class="d-flex align-items-center justify-content-between">';
-                    html += '<div><i class="bi ' + iconClass + ' me-2"></i><strong>' + esc(pb.name || pb.id) + '</strong></div>';
-                    html += '<span class="badge bg-secondary" style="font-size:0.6rem;">' + (pb.step_count || 0) + '</span>';
-                    html += '</div>';
+                    var row = document.createElement('div');
+                    row.className = 'd-flex align-items-center justify-content-between';
+                    var label = document.createElement('div');
+                    var icon = document.createElement('i');
+                    icon.className = 'bi ' + iconClass + ' me-2';
+                    var name = document.createElement('strong');
+                    name.textContent = pb.name || pb.id;
+                    label.appendChild(icon);
+                    label.appendChild(name);
+                    row.appendChild(label);
+                    var stepBadge = document.createElement('span');
+                    stepBadge.className = 'badge bg-secondary';
+                    stepBadge.style.fontSize = '0.6rem';
+                    stepBadge.textContent = pb.step_count || 0;
+                    row.appendChild(stepBadge);
+                    item.appendChild(row);
                     if (pb.description) {
-                        html += '<div style="font-size:0.7rem;color:var(--text-secondary);margin-top:2px;padding-left:1.5rem;">' + esc((pb.description || '').substring(0, 100)) + '</div>';
+                        var description = document.createElement('div');
+                        description.style.cssText = 'font-size:0.7rem;color:var(--text-secondary);margin-top:2px;padding-left:1.5rem;';
+                        description.textContent = (pb.description || '').substring(0, 100);
+                        item.appendChild(description);
                     }
-                    item.innerHTML = html;
                     container.appendChild(item);
                 });
             })
             .catch(function() {
-                document.getElementById('playbooksList').innerHTML = '<div class="text-center text-muted py-2"><small>Failed to load</small></div>';
+                var container = document.getElementById('playbooksList');
+                while (container.firstChild) container.removeChild(container.firstChild);
+                var failure = document.createElement('div');
+                failure.className = 'text-center text-muted py-2';
+                var failureText = document.createElement('small');
+                failureText.textContent = 'Failed to load';
+                failure.appendChild(failureText);
+                container.appendChild(failure);
             });
     }
 
@@ -2197,6 +2351,7 @@ var AgentChat = (function() {
     }
 
     document.addEventListener('DOMContentLoaded', function() {
+        initAgentSidebarTabs();
         init();
         refreshMCPStatus();
         // Auto-refresh MCP status every 30s
