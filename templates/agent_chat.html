@@ -2034,7 +2034,7 @@ var AgentChat = (function() {
                         '<strong>Ollama is not running!</strong> The AI agent cannot function without an LLM.' +
                         '<br>Start Ollama with: <code>ollama serve</code>' +
                         '<br>Then pull a model: <code>ollama pull ' + esc(data.configured_model || 'llama3.1:8b') + '</code>',
-                        'system'
+                        'system', true
                     );
                 } else if (!data.model_available) {
                     var available = (data.available_models || []).join(', ') || 'none';
@@ -2044,7 +2044,7 @@ var AgentChat = (function() {
                         '<br>Available models: ' + esc(available) +
                         '<br>Pull it with: <code>ollama pull ' + esc(data.configured_model) + '</code>' +
                         '<br>Or change the model in <a href="/settings">Settings</a>.',
-                        'system'
+                        'system', true
                     );
                 }
             })
@@ -2351,7 +2351,7 @@ var AgentChat = (function() {
         var input = document.getElementById('chatInput');
         input.placeholder = 'Playbook: ' + (name || id) + ' - Enter target or parameters...';
         input.focus();
-        addBubble('<i class="bi bi-journal-code me-1 text-accent"></i>Playbook selected: <strong>' + esc(name || id) + '</strong>. Enter your target and press Enter to execute.', 'system');
+        addBubble('<i class="bi bi-journal-code me-1 text-accent"></i>Playbook selected: <strong>' + esc(name || id) + '</strong>. Enter your target and press Enter to execute.', 'system', true);
         scrollToBottom();
         closeSidebar();
     }
@@ -2706,7 +2706,7 @@ var AgentChat = (function() {
                     sessionId = data.session_id;
                     maxSteps = 200;
                     updateProgress(0, maxSteps);
-                    addBubble('<i class="bi bi-journal-code me-1"></i>Playbook <strong>' + esc(selectedPlaybook) + '</strong> started...', 'system');
+                    addBubble('<i class="bi bi-journal-code me-1"></i>Playbook <strong>' + esc(selectedPlaybook) + '</strong> started...', 'system', true);
                     connectWebSocket(sessionId);
                     loadSessions();
                     selectedPlaybook = null;
@@ -2731,7 +2731,7 @@ var AgentChat = (function() {
                     sessionId = data.session_id;
                     maxSteps = data.max_steps || 50;
                     updateProgress(0, maxSteps);
-                    addBubble('<i class="bi bi-gear-wide-connected me-1"></i>Investigation started. The agent is working autonomously...', 'system');
+                    addBubble('<i class="bi bi-gear-wide-connected me-1"></i>Investigation started. The agent is working autonomously...', 'system', true);
                     connectWebSocket(sessionId);
                     loadSessions();
                 })
@@ -2768,7 +2768,7 @@ var AgentChat = (function() {
         if (emptyState) emptyState.remove();
     }
 
-    function addBubble(text, type) {
+    function addBubble(text, type, trustedHtml = false) {
         var msgs = document.getElementById('chatMessages');
         removeEmptyState();
         var div = document.createElement('div');
@@ -2786,7 +2786,8 @@ var AgentChat = (function() {
             div.innerHTML = '<div class="bubble-label">Agent</div>' + verdictHtml + '<div class="agent-content">' + renderMarkdown(text) + '</div>';
         } else {
             div.className = 'chat-bubble chat-bubble-system';
-            div.innerHTML = text || '';
+            if (trustedHtml) div.innerHTML = text || '';
+            else div.textContent = text || '';
         }
         msgs.appendChild(div);
     }
@@ -2943,7 +2944,7 @@ var AgentChat = (function() {
                 body: JSON.stringify({ approved: approved, comment: '' })
             }).catch(function() {});
         }
-        addBubble(approved ? '<i class="bi bi-check-circle text-success me-1"></i>Action approved.' : '<i class="bi bi-x-circle text-danger me-1"></i>Action rejected.', 'system');
+        addBubble(approved ? '<i class="bi bi-check-circle text-success me-1"></i>Action approved.' : '<i class="bi bi-x-circle text-danger me-1"></i>Action rejected.', 'system', true);
         pendingApprovalId = null;
     }
 
