@@ -14,6 +14,7 @@ import aiohttp
 from fastapi import APIRouter, Depends, Query, Request
 
 from ..auth import require_role
+from ..health_probes import get_detailed_health
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -36,6 +37,16 @@ async def health(
         'timestamp': datetime.now(timezone.utc).isoformat(),
         'version': '2.0.0',
     }
+
+
+@router.get('/health/detailed')
+async def detailed_health(
+    request: Request,
+    refresh: bool = False,
+    _admin_user: dict = Depends(require_role("admin")),
+):
+    """Return the cached, read-only dependency health report."""
+    return await get_detailed_health(request.app, refresh=refresh, started_at=_START_TIME)
 
 
 @router.get('/info')
