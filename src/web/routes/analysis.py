@@ -21,6 +21,7 @@ from ..models import (
     IOCRequest,
 )
 from ..auth import TEAM_LEAD, get_current_user, get_user_ids_by_role, require_role
+from ..email_capabilities import get_email_capabilities
 from ..oversight import record_cross_user_read
 from ..visibility import serialize_analysis_job, serialize_status
 
@@ -317,6 +318,18 @@ async def analyze_email(
         'status': 'queued',
         'message': f'Email analysis queued: {file.filename}',
     }
+
+
+@router.get('/email/capabilities')
+async def email_capabilities(
+    refresh: bool = False,
+    current_user: dict = Depends(get_current_user),
+):
+    """Return cached status for the email-analysis capabilities."""
+    is_admin = current_user.get('role') == 'admin'
+    if refresh and not is_admin:
+        raise HTTPException(status_code=403, detail='Admin role required for refresh')
+    return get_email_capabilities(refresh=refresh, include_reason=is_admin)
 
 
 @router.get('/{analysis_id}')
