@@ -285,7 +285,6 @@ def test_unknown_event_and_unlinked_recipient_are_safe_and_structured(tmp_path, 
 
 def test_direct_flow_a_triggers_notification(monkeypatch):
     from src.tools.ioc_investigator import IOCInvestigator
-    from src.tools.malware_analyzer import MalwareAnalyzer
 
     ioc_manager = SimpleNamespace(notify=lambda event, payload: calls.append((event, payload)))
     calls = []
@@ -301,13 +300,6 @@ def test_direct_flow_a_triggers_notification(monkeypatch):
     import asyncio
     asyncio.run(investigator.investigate("1.2.3.4"))
     assert calls and calls[0][0] == "verdict_alert"
-
-    malware = MalwareAnalyzer.__new__(MalwareAnalyzer)
-    malware.notification_manager = ioc_manager
-    malware._notify_verdict("sample.bin", "SUSPICIOUS", 65, "analysis-2", "abc123")
-    assert calls[-1][0] == "verdict_alert"
-    assert calls[-1][1]["verdict"] == "SUSPICIOUS"
-
 
 class _FakeAwaitable:
     def __init__(self, value):

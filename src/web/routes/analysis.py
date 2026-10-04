@@ -157,7 +157,7 @@ def _run_file_analysis_bg(
         mgr.update_progress(job_id, 5, 'Loading malware analyzer...')
         from src.tools.malware_analyzer import MalwareAnalyzer
         config = _load_config()
-        analyzer = MalwareAnalyzer(config, notification_manager=notification_manager)
+        analyzer = MalwareAnalyzer(config)
 
         mgr.update_progress(job_id, 10, 'Computing file hashes...')
         mgr.update_progress(job_id, 15, 'Running PE analysis...')

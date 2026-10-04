@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import asyncio
+from copy import copy
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -240,10 +241,6 @@ def create_app() -> FastAPI:
             logger.warning(f"[WEB] EmailAnalyzer not available: {e}")
 
         # Wire cross-tool references
-        if email_ana and ioc_inv:
-            email_ana.ioc_investigator = ioc_inv
-        if email_ana and mal_ana:
-            email_ana.file_analyzer = mal_ana
         if mal_ana and ioc_inv:
             mal_ana.ioc_investigator = ioc_inv
 
@@ -317,6 +314,24 @@ def create_app() -> FastAPI:
     for analyzer in (app.state.ioc_investigator, app.state.malware_analyzer):
         if analyzer is not None:
             analyzer.notification_manager = app.state.notification_manager
+
+    # Email and file-analysis pages are analyst-only and must not enter the
+    # notification path used by the shared Flow A instances.  Shallow copies
+    # preserve expensive RAG/intelligence resources while isolating mutable
+    # wiring attributes.
+    email_ana = getattr(app.state, 'email_analyzer', None)
+    ioc_inv = getattr(app.state, 'ioc_investigator', None)
+    mal_ana = getattr(app.state, 'malware_analyzer', None)
+    if email_ana:
+        email_ioc = copy(ioc_inv) if ioc_inv else None
+        email_malware = copy(mal_ana) if mal_ana else None
+        if email_ioc:
+            email_ioc.notification_manager = None
+        if email_malware:
+            email_malware.notification_manager = None
+            email_malware.ioc_investigator = email_ioc
+        email_ana.ioc_investigator = email_ioc
+        email_ana.file_analyzer = email_malware
 
     # Agent Loop
     try:
