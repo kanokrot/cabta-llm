@@ -350,6 +350,8 @@ class IOCInvestigator:
             ioc_type in ('ipv4', 'ip', 'domain', 'url')
             and self.config.get('analysis', {}).get('enable_llm', True)
             and detection_rules.get('firewall')
+            and str(verdict).strip().upper() != 'CLEAN'
+            and not str(detection_rules.get('firewall') or '').startswith('#')
         ):
             try:
                 fortigate_cli = await self.llm_analyzer.translate_firewall_to_fortigate(

@@ -1015,6 +1015,12 @@ Make rules specific to the threat indicators found. Include:
         (caller should treat None as "translation unavailable" and NOT
         surface a firewall_fortigate key at all — never fabricate output).
         """
+        if (
+            str(verdict).strip().upper() == 'CLEAN'
+            or str(abstract_rule).startswith('#')
+        ):
+            return None
+
         try:
             prompt = f"""You are a network security engineer configuring a FortiGate firewall.
 

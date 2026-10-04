@@ -234,9 +234,11 @@ index=* earliest=-30d
             if context else 'Unknown'
         )
         verdict = str(context.get('verdict', 'Unknown')) if context else 'Unknown'
+        is_clean = str(verdict).strip().upper() == 'CLEAN'
 
         level = (
-            'critical' if verdict == 'MALICIOUS'
+            'informational' if is_clean
+            else 'critical' if verdict == 'MALICIOUS'
             else 'high' if verdict == 'SUSPICIOUS'
             else 'medium'
         )
@@ -244,14 +246,21 @@ index=* earliest=-30d
         value = _SingleQuoted(ioc)
 
         rule = {
-            'title': f'Detection of {malware_family} IOC - {ioc}',
+            'title': (
+                f'Hunt for {ioc} (verdict CLEAN)'
+                if is_clean else f'Detection of {malware_family} IOC - {ioc}'
+            ),
             'id': str(rule_id),
             'status': 'experimental',
-            'description': f'Detects network activity related to {verdict} IOC',
+            'description': (
+                f'Hunt for activity related to {ioc}; verdict CLEAN, informational only'
+                if is_clean
+                else f'Detects network activity related to {verdict} IOC'
+            ),
             'author': 'Ugur Ates',
             'date': datetime.now().strftime('%Y-%m-%d'),
             'references': ['https://github.com/ugur-ates/blue-team-assistant'],
-            'tags': ['attack.command-and-control', 'attack.t1071'],
+            'tags': [] if is_clean else ['attack.command-and-control', 'attack.t1071'],
         }
 
         if ioc_type == 'ipv4':
@@ -397,6 +406,8 @@ dataset = xdr_data
             return f'# Firewall blocklist entry not supported for IOC type: {ioc_type}'
 
         verdict = context.get('verdict', 'Unknown') if context else 'Unknown'
+        if str(verdict).strip().upper() == 'CLEAN':
+            return '# No block rule generated: verdict CLEAN. Review before any enforcement.'
         malware_family = context.get('malware_family', 'Unknown') if context else 'Unknown'
 
         def quote(value: object) -> str:
