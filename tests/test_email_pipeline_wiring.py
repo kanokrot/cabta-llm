@@ -171,16 +171,16 @@ def test_missing_tools_are_reported_without_changing_local_result(tmp_path):
     statuses = {item["capability"]: item["status"] for item in result["capability_errors"]}
     assert statuses["ioc_investigator"] == "not_connected"
     assert statuses["file_analyzer"] == "not_connected"
-    assert result["composite_score"] == 17
+    assert result["composite_score"] == 25
     assert result["base_phishing_score"] == 25
 
 
-def test_malicious_ioc_and_attachment_use_existing_formula(tmp_path):
+def test_malicious_ioc_and_attachment_use_strongest_evidence(tmp_path):
     ioc_analyzer = EmailAnalyzer(_config())
     ioc_analyzer.ioc_investigator = FakeInvestigator({"verdict": "MALICIOUS", "threat_score": 100})
     ioc_result = _run_analyze(ioc_analyzer, _write_eml(tmp_path / "ioc", with_url=True))
     base = ioc_result["base_phishing_score"]
-    assert ioc_result["composite_score"] == int(max(base * 0.70 + 20, base * 0.65))
+    assert ioc_result["composite_score"] == 100
 
     attachment_analyzer = EmailAnalyzer(_config())
     attachment_analyzer.file_analyzer = FakeFileAnalyzer(
@@ -188,7 +188,7 @@ def test_malicious_ioc_and_attachment_use_existing_formula(tmp_path):
     )
     attachment_result = _run_analyze(attachment_analyzer, _write_eml(tmp_path / "attachment"))
     base = attachment_result["base_phishing_score"]
-    assert attachment_result["composite_score"] == int(max(base * 0.70 + 10, base * 0.65))
+    assert attachment_result["composite_score"] == 100
 
 
 def test_attachment_temp_file_cleanup_success_and_invalid_suffix(tmp_path):

@@ -438,29 +438,28 @@ class IntelligentScoring:
     
     @staticmethod
     def calculate_email_score(base_score: int, ioc_results: list, attachment_results: list) -> int:
+        """The email composite is the strongest available 0-100 evidence score.
+        It must not be lower than evidence found in the email itself, so the base
+        email score and any independently computed IOC or attachment score are
+        compared without weights; absent evidence is excluded rather than treated
+        as a score that could reduce the result.
         """
-        Calculate composite email phishing score.
-        
-        v1.0.0: Base score weight increased because email-specific indicators
-        (auth failures, SPAM flags, forensics) are already strong signals.
-        
-        Scoring breakdown:
-        - Base email analysis: 70% (increased from 60%)
-        - IOC analysis: 20% (decreased from 25%)
-        - Attachment analysis: 10% (decreased from 15%)
-        
-        Args:
-            base_score: Base email phishing score (0-100)
-            ioc_results: List of IOC investigation results
-            attachment_results: List of attachment analysis results
-        
-        Returns:
-            Composite phishing score (0-100)
-        """
-        # Base email score (70% weight) - v1.0.0: increased
-        score = base_score * 0.70
-        
-        # IOC analysis (20% weight)
+        def normalize_score(value):
+            if value is None:
+                return None
+            try:
+                numeric = float(value)
+            except (TypeError, ValueError):
+                return None
+            if numeric != numeric:
+                return None
+            return max(0.0, min(100.0, numeric))
+
+        scores = []
+        normalized_base = normalize_score(base_score)
+        if normalized_base is not None:
+            scores.append(normalized_base)
+
         if ioc_results:
             ioc_score = 0
             malicious_count = sum(1 for r in ioc_results if r.get('verdict') == 'MALICIOUS')
@@ -473,12 +472,17 @@ class IntelligentScoring:
             elif suspicious_count == 1:
                 ioc_score = 60
             else:
-                avg_threat_score = sum(r.get('threat_score', 0) for r in ioc_results) / len(ioc_results) if ioc_results else 0
+                threat_scores = [
+                    r.get('threat_score', 0) if r.get('threat_score') is not None else 0
+                    for r in ioc_results
+                ]
+                avg_threat_score = sum(threat_scores) / len(ioc_results)
                 ioc_score = avg_threat_score
-            
-            score += ioc_score * 0.20
-        
-        # Attachment analysis (10% weight)
+
+            normalized_ioc = normalize_score(ioc_score)
+            if normalized_ioc is not None:
+                scores.append(normalized_ioc)
+
         if attachment_results:
             attachment_score = 0
             malicious_count = sum(1 for r in attachment_results if r.get('verdict') == 'MALICIOUS')
@@ -489,19 +493,15 @@ class IntelligentScoring:
             elif suspicious_count > 0:
                 attachment_score = 75
             else:
-                avg_threat_score = sum(r.get('threat_score', 0) for r in attachment_results) / len(attachment_results) if attachment_results else 0
+                threat_scores = [
+                    r.get('threat_score', 0) if r.get('threat_score') is not None else 0
+                    for r in attachment_results
+                ]
+                avg_threat_score = sum(threat_scores) / len(attachment_results)
                 attachment_score = avg_threat_score
-            
-            score += attachment_score * 0.10
-        
-      
-        # If the base score is high (for example, [SPAM] subject or DKIM FAIL),
-        # the composite score should also remain high.
-        if base_score >= 80:
-            score = max(score, base_score * 0.85)  # En az %85'ini koru
-        elif base_score >= 60:
-            score = max(score, base_score * 0.75)  # En az %75'ini koru
-        elif base_score >= 40:
-            score = max(score, base_score * 0.65)  # En az %65'ini koru
-        
-        return max(0, min(100, int(score)))
+
+            normalized_attachment = normalize_score(attachment_score)
+            if normalized_attachment is not None:
+                scores.append(normalized_attachment)
+
+        return int(max(scores, default=0.0))

@@ -132,10 +132,10 @@ async def test_email_analyzer_passes_calculated_scores_and_lookalikes(monkeypatc
 
     result = await analyzer.analyze('message.eml')
 
-    assert result['composite_score'] == 52
+    assert result['composite_score'] == 70
     context = analyzer.llm_analyzer.analyze_email.await_args.args[0]
     assert context['base_score'] == 70
-    assert context['composite_score'] == 52
+    assert context['composite_score'] == 70
     assert context['forensics_score'] == 12
     assert [item['domain'] for item in context['lookalike_domains']] == [
         'example.com',
@@ -156,7 +156,7 @@ async def test_llm_prompt_includes_scores_lookalikes_and_capability_limits():
         'from': 'sender@example.com',
         'to': 'recipient@example.com',
         'base_score': 70,
-        'composite_score': 52,
+        'composite_score': 70,
         'forensics_score': 12,
         'lookalike_domains': [
             {'domain': 'example.com', 'brand': 'Example', 'similarity': 0.91, 'risk': 'medium'},
@@ -174,7 +174,7 @@ async def test_llm_prompt_includes_scores_lookalikes_and_capability_limits():
     prompt = analyzer._call_ollama_api.await_args.args[0]
     assert 'Base Phishing Score: 70/100' in prompt
     assert 'Forensics Score: 12/100' in prompt
-    assert 'Composite Score: 52/100' in prompt
+    assert 'Composite Score: 70/100' in prompt
     assert 'example.com' in prompt
     assert 'apple.com' in prompt
     assert 'ioc_investigator' in prompt
