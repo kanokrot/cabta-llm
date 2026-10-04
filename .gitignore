@@ -133,10 +133,9 @@ evidence/*
 !evidence/vt_independent_holdout_2026-09-25/
 !evidence/operational_metrics_2026-09-27/
 evidence/source_weights_2026-09-16
+evidence/vt_independent_holdout_2026-09-25/plot_comparison.py
+evidence/vt_independent_holdout_2026-09-25/flow_a_comparison.png
 !.env.example
-
-# pytest temp dirs
-.pytest_tmp*/
 
 # pytest temp dirs
 .pytest_tmp*/
