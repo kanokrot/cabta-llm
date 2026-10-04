@@ -6,8 +6,25 @@ from src.web.email_capabilities import clear_email_capability_cache
 from src.web.routes import analysis as analysis_routes
 
 
-def _app(user=None):
+class FakeAnalyzer:
+    def __init__(self, file_analyzer=None, ioc_investigator=None):
+        self.file_analyzer = file_analyzer
+        self.ioc_investigator = ioc_investigator
+
+
+class FakeThreatIntel:
+    def __init__(self, api_keys=None):
+        self.api_keys = api_keys or {}
+
+
+class FakeIOCInvestigator:
+    def __init__(self, api_keys=None):
+        self.threat_intel = FakeThreatIntel(api_keys)
+
+
+def _app(user=None, analyzer=None):
     app = FastAPI()
+    app.state.email_analyzer = analyzer
     app.include_router(analysis_routes.router, prefix="/api/analysis")
     if user is not None:
         app.dependency_overrides[get_current_user] = lambda: user
@@ -28,16 +45,10 @@ def setup_function():
     clear_email_capability_cache()
 
 
-def test_returns_all_capabilities_and_allowed_statuses(monkeypatch):
-    class FakeAnalyzer:
-        file_analyzer = None
-        ioc_investigator = None
-
-    monkeypatch.setattr(
-        "src.web.email_capabilities.create_route_email_analyzer",
-        lambda: FakeAnalyzer(),
+def test_returns_all_capabilities_and_allowed_statuses():
+    response = TestClient(_app(_user("admin"), FakeAnalyzer())).get(
+        "/api/analysis/email/capabilities"
     )
-    response = TestClient(_app(_user("admin"))).get("/api/analysis/email/capabilities")
 
     assert response.status_code == 200
     payload = response.json()
@@ -64,16 +75,10 @@ def test_returns_all_capabilities_and_allowed_statuses(monkeypatch):
     }
 
 
-def test_unconnected_analyzer_dependencies_are_not_connected(monkeypatch):
-    class FakeAnalyzer:
-        file_analyzer = None
-        ioc_investigator = None
-
-    monkeypatch.setattr(
-        "src.web.email_capabilities.create_route_email_analyzer",
-        lambda: FakeAnalyzer(),
+def test_unconnected_analyzer_dependencies_are_not_connected():
+    response = TestClient(_app(_user("admin"), FakeAnalyzer())).get(
+        "/api/analysis/email/capabilities"
     )
-    response = TestClient(_app(_user("admin"))).get("/api/analysis/email/capabilities")
     by_key = {item["key"]: item for item in response.json()["capabilities"]}
 
     assert by_key["attachment_scanning"]["status"] == "not_connected"
@@ -81,16 +86,32 @@ def test_unconnected_analyzer_dependencies_are_not_connected(monkeypatch):
     assert by_key["malwarebazaar_hash"]["status"] == "not_connected"
 
 
-def test_non_admin_does_not_see_reasons(monkeypatch):
-    class FakeAnalyzer:
-        file_analyzer = None
-        ioc_investigator = None
-
-    monkeypatch.setattr(
-        "src.web.email_capabilities.create_route_email_analyzer",
-        lambda: FakeAnalyzer(),
+def test_connected_analyzer_updates_capability_statuses():
+    analyzer = FakeAnalyzer(
+        file_analyzer=object(),
+        ioc_investigator=FakeIOCInvestigator({"abusech": "test-key"}),
     )
-    response = TestClient(_app(_user("SOC Analyst Tier 1-2"))).get(
+    response = TestClient(_app(_user("admin"), analyzer)).get(
+        "/api/analysis/email/capabilities"
+    )
+    by_key = {item["key"]: item for item in response.json()["capabilities"]}
+
+    assert by_key["attachment_scanning"]["status"] == "active"
+    assert by_key["sender_domain_whois"]["status"] == "active"
+    assert by_key["malwarebazaar_hash"]["status"] == "active"
+
+
+def test_connected_without_malwarebazaar_key_needs_config():
+    analyzer = FakeAnalyzer(file_analyzer=object(), ioc_investigator=FakeIOCInvestigator())
+    response = TestClient(_app(_user("admin"), analyzer)).get(
+        "/api/analysis/email/capabilities"
+    )
+    by_key = {item["key"]: item for item in response.json()["capabilities"]}
+    assert by_key["malwarebazaar_hash"]["status"] == "needs_config"
+
+
+def test_non_admin_does_not_see_reasons():
+    response = TestClient(_app(_user("SOC Analyst Tier 1-2"), FakeAnalyzer())).get(
         "/api/analysis/email/capabilities"
     )
 
@@ -98,16 +119,10 @@ def test_non_admin_does_not_see_reasons(monkeypatch):
     assert all("reason" not in item for item in response.json()["capabilities"])
 
 
-def test_admin_sees_reasons(monkeypatch):
-    class FakeAnalyzer:
-        file_analyzer = None
-        ioc_investigator = None
-
-    monkeypatch.setattr(
-        "src.web.email_capabilities.create_route_email_analyzer",
-        lambda: FakeAnalyzer(),
+def test_admin_sees_reasons():
+    response = TestClient(_app(_user("admin"), FakeAnalyzer())).get(
+        "/api/analysis/email/capabilities"
     )
-    response = TestClient(_app(_user("admin"))).get("/api/analysis/email/capabilities")
 
     assert response.status_code == 200
     assert all("reason" in item for item in response.json()["capabilities"])
@@ -118,31 +133,18 @@ def test_unauthenticated_request_is_rejected():
     assert response.status_code == 401
 
 
-def test_cache_does_not_create_analyzer_twice(monkeypatch):
-    class FakeAnalyzer:
-        file_analyzer = None
-        ioc_investigator = None
-
-    calls = {"count": 0}
-
-    def factory():
-        calls["count"] += 1
-        return FakeAnalyzer()
-
-    monkeypatch.setattr(
-        "src.web.email_capabilities.create_route_email_analyzer",
-        factory,
-    )
-    client = TestClient(_app(_user("admin")))
+def test_cache_does_not_rebuild_for_same_analyzer():
+    analyzer = FakeAnalyzer()
+    client = TestClient(_app(_user("admin"), analyzer))
     first = client.get("/api/analysis/email/capabilities")
     second = client.get("/api/analysis/email/capabilities")
 
     assert first.status_code == second.status_code == 200
-    assert calls["count"] == 1
+    assert first.json() == second.json()
 
 
-def test_non_admin_cannot_refresh(monkeypatch):
-    response = TestClient(_app(_user("SOC Analyst Tier 1-2"))).get(
+def test_non_admin_cannot_refresh():
+    response = TestClient(_app(_user("SOC Analyst Tier 1-2"), FakeAnalyzer())).get(
         "/api/analysis/email/capabilities?refresh=1"
     )
     assert response.status_code == 403

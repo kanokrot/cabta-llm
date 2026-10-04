@@ -397,6 +397,7 @@ def serialize_analysis_job(job: Dict[str, Any], role: str = SOC, flow: str = "an
             for key in (
                 "composite_score", "base_phishing_score", "forensics",
                 "advanced_analysis", "detection_rules", "llm_analysis", "iocs_found",
+                "capability_errors",
             ):
                 if key in result:
                     safe_value = _safe_email_result_value(result[key])

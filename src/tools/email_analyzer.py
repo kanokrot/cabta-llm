@@ -6,7 +6,10 @@ from email import policy
 from email.utils import parseaddr
 from pathlib import Path
 import asyncio
+import re
+import threading
 import tempfile
+import time
 from typing import Dict, List
 import logging
 from ..utils.ioc_extractor import IOCExtractor
@@ -22,6 +25,55 @@ from ..integrations.ticketing import create_incident_ticket
 from ..rag.rag_knowledge_base import RAGKnowledgeBase, load_playbooks_from_yaml
 
 logger = logging.getLogger(__name__)
+
+_CROSS_TOOL_LOCK = threading.Lock()
+_CROSS_TOOL_LOCK_WAIT_SECONDS = 120.0
+_IOC_STAGE_TIMEOUT_SECONDS = 60.0
+_ATTACHMENT_STAGE_TIMEOUT_SECONDS = 120.0
+_ATTACHMENT_SUFFIX_RE = re.compile(r'^\.[A-Za-z0-9]{1,10}$')
+
+
+def _append_capability_error(
+    capability_errors: List[Dict],
+    capability: str,
+    status: str,
+    message: str,
+) -> None:
+    """Add one safe, user-facing stage error without exposing internals."""
+    if any(
+        error.get('capability') == capability and error.get('status') == status
+        for error in capability_errors
+    ):
+        return
+    capability_errors.append({
+        'capability': capability,
+        'status': status,
+        'message': message,
+    })
+
+
+def _dedupe_preserve_order(values: List[str]) -> List[str]:
+    seen = set()
+    result = []
+    for value in values:
+        marker = str(value)
+        if marker in seen:
+            continue
+        seen.add(marker)
+        result.append(value)
+    return result
+
+
+async def _acquire_cross_tool_lock() -> bool:
+    """Wait asynchronously for the email cross-tool stage lock."""
+    deadline = time.monotonic() + _CROSS_TOOL_LOCK_WAIT_SECONDS
+    while True:
+        if _CROSS_TOOL_LOCK.acquire(blocking=False):
+            return True
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return False
+        await asyncio.sleep(min(0.05, remaining))
 class EmailAnalyzer:
     """
     SOC-GRADE Email Security Analysis Tool.
@@ -77,6 +129,7 @@ class EmailAnalyzer:
         # Initialize Raw Output Collector
         raw_collector = RawOutputCollector()
         raw_collector.record_pipeline_step('init', 'email_analysis_start', 'started')
+        capability_errors = []
         
         try:
             # Parse email
@@ -232,12 +285,28 @@ class EmailAnalyzer:
             # Investigate IOCs
             ioc_results = []
             if self.ioc_investigator:
-                ioc_results = await self._investigate_iocs(email_data)
+                ioc_results = await self._investigate_iocs(email_data, capability_errors)
+            else:
+                _append_capability_error(
+                    capability_errors,
+                    'ioc_investigator',
+                    'not_connected',
+                    'IOC investigation is not connected for this email.',
+                )
             
             # Analyze attachments
             attachment_results = []
             if self.file_analyzer:
-                attachment_results = await self._analyze_attachments(msg, email_data)
+                attachment_results = await self._analyze_attachments(
+                    msg, email_data, capability_errors
+                )
+            else:
+                _append_capability_error(
+                    capability_errors,
+                    'file_analyzer',
+                    'not_connected',
+                    'Attachment scanning is not connected for this email.',
+                )
             
             # ==================== COMPOSITE SCORING ====================
             composite_score = IntelligentScoring.calculate_email_score(
@@ -330,6 +399,7 @@ class EmailAnalyzer:
                     'suspicious_attachments': sum(1 for r in attachment_results if r.get('verdict') == 'SUSPICIOUS'),
                     'results': attachment_results
                 },
+                'capability_errors': capability_errors,
                 'llm_analysis': llm_analysis,
                 'rag_references': rag_context,
                 'iocs_found': {
@@ -612,78 +682,182 @@ class EmailAnalyzer:
 
         return min(100, score)
     
-    async def _investigate_iocs(self, email_data: Dict) -> List[Dict]:
-        """Investigate extracted IOCs."""
+    async def _investigate_iocs(
+        self,
+        email_data: Dict,
+        capability_errors: List[Dict] = None,
+    ) -> List[Dict]:
+        """Investigate extracted IOCs with bounded, partial-result processing."""
         ioc_results = []
-        
+        capability_errors = capability_errors if capability_errors is not None else []
+
         if not self.ioc_investigator:
+            _append_capability_error(
+                capability_errors,
+                'ioc_investigator',
+                'not_connected',
+                'IOC investigation is not connected for this email.',
+            )
             return ioc_results
-        
-        logger.info(f"[EMAIL] Found {len(email_data['urls'])} URLs, {len(email_data['ips'])} IPs, {len(email_data['domains'])} domains")
-        
-        # Investigate URLs (max 5)
-        for url in email_data['urls'][:5]:
-            try:
-                logger.info(f"[EMAIL] Investigating URL: {url}")
-                result = await self.ioc_investigator.investigate(url)
-                ioc_results.append(result)
-            except Exception as e:
-                logger.error(f"[EMAIL] IOC investigation failed for {url}: {e}")
-        
-        # Investigate IPs (max 3)
-        for ip in email_data['ips'][:3]:
-            try:
-                logger.info(f"[EMAIL] Investigating IP: {ip}")
-                result = await self.ioc_investigator.investigate(ip)
-                ioc_results.append(result)
-            except Exception as e:
-                logger.error(f"[EMAIL] IOC investigation failed for {ip}: {e}")
-        
-        # Investigate domains (max 3)
-        for domain in email_data['domains'][:3]:
-            try:
-                logger.info(f"[EMAIL] Investigating domain: {domain}")
-                result = await self.ioc_investigator.investigate(domain)
-                ioc_results.append(result)
-            except Exception as e:
-                logger.error(f"[EMAIL] IOC investigation failed for {domain}: {e}")
-        
-        return ioc_results
-    
-    async def _analyze_attachments(self, msg: email.message.Message, email_data: Dict) -> List[Dict]:
-        """Analyze email attachments."""
+
+        if not await _acquire_cross_tool_lock():
+            _append_capability_error(
+                capability_errors,
+                'ioc_investigator',
+                'busy',
+                'IOC investigation is busy; this stage was skipped.',
+            )
+            return ioc_results
+
+        deadline = time.monotonic() + _IOC_STAGE_TIMEOUT_SECONDS
+        logger.info(
+            f"[EMAIL] Found {len(email_data['urls'])} URLs, "
+            f"{len(email_data['ips'])} IPs, {len(email_data['domains'])} domains"
+        )
+        try:
+            groups = (
+                ('URL', _dedupe_preserve_order(email_data['urls'])[:5]),
+                ('IP', _dedupe_preserve_order(email_data['ips'])[:3]),
+                ('domain', _dedupe_preserve_order(email_data['domains'])[:3]),
+            )
+            for label, values in groups:
+                for value in values:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        _append_capability_error(
+                            capability_errors,
+                            'ioc_investigator',
+                            'timeout',
+                            'IOC investigation timed out; partial results were kept.',
+                        )
+                        return ioc_results
+                    try:
+                        logger.info(f"[EMAIL] Investigating {label}: {value}")
+                        result = await asyncio.wait_for(
+                            self.ioc_investigator.investigate(value),
+                            timeout=remaining,
+                        )
+                        ioc_results.append(result)
+                    except asyncio.TimeoutError:
+                        _append_capability_error(
+                            capability_errors,
+                            'ioc_investigator',
+                            'timeout',
+                            'IOC investigation timed out; partial results were kept.',
+                        )
+                        return ioc_results
+                    except Exception:
+                        logger.exception("[EMAIL] IOC investigation failed")
+                        _append_capability_error(
+                            capability_errors,
+                            'ioc_investigator',
+                            'error',
+                            'IOC investigation failed; partial results were kept.',
+                        )
+            return ioc_results
+        finally:
+            _CROSS_TOOL_LOCK.release()
+
+    async def _analyze_attachments(
+        self,
+        msg: email.message.Message,
+        email_data: Dict,
+        capability_errors: List[Dict] = None,
+    ) -> List[Dict]:
+        """Analyze email attachments with bounded, partial-result processing."""
         attachment_results = []
-        
+        capability_errors = capability_errors if capability_errors is not None else []
+
         if not self.file_analyzer:
+            _append_capability_error(
+                capability_errors,
+                'file_analyzer',
+                'not_connected',
+                'Attachment scanning is not connected for this email.',
+            )
             return attachment_results
-        
+
+        if not await _acquire_cross_tool_lock():
+            _append_capability_error(
+                capability_errors,
+                'file_analyzer',
+                'busy',
+                'Attachment scanning is busy; this stage was skipped.',
+            )
+            return attachment_results
+
+        deadline = time.monotonic() + _ATTACHMENT_STAGE_TIMEOUT_SECONDS
         logger.info(f"[EMAIL] Found {len(email_data['attachments'])} attachments")
-        
-        # Extract and analyze attachments (max 3)
-        for attachment_info in email_data['attachments'][:3]:
-            try:
-                # Extract attachment to temp file
-                for part in msg.walk():
-                    if part.get_filename() == attachment_info['filename']:
-                        with tempfile.NamedTemporaryFile(delete=False, suffix=Path(attachment_info['filename']).suffix) as tmp:
-                            tmp.write(part.get_payload(decode=True))
+        try:
+            for attachment_info in email_data['attachments'][:3]:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    _append_capability_error(
+                        capability_errors,
+                        'file_analyzer',
+                        'timeout',
+                        'Attachment scanning timed out; partial results were kept.',
+                    )
+                    break
+
+                tmp_path = None
+                try:
+                    filename = attachment_info['filename']
+                    suffix = Path(filename).suffix
+                    if not _ATTACHMENT_SUFFIX_RE.fullmatch(suffix):
+                        suffix = ''
+                    for part in msg.walk():
+                        if part.get_filename() != filename:
+                            continue
+                        payload = part.get_payload(decode=True)
+                        if payload is None:
+                            raise ValueError('attachment payload unavailable')
+                        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+                            tmp.write(payload)
                             tmp_path = tmp.name
-                        
-                        logger.info(f"[EMAIL] Analyzing attachment: {attachment_info['filename']}")
-                        result = await self.file_analyzer.analyze(tmp_path)
-                        result['filename'] = attachment_info['filename']
+
+                        logger.info(f"[EMAIL] Analyzing attachment: {filename}")
+                        remaining = deadline - time.monotonic()
+                        if remaining <= 0:
+                            _append_capability_error(
+                                capability_errors,
+                                'file_analyzer',
+                                'timeout',
+                                'Attachment scanning timed out; partial results were kept.',
+                            )
+                            return attachment_results
+                        result = await asyncio.wait_for(
+                            self.file_analyzer.analyze(tmp_path),
+                            timeout=remaining,
+                        )
+                        result['filename'] = filename
                         attachment_results.append(result)
-                        
-                        # Cleanup
+                        break
+                except asyncio.TimeoutError:
+                    _append_capability_error(
+                        capability_errors,
+                        'file_analyzer',
+                        'timeout',
+                        'Attachment scanning timed out; partial results were kept.',
+                    )
+                    break
+                except Exception:
+                    logger.exception("[EMAIL] Attachment analysis failed")
+                    _append_capability_error(
+                        capability_errors,
+                        'file_analyzer',
+                        'error',
+                        'Attachment scanning failed; partial results were kept.',
+                    )
+                finally:
+                    if tmp_path:
                         try:
                             Path(tmp_path).unlink()
-                        except:
+                        except OSError:
                             pass
-                        break
-            except Exception as e:
-                logger.error(f"[EMAIL] Attachment analysis failed for {attachment_info['filename']}: {e}")
-        
-        return attachment_results
+            return attachment_results
+        finally:
+            _CROSS_TOOL_LOCK.release()
     
     def _check_spf(self, msg: email.message.Message) -> str:
         """Check SPF status from headers."""

@@ -20,7 +20,7 @@ CAPABILITY_STATUSES = {
 
 _CACHE_TTL_SECONDS = 300.0
 _CACHE_LOCK = threading.Lock()
-_CACHE: Optional[tuple[float, Dict[str, Any]]] = None
+_CACHE: Optional[tuple[float, Optional[int], Dict[str, Any]]] = None
 
 
 _CAPABILITIES = (
@@ -98,9 +98,6 @@ def create_route_email_analyzer():
 
 def inspect_email_pipeline_connections(analyzer=None) -> Dict[str, Any]:
     """Return connection facts that future email-analysis code can reuse."""
-    if analyzer is None:
-        analyzer = create_route_email_analyzer()
-
     ioc_investigator = getattr(analyzer, "ioc_investigator", None)
     file_analyzer = getattr(analyzer, "file_analyzer", None)
     return {
@@ -125,7 +122,7 @@ def _entry(key: str, label: str, group: str, status: str, reason: str, checked_a
     }
 
 
-def _build_snapshot() -> Dict[str, Any]:
+def _build_snapshot(analyzer=None) -> Dict[str, Any]:
     checked_at = _checked_at()
     results: Dict[str, Dict[str, Any]] = {}
 
@@ -159,7 +156,7 @@ def _build_snapshot() -> Dict[str, Any]:
         }
 
     try:
-        connection = inspect_email_pipeline_connections()
+        connection = inspect_email_pipeline_connections(analyzer)
         analyzer = connection["analyzer"]
         if connection["file_connected"]:
             attachment = {"status": "active", "reason": "route-created analyzer has file_analyzer"}
@@ -244,16 +241,26 @@ def clear_email_capability_cache() -> None:
         _CACHE = None
 
 
-def get_email_capabilities(*, refresh: bool = False, include_reason: bool = False) -> Dict[str, Any]:
+def get_email_capabilities(
+    *,
+    analyzer=None,
+    refresh: bool = False,
+    include_reason: bool = False,
+) -> Dict[str, Any]:
     """Return a cached capability snapshot, hiding reasons from non-admins."""
     global _CACHE
     now = time.monotonic()
+    analyzer_marker = id(analyzer) if analyzer is not None else None
     with _CACHE_LOCK:
         if refresh:
             _CACHE = None
-        if _CACHE is None or now - _CACHE[0] >= _CACHE_TTL_SECONDS:
-            _CACHE = (time.monotonic(), _build_snapshot())
-        snapshot = copy.deepcopy(_CACHE[1])
+        if (
+            _CACHE is None
+            or now - _CACHE[0] >= _CACHE_TTL_SECONDS
+            or _CACHE[1] != analyzer_marker
+        ):
+            _CACHE = (time.monotonic(), analyzer_marker, _build_snapshot(analyzer))
+        snapshot = copy.deepcopy(_CACHE[2])
 
     if not include_reason:
         for capability in snapshot["capabilities"]:

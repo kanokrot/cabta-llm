@@ -26,6 +26,7 @@ from ..oversight import record_cross_user_read
 from ..visibility import serialize_analysis_job, serialize_status
 
 logger = logging.getLogger(__name__)
+MAX_EMAIL_UPLOAD_BYTES = 25 * 1024 * 1024
 router = APIRouter(
     dependencies=[
         Depends(require_role([
@@ -69,17 +70,42 @@ def _get_readable_job(request: Request, analysis_id: str, current_user: dict):
     return job
 
 
+async def _read_email_upload_with_limit(file: UploadFile) -> bytes:
+    """Read an email upload incrementally and reject oversized content."""
+    chunks = []
+    total = 0
+    chunk_size = 1024 * 1024
+    while True:
+        chunk = await file.read(chunk_size)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > MAX_EMAIL_UPLOAD_BYTES:
+            raise HTTPException(status_code=413, detail='Email file exceeds 25 MB limit')
+        chunks.append(chunk)
+    return b''.join(chunks)
+
+
 # ------------------------------------------------------------------
 # Background analysis helpers
 # ------------------------------------------------------------------
 
-def _run_email_analysis_bg(mgr, job_id: str, eml_path: str, user_id: int = None) -> None:
+def _run_email_analysis_bg(
+    mgr,
+    job_id: str,
+    eml_path: str,
+    user_id: int = None,
+    shared_email_analyzer=None,
+) -> None:
     """Run email analysis in a background thread."""
     try:
         mgr.update_progress(job_id, 5, 'Loading email analyzer...')
         from src.tools.email_analyzer import EmailAnalyzer
         config = _load_config()
         analyzer = EmailAnalyzer(config)
+        if shared_email_analyzer is not None:
+            analyzer.ioc_investigator = getattr(shared_email_analyzer, 'ioc_investigator', None)
+            analyzer.file_analyzer = getattr(shared_email_analyzer, 'file_analyzer', None)
 
         mgr.update_progress(job_id, 10, 'Parsing email headers...')
         mgr.update_progress(job_id, 20, 'Analyzing authentication (SPF/DKIM/DMARC)...')
@@ -288,7 +314,7 @@ async def analyze_email(
     """Upload and analyze an email (.eml)."""
     mgr = request.app.state.analysis_manager
 
-    content = await file.read()
+    content = await _read_email_upload_with_limit(file)
     sha256 = hashlib.sha256(content).hexdigest()
 
     with tempfile.NamedTemporaryFile(delete=False, suffix='.eml') as tmp:
@@ -308,7 +334,13 @@ async def analyze_email(
     # Launch background email analysis
     t = threading.Thread(
         target=_run_email_analysis_bg,
-        args=(mgr, job_id, tmp_path, current_user['id']),
+        args=(
+            mgr,
+            job_id,
+            tmp_path,
+            current_user['id'],
+            getattr(request.app.state, 'email_analyzer', None),
+        ),
         daemon=True,
     )
     t.start()
@@ -322,6 +354,7 @@ async def analyze_email(
 
 @router.get('/email/capabilities')
 async def email_capabilities(
+    request: Request,
     refresh: bool = False,
     current_user: dict = Depends(get_current_user),
 ):
@@ -329,7 +362,12 @@ async def email_capabilities(
     is_admin = current_user.get('role') == 'admin'
     if refresh and not is_admin:
         raise HTTPException(status_code=403, detail='Admin role required for refresh')
-    return get_email_capabilities(refresh=refresh, include_reason=is_admin)
+    analyzer = getattr(request.app.state, 'email_analyzer', None)
+    return get_email_capabilities(
+        analyzer=analyzer,
+        refresh=refresh,
+        include_reason=is_admin,
+    )
 
 
 @router.get('/{analysis_id}')
