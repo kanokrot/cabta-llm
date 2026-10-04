@@ -9,6 +9,7 @@ from typing import Dict, List, Tuple
 import logging
 from urllib.parse import urlparse
 import difflib
+import unicodedata
 
 logger = logging.getLogger(__name__)
 class AdvancedEmailAnalyzer:
@@ -100,6 +101,43 @@ class AdvancedEmailAnalyzer:
                     analysis['anomalies'].append(f'Message-ID domain ({msg_id_domain}) != From domain ({from_domain})')
         
         return analysis
+
+    @staticmethod
+    def detect_mixed_script(subject, from_header) -> Dict:
+        """Detect tokens mixing Latin with Cyrillic or Greek characters."""
+        token_limit = 10
+        token_length_limit = 64
+        fields = {'subject': [], 'display_name': []}
+        display_name = parseaddr(str(from_header or ''))[0]
+
+        for field_name, value in (
+            ('subject', subject),
+            ('display_name', display_name),
+        ):
+            if len(fields['subject']) + len(fields['display_name']) >= token_limit:
+                break
+            tokens = re.findall(r'[^\W_]+', str(value or ''), flags=re.UNICODE)
+            for token in tokens:
+                scripts = {
+                    unicodedata.name(character, '').split(' ', 1)[0]
+                    for character in token
+                    if unicodedata.name(character, '').startswith(
+                        ('LATIN', 'CYRILLIC', 'GREEK')
+                    )
+                }
+                has_latin = 'LATIN' in scripts
+                has_non_latin_target = bool(scripts & {'CYRILLIC', 'GREEK'})
+                if has_latin and has_non_latin_target:
+                    fields[field_name].append(token[:token_length_limit])
+                    if len(fields['subject']) + len(fields['display_name']) >= token_limit:
+                        break
+
+        count = len(fields['subject']) + len(fields['display_name'])
+        return {
+            'found': count > 0,
+            'fields': fields,
+            'count': count,
+        }
     
     @staticmethod
     def detect_link_text_mismatch(html_body: str) -> List[Dict]:

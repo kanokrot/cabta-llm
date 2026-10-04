@@ -231,6 +231,17 @@ class EmailAnalyzer:
                 email_data['body_html'] + email_data['body_text'],
                 all_domains
             )
+
+            mixed_script = self.advanced_analyzer.detect_mixed_script(
+                email_data.get('subject'),
+                email_data.get('from'),
+            )
+            if not isinstance(mixed_script, dict):
+                mixed_script = {
+                    'found': False,
+                    'fields': {'subject': [], 'display_name': []},
+                    'count': 0,
+                }
             
             # 8. Email Template Fingerprinting
             logger.info("[EMAIL] Fingerprinting email template...")
@@ -292,7 +303,8 @@ class EmailAnalyzer:
                 qr_detection,
                 brand_impersonation,
                 threat_indicators,
-                bec_results
+                bec_results,
+                mixed_script
             )
             
             # ==================== CROSS-TOOL INTEGRATION ====================
@@ -367,6 +379,7 @@ class EmailAnalyzer:
                     'html_obfuscation_score': html_obfuscation.get('risk_score', 0),
                     'qr_codes_found': qr_detection.get('qr_codes_found', 0),
                     'brand_impersonation': len(brand_impersonation),
+                    'mixed_script_found': mixed_script.get('found', False),
                     'ioc_count': len(ioc_results),
                     'malicious_iocs': sum(1 for r in ioc_results if r.get('verdict') in ['MALICIOUS', 'SUSPICIOUS']),
                     'attachment_count': len(attachment_results),
@@ -398,6 +411,7 @@ class EmailAnalyzer:
                     'html_obfuscation': html_obfuscation,
                     'qr_detection': qr_detection,
                     'brand_impersonation': brand_impersonation,
+                    'mixed_script': mixed_script,
                     'template_fingerprint': template_fingerprint,
                     'threat_indicators': threat_indicators,
                     'bec_analysis': bec_results,
@@ -461,6 +475,7 @@ class EmailAnalyzer:
                 'html_obfuscation': html_obfuscation,
                 'qr_detection': qr_detection,
                 'brand_impersonation': brand_impersonation,
+                'mixed_script': mixed_script,
                 'template_fingerprint': template_fingerprint,
                 'threat_indicators': threat_indicators,
                 'bec_analysis': bec_results,
@@ -575,7 +590,8 @@ class EmailAnalyzer:
         qr_detection: Dict,
         brand_impersonation: List,
         threat_indicators: Dict = None,
-        bec_results: Dict = None
+        bec_results: Dict = None,
+        mixed_script: Dict = None,
     ) -> int:
         """
         Calculate base phishing score (email-only, before IOC/attachment analysis).
@@ -654,6 +670,10 @@ class EmailAnalyzer:
         # ==================== BRAND IMPERSONATION (max 20) ====================
         if brand_impersonation:
             score += 20  # Critical indicator
+
+        # ==================== MIXED SCRIPT (same critical level as above) ====================
+        if mixed_script and mixed_script.get('found'):
+            score += 20  # Same critical indicator level as lookalike/brand
         
         # ==================== PHISHING KEYWORDS (max 10) ====================
         phishing_keywords = [
