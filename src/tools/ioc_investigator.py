@@ -362,18 +362,23 @@ class IOCInvestigator:
             except Exception as exc:
                 logger.warning(f"[IOC] FortiGate translation failed (non-fatal): {exc}")
 
-        # Generate recommendations
-        # Prioritize LLM-generated recommendations if they exist and are valid
+        # Build the rule-based recommendations once for comparison and fallback.
+        recommendations_rule_based = list(
+            self._generate_recommendations(verdict, intel_results)
+        )
+        if dga_result and dga_result.get('is_dga'):
+            recommendations_rule_based.append(
+                f"DGA result: is_dga=True, confidence={dga_result.get('confidence')}"
+            )
+
+        # Prioritize LLM-generated recommendations if they exist and are valid.
         if llm_analysis and isinstance(llm_analysis.get('recommendations'), list) and llm_analysis['recommendations']:
-            recommendations = llm_analysis['recommendations']
+            recommendations = list(llm_analysis['recommendations'])
+            recommendations_source = 'llm'
             logger.info("[IOC] Using dynamic LLM-generated recommendations.")
         else:
-            # Fallback to the static, verdict-based list if LLM fails
-            recommendations = self._generate_recommendations(verdict, intel_results)
-            if dga_result and dga_result.get('is_dga'):
-                recommendations.append(
-                    f"DGA result: is_dga=True, confidence={dga_result.get('confidence')}"
-                )
+            recommendations = list(recommendations_rule_based)
+            recommendations_source = 'rule_based'
             logger.info("[IOC] LLM recommendations unavailable, using static fallback list.")
 
         # Add domain-specific recommendations
@@ -381,6 +386,11 @@ class IOCInvestigator:
             domain_age = domain_enrichment.get('domain_age', {})
             if domain_age.get('is_newly_registered'):
                 recommendations.insert(0, '🆕 Domain is newly registered (<30 days) - high risk indicator')
+
+        if domain_enrichment:
+            domain_age = domain_enrichment.get('domain_age', {})
+            if domain_age.get('is_newly_registered'):
+                recommendations_rule_based.insert(0, recommendations[0])
 
         result = {
             'ioc': ioc,
@@ -407,6 +417,8 @@ class IOCInvestigator:
             'llm_analysis': llm_analysis,
             'detection_rules': detection_rules,
             'recommendations': recommendations,
+            'recommendations_rule_based': list(recommendations_rule_based),
+            'recommendations_source': recommendations_source,
             'rag_references': rag_hits
         }
 
