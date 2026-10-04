@@ -813,6 +813,7 @@
 
         output.overview = ov;
         output.threat_score = score;
+        if (meta.sha256) output.sha256 = meta.sha256;
 
         /* ===== STATIC ANALYSIS TAB ===== */
         var peAnalysis = (sa.pe_analysis || res.pe_analysis || {});

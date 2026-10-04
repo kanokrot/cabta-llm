@@ -1298,6 +1298,8 @@
         progressBar.textContent = pct + '%';
         if (message) {
             progressStatus.textContent = message;
+            if (message === setProgress.lastMessage && progressLog.firstChild) return;
+            setProgress.lastMessage = message;
             var li = document.createElement('li');
             li.textContent = message;
             progressLog.appendChild(li);
@@ -2422,8 +2424,6 @@
             while (progressLog.firstChild) { progressLog.removeChild(progressLog.firstChild); }
             progressBar.classList.remove('bg-danger');
             progressSpinner.style.display = '';
-            setProgress(0, 'Uploading email...');
-
             window.startEmailAnalysis(uploadedFile, {
                 onProgress: function (data) {
                     setProgress(data.percent || 0, data.message || '');
