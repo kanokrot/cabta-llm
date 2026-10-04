@@ -125,11 +125,35 @@
      * Convert raw email analysis JSON into tab-friendly HTML fragments.
      * Returns { overview, headers, auth, links, attachments }.
      */
+    function emailAuthFactorLevel(value) {
+        if (value === null || typeof value === 'undefined' || value === '') return null;
+        var status = String(value).toLowerCase();
+        if (status === 'pass') return 'low';
+        if (status === 'fail') return 'high';
+        if (['softfail', 'none', 'unknown'].indexOf(status) >= 0) return 'medium';
+        return null;
+    }
+
+    function emailScoreFactorLevel(value) {
+        if (value === null || typeof value === 'undefined' || value === '' || !isFinite(Number(value))) return null;
+        var score = Number(value);
+        if (score >= 60) return 'high';
+        if (score >= 40) return 'medium';
+        return 'low';
+    }
+
+    function emailCountFactorLevel(value, mediumAtOne) {
+        if (!Array.isArray(value)) return null;
+        if (value.length === 0) return 'low';
+        return mediumAtOne && value.length === 1 ? 'medium' : 'high';
+    }
+
     function renderEmailResult(result) {
         if (!result) return {};
 
         var res = result.result ? (typeof result.result === 'string' ? JSON.parse(result.result) : result.result) : result;
         var output = {};
+        output.verdict = res.verdict || null;
 
         // Overview tab
         var ov = '<div class="mb-3">';
@@ -218,36 +242,38 @@
         /* --- Pass through rich data fields for template rendering --- */
 
         /* Phishing risk */
-        // Bug 3 fix: include additional risk factors from forensics and advanced_analysis
+        // Include only factors with a level supported by the underlying result.
         if (res.composite_score !== undefined || res.base_phishing_score !== undefined) {
             var factors = [];
             if (res.email_data) {
-                if (res.email_data.spf) factors.push({ name: 'SPF', status: res.email_data.spf });
-                if (res.email_data.dkim) factors.push({ name: 'DKIM', status: res.email_data.dkim });
-                if (res.email_data.dmarc) factors.push({ name: 'DMARC', status: res.email_data.dmarc });
+                ['spf', 'dkim', 'dmarc'].forEach(function (protocol) {
+                    var authLevel = emailAuthFactorLevel(res.email_data[protocol]);
+                    if (authLevel) factors.push({ label: protocol.toUpperCase(), level: authLevel });
+                });
             }
-            // Forensics score
             if (res.forensics && res.forensics.forensics_score !== undefined) {
-                factors.push({ name: 'Forensics Score', status: String(res.forensics.forensics_score) });
+                var forensicsLevel = emailScoreFactorLevel(res.forensics.forensics_score);
+                if (forensicsLevel) factors.push({ label: 'Forensics score', level: forensicsLevel });
             }
-            // Advanced analysis factors
             if (res.advanced_analysis) {
                 var aa = res.advanced_analysis;
-                if (aa.link_mismatches && aa.link_mismatches.length > 0) {
-                    factors.push({ name: 'Link Mismatches', status: String(aa.link_mismatches.length) + ' found' });
-                }
-                if (aa.lookalike_domains && aa.lookalike_domains.length > 0) {
-                    factors.push({ name: 'Lookalike Domains', status: String(aa.lookalike_domains.length) + ' found' });
-                }
-                if (aa.html_obfuscation !== undefined) {
-                    factors.push({ name: 'HTML Obfuscation', status: String(aa.html_obfuscation) });
-                }
-                if (aa.brand_impersonation && aa.brand_impersonation.length > 0) {
-                    factors.push({ name: 'Brand Impersonation', status: aa.brand_impersonation.join(', ') });
-                }
+                var linkLevel = emailCountFactorLevel(aa.link_mismatches, false);
+                if (linkLevel) factors.push({ label: 'Link mismatches', level: linkLevel });
+                var lookalikeLevel = emailCountFactorLevel(aa.lookalike_domains, false);
+                if (lookalikeLevel) factors.push({ label: 'Lookalike domains', level: lookalikeLevel });
+                var brandLevel = emailCountFactorLevel(aa.brand_impersonation, false);
+                if (brandLevel) factors.push({ label: 'Brand impersonation', level: brandLevel });
+                var htmlRisk = aa.html_obfuscation && typeof aa.html_obfuscation === 'object'
+                    ? aa.html_obfuscation.risk_score : null;
+                var htmlLevel = emailScoreFactorLevel(htmlRisk);
+                if (htmlLevel) factors.push({ label: 'HTML obfuscation', level: htmlLevel });
+                var headerAnomalies = aa.header_analysis && aa.header_analysis.anomalies;
+                var headerLevel = emailCountFactorLevel(headerAnomalies, true);
+                if (headerLevel) factors.push({ label: 'Header anomalies', level: headerLevel });
             }
+            var phishingScore = res.composite_score !== undefined ? res.composite_score : res.base_phishing_score;
             output.phishingRisk = {
-                score: res.composite_score || res.base_phishing_score || 0,
+                score: phishingScore,
                 factors: factors
             };
         }
@@ -322,6 +348,20 @@
 
         return output;
     }
+
+    function resolveFileVerdict(verdict, score) {
+        var normalized = verdict === null || typeof verdict === 'undefined' ? '' : String(verdict).trim().toUpperCase();
+        if (normalized === 'BENIGN') return 'CLEAN';
+        if (['CLEAN', 'SUSPICIOUS', 'MALICIOUS'].indexOf(normalized) >= 0) return normalized;
+        if (score !== null && typeof score !== 'undefined' && score !== '' && isFinite(Number(score))) {
+            var numericScore = Number(score);
+            if (numericScore >= 70) return 'MALICIOUS';
+            if (numericScore >= 40) return 'SUSPICIOUS';
+            return 'CLEAN';
+        }
+        return 'UNKNOWN';
+    }
+    window.resolveFileVerdict = resolveFileVerdict;
 
     function emailVerdictColor(verdict) {
         if (!verdict) return 'secondary';
@@ -647,11 +687,11 @@
         var output = {};
 
         /* ===== OVERVIEW TAB ===== */
-        var verdict = res.verdict || result.verdict || 'UNKNOWN';
         // Bug 5 fix: composite_score fallback for file analysis
         var score = res.threat_score !== undefined ? res.threat_score :
                     (res.composite_score !== undefined ? res.composite_score :
                     (result.score !== undefined ? result.score : null));
+        var verdict = resolveFileVerdict(res.verdict || result.verdict, score);
         var vColor = verdict.toUpperCase() === 'MALICIOUS' ? 'danger' : (verdict.toUpperCase() === 'SUSPICIOUS' ? 'warning' : (verdict.toUpperCase() === 'CLEAN' ? 'success' : 'secondary'));
 
         var ov = '';
@@ -662,7 +702,7 @@
                 var c = parseFloat(res.scoring.confidence);
                 confidence = c >= 0.7 ? 'High' : (c >= 0.4 ? 'Medium' : 'Low');
             }
-            ov += window.renderThreatGauge(score, confidence);
+            ov += window.renderThreatGauge(score, confidence, verdict);
         } else {
             ov += '<h5>Verdict: <span class="badge bg-' + vColor + '">' + escHtml(verdict) + '</span></h5>';
             if (score !== null) ov += '<p><strong>Threat Score:</strong> ' + score + '/100</p>';
@@ -837,6 +877,7 @@
 
         output.overview = ov;
         output.threat_score = score;
+        output.verdict = verdict;
         if (meta.sha256) output.sha256 = meta.sha256;
 
         /* ===== STATIC ANALYSIS TAB ===== */
@@ -1755,10 +1796,16 @@
         }
 
         /* ===== LLM ANALYSIS TAB ===== */
-        if (res.llm_analysis) {
+        {
             var llm = res.llm_analysis;
             var llmHtml = '';
-            if (typeof llm === 'object') {
+            var llmUnavailable = !llm || (typeof llm === 'string' && !llm.trim());
+            if (llmUnavailable) {
+                llmHtml += '<div class="alert alert-secondary">AI analysis not available</div>';
+            } else if (typeof llm === 'object') {
+                if (!llm.verdict) {
+                    llmHtml += '<div class="alert alert-secondary">AI analysis not available</div>';
+                }
                 /* Verdict badge */
                 if (llm.verdict) {
                     var llmVColor = llm.verdict.toUpperCase() === 'MALICIOUS' ? 'danger' : (llm.verdict.toUpperCase() === 'SUSPICIOUS' ? 'warning' : (llm.verdict.toUpperCase() === 'CLEAN' ? 'success' : 'secondary'));
@@ -1803,7 +1850,7 @@
             } else {
                 llmHtml += '<pre style="white-space:pre-wrap;word-break:break-word;background:rgba(0,0,0,0.15);padding:1rem;border-radius:8px;font-size:0.85rem;">' + escHtml(String(llm)) + '</pre>';
             }
-            if (llmHtml) output.llm = llmHtml;
+            output.llm = llmHtml || '<div class="alert alert-secondary">AI analysis not available</div>';
         }
 
         /* ===== DETECTION RULES TAB ===== */

@@ -1609,14 +1609,15 @@
     }
 
     /* --- Threat Gauge SVG Renderer --- */
-    window.renderThreatGauge = function (score, confidence) {
+    window.renderThreatGauge = function (score, confidence, verdict) {
         score = Math.max(0, Math.min(100, parseInt(score, 10) || 0));
         confidence = confidence || 'Medium';
 
-        var colorClass, color, verdict;
-        if (score <= 30) {
+        var resolvedVerdict = window.resolveFileVerdict(verdict, score);
+        var colorClass, color;
+        if (resolvedVerdict === 'CLEAN') {
             colorClass = 'gauge-green'; color = '#198754'; verdict = 'Clean';
-        } else if (score <= 60) {
+        } else if (resolvedVerdict === 'SUSPICIOUS') {
             colorClass = 'gauge-orange'; color = '#fd7e14'; verdict = 'Suspicious';
         } else {
             colorClass = 'gauge-red'; color = '#dc3545'; verdict = 'Malicious';
@@ -1732,12 +1733,13 @@
         recents.forEach(function (r) {
             var typeInfo = getFileTypeInfo(r.name || 'file');
 
+            var recentVerdict = window.resolveFileVerdict(r.verdict, r.score);
             var verdictClass = 'ru-verdict-unknown';
             var verdictLabel = r.verdict || 'Analyzed';
-            var vl = verdictLabel.toLowerCase();
-            if (vl === 'clean' || vl === 'benign') verdictClass = 'ru-verdict-clean';
-            else if (vl === 'suspicious') verdictClass = 'ru-verdict-suspicious';
-            else if (vl === 'malicious') verdictClass = 'ru-verdict-malicious';
+            if (recentVerdict !== 'UNKNOWN') {
+                verdictLabel = recentVerdict.charAt(0) + recentVerdict.slice(1).toLowerCase();
+                verdictClass = 'ru-verdict-' + recentVerdict.toLowerCase();
+            }
 
             var item = document.createElement('div');
             item.className = 'ma-recent-item';
@@ -1897,20 +1899,15 @@
                     if (data.pipeline) setSanitizedHTML(document.getElementById('resultPipeline'), data.pipeline);
 
                     /* Save to recent uploads */
-                    var verdict = 'Analyzed';
-                    if (data.threat_score !== undefined) {
-                        var s = parseInt(data.threat_score, 10);
-                        if (s <= 30) verdict = 'Clean';
-                        else if (s <= 60) verdict = 'Suspicious';
-                        else verdict = 'Malicious';
-                    }
+                    var recentScoreValue = data.score !== undefined ? data.score : data.threat_score;
+                    var resolvedRecentVerdict = window.resolveFileVerdict(data.verdict, recentScoreValue);
+                    var verdict = resolvedRecentVerdict === 'UNKNOWN' ? 'Analyzed' : resolvedRecentVerdict.charAt(0) + resolvedRecentVerdict.slice(1).toLowerCase();
                     var recentEntry = {
                         name: currentFile.name,
                         size: formatFileSize(currentFile.size),
                         verdict: verdict,
                         date: new Date().toLocaleDateString() + ' ' + new Date().toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})
                     };
-                    var recentScoreValue = data.score !== undefined ? data.score : data.threat_score;
                     if (recentScoreValue !== undefined && recentScoreValue !== null && isFinite(Number(recentScoreValue))) {
                         recentEntry.score = Number(recentScoreValue);
                     }

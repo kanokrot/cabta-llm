@@ -271,6 +271,7 @@
     .risk-factor.risk-high   { color: #dc3545; background: rgba(220,53,69,0.1); }
     .risk-factor.risk-medium { color: #fd7e14; background: rgba(253,126,20,0.1); }
     .risk-factor.risk-low    { color: #198754; background: rgba(25,135,84,0.1); }
+    .risk-factor.risk-unknown { color: var(--text-primary); }
 
     /* ── Sender Analysis Card ── */
     .sender-card {
@@ -1577,8 +1578,8 @@
             h += '<div class="mt-3">';
             for (var i = 0; i < factors.length; i++) {
                 var f = factors[i];
-                var lvl = ['high','medium','low'].indexOf(f.level) >= 0 ? f.level : 'low';
-                var ic = lvl === 'high' ? 'bi-x-circle-fill' : lvl === 'medium' ? 'bi-exclamation-circle-fill' : 'bi-check-circle-fill';
+                var lvl = ['high','medium','low'].indexOf(f.level) >= 0 ? f.level : 'unknown';
+                var ic = lvl === 'high' ? 'bi-x-circle-fill' : lvl === 'medium' ? 'bi-exclamation-circle-fill' : lvl === 'low' ? 'bi-check-circle-fill' : 'bi-question-circle';
                 h += '<span class="risk-factor risk-' + lvl + '"><i class="bi ' + ic + '"></i> ' + escHtmlLocal(f.label) + '</span>';
             }
             h += '</div>';
@@ -1696,13 +1697,16 @@
         for (var i = 0; i < links.length; i++) {
             var l = links[i];
             var st = ['safe','malicious','suspicious'].indexOf(l.status) >= 0 ? l.status : 'unknown';
+            var stLabel = st === 'unknown' ? 'Not checked' : st;
             var stIcon = st === 'safe' ? 'bi-check-circle-fill' : st === 'malicious' ? 'bi-x-circle-fill' : st === 'suspicious' ? 'bi-exclamation-circle-fill' : 'bi-question-circle';
+            var redirectChain = l.redirectChain;
+            if (redirectChain === undefined || redirectChain === null || redirectChain === '' || redirectChain === 'N/A') redirectChain = 'Not checked';
             h += '<tr>'
                 + '<td class="text-muted">' + (i + 1) + '</td>'
                 + '<td style="max-width:280px;">' + escHtmlLocal(l.url || '') + '</td>'
                 + '<td><code>' + escHtmlLocal(l.domain || '') + '</code></td>'
-                + '<td><span class="link-status ' + st + '"><i class="bi ' + stIcon + '"></i> ' + escHtmlLocal(st) + '</span></td>'
-                + '<td class="small">' + escHtmlLocal(l.redirectChain || 'N/A') + '</td>'
+                + '<td><span class="link-status ' + st + '"><i class="bi ' + stIcon + '"></i> ' + escHtmlLocal(stLabel) + '</span></td>'
+                + '<td class="small">' + escHtmlLocal(redirectChain) + '</td>'
                 + '<td>' + (l.openPhishMatch === undefined || l.openPhishMatch === null
                     ? '<span class="badge bg-secondary">Not checked</span>'
                     : (l.openPhishMatch ? '<span class="badge bg-danger">Match</span>' : '<span class="badge bg-secondary">None</span>')) + '</td>'
@@ -2162,8 +2166,8 @@
      *  AI / LLM ANALYSIS RENDERER
      * ======================================================== */
     function renderLLMAnalysis(llm) {
-        if (!llm) return '';
-        var verdict = (llm.verdict || 'UNKNOWN').toUpperCase();
+        var isObject = llm && typeof llm === 'object';
+        var verdict = isObject && llm.verdict ? String(llm.verdict).toUpperCase() : '';
         var vClass = verdict === 'PHISHING' ? 'verdict-phishing' : verdict === 'SUSPICIOUS' ? 'verdict-suspicious' : verdict === 'CLEAN' ? 'verdict-clean' : 'verdict-unknown';
         var vIcon = verdict === 'PHISHING' ? 'bi-exclamation-triangle-fill' : verdict === 'SUSPICIOUS' ? 'bi-exclamation-circle-fill' : verdict === 'CLEAN' ? 'bi-check-circle-fill' : 'bi-question-circle';
 
@@ -2172,12 +2176,19 @@
             + '<div class="d-flex align-items-center justify-content-center rounded-circle" style="width:48px;height:48px;background:rgba(13,110,253,0.15)">'
             + '<i class="bi bi-robot fs-4 text-primary"></i></div>'
             + '<div><h6 class="mb-0 fw-bold">AI Analysis</h6>'
-            + '<span class="ai-verdict ' + vClass + '"><i class="bi ' + vIcon + '"></i> ' + escHtmlLocal(verdict) + '</span></div></div>';
+            + (verdict ? '<span class="ai-verdict ' + vClass + '"><i class="bi ' + vIcon + '"></i> ' + escHtmlLocal(verdict) + '</span>' : '<span class="ai-verdict verdict-unknown">AI analysis not available</span>') + '</div></div>';
 
-        if (llm.analysis) {
+        if (isObject && llm.error) {
+            h += '<div class="alert alert-warning py-2 px-3">LLM Error: ' + escHtmlLocal(llm.error) + '</div>';
+        }
+        if (!verdict) {
+            h += '<div class="alert alert-secondary py-2 px-3">AI analysis not available</div>';
+        }
+
+        if (isObject && llm.analysis) {
             h += '<div class="mb-3" style="font-size:0.9rem;line-height:1.6;white-space:pre-wrap;">' + escHtmlLocal(llm.analysis) + '</div>';
         }
-        if (llm.recommendations && llm.recommendations.length) {
+        if (isObject && llm.recommendations && llm.recommendations.length) {
             h += '<div class="mt-3"><div class="fw-semibold small mb-2"><i class="bi bi-list-check me-1"></i>Recommendations</div>'
                 + '<ul class="list-unstyled mb-0">';
             for (var i = 0; i < llm.recommendations.length; i++) {
@@ -2279,7 +2290,8 @@
             if (scoreField !== null && typeof scoreField !== 'undefined' && scoreField !== '' && isFinite(Number(scoreField))) {
                 scoreValue = Math.max(0, Math.min(100, Number(scoreField)));
             }
-            var scoreBand = scoreValue === null ? 'ea-score-unknown' : scoreValue < 30 ? 'ea-score-safe' : scoreValue < 60 ? 'ea-score-medium' : 'ea-score-phishing';
+            var storedVerdict = r.verdict === null || typeof r.verdict === 'undefined' ? '' : String(r.verdict).toUpperCase();
+            var scoreBand = storedVerdict === 'PHISHING' || storedVerdict === 'MALICIOUS' ? 'ea-score-phishing' : storedVerdict === 'SUSPICIOUS' || storedVerdict === 'SPAM' ? 'ea-score-medium' : storedVerdict === 'CLEAN' ? 'ea-score-safe' : scoreValue === null ? 'ea-score-unknown' : scoreValue < 30 ? 'ea-score-safe' : scoreValue < 60 ? 'ea-score-medium' : 'ea-score-phishing';
             var scoreLabel = scoreBand === 'ea-score-safe' ? 'Safe' : scoreBand === 'ea-score-medium' ? 'Medium' : scoreBand === 'ea-score-phishing' ? 'Phishing' : '';
 
             var item = document.createElement('div');
@@ -2551,6 +2563,7 @@
                         filename: uploadedFile.name,
                         subject: data.subject || uploadedFile.name,
                         sender: data.sender ? data.sender.email : '',
+                        verdict: data.verdict || null,
                         date: new Date().toLocaleString(),
                         riskScore: data.phishingRisk ? data.phishingRisk.score : 0
                     });
