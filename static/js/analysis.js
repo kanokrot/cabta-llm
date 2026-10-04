@@ -263,6 +263,13 @@
                 if (lookalikeLevel) factors.push({ label: 'Lookalike domains', level: lookalikeLevel });
                 var brandLevel = emailCountFactorLevel(aa.brand_impersonation, false);
                 if (brandLevel) factors.push({ label: 'Brand impersonation', level: brandLevel });
+                if (Object.prototype.hasOwnProperty.call(aa, 'mixed_script')
+                    && aa.mixed_script && typeof aa.mixed_script.found === 'boolean') {
+                    factors.push({
+                        label: 'Mixed-script text',
+                        level: aa.mixed_script.found ? 'high' : 'low'
+                    });
+                }
                 var htmlRisk = aa.html_obfuscation && typeof aa.html_obfuscation === 'object'
                     ? aa.html_obfuscation.risk_score : null;
                 var htmlLevel = emailScoreFactorLevel(htmlRisk);
