@@ -78,6 +78,11 @@
     function startEmailAnalysis(file, callbacks) {
         callbacks = callbacks || {};
 
+        if (file && file.size > 25 * 1024 * 1024) {
+            if (callbacks.onError) callbacks.onError(new Error('Email file exceeds 25 MB limit'));
+            return;
+        }
+
         var formData = new FormData();
         formData.append('file', file);
 
@@ -89,7 +94,14 @@
             body: formData
         })
         .then(function (response) {
-            if (!response.ok) throw new Error('HTTP ' + response.status);
+            if (!response.ok) {
+                return response.json().then(function (payload) {
+                    var detail = payload && payload.detail;
+                    throw new Error(typeof detail === 'string' ? detail : 'HTTP ' + response.status);
+                }, function () {
+                    throw new Error('HTTP ' + response.status);
+                });
+            }
             return response.json();
         })
         .then(function (data) {
@@ -382,6 +394,11 @@
     function startFileAnalysis(file, callbacks) {
         callbacks = callbacks || {};
 
+        if (file && file.size > 50 * 1024 * 1024) {
+            if (callbacks.onError) callbacks.onError(new Error('File exceeds 50 MB limit'));
+            return;
+        }
+
         var formData = new FormData();
         formData.append('file', file);
 
@@ -392,7 +409,14 @@
             body: formData
         })
         .then(function (response) {
-            if (!response.ok) throw new Error('HTTP ' + response.status);
+            if (!response.ok) {
+                return response.json().then(function (payload) {
+                    var detail = payload && payload.detail;
+                    throw new Error(typeof detail === 'string' ? detail : 'HTTP ' + response.status);
+                }, function () {
+                    throw new Error('HTTP ' + response.status);
+                });
+            }
             return response.json();
         })
         .then(function (data) {
