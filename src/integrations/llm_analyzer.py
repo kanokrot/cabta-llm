@@ -322,8 +322,35 @@ Keep it concise and factual."""
                     'malicious_files': [a.get('filename') for a in email_data.get('malicious_attachment_details', [])[:3]]
                 },
                 'base_score': email_data.get('base_score', 0),
-                'composite_score': email_data.get('composite_score', 0)
+                'composite_score': email_data.get('composite_score', 0),
+                'forensics_score': email_data.get('forensics_score', 0),
+                'capability_errors': self._ensure_list(email_data.get('capability_errors', [])),
             }
+
+            lookalike_domains = []
+            for item in context['lookalike_domains']:
+                if isinstance(item, dict):
+                    lookalike_domains.append(
+                        f"{item.get('domain', 'N/A')} "
+                        f"(brand={item.get('brand', 'N/A')}, "
+                        f"similarity={item.get('similarity', 'N/A')}, "
+                        f"risk={item.get('risk', 'N/A')})"
+                    )
+                else:
+                    lookalike_domains.append(str(item))
+            lookalike_summary = ', '.join(lookalike_domains) if lookalike_domains else 'None detected'
+
+            capability_errors = []
+            for item in context['capability_errors']:
+                if isinstance(item, dict):
+                    capability_errors.append(
+                        f"{item.get('capability', 'unknown')} "
+                        f"({item.get('status', 'unavailable')}): "
+                        f"{item.get('message', 'capability incomplete')}"
+                    )
+                else:
+                    capability_errors.append(str(item))
+            capability_summary = '; '.join(capability_errors) if capability_errors else 'None reported'
 
             prompt = f"""You are a SOC analyst at specializing in email security and phishing detection.
 
@@ -341,7 +368,7 @@ Authentication:
 Advanced Analysis Results:
 - Header Anomalies: {len(context['header_anomalies'])}
 - Link-Text Mismatches: {len(context['link_mismatches'])}
-- Lookalike Domains: {len(context['lookalike_domains'])}
+- Lookalike Domains: {lookalike_summary}
 - HTML Obfuscation Score: {context['html_obfuscation_score']}/100
 - QR Codes Detected: {len(context['qr_codes'])}
 - Brand Impersonation: {len(context['brand_impersonation'])}
@@ -359,7 +386,12 @@ Attachments:
 
 Scoring:
 - Base Phishing Score: {context['base_score']}/100
+- Forensics Score: {context['forensics_score']}/100
 - Composite Score: {context['composite_score']}/100
+
+Capability limitations:
+- {capability_summary}
+- Use rule and forensics scores as evidence; if the base score is high, explain before concluding CLEAN.
 
 {self._format_rag_section(rag_context)}
 Based on the above tool analysis, provide your professional assessment in JSON format:
@@ -831,7 +863,7 @@ Be specific and reference the tool findings in your analysis."""
         if isinstance(value, list):
             return value
         elif isinstance(value, int):
-            return []  # Empty list if it's a count
+            return [value]
         elif value is None:
             return []
         else:

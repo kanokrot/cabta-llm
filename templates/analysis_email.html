@@ -3,8 +3,8 @@
 {% extends "base.html" %}
 
 {% block title %}Email Analysis - Blue Team Assistant{% endblock %}
-{% block page_title %}Email Forensics{% endblock %}
-{% block page_subtitle %}<span class="page-subtitle">Analyze .eml files for phishing indicators, authentication failures, and embedded threats</span>{% endblock %}
+{% block page_title %}{% endblock %}
+{% block page_subtitle %}{% endblock %}
 
 {% block extra_head %}
 <style>
@@ -74,6 +74,94 @@
         font-size: 0.75rem;
         font-weight: 600;
         margin-top: 0.75rem;
+    }
+
+    .ea-upload-card .card-header {
+        justify-content: flex-start;
+        gap: 0.5rem;
+    }
+    .ea-capabilities {
+        margin-top: 1.25rem;
+        padding-top: 1.25rem;
+        border-top: 1px solid var(--bs-border-color, currentColor);
+    }
+    .ea-capabilities-header {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 0.75rem;
+        margin-bottom: 0.85rem;
+    }
+    .ea-capabilities-title {
+        margin: 0;
+        font-size: 0.95rem;
+        font-weight: 700;
+    }
+    .ea-capabilities-checked,
+    .ea-capability-state {
+        color: var(--text-primary);
+        font-size: 0.78rem;
+    }
+    .ea-capability-groups {
+        display: grid;
+        gap: 1rem;
+    }
+    .ea-capability-group-title {
+        color: var(--text-primary);
+        font-size: 0.68rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        margin-bottom: 0.45rem;
+        text-transform: uppercase;
+    }
+    .ea-capability-grid {
+        display: grid;
+        gap: 0.65rem;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    }
+    .ea-capability-chip {
+        align-items: flex-start;
+        background: rgba(var(--bs-body-color-rgb, 255,255,255), 0.05);
+        border: 1px solid rgba(var(--bs-body-color-rgb, 255,255,255), 0.15);
+        border-radius: 10px;
+        display: flex;
+        gap: 0.55rem;
+        min-width: 0;
+        padding: 0.65rem 0.75rem;
+    }
+    .ea-status-dot {
+        border-radius: 50%;
+        flex: 0 0 0.55rem;
+        height: 0.55rem;
+        margin-top: 0.35rem;
+        width: 0.55rem;
+    }
+    .ea-status-active { color: var(--bs-success); }
+    .ea-status-limited,
+    .ea-status-needs-config { color: var(--bs-warning); }
+    .ea-status-not-connected { color: var(--bs-secondary-color); }
+    .ea-status-unreachable { color: var(--bs-danger); }
+    .ea-status-unavailable { color: var(--bs-secondary-color); }
+    .ea-status-dot.ea-status-active { background: var(--bs-success); }
+    .ea-status-dot.ea-status-limited,
+    .ea-status-dot.ea-status-needs-config { background: var(--bs-warning); }
+    .ea-status-dot.ea-status-not-connected,
+    .ea-status-dot.ea-status-unavailable { background: var(--bs-secondary-color); }
+    .ea-status-dot.ea-status-unreachable { background: var(--bs-danger); }
+    .ea-capability-copy {
+        min-width: 0;
+    }
+    .ea-capability-name {
+        overflow-wrap: anywhere;
+    }
+    .ea-capability-status {
+        display: block;
+        font-size: 0.75rem;
+        margin-top: 0.15rem;
+    }
+    [data-theme="dark"] .ea-capability-chip {
+        background: rgba(var(--bs-body-color-rgb, 255,255,255), 0.07);
+        border-color: rgba(var(--bs-body-color-rgb, 255,255,255), 0.22);
     }
 
     /* ── Capability Groups ── */
@@ -392,22 +480,588 @@
 
     /* ── Template indicator badges ── */
     .template-badge { display: inline-block; padding: 0.2rem 0.6rem; border-radius: 6px; font-size: 0.78rem; background: rgba(253,126,20,0.1); color: #fd7e14; margin: 0.15rem; }
+    /* E2.1 status-console layer */
+    .email-drop-zone {
+        border: 0;
+        border-radius: 4px;
+        background-color: color-mix(in srgb, var(--text-primary) 2%, transparent);
+        background-image: linear-gradient(color-mix(in srgb, var(--text-primary) 5%, transparent) 1px, transparent 1px),
+            linear-gradient(90deg, color-mix(in srgb, var(--text-primary) 5%, transparent) 1px, transparent 1px);
+        background-size: 24px 24px;
+        isolation: isolate;
+        transition: box-shadow 0.15s ease;
+    }
+    .email-drop-zone::before {
+        background: rgba(var(--bs-primary-rgb), 0.75);
+        content: none;
+        height: 2px;
+        inset: 0 0 auto;
+        opacity: 1;
+        z-index: 0;
+    }
+    .email-drop-zone > * {
+        position: relative;
+        z-index: 1;
+    }
+    .email-drop-zone .drop-icon-wrap {
+        background: rgba(var(--bs-primary-rgb), 0.1);
+    }
+    .email-drop-zone .drop-icon-wrap i {
+        color: rgba(var(--bs-primary-rgb), 1);
+    }
+    .email-drop-zone:hover,
+    .email-drop-zone.drag-over {
+        border-color: transparent;
+        box-shadow: 0 0 20px rgba(var(--bs-primary-rgb), 0.15);
+    }
+    .email-drop-zone.drag-over .drop-icon-wrap {
+        background: rgba(var(--bs-primary-rgb), 0.2);
+    }
+    .email-drop-zone.drag-over .drop-icon-wrap {
+        animation: none;
+    }
+    .ea-corner {
+        border-color: rgba(var(--bs-primary-rgb), 0.7);
+        border-style: solid;
+        border-width: 0;
+        height: 18px;
+        pointer-events: none;
+        position: absolute !important;
+        width: 18px;
+        z-index: 2 !important;
+    }
+    .ea-corner-tl { border-left-width: 2px; border-top-width: 2px; left: 12px; top: 12px; }
+    .ea-corner-tr { border-right-width: 2px; border-top-width: 2px; right: 12px; top: 12px; }
+    .ea-corner-bl { border-bottom-width: 2px; border-left-width: 2px; bottom: 12px; left: 12px; }
+    .ea-corner-br { border-bottom-width: 2px; border-right-width: 2px; bottom: 12px; right: 12px; }
+    .email-drop-zone.drag-over .ea-corner {
+        border-color: rgba(var(--bs-primary-rgb), 1);
+    }
+    .drop-security-badge {
+        background: rgba(var(--bs-success-rgb), 0.12);
+        color: rgba(var(--bs-success-rgb), 1);
+    }
+    @media (prefers-reduced-motion: no-preference) {
+        .email-drop-zone.drag-over .drop-icon-wrap {
+            animation: ea-envelope-bounce 0.6s ease infinite alternate;
+        }
+        .email-drop-zone.drag-over::before {
+            animation: ea-scan-line 1.6s linear infinite;
+            content: '';
+        }
+        .ea-status-dot.ea-status-active {
+            animation: ea-led-pulse 2.4s ease-in-out infinite;
+        }
+    }
+    @keyframes ea-envelope-bounce {
+        from { transform: translateY(0); }
+        to { transform: translateY(-6px); }
+    }
+    @keyframes ea-scan-line {
+        from { transform: translateY(-2px); }
+        to { transform: translateY(calc(100% + 2px)); }
+    }
+    @keyframes ea-led-pulse {
+        0%, 100% { box-shadow: 0 0 0 3px rgba(var(--bs-success-rgb), 0.18); }
+        50% { box-shadow: 0 0 0 3px rgba(var(--bs-success-rgb), 0.32); }
+    }
+
+    .ea-upload-card,
+    #recentAnalysesCard {
+        font-variant-numeric: tabular-nums;
+    }
+    .ea-capabilities {
+        border-top-color: color-mix(in srgb, var(--text-primary) 14%, transparent);
+        font-variant-numeric: tabular-nums;
+    }
+    .ea-summary {
+        align-items: flex-start;
+        display: flex;
+        gap: 0.75rem;
+        justify-content: space-between;
+        margin-bottom: 0.85rem;
+    }
+    .ea-summary {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        grid-template-rows: auto auto auto;
+    }
+    .ea-summary .ea-capabilities-title {
+        color: rgba(var(--bs-success-rgb), 1);
+        font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+        font-size: 0;
+        font-weight: 700;
+        grid-column: 1;
+        grid-row: 1;
+        line-height: 1;
+        margin: 0;
+    }
+    .ea-summary .ea-capabilities-title::before {
+        color: var(--text-primary);
+        content: '--/--';
+        font-size: 28px;
+    }
+    .ea-summary > .ea-summary-value {
+        grid-column: 1;
+        grid-row: 1;
+    }
+    .ea-summary > .ea-summary-checked {
+        grid-column: 2;
+        grid-row: 1;
+    }
+    .ea-summary .ea-capabilities-checked {
+        color: var(--text-primary);
+        font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+        font-size: 0.7rem;
+        grid-column: 2;
+        grid-row: 1;
+        letter-spacing: 0.08em;
+        padding-top: 0.25rem;
+        text-transform: uppercase;
+        white-space: nowrap;
+    }
+    .ea-summary-main {
+        flex: 1;
+        min-width: 0;
+    }
+    .ea-summary > .ea-summary-label {
+        grid-column: 1;
+        grid-row: 2;
+    }
+    .ea-summary > .ea-summary-bar {
+        grid-column: 1;
+        grid-row: 3;
+    }
+    .ea-summary-value {
+        color: rgba(var(--bs-success-rgb), 1);
+        font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+        font-size: 28px;
+        font-weight: 700;
+        line-height: 1;
+    }
+    .ea-summary-value.ea-summary-unavailable {
+        color: var(--text-primary);
+    }
+    .ea-summary-label,
+    .ea-summary-checked,
+    .ea-capability-status,
+    .ea-group-count {
+        font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+    }
+    .ea-summary-label {
+        color: var(--text-primary);
+        font-size: 0.7rem;
+        letter-spacing: 0.12em;
+        margin-top: 0.25rem;
+        text-transform: uppercase;
+    }
+    .ea-summary-checked {
+        color: var(--text-primary);
+        font-size: 0.7rem;
+        letter-spacing: 0.08em;
+        padding-top: 0.25rem;
+        text-transform: uppercase;
+        white-space: nowrap;
+    }
+    .ea-summary-checked.ea-summary-unavailable {
+        letter-spacing: 0;
+        text-transform: none;
+    }
+    .ea-summary-bar {
+        display: flex;
+        gap: 2px;
+        height: 6px;
+        margin-top: 0.9rem;
+        overflow: hidden;
+        width: 100%;
+    }
+    .ea-summary-bar.ea-summary-unavailable {
+        background: color-mix(in srgb, var(--text-primary) 20%, transparent);
+    }
+    .ea-summary-segment {
+        display: block;
+        min-width: 0;
+    }
+    .ea-summary-segment-active { background: rgba(var(--bs-success-rgb), 0.9); }
+    .ea-summary-segment-limited { background: rgba(var(--bs-warning-rgb), 0.9); }
+    .ea-summary-segment-not-connected { background: color-mix(in srgb, var(--text-primary) 42%, transparent); }
+    .ea-summary-segment-unreachable { background: rgba(var(--bs-danger-rgb), 0.9); }
+    .ea-group-head {
+        align-items: center;
+        display: flex;
+        gap: 0.6rem;
+        margin-bottom: 0.45rem;
+    }
+    .ea-group-title {
+        color: var(--text-primary);
+        font-size: 0.7rem;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+    }
+    .ea-group-rule {
+        background: color-mix(in srgb, var(--text-primary) 16%, transparent);
+        flex: 1;
+        height: 1px;
+    }
+    .ea-group-count {
+        color: var(--text-primary);
+        font-size: 0.7rem;
+        white-space: nowrap;
+    }
+    .ea-capability-grid {
+        gap: 0.5rem;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    }
+    .ea-chip {
+        align-items: flex-start;
+        border-radius: 0;
+        border-style: solid;
+        border-width: 1px 1px 1px 3px;
+        display: flex;
+        gap: 0.55rem;
+        min-width: 0;
+        padding: 0.65rem 0.75rem;
+        transition: transform 0.15s ease, border-color 0.15s ease;
+    }
+    .ea-capability-chip {
+        background: color-mix(in srgb, var(--text-primary) 5%, transparent);
+    }
+    .ea-chip.ea-status-active { border-color: rgba(var(--bs-success-rgb), 0.28); border-left-color: rgba(var(--bs-success-rgb), 1); }
+    .ea-chip.ea-status-limited,
+    .ea-chip.ea-status-needs-config { border-color: rgba(var(--bs-warning-rgb), 0.3); border-left-color: rgba(var(--bs-warning-rgb), 1); }
+    .ea-chip.ea-status-not-connected,
+    .ea-chip.ea-status-unavailable { border-color: color-mix(in srgb, var(--text-primary) 24%, transparent); border-left-color: var(--text-primary); }
+    .ea-chip.ea-status-unreachable { border-color: rgba(var(--bs-danger-rgb), 0.3); border-left-color: rgba(var(--bs-danger-rgb), 1); }
+    .ea-chip:hover { transform: translateY(-1px); }
+    .ea-chip.ea-status-active:hover { border-color: rgba(var(--bs-success-rgb), 0.65); border-left-color: rgba(var(--bs-success-rgb), 1); }
+    .ea-chip.ea-status-limited:hover,
+    .ea-chip.ea-status-needs-config:hover { border-color: rgba(var(--bs-warning-rgb), 0.7); border-left-color: rgba(var(--bs-warning-rgb), 1); }
+    .ea-chip.ea-status-not-connected:hover,
+    .ea-chip.ea-status-unavailable:hover { border-color: color-mix(in srgb, var(--text-primary) 55%, transparent); border-left-color: var(--text-primary); }
+    .ea-chip.ea-status-unreachable:hover { border-color: rgba(var(--bs-danger-rgb), 0.7); border-left-color: rgba(var(--bs-danger-rgb), 1); }
+    .ea-status-dot {
+        flex: 0 0 8px;
+        height: 8px;
+        width: 8px;
+    }
+    .ea-status-active { color: rgba(var(--bs-success-rgb), 1); }
+    .ea-status-limited,
+    .ea-status-needs-config { color: rgba(var(--bs-warning-rgb), 1); }
+    .ea-status-not-connected,
+    .ea-status-unavailable { color: var(--text-primary); }
+    .ea-status-unreachable { color: rgba(var(--bs-danger-rgb), 1); }
+    .ea-status-dot.ea-status-active { background: rgba(var(--bs-success-rgb), 1); box-shadow: 0 0 0 3px rgba(var(--bs-success-rgb), 0.18); }
+    .ea-status-dot.ea-status-limited,
+    .ea-status-dot.ea-status-needs-config { background: rgba(var(--bs-warning-rgb), 1); }
+    .ea-status-dot.ea-status-not-connected,
+    .ea-status-dot.ea-status-unavailable { background: var(--text-primary); }
+    .ea-status-dot.ea-status-unreachable { background: rgba(var(--bs-danger-rgb), 1); }
+    .ea-capability-name {
+        overflow-wrap: anywhere;
+        white-space: normal;
+    }
+    .ea-capability-status {
+        display: block;
+        font-size: 0.66rem;
+        letter-spacing: 0.08em;
+        margin-top: 0.15rem;
+        text-transform: uppercase;
+    }
+    [data-theme="dark"] .ea-capability-chip {
+        background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+    }
+    [data-theme="dark"] .ea-chip.ea-status-not-connected,
+    [data-theme="dark"] .ea-chip.ea-status-unavailable {
+        border-color: color-mix(in srgb, var(--text-primary) 32%, transparent);
+    }
+    .ea-tag {
+        border: 1px solid color-mix(in srgb, var(--text-primary) 24%, transparent);
+        color: var(--text-primary);
+        font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+        font-size: 0.62rem;
+        letter-spacing: 0.08em;
+        padding: 0.2rem 0.4rem;
+        text-transform: uppercase;
+    }
+    .ea-analyze-button {
+        background: linear-gradient(135deg, var(--bs-primary), var(--bs-info));
+        border: 0;
+        height: 48px;
+        letter-spacing: 0.04em;
+        transition: filter 0.15s ease, box-shadow 0.15s ease;
+    }
+    .ea-analyze-button:hover:not(:disabled) {
+        box-shadow: 0 0.5rem 1rem rgba(var(--bs-primary-rgb), 0.35);
+        filter: brightness(1.08);
+    }
+    .ea-analyze-button:disabled { opacity: 0.55; }
+    .ea-recent-row {
+        align-items: center;
+        display: flex;
+        gap: 0.75rem;
+        justify-content: space-between;
+    }
+    .ea-recent-body {
+        flex: 1;
+        min-width: 0;
+    }
+    .ea-recent-title {
+        overflow-wrap: anywhere;
+        white-space: normal;
+    }
+    .ea-recent-meta,
+    .ea-recent-score {
+        font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+        font-variant-numeric: tabular-nums;
+    }
+    .ea-recent-meta {
+        color: var(--text-primary);
+        font-size: 0.7rem;
+        margin-top: 0.2rem;
+        overflow-wrap: anywhere;
+    }
+    .ea-recent-result {
+        align-items: center;
+        display: flex;
+        flex: 0 0 auto;
+        gap: 0.5rem;
+    }
+    .ea-recent-verdict {
+        border: 1px solid color-mix(in srgb, var(--text-primary) 30%, transparent);
+        font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+        font-size: 0.66rem;
+        letter-spacing: 0.08em;
+        padding: 0.2rem 0.4rem;
+        text-transform: uppercase;
+        white-space: nowrap;
+    }
+    .ea-recent-score-track {
+        background: color-mix(in srgb, var(--text-primary) 14%, transparent);
+        height: 4px;
+        overflow: hidden;
+        width: 90px;
+    }
+    .ea-recent-score-fill { height: 100%; }
+    .ea-recent-score-fill.ea-score-safe,
+    .ea-recent-verdict.ea-score-safe { background: rgba(var(--bs-success-rgb), 0.9); color: rgba(var(--bs-success-rgb), 1); }
+    .ea-recent-score-fill.ea-score-medium,
+    .ea-recent-verdict.ea-score-medium { background: rgba(var(--bs-warning-rgb), 0.9); color: rgba(var(--bs-warning-rgb), 1); }
+    .ea-recent-score-fill.ea-score-phishing,
+    .ea-recent-verdict.ea-score-phishing { background: rgba(var(--bs-danger-rgb), 0.9); color: rgba(var(--bs-danger-rgb), 1); }
+    .ea-recent-score-fill.ea-score-unknown,
+    .ea-recent-verdict.ea-score-unknown { background: var(--text-primary); color: var(--text-primary); }
+
+    /* E2.2 contrast and layout corrections */
+    .ea-upload-card .email-drop-zone {
+        background-image: linear-gradient(color-mix(in srgb, var(--text-primary) 8%, transparent) 1px, transparent 1px),
+            linear-gradient(90deg, color-mix(in srgb, var(--text-primary) 8%, transparent) 1px, transparent 1px);
+        background-size: 24px 24px;
+    }
+    [data-theme="dark"] .ea-upload-card .email-drop-zone {
+        background-image: linear-gradient(color-mix(in srgb, var(--text-primary) 12%, transparent) 1px, transparent 1px),
+            linear-gradient(90deg, color-mix(in srgb, var(--text-primary) 12%, transparent) 1px, transparent 1px);
+    }
+    .ea-summary {
+        align-items: baseline;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        row-gap: 0.5rem;
+    }
+    .ea-summary > .ea-capabilities-title,
+    .ea-summary > .ea-summary-value {
+        order: 1;
+    }
+    .ea-summary > .ea-summary-label {
+        margin-top: 0;
+        order: 2;
+    }
+    .ea-summary > .ea-capabilities-checked,
+    .ea-summary > .ea-summary-checked {
+        margin-left: auto;
+        order: 3;
+        padding-top: 0;
+    }
+    .ea-summary > .ea-summary-bar {
+        flex: 0 0 100%;
+        margin-top: 0;
+        order: 4;
+    }
+    .ea-summary-value {
+        color: var(--text-primary);
+    }
+    .ea-summary-value.ea-summary-unavailable {
+        color: var(--text-primary);
+    }
+    .ea-summary-bar.ea-summary-unavailable {
+        background: color-mix(in srgb, var(--text-primary) 10%, transparent);
+    }
+    .ea-summary-segment-not-connected {
+        background: color-mix(in srgb, var(--text-primary) 35%, transparent);
+    }
+    .ea-chip.ea-status-not-connected,
+    .ea-chip.ea-status-unavailable {
+        border-left-color: color-mix(in srgb, var(--text-primary) 45%, transparent);
+    }
+    .ea-chip.ea-status-not-connected .ea-capability-name,
+    .ea-chip.ea-status-unavailable .ea-capability-name {
+        color: var(--text-primary);
+    }
+    .ea-capability-name {
+        color: var(--text-primary);
+    }
+    .ea-capability-status {
+        font-size: 0.7rem;
+        font-weight: 600;
+    }
+    .ea-capability-status.ea-status-not-connected,
+    .ea-capability-status.ea-status-unavailable {
+        color: color-mix(in srgb, var(--text-primary) 75%, transparent);
+    }
+    .ea-status-dot.ea-status-not-connected,
+    .ea-status-dot.ea-status-unavailable {
+        background: color-mix(in srgb, var(--text-primary) 55%, transparent);
+    }
+    .ea-group-rule {
+        background: color-mix(in srgb, var(--text-primary) 18%, transparent);
+    }
+    [data-theme="dark"] .ea-group-rule {
+        background: color-mix(in srgb, var(--text-primary) 24%, transparent);
+    }
+    [data-theme="dark"] .ea-status-active {
+        color: color-mix(in srgb, rgb(var(--bs-success-rgb)) 60%, white);
+    }
+    [data-theme="dark"] .ea-status-dot.ea-status-active {
+        background: color-mix(in srgb, rgb(var(--bs-success-rgb)) 60%, white);
+    }
+    [data-theme="dark"] .ea-status-limited,
+    [data-theme="dark"] .ea-status-needs-config {
+        color: color-mix(in srgb, rgb(var(--bs-warning-rgb)) 55%, white);
+    }
+    [data-theme="dark"] .ea-status-dot.ea-status-limited,
+    [data-theme="dark"] .ea-status-dot.ea-status-needs-config {
+        background: color-mix(in srgb, rgb(var(--bs-warning-rgb)) 55%, white);
+    }
+    [data-theme="dark"] .ea-status-unreachable {
+        color: color-mix(in srgb, rgb(var(--bs-danger-rgb)) 55%, white);
+    }
+    [data-theme="dark"] .ea-status-dot.ea-status-unreachable {
+        background: color-mix(in srgb, rgb(var(--bs-danger-rgb)) 55%, white);
+    }
+    .ea-recent-card .card-header {
+        gap: 0.5rem;
+        justify-content: flex-start;
+    }
+    .ea-recent-score-track {
+        background: color-mix(in srgb, var(--text-primary) 14%, transparent);
+    }
+    .ea-recent-score-fill.ea-score-safe {
+        background: var(--bs-success);
+    }
+    .ea-recent-score-fill.ea-score-medium {
+        background: var(--bs-warning);
+    }
+    .ea-recent-score-fill.ea-score-phishing {
+        background: var(--bs-danger);
+    }
+    body:has(.ea-email-page) .sub-header {
+        border: 0;
+        height: 0;
+        margin-top: 0 !important;
+        min-height: 0;
+        overflow: hidden;
+        padding: 0;
+    }
+    .ea-email-page {
+        padding-top: 56px;
+    }
+    .ea-summary-value,
+    .ea-capability-name {
+        color: var(--text-primary);
+    }
+    .ea-chip.ea-status-not-connected,
+    .ea-chip.ea-status-unavailable {
+        border-left-color: color-mix(in srgb, var(--text-primary) 55%, transparent);
+        border-left-style: dashed;
+    }
+    .ea-capability-status.ea-status-not-connected,
+    .ea-capability-status.ea-status-unavailable {
+        color: var(--text-primary);
+        font-weight: 600;
+    }
+    .ea-status-dot.ea-status-not-connected,
+    .ea-status-dot.ea-status-unavailable {
+        background: transparent;
+        border: 1.5px solid var(--text-primary);
+        border-radius: 50%;
+        box-sizing: border-box;
+    }
+    [data-theme="light"] .ea-capability-status.ea-status-limited,
+    [data-theme="light"] .ea-capability-status.ea-status-needs-config {
+        color: color-mix(in srgb, var(--bs-warning) 55%, black);
+    }
+    [data-theme="light"] .ea-capability-status.ea-status-active {
+        color: color-mix(in srgb, var(--bs-success) 85%, black);
+    }
+    .ea-recent-score-track {
+        display: block;
+        flex: 0 0 90px;
+        height: 4px;
+        overflow: hidden;
+        width: 90px;
+    }
+    .ea-recent-score-fill {
+        display: block;
+        height: 100%;
+    }
+    .ea-recent-level {
+        border: 1px solid color-mix(in srgb, var(--text-primary) 30%, transparent);
+        font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+        font-size: 0.66rem;
+        letter-spacing: 0.08em;
+        padding: 0.2rem 0.4rem;
+        text-transform: uppercase;
+        white-space: nowrap;
+    }
+    .ea-recent-level.ea-score-safe {
+        background: color-mix(in srgb, var(--bs-success) 14%, transparent);
+        color: var(--bs-success);
+    }
+    .ea-recent-level.ea-score-medium {
+        background: color-mix(in srgb, var(--bs-warning) 14%, transparent);
+        color: var(--bs-warning);
+    }
+    .ea-recent-level.ea-score-phishing {
+        background: color-mix(in srgb, var(--bs-danger) 14%, transparent);
+        color: var(--bs-danger);
+    }
+    @media (max-width: 575.98px) {
+        .ea-summary-checked { font-size: 0.62rem; }
+        .ea-recent-result { flex-wrap: wrap; justify-content: flex-end; }
+        .ea-recent-score-track { width: 70px; }
+    }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="row g-4">
+<div class="row g-4 ea-email-page">
     <!-- Email Upload Area -->
-    <div class="col-lg-8">
-        <div class="card">
+    <div class="col-12">
+        <div class="card ea-upload-card">
             <div class="card-header d-flex align-items-center">
                 <i class="bi bi-envelope-arrow-up me-2 text-accent"></i>
                 <h5 class="mb-0">Upload Email for Analysis</h5>
+                <span class="ea-tag">EMAIL FORENSICS</span>
             </div>
             <div class="card-body">
                 <form id="emailForm" onsubmit="return false;">
                     <!-- Enhanced drag-and-drop zone -->
                     <div id="dropZone" class="email-drop-zone text-center p-5 mb-3">
+                        <span class="ea-corner ea-corner-tl" aria-hidden="true"></span>
+                        <span class="ea-corner ea-corner-tr" aria-hidden="true"></span>
+                        <span class="ea-corner ea-corner-bl" aria-hidden="true"></span>
+                        <span class="ea-corner ea-corner-br" aria-hidden="true"></span>
                         <div class="drop-icon-wrap">
                             <i class="bi bi-envelope-paper"></i>
                         </div>
@@ -434,7 +1088,19 @@
                         </div>
                     </div>
 
-                    <button type="submit" id="emailSubmitBtn" class="btn btn-primary w-100" disabled>
+                    <section id="emailCapabilities" class="ea-capabilities" aria-live="polite">
+                        <div class="ea-summary">
+                            <h6 id="emailCapabilitiesTitle" class="ea-capabilities-title">Capabilities · Checking…</h6>
+                            <span id="emailCapabilitiesChecked" class="ea-capabilities-checked"></span>
+                            <div class="ea-summary-label">CAPABILITIES ONLINE</div>
+                            <div class="ea-summary-bar ea-summary-unavailable" title="Checking&#8230;"></div>
+                        </div>
+                        <div id="emailCapabilitiesGroups" class="ea-capability-groups">
+                            <div class="ea-capability-state">Checking…</div>
+                        </div>
+                    </section>
+
+                    <button type="submit" id="emailSubmitBtn" class="btn btn-primary w-100 mt-3 ea-analyze-button" disabled>
                         <i class="bi bi-shield-exclamation me-2"></i>Analyze Email
                     </button>
                 </form>
@@ -442,78 +1108,12 @@
         </div>
 
         <!-- Recent Email Analyses -->
-        <div id="recentAnalysesCard" class="card mt-4" style="display:none;">
+        <div id="recentAnalysesCard" class="card mt-4 ea-recent-card" style="display:none;">
             <div class="card-header d-flex align-items-center">
                 <i class="bi bi-clock-history me-2 text-accent"></i>
                 <h5 class="mb-0">Recent Analyses</h5>
             </div>
             <div class="card-body" id="recentAnalysesList">
-            </div>
-        </div>
-    </div>
-
-    <!-- Analysis Capabilities Panel -->
-    <div class="col-lg-4">
-        <div class="card">
-            <div class="card-header d-flex align-items-center">
-                <i class="bi bi-gear me-2 text-accent"></i>
-                <h5 class="mb-0">Analysis Capabilities</h5>
-            </div>
-            <div class="card-body p-0">
-                <div class="list-group list-group-flush">
-                    <!-- Email Authentication -->
-                    <div class="cap-group-label">Email Authentication</div>
-                    <div class="cap-item list-group-item d-flex justify-content-between align-items-center">
-                        <span><i class="bi bi-shield-check me-2 text-accent"></i>SPF / DKIM / DMARC</span>
-                        <span class="badge bg-success">Active</span>
-                    </div>
-                    <div class="cap-item list-group-item d-flex justify-content-between align-items-center">
-                        <span><i class="bi bi-card-heading me-2 text-accent"></i>Header Forensics</span>
-                        <span class="badge bg-success">Active</span>
-                    </div>
-
-                    <!-- Threat Intelligence -->
-                    <div class="cap-group-label mt-2">Threat Intelligence</div>
-                    <div class="cap-item list-group-item d-flex justify-content-between align-items-center">
-                        <span><i class="bi bi-link-45deg me-2 text-accent"></i>URL Analysis</span>
-                        <span class="badge bg-success">Active</span>
-                    </div>
-                    <div class="cap-item list-group-item d-flex justify-content-between align-items-center">
-                        <span><i class="bi bi-paperclip me-2 text-accent"></i>Attachment Scanning</span>
-                        <span class="badge bg-success">Active</span>
-                    </div>
-                    <div class="cap-item list-group-item d-flex justify-content-between align-items-center">
-                        <span><i class="bi bi-incognito me-2 text-accent"></i>Brand Impersonation</span>
-                        <span class="badge bg-success">Active</span>
-                    </div>
-                    <div class="cap-item list-group-item d-flex justify-content-between align-items-center">
-                        <span><i class="bi bi-globe2 me-2 text-accent"></i>OpenPhish URL Check</span>
-                        <span class="badge bg-success">Active</span>
-                    </div>
-                    <div class="cap-item list-group-item d-flex justify-content-between align-items-center">
-                        <span><i class="bi bi-bug me-2 text-accent"></i>MalwareBazaar Hash</span>
-                        <span class="badge bg-success">Active</span>
-                    </div>
-
-                    <!-- Advanced (Free OSINT) -->
-                    <div class="cap-group-label mt-2">Advanced (Free OSINT)</div>
-                    <div class="cap-item list-group-item d-flex justify-content-between align-items-center">
-                        <span><i class="bi bi-whois me-2 text-accent"></i>Sender Domain WHOIS</span>
-                        <span class="badge bg-info">OSINT</span>
-                    </div>
-                    <div class="cap-item list-group-item d-flex justify-content-between align-items-center">
-                        <span><i class="bi bi-spellcheck me-2 text-accent"></i>Typosquat Detection</span>
-                        <span class="badge bg-info">OSINT</span>
-                    </div>
-                    <div class="cap-item list-group-item d-flex justify-content-between align-items-center">
-                        <span><i class="bi bi-person-x me-2 text-accent"></i>HudsonRock Breach Check</span>
-                        <span class="badge bg-info">OSINT</span>
-                    </div>
-                    <div class="cap-item list-group-item d-flex justify-content-between align-items-center">
-                        <span><i class="bi bi-clipboard-data me-2 text-accent"></i>Paste Site Monitoring</span>
-                        <span class="badge bg-info">OSINT</span>
-                    </div>
-                </div>
             </div>
         </div>
     </div>
@@ -719,6 +1319,214 @@
     }
 
     /* ========================================================
+     *  EMAIL CAPABILITIES
+     * ======================================================== */
+    function capabilityStatus(status) {
+        var statuses = {
+            active: { label: 'Active', className: 'ea-status-active' },
+            limited: { label: 'Limited', className: 'ea-status-limited' },
+            needs_config: { label: 'Needs setup', className: 'ea-status-needs-config' },
+            not_connected: { label: 'Not connected', className: 'ea-status-not-connected' },
+            unreachable: { label: 'Unreachable', className: 'ea-status-unreachable' }
+        };
+        return statuses[status] || { label: 'Status unavailable', className: 'ea-status-unavailable' };
+    }
+
+    function capabilityCheckedTime(checkedAt) {
+        if (!checkedAt) return '';
+        var checkedDate = new Date(checkedAt);
+        if (isNaN(checkedDate.getTime())) return '';
+        var hours = ('0' + checkedDate.getHours()).slice(-2);
+        var minutes = ('0' + checkedDate.getMinutes()).slice(-2);
+        return 'Checked ' + hours + ':' + minutes;
+    }
+
+    function capabilityCountText(value) {
+        return value < 10 ? '0' + value : String(value);
+    }
+
+    function capabilitySummaryBucket(status) {
+        if (status === 'active') return 'active';
+        if (status === 'limited' || status === 'needs_config') return 'limited';
+        if (status === 'not_connected') return 'not-connected';
+        if (status === 'unreachable') return 'unreachable';
+        return 'not-connected';
+    }
+
+    function renderCapabilitySummary(capabilities, unavailable) {
+        var title = document.getElementById('emailCapabilitiesTitle');
+        var bar = document.querySelector('#emailCapabilities .ea-summary-bar');
+        if (!title || !bar) return;
+
+        title.className = 'ea-summary-value' + (unavailable ? ' ea-summary-unavailable' : '');
+        bar.className = 'ea-summary-bar' + (unavailable ? ' ea-summary-unavailable' : '');
+        bar.textContent = '';
+
+        if (unavailable) {
+            title.textContent = '--/--';
+            bar.setAttribute('title', 'Status unavailable');
+            var unavailableSegment = document.createElement('span');
+            unavailableSegment.className = 'ea-summary-segment ea-summary-segment-not-connected';
+            unavailableSegment.style.flexGrow = '1';
+            unavailableSegment.style.flexBasis = '0%';
+            unavailableSegment.setAttribute('title', 'Status unavailable');
+            bar.appendChild(unavailableSegment);
+            return;
+        }
+
+        var counts = { active: 0, limited: 0, 'not-connected': 0, unreachable: 0 };
+        for (var i = 0; i < capabilities.length; i++) {
+            var bucket = capabilitySummaryBucket(capabilities[i] && capabilities[i].status);
+            counts[bucket]++;
+        }
+        var total = capabilities.length;
+        title.textContent = capabilityCountText(counts.active) + '/' + capabilityCountText(total);
+        var bucketOrder = ['active', 'limited', 'not-connected', 'unreachable'];
+        var bucketLabels = {
+            active: 'active',
+            limited: 'limited',
+            'not-connected': 'not connected',
+            unreachable: 'unreachable'
+        };
+        var summaryParts = [];
+        for (var bi = 0; bi < bucketOrder.length; bi++) {
+            var bucketKey = bucketOrder[bi];
+            if (!counts[bucketKey]) continue;
+            summaryParts.push(counts[bucketKey] + ' ' + bucketLabels[bucketKey]);
+            var segment = document.createElement('span');
+            segment.className = 'ea-summary-segment ea-summary-segment-' + bucketKey;
+            segment.style.flexGrow = String(counts[bucketKey]);
+            segment.style.flexBasis = '0%';
+            segment.setAttribute('title', counts[bucketKey] + ' ' + bucketLabels[bucketKey]);
+            bar.appendChild(segment);
+        }
+        bar.setAttribute('title', summaryParts.join(', '));
+    }
+
+    function makeCapabilityState(text) {
+        var state = document.createElement('div');
+        state.className = 'ea-capability-state';
+        state.textContent = text;
+        return state;
+    }
+
+    function renderCapabilitiesUnavailable() {
+        var title = document.getElementById('emailCapabilitiesTitle');
+        var checked = document.getElementById('emailCapabilitiesChecked');
+        var groups = document.getElementById('emailCapabilitiesGroups');
+        if (!title || !checked || !groups) return;
+        title.textContent = 'Capabilities · Status unavailable';
+        title.className = 'ea-summary-value ea-summary-unavailable';
+        checked.className = 'ea-summary-checked ea-summary-unavailable';
+        checked.textContent = 'Status unavailable';
+        renderCapabilitySummary([], true);
+        while (groups.firstChild) groups.removeChild(groups.firstChild);
+        groups.appendChild(makeCapabilityState('Status unavailable'));
+    }
+
+    function renderCapabilities(payload) {
+        var title = document.getElementById('emailCapabilitiesTitle');
+        var checked = document.getElementById('emailCapabilitiesChecked');
+        var groups = document.getElementById('emailCapabilitiesGroups');
+        if (!title || !checked || !groups || !payload || !Array.isArray(payload.capabilities)) {
+            renderCapabilitiesUnavailable();
+            return;
+        }
+
+        var groupLabels = {
+            email_authentication: 'Email authentication',
+            threat_intelligence: 'Threat intelligence',
+            advanced_osint: 'Advanced OSINT'
+        };
+        var groupOrder = ['email_authentication', 'threat_intelligence', 'advanced_osint'];
+        var renderedCapabilities = [];
+        for (var i = 0; i < payload.capabilities.length; i++) {
+            var candidate = payload.capabilities[i];
+            if (candidate && groupOrder.indexOf(candidate.group) >= 0) renderedCapabilities.push(candidate);
+        }
+        checked.textContent = capabilityCheckedTime(payload.checked_at);
+        renderCapabilitySummary(renderedCapabilities, false);
+        title.className = 'ea-summary-value';
+        checked.className = 'ea-summary-checked';
+        while (groups.firstChild) groups.removeChild(groups.firstChild);
+
+        for (var gi = 0; gi < groupOrder.length; gi++) {
+            var groupKey = groupOrder[gi];
+            var group = document.createElement('section');
+            group.className = 'ea-capability-group';
+
+            var groupTotal = 0;
+            var groupActive = 0;
+            for (var gci = 0; gci < renderedCapabilities.length; gci++) {
+                if (renderedCapabilities[gci].group !== groupKey) continue;
+                groupTotal++;
+                if (renderedCapabilities[gci].status === 'active') groupActive++;
+            }
+
+            var groupHead = document.createElement('div');
+            groupHead.className = 'ea-group-head';
+            var groupTitle = document.createElement('div');
+            groupTitle.className = 'ea-group-title';
+            groupTitle.textContent = groupLabels[groupKey];
+            groupHead.appendChild(groupTitle);
+            var groupRule = document.createElement('span');
+            groupRule.className = 'ea-group-rule';
+            groupRule.setAttribute('aria-hidden', 'true');
+            groupHead.appendChild(groupRule);
+            var groupCount = document.createElement('span');
+            groupCount.className = 'ea-group-count';
+            groupCount.textContent = capabilityCountText(groupActive) + '/' + capabilityCountText(groupTotal);
+            groupHead.appendChild(groupCount);
+            group.appendChild(groupHead);
+
+            var grid = document.createElement('div');
+            grid.className = 'ea-capability-grid';
+            for (var ci = 0; ci < renderedCapabilities.length; ci++) {
+                var capability = renderedCapabilities[ci];
+                if (capability.group !== groupKey) continue;
+                var status = capabilityStatus(capability.status);
+
+                var chip = document.createElement('div');
+                chip.className = 'ea-capability-chip ea-chip ' + status.className;
+                if (Object.prototype.hasOwnProperty.call(capability, 'reason') && capability.reason != null) {
+                    chip.setAttribute('title', String(capability.reason));
+                }
+
+                var dot = document.createElement('span');
+                dot.className = 'ea-status-dot ' + status.className;
+                dot.setAttribute('aria-hidden', 'true');
+                chip.appendChild(dot);
+
+                var copy = document.createElement('div');
+                copy.className = 'ea-capability-copy';
+                var name = document.createElement('div');
+                name.className = 'ea-capability-name';
+                name.textContent = capability.label == null ? 'Status unavailable' : String(capability.label);
+                copy.appendChild(name);
+
+                var statusText = document.createElement('small');
+                statusText.className = 'ea-capability-status ' + status.className;
+                statusText.textContent = status.label;
+                copy.appendChild(statusText);
+                chip.appendChild(copy);
+                grid.appendChild(chip);
+            }
+            group.appendChild(grid);
+            groups.appendChild(group);
+        }
+    }
+
+    function loadEmailCapabilities() {
+        fetch('/api/analysis/email/capabilities', { credentials: 'include' })
+            .then(function (response) {
+                if (!response.ok) throw new Error('HTTP ' + response.status);
+                return response.json();
+            })
+            .then(renderCapabilities)
+            .catch(function () { renderCapabilitiesUnavailable(); });
+    }
+
+    /* ========================================================
      *  CLIPBOARD HELPER
      * ======================================================== */
     function copyToClipboard(text) {
@@ -893,7 +1701,9 @@
                 + '<td><code>' + escHtmlLocal(l.domain || '') + '</code></td>'
                 + '<td><span class="link-status ' + st + '"><i class="bi ' + stIcon + '"></i> ' + escHtmlLocal(st) + '</span></td>'
                 + '<td class="small">' + escHtmlLocal(l.redirectChain || 'N/A') + '</td>'
-                + '<td>' + (l.openPhishMatch ? '<span class="badge bg-danger">Match</span>' : '<span class="badge bg-secondary">None</span>') + '</td>'
+                + '<td>' + (l.openPhishMatch === undefined || l.openPhishMatch === null
+                    ? '<span class="badge bg-secondary">Not checked</span>'
+                    : (l.openPhishMatch ? '<span class="badge bg-danger">Match</span>' : '<span class="badge bg-secondary">None</span>')) + '</td>'
                 + '</tr>';
         }
         h += '</tbody></table></div>';
@@ -1458,48 +2268,73 @@
         var card = document.getElementById('recentAnalysesCard');
         if (!list.length) { card.style.display = 'none'; return; }
         card.style.display = 'block';
-        /* Build DOM nodes instead of innerHTML */
+        /* Build DOM nodes only. */
         container.textContent = '';
         for (var i = 0; i < list.length; i++) {
             var r = list[i];
-            var riskVal = Number(r.riskScore) || 0;
-            var riskClass = riskVal < 30 ? 'risk-safe' : riskVal < 60 ? 'risk-warn' : 'risk-danger';
-            var badgeClass = riskVal < 30 ? 'bg-success' : riskVal < 60 ? 'bg-warning text-dark' : 'bg-danger';
+            var scoreValue = null;
+            var scoreField = Object.prototype.hasOwnProperty.call(r, 'score') ? r.score : r.riskScore;
+            if (scoreField !== null && typeof scoreField !== 'undefined' && scoreField !== '' && isFinite(Number(scoreField))) {
+                scoreValue = Math.max(0, Math.min(100, Number(scoreField)));
+            }
+            var scoreBand = scoreValue === null ? 'ea-score-unknown' : scoreValue < 30 ? 'ea-score-safe' : scoreValue < 60 ? 'ea-score-medium' : 'ea-score-phishing';
+            var scoreLabel = scoreBand === 'ea-score-safe' ? 'Safe' : scoreBand === 'ea-score-medium' ? 'Medium' : scoreBand === 'ea-score-phishing' ? 'Phishing' : '';
 
             var item = document.createElement('div');
-            item.className = 'recent-item d-flex align-items-center gap-3';
-
-            var dot = document.createElement('span');
-            dot.className = 'recent-risk-dot ' + riskClass;
-            item.appendChild(dot);
+            item.className = 'recent-item ea-recent-row';
 
             var body = document.createElement('div');
-            body.className = 'flex-grow-1';
+            body.className = 'ea-recent-body';
 
             var title = document.createElement('div');
-            title.className = 'fw-semibold';
+            title.className = 'fw-semibold ea-recent-title';
             title.style.fontSize = '0.88rem';
             title.textContent = r.subject || r.filename || 'Unknown Email';
             body.appendChild(title);
 
             var meta = document.createElement('div');
-            meta.className = 'text-muted';
-            meta.style.fontSize = '0.75rem';
+            meta.className = 'ea-recent-meta';
             meta.textContent = (r.sender || '') + ' \u00B7 ' + (r.date || '');
             body.appendChild(meta);
 
             item.appendChild(body);
 
-            var badge = document.createElement('span');
-            badge.className = 'badge ' + badgeClass;
-            badge.textContent = riskVal;
-            item.appendChild(badge);
+            var result = document.createElement('div');
+            result.className = 'ea-recent-result';
+            if (r.verdict !== null && typeof r.verdict !== 'undefined' && r.verdict !== '') {
+                var verdict = document.createElement('span');
+                verdict.className = 'ea-recent-verdict ' + scoreBand;
+                verdict.textContent = String(r.verdict).toUpperCase();
+                result.appendChild(verdict);
+            }
+            if (scoreValue !== null) {
+                var level = document.createElement('span');
+                level.className = 'ea-recent-level ' + scoreBand;
+                level.textContent = scoreLabel.toUpperCase();
+                result.appendChild(level);
+
+                var track = document.createElement('span');
+                track.className = 'ea-recent-score-track';
+                var fill = document.createElement('span');
+                fill.className = 'ea-recent-score-fill ' + scoreBand;
+                fill.style.width = scoreValue + '%';
+                if (scoreValue > 0) fill.style.minWidth = '2px';
+                track.appendChild(fill);
+                result.appendChild(track);
+
+                var score = document.createElement('span');
+                score.className = 'ea-recent-score';
+                score.textContent = String(scoreValue);
+                result.appendChild(score);
+            }
+            if (result.childNodes.length) item.appendChild(result);
 
             container.appendChild(item);
         }
     }
 
-    /* Show recent on page load */
+    /* Show capabilities and recent analyses on page load */
+    loadEmailCapabilities();
     displayRecentAnalyses();
 
     /* ========================================================

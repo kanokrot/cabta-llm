@@ -348,7 +348,7 @@ class EmailAnalyzer:
                     **email_data,
                     'header_anomalies': header_analysis.get('anomalies', []),
                     'link_mismatches': len(link_mismatches),
-                    'lookalike_domains': len(lookalike_domains),
+                    'lookalike_domains': lookalike_domains,
                     'html_obfuscation_score': html_obfuscation.get('risk_score', 0),
                     'qr_codes_found': qr_detection.get('qr_codes_found', 0),
                     'brand_impersonation': len(brand_impersonation),
@@ -363,6 +363,10 @@ class EmailAnalyzer:
                     'bec_verdict': bec_results.get('verdict', 'LOW'),
                     'bec_has_financial': bec_results.get('has_financial_indicators', False),
                     'bec_has_impersonation': bec_results.get('has_impersonation_indicators', False),
+                    'base_score': base_score,
+                    'composite_score': composite_score,
+                    'forensics_score': forensics.get('forensics_score', 0),
+                    'capability_errors': capability_errors,
                 }
                 llm_analysis = await self.llm_analyzer.analyze_email(
                     email_context,
@@ -505,7 +509,18 @@ class EmailAnalyzer:
         if msg.is_multipart():
             for part in msg.walk():
                 content_type = part.get_content_type()
-                if content_type == 'text/plain':
+                filename = part.get_filename()
+                is_attachment = (
+                    part.get_content_disposition() == 'attachment'
+                    or (filename and content_type not in ('text/plain', 'text/html'))
+                )
+                if is_attachment:
+                    email_data['attachments'].append({
+                        'filename': filename or 'unnamed',
+                        'content_type': content_type,
+                        'size': len(part.get_payload(decode=True) or b'')
+                    })
+                elif content_type == 'text/plain':
                     try:
                         body_parts.append(part.get_payload(decode=True).decode('utf-8', errors='ignore'))
                     except:
@@ -515,13 +530,6 @@ class EmailAnalyzer:
                         email_data['body_html'] += part.get_payload(decode=True).decode('utf-8', errors='ignore')
                     except:
                         pass
-                # Extract attachments
-                elif part.get_filename():
-                    email_data['attachments'].append({
-                        'filename': part.get_filename(),
-                        'content_type': content_type,
-                        'size': len(part.get_payload(decode=True) or b'')
-                    })
         else:
             try:
                 body_parts.append(msg.get_payload(decode=True).decode('utf-8', errors='ignore'))
