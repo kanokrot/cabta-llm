@@ -3,8 +3,8 @@
 {% extends "base.html" %}
 
 {% block title %}File Analysis - Blue Team Assistant{% endblock %}
-{% block page_title %}Malware Analysis{% endblock %}
-{% block page_subtitle %}<span class="page-subtitle">Upload suspicious files for static analysis, YARA matching, and threat scoring</span>{% endblock %}
+{% block page_title %}{% endblock %}
+{% block page_subtitle %}{% endblock %}
 
 {% block extra_head %}
 <style>
@@ -694,28 +694,186 @@
         font-size: 0.8rem;
         padding: 6px 14px;
     }
+
+    /* ===== File console presentation ===== */
+    body:has(.ma-file-page) .sub-header {
+        border: 0;
+        height: 0;
+        margin-top: 0 !important;
+        min-height: 0;
+        overflow: hidden;
+        padding: 0;
+    }
+    .ma-file-page {
+        font-variant-numeric: tabular-nums;
+        padding-top: 56px;
+    }
+    .ma-upload-shell { margin-inline: auto; max-width: 1120px; }
+    .ma-upload-card .card-header { gap: 0.5rem; justify-content: flex-start; }
+    .ma-card-icon { margin-right: 0; }
+    .ma-tag {
+        border: 1px solid color-mix(in srgb, var(--text-primary) 24%, transparent);
+        color: var(--text-primary);
+        font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+        font-size: 0.62rem;
+        letter-spacing: 0.08em;
+        margin-left: 0.25rem;
+        padding: 0.2rem 0.4rem;
+        text-transform: uppercase;
+    }
+    .ma-drop-zone {
+        background-color: color-mix(in srgb, var(--text-primary) 2%, transparent);
+        background-image: linear-gradient(color-mix(in srgb, var(--text-primary) 8%, transparent) 1px, transparent 1px),
+            linear-gradient(90deg, color-mix(in srgb, var(--text-primary) 8%, transparent) 1px, transparent 1px);
+        background-size: 24px 24px;
+        border: 2px solid color-mix(in srgb, var(--bs-primary) 70%, transparent);
+        border-radius: 18px;
+        position: relative;
+    }
+    .ma-drop-zone:hover, .ma-drop-zone.drag-over {
+        border-color: var(--bs-primary);
+        box-shadow: 0 0 20px color-mix(in srgb, var(--bs-primary) 18%, transparent);
+    }
+    .ma-drop-zone .drop-icon { color: var(--bs-primary); }
+    .ma-drop-corner {
+        border-color: color-mix(in srgb, var(--bs-primary) 70%, transparent);
+        border-style: solid;
+        border-width: 0;
+        height: 18px;
+        pointer-events: none;
+        position: absolute;
+        width: 18px;
+        z-index: 2;
+    }
+    .ma-drop-corner-tl { border-left-width: 2px; border-top-width: 2px; left: 12px; top: 12px; }
+    .ma-drop-corner-tr { border-right-width: 2px; border-top-width: 2px; right: 12px; top: 12px; }
+    .ma-drop-corner-bl { border-bottom-width: 2px; border-left-width: 2px; bottom: 12px; left: 12px; }
+    .ma-drop-corner-br { border-bottom-width: 2px; border-right-width: 2px; bottom: 12px; right: 12px; }
+    .ma-file-type-icons { gap: 0.4rem; opacity: 1; }
+    .ma-file-type-icons span {
+        border: 1px solid color-mix(in srgb, var(--text-primary) 24%, transparent);
+        color: var(--text-primary);
+        font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+        padding: 0.25rem 0.45rem;
+        text-transform: uppercase;
+    }
+    .ma-file-type-icons i { color: var(--text-primary); }
+
+    .ma-engine-section { border-top: 1px solid color-mix(in srgb, var(--text-primary) 16%, transparent); margin-top: 1.25rem; padding-top: 1.25rem; }
+    .ma-engine-heading { align-items: center; color: var(--text-primary); display: flex; gap: 0.5rem; margin-bottom: 0.85rem; }
+    .ma-engine-heading h6 { margin: 0; }
+    .ma-engine-summary { align-items: baseline; display: flex; flex-wrap: wrap; gap: 0.5rem 0.75rem; margin-bottom: 1rem; }
+    .ma-summary-value, .ma-summary-label, .ma-summary-checked, .ma-group-count, .ma-chip-status, .ma-chip-provider, .ma-legend, .ma-recent-meta, .ma-recent-score {
+        font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+        font-variant-numeric: tabular-nums;
+    }
+    .ma-summary-value { color: var(--text-primary); font-size: 28px; font-weight: 700; line-height: 1; }
+    .ma-summary-label { color: var(--text-primary); font-size: 0.7rem; letter-spacing: 0.12em; text-transform: uppercase; }
+    .ma-summary-checked { color: var(--text-primary); font-size: 0.7rem; letter-spacing: 0.08em; margin-left: auto; text-transform: uppercase; }
+    .ma-summary-bar { background: color-mix(in srgb, var(--text-primary) 10%, transparent); display: flex; flex: 0 0 100%; gap: 2px; height: 6px; overflow: hidden; width: 100%; }
+    .ma-summary-bar.ma-summary-unavailable { background: color-mix(in srgb, var(--text-primary) 22%, transparent); }
+    .ma-summary-segment { display: block; min-width: 0; }
+    .ma-summary-segment-active { background: var(--bs-success); }
+    .ma-summary-segment-warning { background: var(--bs-warning); }
+    .ma-summary-segment-not-connected { background: color-mix(in srgb, var(--text-primary) 42%, transparent); }
+    .ma-summary-segment-unreachable { background: var(--bs-danger); }
+    .ma-engine-groups { display: grid; gap: 1rem; }
+    .ma-capability-group { min-width: 0; }
+    .ma-group-head { align-items: center; display: flex; gap: 0.5rem; margin-bottom: 0.45rem; }
+    .ma-group-title { color: var(--text-primary); font-size: 0.68rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+    .ma-group-rule { background: color-mix(in srgb, var(--text-primary) 16%, transparent); flex: 1; height: 1px; }
+    .ma-group-count { color: var(--text-primary); font-size: 0.7rem; white-space: nowrap; }
+    .ma-engine-grid { align-items: stretch; display: grid; gap: 0.5rem; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+    .ma-engine-chip { align-items: flex-start; background: color-mix(in srgb, var(--text-primary) 5%, transparent); border: 1px solid color-mix(in srgb, var(--text-primary) 20%, transparent); border-left-width: 3px; border-radius: 0; display: flex; gap: 0.55rem; min-width: 0; padding: 0.65rem 0.75rem; }
+    .ma-engine-chip.ma-status-active { border-color: color-mix(in srgb, var(--bs-success) 34%, transparent); border-left-color: var(--bs-success); }
+    .ma-engine-chip.ma-status-beta, .ma-engine-chip.ma-status-limited, .ma-engine-chip.ma-status-needs-config { border-color: color-mix(in srgb, var(--bs-warning) 38%, transparent); border-left-color: var(--bs-warning); }
+    .ma-engine-chip.ma-status-not-connected { border-color: color-mix(in srgb, var(--text-primary) 24%, transparent); border-left-color: color-mix(in srgb, var(--text-primary) 60%, transparent); border-left-style: dashed; }
+    .ma-engine-chip.ma-status-unreachable { border-color: color-mix(in srgb, var(--bs-danger) 38%, transparent); border-left-color: var(--bs-danger); }
+    .ma-chip-rail { display: flex; flex: 0 0 0.6rem; padding-top: 0.25rem; }
+    .ma-status-dot { border-radius: 50%; display: block; height: 0.55rem; width: 0.55rem; }
+    .ma-status-dot.ma-status-active { background: var(--bs-success); }
+    .ma-status-dot.ma-status-beta, .ma-status-dot.ma-status-limited, .ma-status-dot.ma-status-needs-config { background: var(--bs-warning); }
+    .ma-status-dot.ma-status-not-connected { background: transparent; border: 1.5px solid var(--text-primary); box-sizing: border-box; }
+    .ma-status-dot.ma-status-unreachable { background: var(--bs-danger); }
+    .ma-chip-body { min-width: 0; }
+    .ma-chip-name { color: var(--text-primary); overflow-wrap: anywhere; }
+    .ma-chip-status-row { align-items: baseline; display: flex; flex-wrap: wrap; gap: 0.35rem 0.5rem; margin-top: 0.18rem; }
+    .ma-chip-status { font-size: 0.7rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
+    .ma-chip-status.ma-status-active { color: color-mix(in srgb, var(--bs-success) 85%, black); }
+    .ma-chip-status.ma-status-beta, .ma-chip-status.ma-status-limited, .ma-chip-status.ma-status-needs-config { color: color-mix(in srgb, var(--bs-warning) 55%, black); }
+    .ma-chip-status.ma-status-not-connected, .ma-chip-status.ma-status-unavailable { color: var(--text-primary); }
+    .ma-chip-status.ma-status-unreachable { color: color-mix(in srgb, var(--bs-danger) 55%, black); }
+    .ma-chip-provider { color: color-mix(in srgb, var(--text-primary) 70%, transparent); font-size: 0.62rem; }
+    .ma-capability-state { color: var(--text-primary); font-size: 0.78rem; }
+    .ma-legend { align-items: center; color: var(--text-primary); display: flex; flex-wrap: wrap; font-size: 0.68rem; gap: 0.45rem; margin-top: 0.85rem; }
+    .ma-legend-label { letter-spacing: 0.08em; }
+    .ma-legend-item { align-items: center; display: inline-flex; gap: 0.25rem; }
+    .ma-legend-dot { color: var(--bs-success); font-size: 0.9rem; }
+    .ma-legend-dot.ma-legend-warning, .ma-legend-dot.ma-legend-needs-config { color: var(--bs-warning); }
+    .ma-legend-dot.ma-legend-not-connected { color: var(--text-primary); }
+    [data-theme="dark"] .ma-chip-status.ma-status-active { color: color-mix(in srgb, var(--bs-success) 60%, white); }
+    [data-theme="dark"] .ma-chip-status.ma-status-beta, [data-theme="dark"] .ma-chip-status.ma-status-limited, [data-theme="dark"] .ma-chip-status.ma-status-needs-config { color: color-mix(in srgb, var(--bs-warning) 55%, white); }
+    [data-theme="dark"] .ma-chip-status.ma-status-unreachable { color: color-mix(in srgb, var(--bs-danger) 55%, white); }
+    [data-theme="dark"] .ma-drop-zone { background-image: linear-gradient(color-mix(in srgb, var(--text-primary) 12%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in srgb, var(--text-primary) 12%, transparent) 1px, transparent 1px); }
+    @media (prefers-reduced-motion: no-preference) {
+        .ma-status-dot.ma-led-active { animation: ma-led-pulse 1.8s ease-in-out infinite; }
+        .ma-file-page .ma-drop-zone.drag-over::after { animation: ma-scan-line 1.6s linear infinite; background: linear-gradient(to bottom, transparent, color-mix(in srgb, var(--bs-primary) 45%, transparent), transparent); content: ''; height: 2px; left: 0; position: absolute; right: 0; top: 0; z-index: 1; }
+        @keyframes ma-led-pulse { 0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--bs-success) 30%, transparent); } 50% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--bs-success) 18%, transparent); } }
+        @keyframes ma-scan-line { from { transform: translateY(0); } to { transform: translateY(180px); } }
+    }
+    .ma-analyze-button { background: linear-gradient(135deg, var(--bs-primary), var(--bs-info)); border: 0; height: 48px; letter-spacing: 0.04em; }
+    .ma-analyze-button:hover:not(:disabled) { box-shadow: 0 0.5rem 1rem color-mix(in srgb, var(--bs-primary) 24%, transparent); filter: brightness(1.08); }
+    .ma-analyze-button:disabled { opacity: 0.55; }
+    .ma-recent-section { margin-top: 1.5rem; }
+    .ma-recent-card .card-header { gap: 0.5rem; justify-content: flex-start; }
+    .ma-recent-item { align-items: center; border-bottom: 1px solid color-mix(in srgb, var(--text-primary) 10%, transparent); display: flex; gap: 0.75rem; padding: 0.7rem 0.9rem; }
+    .ma-recent-item:last-child { border-bottom: 0; }
+    .ma-recent-icon { align-items: center; background: color-mix(in srgb, var(--bs-primary) 12%, transparent); color: var(--text-primary); display: flex; flex: 0 0 2.25rem; height: 2.25rem; justify-content: center; }
+    .ma-recent-body { flex: 1; min-width: 0; }
+    .ma-recent-title { color: var(--text-primary); overflow-wrap: anywhere; white-space: normal; }
+    .ma-recent-meta { color: var(--text-primary); font-size: 0.7rem; margin-top: 0.2rem; overflow-wrap: anywhere; }
+    .ma-recent-result { align-items: center; display: flex; flex: 0 0 auto; flex-wrap: wrap; gap: 0.5rem; justify-content: flex-end; }
+    .ma-recent-verdict { border: 1px solid color-mix(in srgb, var(--text-primary) 30%, transparent); font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace; font-size: 0.66rem; letter-spacing: 0.08em; padding: 0.2rem 0.4rem; text-transform: uppercase; white-space: nowrap; }
+    .ma-recent-verdict-clean { background: color-mix(in srgb, var(--bs-success) 14%, transparent); color: var(--bs-success); }
+    .ma-recent-verdict-suspicious { background: color-mix(in srgb, var(--bs-warning) 14%, transparent); color: var(--bs-warning); }
+    .ma-recent-verdict-malicious { background: color-mix(in srgb, var(--bs-danger) 14%, transparent); color: var(--bs-danger); }
+    .ma-recent-verdict-unknown { color: var(--text-primary); }
+    .ma-recent-score-track { background: color-mix(in srgb, var(--text-primary) 14%, transparent); display: block; flex: 0 0 90px; height: 4px; overflow: hidden; width: 90px; }
+    .ma-recent-score-fill { display: block; height: 100%; min-width: 2px; }
+    .ma-recent-score-fill-clean { background: var(--bs-success); }
+    .ma-recent-score-fill-suspicious { background: var(--bs-warning); }
+    .ma-recent-score-fill-malicious { background: var(--bs-danger); }
+    .ma-recent-score-fill-unknown { background: var(--text-primary); }
+    .ma-recent-score { color: var(--text-primary); font-size: 0.7rem; }
+    @media (max-width: 575.98px) { .ma-summary-checked { font-size: 0.62rem; } .ma-recent-score-track { width: 70px; } }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="fa-upload-shell">
+<div class="ma-file-page">
+<div class="ma-upload-shell">
     <!-- File Upload Area -->
-    <div class="card fa-upload-card">
+        <div class="card ma-upload-card">
             <div class="card-header d-flex align-items-center">
-                <i class="bi bi-file-earmark-arrow-up me-2 text-accent"></i>
+                <i class="bi bi-file-earmark-arrow-up ma-card-icon text-accent"></i>
                 <h5 class="mb-0">Upload file for analysis</h5>
+                <span class="ma-tag">MALWARE ANALYSIS</span>
             </div>
             <div class="card-body">
                 <form id="fileForm" onsubmit="return false;">
                     <!-- Drag-and-drop zone -->
-                    <div id="dropZone" class="drop-zone drop-zone-enhanced text-center p-5 rounded mb-3">
+                    <div id="dropZone" class="drop-zone drop-zone-enhanced ma-drop-zone text-center p-5 rounded mb-3">
+                        <span class="ma-drop-corner ma-drop-corner-tl" aria-hidden="true"></span>
+                        <span class="ma-drop-corner ma-drop-corner-tr" aria-hidden="true"></span>
+                        <span class="ma-drop-corner ma-drop-corner-bl" aria-hidden="true"></span>
+                        <span class="ma-drop-corner ma-drop-corner-br" aria-hidden="true"></span>
                         <i class="bi bi-cloud-arrow-up drop-icon"></i>
                         <p class="mt-2 mb-1 fw-semibold">Drag and drop a file here or click to browse</p>
                         <p class="mb-1 text-muted small">
                             Supported: PE, ELF, PDF, Office documents, scripts, archives
                         </p>
                         <p class="mb-2 text-muted small">Max 50 MB</p>
-                        <div class="file-type-icons mt-2">
+                        <div class="file-type-icons ma-file-type-icons mt-2">
                             <span><i class="bi bi-filetype-exe"></i>PE</span>
                             <span><i class="bi bi-filetype-pdf"></i>PDF</span>
                             <span><i class="bi bi-filetype-doc"></i>Office</span>
@@ -761,52 +919,30 @@
                         </div>
                     </div>
 
-                    <div class="fa-engine-section">
-                        <div class="fa-engine-heading">
+                    <section class="ma-engine-section" aria-live="polite">
+                        <div class="ma-engine-heading">
                             <i class="bi bi-gear text-accent" aria-hidden="true"></i>
                             <h6>Engines</h6>
-                            <span class="fa-engine-count">· 9 active, 1 beta</span>
                         </div>
-                        <div class="fa-engine-chips">
-                            <div class="fa-engine-chip">
-                                <span class="fa-engine-chip-label"><span class="fa-status-dot" aria-hidden="true"></span><span class="fa-engine-chip-copy"><span class="fa-engine-chip-name">Static Analysis</span><span class="fa-engine-chip-meta">Core</span></span></span>
-                            </div>
-                            <div class="fa-engine-chip">
-                                <span class="fa-engine-chip-label"><span class="fa-status-dot" aria-hidden="true"></span><span class="fa-engine-chip-copy"><span class="fa-engine-chip-name">String Extraction</span><span class="fa-engine-chip-meta">Core</span></span></span>
-                            </div>
-                            <div class="fa-engine-chip">
-                                <span class="fa-engine-chip-label"><span class="fa-status-dot" aria-hidden="true"></span><span class="fa-engine-chip-copy"><span class="fa-engine-chip-name">YARA Rules</span><span class="fa-engine-chip-meta">Detection</span></span></span>
-                            </div>
-                            <div class="fa-engine-chip">
-                                <span class="fa-engine-chip-label"><span class="fa-status-dot" aria-hidden="true"></span><span class="fa-engine-chip-copy"><span class="fa-engine-chip-name">IOC Extraction</span><span class="fa-engine-chip-meta">Detection</span></span></span>
-                            </div>
-                            <div class="fa-engine-chip">
-                                <span class="fa-engine-chip-label"><span class="fa-status-dot" aria-hidden="true"></span><span class="fa-engine-chip-copy"><span class="fa-engine-chip-name">MITRE ATT&amp;CK Mapping</span><span class="fa-engine-chip-meta">Intel</span></span></span>
-                            </div>
-                            <div class="fa-engine-chip">
-                                <span class="fa-engine-chip-label"><span class="fa-status-dot" aria-hidden="true"></span><span class="fa-engine-chip-copy"><span class="fa-engine-chip-name">Hash Reputation</span><span class="fa-engine-chip-meta">MalwareBazaar</span></span></span>
-                            </div>
-                            <div class="fa-engine-chip">
-                                <span class="fa-engine-chip-label"><span class="fa-status-dot" aria-hidden="true"></span><span class="fa-engine-chip-copy"><span class="fa-engine-chip-name">Macro Analysis</span><span class="fa-engine-chip-meta">olevba</span></span></span>
-                            </div>
-                            <div class="fa-engine-chip">
-                                <span class="fa-engine-chip-label"><span class="fa-status-dot" aria-hidden="true"></span><span class="fa-engine-chip-copy"><span class="fa-engine-chip-name">PE Analysis</span><span class="fa-engine-chip-meta">pefile</span></span></span>
-                            </div>
-                            <div class="fa-engine-chip">
-                                <span class="fa-engine-chip-label"><span class="fa-status-dot fa-status-dot-beta" aria-hidden="true"></span><span class="fa-engine-chip-copy"><span class="fa-engine-chip-name">Malpedia Family</span><span class="fa-engine-chip-meta fa-engine-beta">Beta</span></span></span>
-                            </div>
-                            <div class="fa-engine-chip">
-                                <span class="fa-engine-chip-label"><span class="fa-status-dot" aria-hidden="true"></span><span class="fa-engine-chip-copy"><span class="fa-engine-chip-name">EPSS Score</span><span class="fa-engine-chip-meta">Risk</span></span></span>
-                            </div>
+                        <div class="ma-engine-summary">
+                            <strong class="ma-summary-value">Checking…</strong>
+                            <span class="ma-summary-label">ENGINES ONLINE</span>
+                            <span class="ma-summary-checked">Checking…</span>
+                            <div class="ma-summary-bar ma-summary-unavailable" title="Checking…"></div>
                         </div>
-                    </div>
+                        <div class="ma-engine-groups">
+                            <div class="ma-capability-state">Checking…</div>
+                        </div>
+                        <div class="ma-legend" aria-label="Engine status legend"></div>
+                    </section>
 
-                    <button type="submit" id="fileSubmitBtn" class="btn btn-primary w-100 mt-4" disabled>
+                    <button type="submit" id="fileSubmitBtn" class="btn btn-primary ma-analyze-button w-100 mt-4" disabled>
                         <i class="bi bi-shield-exclamation me-2"></i>Analyze File
                     </button>
                 </form>
             </div>
         </div>
+</div>
 </div>
 
 <!-- Progress Area (hidden by default) -->
@@ -1089,11 +1225,12 @@
 </div>
 
 <!-- Recent Uploads Section -->
-<div id="recentUploadsSection" class="recent-uploads-section" style="display: none;">
-    <div class="card">
-        <div class="card-header d-flex align-items-center">
+<div id="recentUploadsSection" class="recent-uploads-section ma-recent-section" style="display: none;">
+    <div class="card ma-recent-card">
+        <div class="card-header ma-group-head">
             <i class="bi bi-clock-history me-2 text-accent"></i>
-            <h5 class="mb-0">Recent File Analyses</h5>
+            <div class="ma-group-title">Recent File Analyses</div>
+            <span class="ma-group-rule" aria-hidden="true"></span>
             <button class="btn btn-sm btn-outline-secondary ms-auto" onclick="clearRecentUploads()" title="Clear history">
                 <i class="bi bi-trash3"></i>
             </button>
@@ -1169,6 +1306,18 @@
         return FILE_TYPE_MAP[ext] || { icon: 'bi-file-earmark', badge: 'badge-generic', label: ext.toUpperCase() || 'Unknown', cat: 'File' };
     }
 
+    var RECENT_FILE_TYPES = {
+        exe: 'PE', dll: 'PE', sys: 'PE', elf: 'ELF', so: 'ELF', pdf: 'PDF',
+        doc: 'OFFICE', docx: 'OFFICE', docm: 'OFFICE', xls: 'OFFICE', xlsx: 'OFFICE', xlsm: 'OFFICE',
+        ppt: 'OFFICE', pptx: 'OFFICE', ps1: 'SCRIPT', vbs: 'SCRIPT', js: 'SCRIPT', bat: 'SCRIPT', sh: 'SCRIPT', py: 'SCRIPT',
+        zip: 'ARCHIVE', rar: 'ARCHIVE', '7z': 'ARCHIVE'
+    };
+
+    function getRecentFileType(filename) {
+        var ext = (filename.split('.').pop() || '').toLowerCase();
+        return RECENT_FILE_TYPES[ext] || '';
+    }
+
     /* --- Helpers --- */
     function formatFileSize(bytes) {
         if (bytes < 1024) return bytes + ' B';
@@ -1234,6 +1383,8 @@
         progressBar.textContent = pct + '%';
         if (message) {
             progressStatus.textContent = message;
+            if (message === setProgress.lastMessage && progressLog.firstChild) return;
+            setProgress.lastMessage = message;
             var li = document.createElement('li');
             li.textContent = message;
             progressLog.appendChild(li);
@@ -1249,6 +1400,212 @@
         /* eslint-disable no-unsanitized/property -- pre-sanitized via escHtml in analysis.js */
         el.innerHTML = html; // SAFE: content from renderFileResult uses escHtml for all user data
         /* eslint-enable no-unsanitized/property */
+    }
+
+    /* ========================================================
+     *  FILE ENGINE CAPABILITIES
+     * ======================================================== */
+    function fileCapabilityStatus(status, beta) {
+        var statuses = {
+            active: { label: 'Active', className: 'ma-status-active' },
+            limited: { label: 'Limited', className: 'ma-status-limited' },
+            needs_config: { label: 'Needs setup', className: 'ma-status-needs-config' },
+            not_connected: { label: 'Not connected', className: 'ma-status-not-connected' },
+            unreachable: { label: 'Unreachable', className: 'ma-status-unreachable' }
+        };
+        if (status === 'active' && beta) return { label: 'Beta', className: 'ma-status-beta' };
+        return statuses[status] || { label: 'Status unavailable', className: 'ma-status-unavailable' };
+    }
+
+    function fileCapabilityCheckedTime(checkedAt) {
+        if (!checkedAt) return '';
+        var checkedDate = new Date(checkedAt);
+        if (isNaN(checkedDate.getTime())) return '';
+        return ('0' + checkedDate.getHours()).slice(-2) + ':' + ('0' + checkedDate.getMinutes()).slice(-2);
+    }
+
+    function fileCapabilityCount(value) {
+        return value < 10 ? '0' + value : String(value);
+    }
+
+    function fileCapabilityBucket(capability) {
+        if (capability && capability.status === 'active' && capability.beta !== true) return 'active';
+        if (capability && (capability.status === 'active' || capability.status === 'limited' || capability.status === 'needs_config') && capability.beta === true) return 'warning';
+        if (capability && (capability.status === 'limited' || capability.status === 'needs_config')) return 'warning';
+        if (capability && capability.status === 'unreachable') return 'unreachable';
+        return 'not-connected';
+    }
+
+    function renderFileCapabilitySummary(root, capabilities, unavailable) {
+        var value = root.querySelector('.ma-summary-value');
+        var checked = root.querySelector('.ma-summary-checked');
+        var bar = root.querySelector('.ma-summary-bar');
+        if (!value || !checked || !bar) return;
+        bar.textContent = '';
+        if (unavailable) {
+            value.textContent = '--/--';
+            checked.textContent = 'Status unavailable';
+            bar.className = 'ma-summary-bar ma-summary-unavailable';
+            var unavailableSegment = document.createElement('span');
+            unavailableSegment.className = 'ma-summary-segment ma-summary-segment-not-connected';
+            unavailableSegment.style.flexGrow = '1';
+            unavailableSegment.style.flexBasis = '0%';
+            bar.appendChild(unavailableSegment);
+            return;
+        }
+
+        var counts = { active: 0, warning: 0, 'not-connected': 0, unreachable: 0 };
+        for (var i = 0; i < capabilities.length; i++) counts[fileCapabilityBucket(capabilities[i])]++;
+        value.textContent = fileCapabilityCount(counts.active) + '/' + fileCapabilityCount(capabilities.length);
+        checked.textContent = 'CHECKED ' + fileCapabilityCheckedTime(root.getAttribute('data-checked-at'));
+        bar.className = 'ma-summary-bar';
+        var bucketOrder = ['active', 'warning', 'not-connected', 'unreachable'];
+        for (var bi = 0; bi < bucketOrder.length; bi++) {
+            var bucket = bucketOrder[bi];
+            if (!counts[bucket]) continue;
+            var segment = document.createElement('span');
+            segment.className = 'ma-summary-segment ma-summary-segment-' + bucket;
+            segment.style.flexGrow = String(counts[bucket]);
+            segment.style.flexBasis = '0%';
+            bar.appendChild(segment);
+        }
+    }
+
+    function renderFileCapabilityLegend(root) {
+        var legend = root.querySelector('.ma-legend');
+        if (!legend) return;
+        while (legend.firstChild) legend.removeChild(legend.firstChild);
+        var label = document.createElement('span');
+        label.className = 'ma-legend-label';
+        label.textContent = 'LEGEND';
+        legend.appendChild(label);
+        var items = [
+            { symbol: '●', text: 'Active', className: 'ma-legend-dot' },
+            { symbol: '●', text: 'Beta or limited', className: 'ma-legend-dot ma-legend-warning' },
+            { symbol: '○', text: 'Not connected (dashed rail)', className: 'ma-legend-dot ma-legend-not-connected' },
+            { symbol: '●', text: 'Needs setup', className: 'ma-legend-dot ma-legend-needs-config' }
+        ];
+        for (var i = 0; i < items.length; i++) {
+            var item = document.createElement('span');
+            item.className = 'ma-legend-item';
+            var dot = document.createElement('span');
+            dot.className = items[i].className;
+            dot.textContent = items[i].symbol;
+            var text = document.createElement('span');
+            text.textContent = items[i].text;
+            item.appendChild(dot);
+            item.appendChild(text);
+            legend.appendChild(item);
+        }
+    }
+
+    function renderFileCapabilitiesUnavailable() {
+        var root = document.querySelector('.ma-engine-section');
+        if (!root) return;
+        renderFileCapabilitySummary(root, [], true);
+        var groups = root.querySelector('.ma-engine-groups');
+        if (!groups) return;
+        while (groups.firstChild) groups.removeChild(groups.firstChild);
+        var state = document.createElement('div');
+        state.className = 'ma-capability-state';
+        state.textContent = 'Status unavailable';
+        groups.appendChild(state);
+        renderFileCapabilityLegend(root);
+    }
+
+    function renderFileCapabilities(payload) {
+        var root = document.querySelector('.ma-engine-section');
+        if (!root || !payload || !Array.isArray(payload.capabilities)) {
+            renderFileCapabilitiesUnavailable();
+            return;
+        }
+        var knownStatuses = { active: true, limited: true, needs_config: true, not_connected: true, unreachable: true };
+        for (var si = 0; si < payload.capabilities.length; si++) {
+            if (!payload.capabilities[si] || !knownStatuses[payload.capabilities[si].status]) {
+                renderFileCapabilitiesUnavailable();
+                return;
+            }
+        }
+        root.setAttribute('data-checked-at', payload.checked_at || '');
+        renderFileCapabilitySummary(root, payload.capabilities, false);
+        var groups = root.querySelector('.ma-engine-groups');
+        if (!groups) return;
+        while (groups.firstChild) groups.removeChild(groups.firstChild);
+        var groupOrder = ['core', 'detection', 'format', 'threat_intelligence'];
+        for (var gi = 0; gi < groupOrder.length; gi++) {
+            var groupKey = groupOrder[gi];
+            var members = payload.capabilities.filter(function (capability) { return capability && capability.group === groupKey; });
+            if (!members.length) continue;
+            var group = document.createElement('section');
+            group.className = 'ma-capability-group';
+            var groupHead = document.createElement('div');
+            groupHead.className = 'ma-group-head';
+            var groupTitle = document.createElement('div');
+            groupTitle.className = 'ma-group-title';
+            groupTitle.textContent = String(members[0].group_label || groupKey);
+            var groupRule = document.createElement('span');
+            groupRule.className = 'ma-group-rule';
+            groupRule.setAttribute('aria-hidden', 'true');
+            var groupCount = document.createElement('span');
+            groupCount.className = 'ma-group-count';
+            var activeCount = members.filter(function (capability) { return fileCapabilityBucket(capability) === 'active'; }).length;
+            groupCount.textContent = fileCapabilityCount(activeCount) + '/' + fileCapabilityCount(members.length);
+            groupHead.appendChild(groupTitle);
+            groupHead.appendChild(groupRule);
+            groupHead.appendChild(groupCount);
+            group.appendChild(groupHead);
+
+            var grid = document.createElement('div');
+            grid.className = 'ma-engine-grid';
+            for (var ci = 0; ci < members.length; ci++) {
+                var capability = members[ci];
+                var status = fileCapabilityStatus(capability.status, capability.beta === true);
+                var chip = document.createElement('div');
+                chip.className = 'ma-engine-chip ' + status.className;
+                if (Object.prototype.hasOwnProperty.call(capability, 'reason') && capability.reason != null) chip.setAttribute('title', String(capability.reason));
+                var rail = document.createElement('span');
+                rail.className = 'ma-chip-rail';
+                var dot = document.createElement('span');
+                dot.className = 'ma-status-dot ' + status.className + (capability.status === 'active' && capability.beta !== true ? ' ma-led-active' : '');
+                dot.setAttribute('aria-hidden', 'true');
+                rail.appendChild(dot);
+                var body = document.createElement('div');
+                body.className = 'ma-chip-body';
+                var name = document.createElement('div');
+                name.className = 'ma-chip-name';
+                name.textContent = capability.label == null ? 'Status unavailable' : String(capability.label);
+                var statusRow = document.createElement('div');
+                statusRow.className = 'ma-chip-status-row';
+                var statusText = document.createElement('span');
+                statusText.className = 'ma-chip-status ' + status.className;
+                statusText.textContent = status.label;
+                statusRow.appendChild(statusText);
+                if (capability.provider != null && String(capability.provider)) {
+                    var provider = document.createElement('span');
+                    provider.className = 'ma-chip-provider';
+                    provider.textContent = String(capability.provider);
+                    statusRow.appendChild(provider);
+                }
+                body.appendChild(name);
+                body.appendChild(statusRow);
+                chip.appendChild(rail);
+                chip.appendChild(body);
+                grid.appendChild(chip);
+            }
+            group.appendChild(grid);
+            groups.appendChild(group);
+        }
+        renderFileCapabilityLegend(root);
+    }
+
+    function loadFileCapabilities() {
+        fetch('/api/analysis/file/capabilities', { credentials: 'include' })
+            .then(function (response) {
+                if (!response.ok) throw new Error('HTTP ' + response.status);
+                return response.json();
+            })
+            .then(renderFileCapabilities)
+            .catch(function () { renderFileCapabilitiesUnavailable(); });
     }
 
     /* --- Threat Gauge SVG Renderer --- */
@@ -1383,33 +1740,55 @@
             else if (vl === 'malicious') verdictClass = 'ru-verdict-malicious';
 
             var item = document.createElement('div');
-            item.className = 'recent-upload-item';
+            item.className = 'ma-recent-item';
 
             var iconDiv = document.createElement('div');
-            iconDiv.className = 'ru-icon';
-            iconDiv.style.background = 'rgba(var(--bs-primary-rgb,13,110,253),0.1)';
+            iconDiv.className = 'ma-recent-icon';
             var iconI = document.createElement('i');
             iconI.className = 'bi ' + typeInfo.icon;
             iconDiv.appendChild(iconI);
 
             var detailsDiv = document.createElement('div');
-            detailsDiv.className = 'ru-details';
+            detailsDiv.className = 'ma-recent-body';
             var nameDiv = document.createElement('div');
-            nameDiv.className = 'ru-name';
+            nameDiv.className = 'ma-recent-title';
             nameDiv.textContent = r.name || 'Unknown';
             var metaDiv = document.createElement('div');
-            metaDiv.className = 'ru-meta';
-            metaDiv.textContent = (r.size || '') + ' \u00B7 ' + (r.date || '');
+            metaDiv.className = 'ma-recent-meta';
+            var recentMeta = [];
+            if (r.ftype) recentMeta.push(String(r.ftype));
+            if (r.size) recentMeta.push(String(r.size));
+            if (r.sha256) recentMeta.push('sha256 ' + String(r.sha256).slice(0, 6) + '\u2026' + String(r.sha256).slice(-4));
+            if (r.date) recentMeta.push(String(r.date));
+            metaDiv.textContent = recentMeta.join(' \u00B7 ');
             detailsDiv.appendChild(nameDiv);
             detailsDiv.appendChild(metaDiv);
 
             var verdictSpan = document.createElement('span');
-            verdictSpan.className = 'ru-verdict ' + verdictClass;
+            verdictSpan.className = 'ma-recent-verdict ma-recent-verdict-' + verdictClass.replace('ru-verdict-', '');
             verdictSpan.textContent = verdictLabel;
+
+            var recentResult = document.createElement('div');
+            recentResult.className = 'ma-recent-result';
+            recentResult.appendChild(verdictSpan);
+            if (r.score !== undefined && r.score !== null && isFinite(Number(r.score))) {
+                var recentScore = Math.max(0, Math.min(100, Math.round(Number(r.score))));
+                var scoreTrack = document.createElement('span');
+                scoreTrack.className = 'ma-recent-score-track';
+                var scoreFill = document.createElement('span');
+                scoreFill.className = 'ma-recent-score-fill ma-recent-score-fill-' + verdictClass.replace('ru-verdict-', '');
+                scoreFill.style.width = Math.max(2, recentScore) + '%';
+                scoreTrack.appendChild(scoreFill);
+                var scoreText = document.createElement('span');
+                scoreText.className = 'ma-recent-score';
+                scoreText.textContent = String(recentScore).padStart(2, '0');
+                recentResult.appendChild(scoreTrack);
+                recentResult.appendChild(scoreText);
+            }
 
             item.appendChild(iconDiv);
             item.appendChild(detailsDiv);
-            item.appendChild(verdictSpan);
+            item.appendChild(recentResult);
             list.appendChild(item);
         });
     }
@@ -1421,6 +1800,7 @@
 
     /* Render recent uploads on page load */
     renderRecentUploads();
+    loadFileCapabilities();
 
     /* --- Drag-and-drop --- */
     if (dropZone) {
@@ -1490,8 +1870,6 @@
             while (progressLog.firstChild) { progressLog.removeChild(progressLog.firstChild); }
             progressBar.classList.remove('bg-danger');
             progressSpinner.style.display = '';
-            setProgress(0, 'Uploading file...');
-
             window.startFileAnalysis(currentFile, {
                 onProgress: function (data) {
                     setProgress(data.percent || 0, data.message || '');
@@ -1526,12 +1904,20 @@
                         else if (s <= 60) verdict = 'Suspicious';
                         else verdict = 'Malicious';
                     }
-                    saveRecentUpload({
+                    var recentEntry = {
                         name: currentFile.name,
                         size: formatFileSize(currentFile.size),
                         verdict: verdict,
                         date: new Date().toLocaleDateString() + ' ' + new Date().toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})
-                    });
+                    };
+                    var recentScoreValue = data.score !== undefined ? data.score : data.threat_score;
+                    if (recentScoreValue !== undefined && recentScoreValue !== null && isFinite(Number(recentScoreValue))) {
+                        recentEntry.score = Number(recentScoreValue);
+                    }
+                    if (data.sha256) recentEntry.sha256 = String(data.sha256);
+                    var recentFileType = getRecentFileType(currentFile.name);
+                    if (recentFileType) recentEntry.ftype = recentFileType;
+                    saveRecentUpload(recentEntry);
                 },
                 onError: function (err) {
                     setProgress(0, 'Error: ' + (err.message || err));
