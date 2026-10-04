@@ -273,6 +273,7 @@ class IOCInvestigator:
             target_domain = ioc if ioc_type == 'domain' else extract_domain_from_url(ioc)
             if target_domain:
                 domain_enrichment = await self._enrich_domain(target_domain)
+        dga_result = domain_enrichment.get('dga_analysis') if domain_enrichment else None
 
         verdict = determine_verdict(threat_score, coverage)
 
@@ -331,6 +332,7 @@ class IOCInvestigator:
                     intel_results,
                     rag_context=rag_hits,
                     authoritative_verdict=verdict,
+                    dga=dga_result,
                 )
                 if llm_analysis is None:
                     llm_analysis = {'note': 'LLM unavailable - results based on threat intelligence only'}
@@ -366,17 +368,17 @@ class IOCInvestigator:
         else:
             # Fallback to the static, verdict-based list if LLM fails
             recommendations = self._generate_recommendations(verdict, intel_results)
+            if dga_result and dga_result.get('is_dga'):
+                recommendations.append(
+                    f"DGA result: is_dga=True, confidence={dga_result.get('confidence')}"
+                )
             logger.info("[IOC] LLM recommendations unavailable, using static fallback list.")
 
         # Add domain-specific recommendations
         if domain_enrichment:
             domain_age = domain_enrichment.get('domain_age', {})
-            dga = domain_enrichment.get('dga_analysis', {})
             if domain_age.get('is_newly_registered'):
                 recommendations.insert(0, '🆕 Domain is newly registered (<30 days) - high risk indicator')
-            if dga.get('is_dga'):
-                family = dga.get('dga_family_guess', 'unknown')
-                recommendations.insert(0, f'🤖 Domain appears algorithmically generated (DGA, family: {family})')
 
         result = {
             'ioc': ioc,

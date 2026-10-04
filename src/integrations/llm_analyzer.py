@@ -83,6 +83,7 @@ class LLMAnalyzer:
         results: Dict,
         rag_context: Optional[list] = None,
         authoritative_verdict: Optional[str] = None,
+        dga: Optional[Dict] = None,
     ) -> Dict:
         """
         Analyze IOC investigation results using LLM.
@@ -100,7 +101,7 @@ class LLMAnalyzer:
         """
         try:
             # Prepare context for LLM
-            context = self._prepare_ioc_context(ioc, ioc_type, results)
+            context = self._prepare_ioc_context(ioc, ioc_type, results, dga=dga)
 
             # Build prompt
             sources_checked = results.get('sources_checked', 0)
@@ -113,6 +114,13 @@ class LLMAnalyzer:
                 findings_summary = f"⚠️ **SUSPICIOUS**: 1 out of {sources_checked} sources flagged this IOC."
             else:
                 findings_summary = f"🚨 **MALICIOUS**: {sources_flagged} out of {sources_checked} sources flagged this IOC."
+
+            dga_section = ''
+            if 'dga' in context:
+                dga_section = (
+                    '**DGA Enrichment:**\n'
+                    f"{json.dumps(context['dga'], indent=2)}\n"
+                )
 
             prompt = f"""You are a senior SOC analyst specializing in critical infrastructure cybersecurity. 
 
@@ -129,6 +137,9 @@ Sources Flagged: {sources_flagged}
 
 **Key Findings:**
 {json.dumps(context.get('key_findings', []), indent=2)}
+**Source Status:**
+{json.dumps(context.get('source_status', {}), indent=2)}
+{dga_section}
 {self._format_rag_section(rag_context)}
 **IMPORTANT RULES:**
 1. Your verdict MUST match the investigation findings
@@ -137,7 +148,16 @@ Sources Flagged: {sources_flagged}
 4. If sources_flagged >= 3, verdict can be "MALICIOUS"
 5. Do NOT hallucinate findings that don't exist
 6. Base your analysis ONLY on the data provided above
-7. ONLY reference source names that appear in the "Key Findings" list above. Do NOT mention any other source by name.
+7. If any source is degraded, state that the verdict is provisional and name the degraded sources.
+8. Do NOT invent playbooks or standards; cite a knowledge-base entry only by its [N] marker.
+9. If DGA confidence is below 70 or family is None, treat DGA as a weak signal.
+10. Do not recommend allowlisting when any source is degraded.
+11. ONLY reference source names that appear in the "Key Findings" or "Source Status" sections above. Do NOT mention any other source by name.
+12. If any source is degraded, one recommendation MUST be to restore that
+    source (fix its credentials or feed) and re-run the analysis now.
+    Do not suggest waiting days for a degraded source to recover.
+13. If any source is degraded, do not recommend "maintaining" or "recording"
+    a Clean status; describe the verdict as provisional.
 
 Provide your analysis in a clear, professional format. Include:
 
@@ -844,7 +864,13 @@ Be specific and reference the tool findings in your analysis."""
         else:
             return {}
 
-    def _prepare_ioc_context(self, ioc: str, ioc_type: str, results: Dict) -> Dict:
+    def _prepare_ioc_context(
+        self,
+        ioc: str,
+        ioc_type: str,
+        results: Dict,
+        dga: Optional[Dict] = None,
+    ) -> Dict:
         """Prepare investigation results for LLM context."""
         # Extract key findings
         context = {
@@ -852,12 +878,39 @@ Be specific and reference the tool findings in your analysis."""
             'type': ioc_type,
             'threat_score': results.get('threat_score', 0),
             'sources_flagged': results.get('sources_flagged', 0),
-            'key_findings': []
+            'key_findings': [],
+            'source_status': {
+                'responded': [],
+                'degraded': [],
+                'not_applicable': [],
+            },
         }
 
         # Extract important findings from each source
         sources = results.get('sources', {})
         for source_name, source_data in sources.items():
+            source_data = source_data or {}
+            status = source_data.get('status')
+
+            if source_data.get('not_applicable') is True:
+                context['source_status']['not_applicable'].append(source_name)
+            elif (
+                status == '⚠'
+                or 'error' in source_data
+                or source_data.get('feed_status') == 'unavailable'
+            ):
+                reason = source_data.get('error') or source_data.get('reason')
+                if not reason and source_data.get('feed_status') == 'unavailable':
+                    reason = 'feed_status=unavailable'
+                if not reason:
+                    reason = 'source returned a degraded status'
+                context['source_status']['degraded'].append({
+                    'source': source_name,
+                    'reason': str(reason),
+                })
+            else:
+                context['source_status']['responded'].append(source_name)
+
             if source_data.get('status') == '✓':
                 finding = {'source': source_name}
 
@@ -872,6 +925,13 @@ Be specific and reference the tool findings in your analysis."""
                     finding['detections'] = source_data['detections']
 
                 context['key_findings'].append(finding)
+
+        if dga is not None:
+            context['dga'] = {
+                'is_dga': dga.get('is_dga'),
+                'confidence': dga.get('confidence'),
+                'family': dga.get('family', dga.get('dga_family_guess')),
+            }
 
         return context
 
