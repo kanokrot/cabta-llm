@@ -4,6 +4,7 @@ Author: Ugur AtesEmail Analysis Tool - SOC-GRADE with Advanced Features."""
 import email
 from email import policy
 from email.utils import parseaddr
+from html import unescape
 from pathlib import Path
 import asyncio
 import re
@@ -11,6 +12,7 @@ import threading
 import tempfile
 import time
 from typing import Dict, List
+from urllib.parse import urlparse
 import logging
 from ..utils.ioc_extractor import IOCExtractor
 from ..integrations.llm_analyzer import LLMAnalyzer
@@ -31,6 +33,19 @@ _CROSS_TOOL_LOCK_WAIT_SECONDS = 120.0
 _IOC_STAGE_TIMEOUT_SECONDS = 60.0
 _ATTACHMENT_STAGE_TIMEOUT_SECONDS = 120.0
 _ATTACHMENT_SUFFIX_RE = re.compile(r'^\.[A-Za-z0-9]{1,10}$')
+
+
+def _is_allowlisted_email_url(url: str) -> bool:
+    """Return whether a URL host matches the shared IOC domain allowlist."""
+    try:
+        hostname = (urlparse(url).hostname or '').lower().rstrip('.')
+    except ValueError:
+        return False
+    return any(
+        hostname == allowed_domain
+        or hostname.endswith(f'.{allowed_domain}')
+        for allowed_domain in IOCExtractor.WHITELIST_DOMAINS
+    )
 
 
 def _append_capability_error(
@@ -415,7 +430,10 @@ class EmailAnalyzer:
                     'from': email_data.get('from', ''),
                     'subject': email_data.get('subject', ''),
                     'sender_domain': email_data.get('from', '').split('@')[-1].split('>')[0] if '@' in email_data.get('from', '') else '',
-                    'urls': email_data.get('urls', [])[:5],
+                    'urls': [
+                        url for url in email_data.get('urls', [])
+                        if not _is_allowlisted_email_url(url)
+                    ][:5],
                     'malicious_iocs': [r.get('ioc') for r in ioc_results if r.get('verdict') == 'MALICIOUS'][:10]
                 })
             }
@@ -541,7 +559,7 @@ class EmailAnalyzer:
         # Extract IOCs
         all_text = f"{email_data['from']} {email_data['subject']} {email_data['body_text']} {email_data['body_html']}"
         iocs = IOCExtractor.extract_all(all_text)
-        email_data['urls'] = iocs['urls']
+        email_data['urls'] = [unescape(url) for url in iocs['urls']]
         email_data['ips'] = iocs['ipv4']
         email_data['domains'] = iocs['domains']
         
