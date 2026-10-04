@@ -782,6 +782,8 @@ class ToolRegistry:
                         ioc_value, ioc_type, {'verdict': 'Unknown', 'malware_family': 'Unknown'}
                     )
                     for generated_type in ('suricata', 'firewall'):
+                        if generated_type not in ioc_rules:
+                            continue
                         rules.setdefault(generated_type, []).append(
                             ioc_rules[generated_type]
                         )

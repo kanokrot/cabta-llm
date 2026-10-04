@@ -7,23 +7,21 @@ from src.detection.rule_generator import RuleGenerator
 from src.detection.rule_validator import validate_rule
 from src.integrations.llm_analyzer import LLMAnalyzer
 from src.tools.ioc_investigator import IOCInvestigator
+from src.agent.tool_registry import ToolRegistry
 
 
-EXPECTED_KEYS = {'kql', 'spl', 'sigma', 'xql', 'dql', 'suricata', 'firewall'}
+EXPECTED_CLEAN_KEYS = {'kql', 'spl', 'sigma', 'xql', 'dql', 'suricata'}
 NETWORK_RULE_KEYS = ('kql', 'spl', 'xql', 'dql', 'suricata')
 
 
-def test_clean_ioc_rules_only_change_firewall_and_sigma():
-    clean = RuleGenerator.generate_ioc_rules(
-        'kurs.if.ua', 'domain', {'verdict': 'CLEAN'}
-    )
+@pytest.mark.parametrize('verdict', ['CLEAN', 'clean', ' Clean '])
+def test_clean_ioc_rules_omit_firewall(verdict):
+    clean = RuleGenerator.generate_ioc_rules('kurs.if.ua', 'domain', {'verdict': verdict})
     malicious = RuleGenerator.generate_ioc_rules(
         'kurs.if.ua', 'domain', {'verdict': 'MALICIOUS'}
     )
 
-    assert set(clean) == EXPECTED_KEYS
-    assert 'deny' not in clean['firewall'].lower()
-    assert clean['firewall'].startswith('#')
+    assert set(clean) == EXPECTED_CLEAN_KEYS
     for key in NETWORK_RULE_KEYS:
         assert clean[key] == malicious[key]
 
@@ -125,6 +123,7 @@ async def test_investigator_skips_clean_and_translates_malicious(monkeypatch):
     clean_result = await clean_investigator.investigate('kurs.if.ua')
     assert clean_result['verdict'] == 'CLEAN'
     assert clean_llm.translate_calls == 0
+    assert 'firewall' not in clean_result['detection_rules']
     assert 'firewall_fortigate' not in clean_result['detection_rules']
 
     malicious_llm = _StubLLM('MALICIOUS')
@@ -133,6 +132,39 @@ async def test_investigator_skips_clean_and_translates_malicious(monkeypatch):
     assert malicious_result['verdict'] == 'MALICIOUS'
     assert malicious_llm.translate_calls == 1
     assert 'firewall_fortigate' in malicious_result['detection_rules']
+
+
+def test_clean_hash_rules_omit_firewall_without_crashing():
+    rules = RuleGenerator.generate_ioc_rules(
+        'a' * 64, 'sha256', {'verdict': 'CLEAN'}
+    )
+    assert set(rules) == EXPECTED_CLEAN_KEYS
+
+
+@pytest.mark.asyncio
+async def test_tool_registry_skips_absent_firewall_rule(monkeypatch):
+    registry = ToolRegistry()
+    registry.register_default_tools({})
+
+    monkeypatch.setattr(
+        RuleGenerator,
+        'generate_ioc_rules',
+        lambda *_args: {'suricata': 'suricata rule'},
+    )
+    result = await registry.execute_local_tool(
+        'generate_rules',
+        analysis_result={
+            'result': {
+                'capabilities': [{'name': 'network'}],
+                'mitre_attacks': [{'id': 'T1071'}],
+            }
+        },
+        network_iocs=['kurs.if.ua'],
+    )
+
+    assert 'error' not in result
+    assert result['rules']['suricata'] == ['suricata rule']
+    assert 'firewall' not in result['rules']
 
 
 @pytest.mark.asyncio

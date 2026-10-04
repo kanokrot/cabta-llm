@@ -67,6 +67,9 @@ class RuleGenerator:
             'suricata': RuleGenerator._generate_suricata_ioc(ioc, ioc_type, context),
             'firewall': RuleGenerator._generate_firewall_ioc(ioc, ioc_type, context),
         }
+
+        if context and str(context.get('verdict', 'Unknown')).strip().upper() == 'CLEAN':
+            rules.pop('firewall', None)
         
         return rules
     
