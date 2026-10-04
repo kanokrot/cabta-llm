@@ -699,9 +699,11 @@ def _register_page_routes(app: FastAPI) -> None:
         job = app.state.analysis_manager.get_job(job_id)
         if not job:
             return HTMLResponse('<h3>Report not found</h3>', status_code=404)
-        return templates.TemplateResponse(request, 'report_view.html', {
-            'job': job,
-        })
+        # Redirect to the serialized report endpoint for visibility filtering.
+        target = f"/api/reports/{quote(job_id, safe='')}/html"
+        if request.url.query:
+            target += f"?{request.url.query}"
+        return RedirectResponse(url=target, status_code=307)
 
     # ----- Agent pages -----
 

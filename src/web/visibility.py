@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any, Dict, Iterable, Mapping, Optional
 
 
@@ -209,7 +210,99 @@ def _safe_mitre(value: Any) -> list[dict[str, Any]]:
     return output
 
 
-def _safe_sources(value: Any) -> dict[str, dict[str, Any]]:
+_DETAILED_SOURCE_KEYS = (
+    "error", "message", "found", "not_applicable", "unavailable", "timeout",
+    "cached", "cache_reason", "feed_status", "source", "source_id",
+    "last_analysis", "pulses", "total_pulses", "qualified_pulses",
+    "unique_attribution_count", "sources_checked", "sources_found", "is_c2",
+    "malware_families", "c2_frameworks", "first_seen", "last_seen",
+    "latest_event_timestamp", "cache_fetched_at", "last_successful_refresh",
+    "consecutive_refresh_failures",
+)
+_DETAILED_SOURCE_LIST_KEYS = frozenset({
+    "malware_families", "c2_frameworks", "sources_found",
+})
+_SENSITIVE_SOURCE_KEY_PARTS = ("key", "token", "secret", "password", "auth")
+
+
+def _sanitize_source_text(value: str) -> str:
+    value = re.sub(r"https?://\S+|www\.\S+", "[url]", value, flags=re.IGNORECASE)
+    value = re.sub(
+        r"(?i)\b(?:api[_-]?key|token|secret)\s*[:=]\s*\S+"
+        r"|\bauthorization\s*:\s*\S+"
+        r"|\bbearer\s+\S+",
+        "[redacted]",
+        value,
+    )
+    return re.sub(r"\s+", " ", value).strip()[:200]
+
+
+def _safe_number(value: Any) -> int | float | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return value
+
+
+def _safe_domain_enrichment(value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        return {}
+
+    output: dict[str, Any] = {}
+    domain_age = value.get("domain_age")
+    if isinstance(domain_age, dict):
+        safe_age: dict[str, Any] = {}
+        for key, limit in (("domain", 253), ("creation_date", 40), ("risk_level", 20)):
+            item = domain_age.get(key)
+            if isinstance(item, str):
+                safe_age[key] = item[:limit]
+        age_days = domain_age.get("age_days")
+        if isinstance(age_days, int) and not isinstance(age_days, bool):
+            safe_age["age_days"] = age_days
+        if isinstance(domain_age.get("is_newly_registered"), bool):
+            safe_age["is_newly_registered"] = domain_age["is_newly_registered"]
+        if isinstance(domain_age.get("error"), str):
+            safe_age["error"] = _sanitize_source_text(domain_age["error"])[:120]
+        if safe_age:
+            output["domain_age"] = safe_age
+
+    dga_analysis = value.get("dga_analysis")
+    if isinstance(dga_analysis, dict):
+        safe_dga: dict[str, Any] = {}
+        for key, limit in (("domain", 253), ("sld", 253)):
+            item = dga_analysis.get(key)
+            if isinstance(item, str):
+                safe_dga[key] = item[:limit]
+        for key in ("entropy", "consonant_ratio", "ngram_score", "confidence"):
+            number = _safe_number(dga_analysis.get(key))
+            if number is not None:
+                safe_dga[key] = number
+        if isinstance(dga_analysis.get("is_dga"), bool):
+            safe_dga["is_dga"] = dga_analysis["is_dga"]
+        family = dga_analysis.get("dga_family_guess")
+        if isinstance(family, str):
+            safe_dga["dga_family_guess"] = family[:40]
+
+        dictionary_match = dga_analysis.get("dictionary_match")
+        if isinstance(dictionary_match, dict):
+            safe_dictionary: dict[str, Any] = {}
+            for key in ("coverage", "word_count"):
+                number = _safe_number(dictionary_match.get(key))
+                if number is not None:
+                    safe_dictionary[key] = number
+            words_found = dictionary_match.get("words_found")
+            if isinstance(words_found, list):
+                safe_dictionary["words_found"] = [
+                    word[:30] for word in words_found[:10] if isinstance(word, str)
+                ]
+            if safe_dictionary:
+                safe_dga["dictionary_match"] = safe_dictionary
+        if safe_dga:
+            output["dga_analysis"] = safe_dga
+
+    return output
+
+
+def _safe_sources(value: Any, *, detailed: bool = False) -> dict[str, dict[str, Any]]:
     if not isinstance(value, dict):
         return {}
     output: dict[str, dict[str, Any]] = {}
@@ -217,9 +310,29 @@ def _safe_sources(value: Any) -> dict[str, dict[str, Any]]:
         if not isinstance(source_name, str) or not isinstance(source_value, dict):
             continue
         row = {}
-        for key in ("status", "score", "confidence", "detections", "total_engines"):
-            if key in source_value and isinstance(source_value[key], (str, int, float, bool)):
-                row[key] = source_value[key]
+        allowed_keys = ("status", "score", "confidence", "detections", "total_engines")
+        if detailed:
+            allowed_keys += _DETAILED_SOURCE_KEYS
+        for key in allowed_keys:
+            if any(part in key.lower() for part in _SENSITIVE_SOURCE_KEY_PARTS):
+                continue
+            if key not in source_value:
+                continue
+            item = source_value[key]
+            if isinstance(item, str):
+                row[key] = (
+                    _sanitize_source_text(item)
+                    if key in {"error", "message"}
+                    else item[:300]
+                )
+            elif isinstance(item, (int, float, bool)):
+                row[key] = item
+            elif key in _DETAILED_SOURCE_LIST_KEYS and isinstance(item, list):
+                row[key] = [
+                    entry[:100] if isinstance(entry, str) else entry
+                    for entry in item[:20]
+                    if isinstance(entry, (str, int, float, bool))
+                ]
         if row:
             output[source_name[:100]] = row
     return output
@@ -264,9 +377,36 @@ def _safe_result(
         if key in result and isinstance(result[key], (str, int, float, bool)):
             output[key] = result[key]
     if isinstance(result.get("sources"), dict):
-        output["sources"] = _safe_sources(result["sources"])
+        output["sources"] = _safe_sources(result["sources"], detailed=detailed)
+    llm_analysis = result.get("llm_analysis")
+    if isinstance(llm_analysis, dict) and any(
+        isinstance(llm_analysis.get(key), str) for key in ("verdict", "analysis")
+    ):
+        safe_llm_analysis = {}
+        if isinstance(llm_analysis.get("verdict"), str):
+            safe_llm_analysis["verdict"] = llm_analysis["verdict"][:20]
+        if isinstance(llm_analysis.get("analysis"), str):
+            safe_llm_analysis["analysis"] = llm_analysis["analysis"][:2000]
+        if isinstance(llm_analysis.get("recommendations"), list):
+            safe_llm_analysis["recommendations"] = _scalar_list(
+                llm_analysis["recommendations"]
+            )
+        if isinstance(llm_analysis.get("hallucination_warning"), str):
+            safe_llm_analysis["hallucination_warning"] = llm_analysis[
+                "hallucination_warning"
+            ][:500]
+        output["llm_analysis"] = safe_llm_analysis
     if isinstance(result.get("recommendations"), list):
         output["recommendations"] = _scalar_list(result["recommendations"])
+    if isinstance(result.get("recommendations_rule_based"), list):
+        output["recommendations_rule_based"] = _scalar_list(
+            result["recommendations_rule_based"]
+        )
+    if result.get("recommendations_source") in {"llm", "rule_based"}:
+        output["recommendations_source"] = result["recommendations_source"]
+    safe_domain_enrichment = _safe_domain_enrichment(result.get("domain_enrichment"))
+    if safe_domain_enrichment:
+        output["domain_enrichment"] = safe_domain_enrichment
     for key in ("mitre_mapping", "mitre_techniques"):
         if isinstance(result.get(key), list):
             output[key] = _safe_mitre(result[key])
