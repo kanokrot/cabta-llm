@@ -12,6 +12,24 @@ from src.agent.tool_registry import ToolRegistry
 
 EXPECTED_CLEAN_KEYS = {'kql', 'spl', 'sigma', 'xql', 'dql', 'suricata'}
 NETWORK_RULE_KEYS = ('kql', 'spl', 'xql', 'dql', 'suricata')
+NETWORK_IOCS = {
+    'ipv4': '203.0.113.5',
+    'ip': '203.0.113.5',
+    'domain': 'kurs.if.ua',
+    'url': 'https://kurs.if.ua/path',
+}
+HASH_IOCS = {
+    'md5': 'a' * 32,
+    'sha1': 'b' * 40,
+    'sha256': 'c' * 64,
+}
+NON_CLEAN_VERDICTS = [
+    {'verdict': 'MALICIOUS'},
+    {'verdict': 'SUSPICIOUS'},
+    {'verdict': 'Unknown'},
+    None,
+    {},
+]
 
 
 @pytest.mark.parametrize('verdict', ['CLEAN', 'clean', ' Clean '])
@@ -141,6 +159,37 @@ def test_clean_hash_rules_omit_firewall_without_crashing():
     assert set(rules) == EXPECTED_CLEAN_KEYS
 
 
+@pytest.mark.parametrize('ioc_type', list(HASH_IOCS))
+@pytest.mark.parametrize('context', NON_CLEAN_VERDICTS)
+def test_unsupported_ioc_types_omit_firewall(ioc_type, context):
+    rules = RuleGenerator.generate_ioc_rules(HASH_IOCS[ioc_type], ioc_type, context)
+    assert set(rules) == EXPECTED_CLEAN_KEYS
+
+
+@pytest.mark.parametrize('ioc_type', list(NETWORK_IOCS))
+@pytest.mark.parametrize('context', NON_CLEAN_VERDICTS)
+def test_supported_ioc_types_keep_deny_firewall(ioc_type, context):
+    rules = RuleGenerator.generate_ioc_rules(NETWORK_IOCS[ioc_type], ioc_type, context)
+    assert 'firewall' in rules
+    assert 'action=deny' in rules['firewall']
+
+
+@pytest.mark.parametrize('ioc_type,ioc', [*NETWORK_IOCS.items(), *HASH_IOCS.items()])
+@pytest.mark.parametrize(
+    'context',
+    [
+        {'verdict': 'CLEAN'},
+        {'verdict': 'clean'},
+        {'verdict': ' Clean '},
+        *NON_CLEAN_VERDICTS,
+    ],
+)
+def test_firewall_output_is_validator_consistent(ioc_type, ioc, context):
+    rules = RuleGenerator.generate_ioc_rules(ioc, ioc_type, context)
+    if 'firewall' in rules:
+        assert validate_rule('firewall', rules['firewall'])['valid'] is True
+
+
 @pytest.mark.asyncio
 async def test_tool_registry_skips_absent_firewall_rule(monkeypatch):
     registry = ToolRegistry()
@@ -165,6 +214,19 @@ async def test_tool_registry_skips_absent_firewall_rule(monkeypatch):
     assert 'error' not in result
     assert result['rules']['suricata'] == ['suricata rule']
     assert 'firewall' not in result['rules']
+
+
+@pytest.mark.asyncio
+async def test_investigator_hash_omits_firewall_and_fortigate(monkeypatch):
+    llm = _StubLLM('MALICIOUS')
+    investigator = _make_investigator(monkeypatch, llm, 'MALICIOUS')
+
+    result = await investigator.investigate('c' * 64)
+
+    assert result['verdict'] == 'MALICIOUS'
+    assert 'firewall' not in result['detection_rules']
+    assert 'firewall_fortigate' not in result['detection_rules']
+    assert llm.translate_calls == 0
 
 
 @pytest.mark.asyncio

@@ -70,6 +70,13 @@ class RuleGenerator:
 
         if context and str(context.get('verdict', 'Unknown')).strip().upper() == 'CLEAN':
             rules.pop('firewall', None)
+
+        value = rules.get('firewall')
+        if isinstance(value, str) and not any(
+            line.strip() and not line.lstrip().startswith('#')
+            for line in value.splitlines()
+        ):
+            rules.pop('firewall', None)
         
         return rules
     

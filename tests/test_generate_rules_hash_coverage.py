@@ -59,7 +59,7 @@ def test_network_only_formats_remain_unsupported_for_hash_types(ioc_type, ioc):
     rules = RuleGenerator.generate_ioc_rules(ioc, ioc_type, {})
 
     assert 'not supported' in rules['suricata'].lower()
-    assert 'not supported' in rules['firewall'].lower()
+    assert 'firewall' not in rules
 
 
 @pytest.mark.asyncio
