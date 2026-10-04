@@ -122,10 +122,22 @@ class OfficeAnalyzer:
         # 3. Malicious Macro Detection (mraptor)
         if self.tool_runner and self.tool_runner.is_available('mraptor'):
             mraptor_out = self.tool_runner.run_mraptor(file_path)
-            if mraptor_out.success:
-                result['macro_verdict'] = self._parse_mraptor(mraptor_out.stdout)
+            if mraptor_out.success or mraptor_out.exit_code in (0, 10, 15):
+                result['macro_verdict'] = self._parse_mraptor(
+                    mraptor_out.stdout,
+                    exit_code=mraptor_out.exit_code,
+                )
                 result['raw_outputs']['mraptor'] = mraptor_out.stdout
-                result['analysis_tools'].append('mraptor')
+                if mraptor_out.stderr:
+                    result['raw_outputs']['mraptor_stderr'] = mraptor_out.stderr
+
+                if result['macro_verdict'].get('error'):
+                    result.setdefault('tool_errors', []).append({
+                        'tool': 'mraptor',
+                        'message': result['macro_verdict']['error'],
+                    })
+                else:
+                    result['analysis_tools'].append('mraptor')
                 
                 if result['macro_verdict'].get('is_suspicious'):
                     result['threat_indicators'].append(
@@ -226,8 +238,8 @@ class OfficeAnalyzer:
         
         return analysis
     
-    def _parse_mraptor(self, output: str) -> Dict:
-        """Parse mraptor output."""
+    def _parse_mraptor(self, output: str, exit_code: int = None) -> Dict:
+        """Parse mraptor result rows without interpreting the legend."""
         verdict = {
             'is_suspicious': False,
             'flags': '',
@@ -235,29 +247,62 @@ class OfficeAnalyzer:
             'write': False,
             'execute': False,
         }
-        
-        output_upper = output.upper()
-        
-        if 'SUSPICIOUS' in output_upper:
-            verdict['is_suspicious'] = True
-        
-        # mraptor flags: A=AutoExec, W=Write, X=Execute
-        flags = ''
-        if 'AUTOEXEC' in output_upper or '|A|' in output or '-A-' in output:
-            verdict['auto_exec'] = True
-            flags += 'A'
-        if 'WRITE' in output_upper or '|W|' in output or '-W-' in output:
-            verdict['write'] = True
-            flags += 'W'
-        if 'EXECUTE' in output_upper or '|X|' in output or '-X-' in output:
-            verdict['execute'] = True
-            flags += 'X'
-        
-        verdict['flags'] = flags
-        
-        if verdict['auto_exec'] and (verdict['write'] or verdict['execute']):
-            verdict['is_suspicious'] = True
-        
+
+        result_pattern = re.compile(
+            r'(?<![A-Za-z0-9_.-])(NO\s+MACRO|OK|SUSPICIOUS|ERROR)(?![A-Za-z0-9_.-])',
+            re.IGNORECASE,
+        )
+        parsed_row = False
+
+        def collect_flags(fragments):
+            flags = ''
+            for fragment in fragments:
+                token = fragment.strip().upper()
+                token = re.sub(r'^[\[\](){}:,;]+|[\[\](){}:,;]+$', '', token)
+                if not token or not re.fullmatch(r'[AWX.\- ]+', token):
+                    continue
+                for flag in token:
+                    if flag in 'AWX' and flag not in flags:
+                        flags += flag
+            return flags
+
+        for raw_line in output.splitlines():
+            line = raw_line.strip()
+            if not line or line.lower().startswith('flags:'):
+                continue
+            match = result_pattern.search(line)
+            if not match:
+                continue
+
+            parsed_row = True
+            result_name = re.sub(r'\s+', ' ', match.group(1).upper())
+            if result_name == 'ERROR':
+                verdict['error'] = 'mraptor reported ERROR'
+                break
+            if result_name in ('NO MACRO', 'OK'):
+                break
+
+            if '|' in line:
+                cells = [cell.strip() for cell in line.split('|')]
+                flags = collect_flags(cell for cell in cells if result_name not in cell.upper())
+            else:
+                before = line[:match.start()].split()
+                after = line[match.end():].split()
+                flags = collect_flags(before + after)
+
+            verdict['is_suspicious'] = result_name == 'SUSPICIOUS'
+            verdict['flags'] = flags
+            verdict['auto_exec'] = 'A' in flags
+            verdict['write'] = 'W' in flags
+            verdict['execute'] = 'X' in flags
+            break
+
+        if not parsed_row:
+            if exit_code == 15:
+                verdict['is_suspicious'] = True
+            elif exit_code == 10:
+                verdict['error'] = 'mraptor exited with error code 10'
+
         return verdict
     
     def _parse_oleobj(self, output: str) -> List[Dict]:
