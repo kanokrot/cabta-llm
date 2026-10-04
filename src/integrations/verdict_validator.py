@@ -209,7 +209,29 @@ def validate_llm_analysis(
 
     # ชั้น 2: เช็ค hallucination ของ source names
     if all_known_sources:
-        valid_sources = {f["source"] for f in context.get("key_findings", [])}
+        valid_sources = set()
+        key_findings = context.get("key_findings", []) if isinstance(context, dict) else []
+        if isinstance(key_findings, list):
+            valid_sources.update(
+                finding["source"]
+                for finding in key_findings
+                if isinstance(finding, dict) and isinstance(finding.get("source"), str)
+            )
+
+        source_status = context.get("source_status") if isinstance(context, dict) else None
+        if isinstance(source_status, dict):
+            for status_key in ("responded", "not_applicable"):
+                names = source_status.get(status_key)
+                if isinstance(names, list):
+                    valid_sources.update(name for name in names if isinstance(name, str))
+
+            degraded = source_status.get("degraded")
+            if isinstance(degraded, list):
+                valid_sources.update(
+                    item["source"]
+                    for item in degraded
+                    if isinstance(item, dict) and isinstance(item.get("source"), str)
+                )
         llm_result = check_source_hallucination(llm_result, valid_sources, all_known_sources)
 
     # ชั้น 3: เช็ค RAG relevance กับ ioc_type
