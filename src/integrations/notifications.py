@@ -207,7 +207,15 @@ class NotificationManager:
 
         subject, message = self._format_message(event_type, payload)
 
-        for channel in self.channels:
+        legacy_channels = self.channels
+        if event_type == "verdict_alert":
+            verdict = str((payload or {}).get("verdict", "")).upper()
+            allowed_verdicts = {str(item).upper() for item in self.create_on_verdict}
+            if verdict not in allowed_verdicts:
+                # An empty create_on_verdict also suppresses all legacy verdict alerts.
+                legacy_channels = []
+
+        for channel in legacy_channels:
             try:
                 result = channel.send(subject, message)
             except Exception as exc:

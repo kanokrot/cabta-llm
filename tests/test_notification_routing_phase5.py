@@ -251,7 +251,7 @@ def test_smtp_and_line_channels_remain_parallel(monkeypatch):
             self.calls += 1
             return {"success": True}
 
-    manager = NotificationManager({"notifications": {"enabled": True}})
+    manager = NotificationManager({"notifications": {"enabled": True, "create_on_verdict": ["MALICIOUS"]}})
     smtp = Channel()
     line = Channel()
     manager.channels = [smtp, line]
