@@ -612,6 +612,75 @@
 {% endif %}
 
 <!-- ══ STATIC ANALYSIS (File) ════════════════════════════════════ -->
+{% if result.domain_enrichment is mapping %}
+{% set domain_intel = result.domain_enrichment %}
+{% set domain_age = domain_intel.domain_age if domain_intel.domain_age is mapping else {} %}
+{% set dga_analysis = domain_intel.dga_analysis if domain_intel.dga_analysis is mapping else {} %}
+{% set dictionary_match = dga_analysis.dictionary_match if dga_analysis.dictionary_match is mapping else {} %}
+{% set created_date = domain_age.creation_date | default('', true) | string %}
+{% set dga_confidence = dga_analysis.confidence | default(0) | float %}
+<div class="card mb-4 card-print-flow">
+    <div class="card-header card-header-collapsible d-flex justify-content-between align-items-center"
+         data-bs-toggle="collapse" data-bs-target="#domainIntelligenceCollapse" aria-expanded="true">
+        <h5 class="mb-0"><i class="bi bi-globe2 me-2"></i>Domain intelligence</h5>
+        {% if dga_analysis.is_dga and dga_confidence >= 70 %}
+        <span class="badge badge-danger">DGA likely</span>
+        {% elif dga_analysis.is_dga and dga_confidence < 70 %}
+        <span class="badge badge-warning">Weak signal</span>
+        {% else %}
+        <span class="badge badge-secondary">Not flagged</span>
+        {% endif %}
+    </div>
+    <div class="collapse show" id="domainIntelligenceCollapse">
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-12 col-lg-6">
+                    <h6 style="color:var(--text-secondary);">Domain age</h6>
+                    <dl class="row mb-0">
+                        <dt class="col-sm-5">Created</dt>
+                        <dd class="col-sm-7">
+                            {% if created_date %}{{ created_date.split('T')[0] | e }}{% else %}N/A{% endif %}
+                        </dd>
+                        <dt class="col-sm-5">Age (days)</dt>
+                        <dd class="col-sm-7">{% if domain_age.age_days is defined %}{{ domain_age.age_days | e }}{% else %}N/A{% endif %}</dd>
+                        <dt class="col-sm-5">Newly registered</dt>
+                        <dd class="col-sm-7">{% if domain_age.is_newly_registered %}Yes{% else %}No{% endif %}</dd>
+                        <dt class="col-sm-5">Risk level</dt>
+                        <dd class="col-sm-7">{% if domain_age.risk_level is defined %}{{ domain_age.risk_level | e }}{% else %}N/A{% endif %}</dd>
+                    </dl>
+                    {% if domain_age.error %}
+                    <div class="mt-2" style="color:var(--text-secondary);">Lookup failed: {{ domain_age.error | e }}</div>
+                    {% endif %}
+                </div>
+                <div class="col-12 col-lg-6">
+                    <h6 style="color:var(--text-secondary);">DGA heuristic</h6>
+                    <dl class="row mb-0">
+                        <dt class="col-sm-5">Confidence</dt>
+                        <dd class="col-sm-7">{% if dga_analysis.confidence is defined %}{{ dga_analysis.confidence | e }}%{% else %}N/A{% endif %}</dd>
+                        <dt class="col-sm-5">Family guess</dt>
+                        <dd class="col-sm-7">{% if dga_analysis.dga_family_guess %}{{ dga_analysis.dga_family_guess | e }}{% else %}none{% endif %}</dd>
+                        <dt class="col-sm-5">Analyzed label</dt>
+                        <dd class="col-sm-7">{% if dga_analysis.sld is defined %}{{ dga_analysis.sld | e }}{% else %}N/A{% endif %}</dd>
+                        <dt class="col-sm-5">Entropy</dt>
+                        <dd class="col-sm-7">{% if dga_analysis.entropy is defined %}{{ dga_analysis.entropy | e }}{% else %}N/A{% endif %}</dd>
+                        <dt class="col-sm-5">Consonant ratio</dt>
+                        <dd class="col-sm-7">{% if dga_analysis.consonant_ratio is defined %}{{ dga_analysis.consonant_ratio | e }}{% else %}N/A{% endif %}</dd>
+                        <dt class="col-sm-5">Dictionary words found</dt>
+                        <dd class="col-sm-7">
+                            {% if dictionary_match.words_found is sequence and dictionary_match.words_found is not string and dictionary_match.words_found | length > 0 %}
+                                {{ dictionary_match.words_found | join(', ') | e }}
+                            {% else %}none{% endif %}
+                        </dd>
+                    </dl>
+                </div>
+            </div>
+            <div class="mt-3" style="color:var(--text-secondary);font-size:0.85rem;">Heuristic signal. Not part of the verdict score.</div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+
 {% if static_analysis and static_analysis | length > 0 %}
 <div class="card mb-4 card-print-flow">
     <div class="card-header card-header-collapsible d-flex justify-content-between align-items-center"
@@ -1597,11 +1666,41 @@
         <h5 class="mb-0"><i class="bi bi-lightbulb me-2"></i>Recommendations</h5>
     </div>
     <div class="card-body">
+        {% set ai_recommendations = llm_analysis.recommendations | default([]) %}
+        {% set rule_based_recommendations = result.recommendations_rule_based | default([]) %}
+        {% if rule_based_recommendations and ai_recommendations %}
+        <div class="row g-3">
+            <div class="col-12 col-md-6">
+                <h6 style="color:var(--text-secondary);">AI analysis</h6>
+                <ol class="mb-0">
+                    {% for rec in ai_recommendations %}
+                    <li style="color:var(--text-primary);margin-bottom:0.5rem;font-size:0.9rem;">{{ rec | e }}</li>
+                    {% endfor %}
+                </ol>
+            </div>
+            <div class="col-12 col-md-6">
+                <h6 style="color:var(--text-secondary);">Rule-based playbook</h6>
+                <ol class="mb-0">
+                    {% for rec in rule_based_recommendations %}
+                    <li style="color:var(--text-primary);margin-bottom:0.5rem;font-size:0.9rem;">{{ rec | e }}</li>
+                    {% endfor %}
+                </ol>
+            </div>
+        </div>
+        {% elif result.recommendations_source == 'rule_based' %}
+        <h6 style="color:var(--text-secondary);">Rule-based recommendations (AI unavailable)</h6>
         <ol class="mb-0">
             {% for rec in recommendations %}
             <li style="color:var(--text-primary);margin-bottom:0.5rem;font-size:0.9rem;">{{ rec | e }}</li>
             {% endfor %}
         </ol>
+        {% else %}
+        <ol class="mb-0">
+            {% for rec in recommendations %}
+            <li style="color:var(--text-primary);margin-bottom:0.5rem;font-size:0.9rem;">{{ rec | e }}</li>
+            {% endfor %}
+        </ol>
+        {% endif %}
     </div>
 </div>
 {% endif %}
