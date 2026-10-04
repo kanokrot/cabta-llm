@@ -62,6 +62,19 @@ COMMON_INFRASTRUCTURE_SUBDOMAINS = {
     'status', 'cp',
 }
 
+# Common public suffixes with two labels.  This is intentionally a small
+# offline set because no public-suffix-list dependency is installed.
+COMMON_MULTI_LABEL_SUFFIXES = {
+    'ac.uk', 'co.uk', 'gov.uk', 'ltd.uk', 'me.uk', 'net.uk', 'org.uk',
+    'plc.uk', 'sch.uk',
+    'co.in', 'firm.in', 'gen.in', 'ind.in', 'net.in', 'org.in',
+    'co.jp', 'ne.jp', 'or.jp',
+    'com.ar', 'com.au', 'com.br', 'com.cn', 'com.hk', 'com.mx',
+    'com.my', 'com.pl', 'com.sg', 'com.tr', 'com.tw', 'com.ua',
+    'com.vn', 'if.ua', 'net.au', 'net.br', 'net.cn', 'net.ua',
+    'org.au', 'org.br', 'org.cn', 'org.ua', 'co.za',
+}
+
 # Minimal dictionary of common English words found in legitimate domains
 # Kept small for performance; focuses on words commonly used in domain names
 _DICTIONARY_WORDS = {
@@ -148,15 +161,11 @@ def _extract_sld(domain: str) -> str:
     """
     domain = domain.lower().strip().rstrip('.')
 
-    # Remove known multi-part TLDs first
-    multi_tlds = ['.co.uk', '.co.jp', '.com.br', '.com.au', '.org.uk', '.co.in']
-    for mt in multi_tlds:
-        if domain.endswith(mt):
-            domain = domain[:-len(mt)]
-            parts = domain.split('.')
-            return parts[-1] if parts else domain
-
+    # Remove known multi-part public suffixes first.
     parts = domain.split('.')
+    if len(parts) >= 3 and '.'.join(parts[-2:]) in COMMON_MULTI_LABEL_SUFFIXES:
+        return parts[-3]
+
     if len(parts) >= 2:
         return parts[-2]  # second-level domain
     return parts[0]
@@ -170,14 +179,9 @@ def _extract_subdomain_labels(domain: str) -> str:
     """
     domain = domain.lower().strip().rstrip('.')
 
-    multi_tlds = ['.co.uk', '.co.jp', '.com.br', '.com.au', '.org.uk', '.co.in']
-    for mt in multi_tlds:
-        if domain.endswith(mt):
-            domain = domain[:-len(mt)]
-            parts = domain.split('.')
-            return '.'.join(parts[:-1]) if len(parts) > 1 else ''
-
     parts = domain.split('.')
+    if len(parts) >= 3 and '.'.join(parts[-2:]) in COMMON_MULTI_LABEL_SUFFIXES:
+        return '.'.join(parts[:-3])
     return '.'.join(parts[:-2]) if len(parts) >= 3 else ''
 
 
