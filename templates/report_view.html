@@ -562,7 +562,12 @@
                             <td>
                                 {% set src_status = source_data.status | default('') | string %}
                                 {% set src_score  = source_data.score  | default(0) | int %}
-                                {% if src_status in ['found','detected','flagged'] or src_score >= 50 %}
+                                {% if src_status == '➖' or source_data.not_applicable %}
+                                    <span class="badge badge-secondary">N/A</span>
+                                {% elif src_status == '⚠' or source_data.error or source_data.feed_status == 'unavailable' %}
+                                    {% set error_title = source_data.error | default(source_data.feed_status | default('Source unavailable'), true) | string %}
+                                    <span class="badge badge-warning" title="{{ error_title | e }}">Error</span>
+                                {% elif src_status in ['found','detected','flagged'] or src_score >= 50 %}
                                     <span class="badge badge-danger">Flagged</span>
                                 {% elif src_status in ['not found','clean','ok'] or (src_score == 0 and src_status) %}
                                     <span class="badge badge-success">Clean</span>
