@@ -370,6 +370,26 @@ async def email_capabilities(
     )
 
 
+@router.get('/file/capabilities')
+async def file_capabilities(
+    request: Request,
+    refresh: bool = False,
+    current_user: dict = Depends(get_current_user),
+):
+    """Return cached status for the file-analysis capabilities."""
+    from ..file_capabilities import get_file_capabilities
+
+    is_admin = current_user.get('role') == 'admin'
+    if refresh and not is_admin:
+        raise HTTPException(status_code=403, detail='Admin role required for refresh')
+    analyzer = getattr(request.app.state, 'malware_analyzer', None)
+    return get_file_capabilities(
+        analyzer=analyzer,
+        refresh=refresh,
+        include_reason=is_admin,
+    )
+
+
 @router.get('/{analysis_id}')
 async def get_analysis(
     request: Request,
