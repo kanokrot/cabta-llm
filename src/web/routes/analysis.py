@@ -26,6 +26,7 @@ from ..oversight import record_cross_user_read
 from ..visibility import serialize_analysis_job, serialize_status
 
 logger = logging.getLogger(__name__)
+MAX_FILE_UPLOAD_BYTES = 50 * 1024 * 1024
 MAX_EMAIL_UPLOAD_BYTES = 25 * 1024 * 1024
 router = APIRouter(
     dependencies=[
@@ -82,6 +83,22 @@ async def _read_email_upload_with_limit(file: UploadFile) -> bytes:
         total += len(chunk)
         if total > MAX_EMAIL_UPLOAD_BYTES:
             raise HTTPException(status_code=413, detail='Email file exceeds 25 MB limit')
+        chunks.append(chunk)
+    return b''.join(chunks)
+
+
+async def _read_file_upload_with_limit(file: UploadFile) -> bytes:
+    """Read a file upload incrementally and reject oversized content."""
+    chunks = []
+    total = 0
+    chunk_size = 1024 * 1024
+    while True:
+        chunk = await file.read(chunk_size)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > MAX_FILE_UPLOAD_BYTES:
+            raise HTTPException(status_code=413, detail='File exceeds 50 MB limit')
         chunks.append(chunk)
     return b''.join(chunks)
 
@@ -266,7 +283,7 @@ async def analyze_file(
     mgr = request.app.state.analysis_manager
 
     # Read file content
-    content = await file.read()
+    content = await _read_file_upload_with_limit(file)
     sha256 = hashlib.sha256(content).hexdigest()
 
     # Save to temp
