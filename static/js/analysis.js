@@ -1944,7 +1944,65 @@
             encodeURIComponent(ruleType) + '/' + action;
     }
 
+    var ruleApprovalStates = {};
+
+    function ruleApprovalStateKey(analysisId, ruleType) {
+        return analysisId + ':' + ruleType;
+    }
+
+    function isRuleApproved(state) {
+        return state === 'approved' || state === 'deployed';
+    }
+
+    function refreshRuleExportSummary(analysisId) {
+        var selected = [];
+        document.querySelectorAll('[data-rule-select]').forEach(function (checkbox) {
+            if (checkbox.getAttribute('data-analysis-id') !== analysisId || !checkbox.checked) return;
+            var ruleType = checkbox.getAttribute('data-rule-type');
+            var label = checkbox.nextElementSibling ?
+                checkbox.nextElementSibling.textContent.trim() : ruleType.toUpperCase();
+            selected.push({
+                type: ruleType,
+                label: label,
+                approved: isRuleApproved(ruleApprovalStates[ruleApprovalStateKey(analysisId, ruleType)])
+            });
+        });
+
+        var approvedCount = selected.filter(function (rule) { return rule.approved; }).length;
+        var pending = selected.filter(function (rule) { return !rule.approved; });
+        var statusText;
+        if (!selected.length) {
+            statusText = 'Select at least one rule to export.';
+        } else if (!pending.length) {
+            statusText = 'All ' + selected.length + (selected.length === 1 ? ' selected rule is' : ' selected rules are') +' approved. Ready to export.';
+        } else {
+            statusText = 'Approved ' + approvedCount + ' of ' + selected.length +
+                ' selected. Approve before export: ' + pending.map(function (rule) {
+                    return rule.label;
+                }).join(', ');
+        }
+
+        document.querySelectorAll('[data-rule-export-status]').forEach(function (element) {
+            if (element.getAttribute('data-analysis-id') === analysisId) {
+                element.textContent = statusText;
+            }
+        });
+
+        var canExport = selected.length > 0 && !pending.length;
+        document.querySelectorAll('[data-rule-action="zip"]').forEach(function (button) {
+            if (button.getAttribute('data-analysis-id') !== analysisId) return;
+            button.disabled = !canExport;
+            button.setAttribute('aria-disabled', canExport ? 'false' : 'true');
+            if (canExport) {
+                button.removeAttribute('title');
+            } else {
+                button.setAttribute('title', 'Approve all selected rules before exporting');
+            }
+        });
+    }
+
     function updateRuleArtifactControls(analysisId, ruleType, state) {
+        ruleApprovalStates[ruleApprovalStateKey(analysisId, ruleType)] = state && state.status;
         document.querySelectorAll('[data-analysis-id][data-rule-type]').forEach(function (element) {
             if (element.getAttribute('data-analysis-id') !== analysisId ||
                     element.getAttribute('data-rule-type') !== ruleType) return;
@@ -1965,6 +2023,7 @@
                 }
             }
         });
+        refreshRuleExportSummary(analysisId);
     }
 
     function ruleArtifactContentUrl(analysisId, ruleType) {
@@ -1983,7 +2042,8 @@
                 return state;
             })
             .catch(function () {
-                /* The rule was saved; keep the existing controls if refresh fails. */
+                ruleApprovalStates[ruleApprovalStateKey(analysisId, ruleType)] = null;
+                refreshRuleExportSummary(analysisId);
             });
     }
 
@@ -2227,6 +2287,15 @@
                     updateRuleArtifactControls(analysisId, ruleType, state);
                 })
                 .catch(function () { /* Keep the pending-review defaults. */ });
+        });
+
+        document.querySelectorAll('[data-rule-select]').forEach(function (checkbox) {
+            checkbox.addEventListener('change', function () {
+                refreshRuleExportSummary(checkbox.getAttribute('data-analysis-id'));
+            });
+        });
+        document.querySelectorAll('[data-rule-export-status]').forEach(function (element) {
+            refreshRuleExportSummary(element.getAttribute('data-analysis-id'));
         });
 
         document.querySelectorAll('[data-rule-action]').forEach(function (button) {

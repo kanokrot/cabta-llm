@@ -1408,9 +1408,15 @@
                     {% endfor %}
                     <button class="btn btn-sm btn-outline-primary ms-auto"
                             data-rule-action="zip"
-                            data-analysis-id="{{ job.id | e }}">
+                            data-analysis-id="{{ job.id | e }}"
+                            disabled aria-disabled="true"
+                            title="Approve all selected rules before exporting">
                         <i class="bi bi-file-earmark-zip me-1"></i>Export selected as ZIP
                     </button>
+                    <div class="w-100 small text-muted" data-rule-export-status
+                         data-analysis-id="{{ job.id | e }}" aria-live="polite">
+                        Select at least one rule to export.
+                    </div>
                 </div>
                 <ul class="nav nav-tabs mb-0" id="ruleTabs" role="tablist">
                     {% for rule_type, rule_content in rule_items %}
