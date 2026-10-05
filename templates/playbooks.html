@@ -3,68 +3,12 @@
 {% extends "base.html" %}
 
 {% block title %}Playbooks - Blue Team Assistant{% endblock %}
-{% block page_title %}Playbooks{% endblock %}
-{% block page_subtitle %}<span class="page-subtitle">Security Automation Playbooks</span>{% endblock %}
+{% block page_title %}{% endblock %}
+{% block page_subtitle %}{% endblock %}
 
 {% block extra_head %}
+<link rel="stylesheet" href="/static/css/playbooks.css?v=1">
 <style>
-    /* ── Base card styles ── */
-    .playbook-card {
-        background: var(--bg-secondary);
-        border: 1px solid var(--border-color);
-        border-radius: 8px;
-        padding: 1.25rem;
-        transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s;
-        height: 100%;
-        display: flex;
-        flex-direction: column;
-        position: relative;
-        overflow: hidden;
-    }
-    .playbook-card:hover {
-        border-color: var(--color-accent);
-        box-shadow: var(--shadow-sm);
-        transform: translateY(-3px) scale(1.01);
-    }
-    .playbook-card .pb-title {
-        font-size: 1rem;
-        font-weight: 600;
-        color: var(--text-primary);
-        margin-bottom: 0.5rem;
-        display: flex;
-        align-items: center;
-    }
-    .playbook-card .pb-desc {
-        font-size: 0.85rem;
-        color: var(--text-secondary);
-        flex: 1;
-        margin-bottom: 0.75rem;
-        display: -webkit-box;
-        -webkit-line-clamp: 3;
-        -webkit-box-orient: vertical;
-        overflow: hidden;
-    }
-    .playbook-card .pb-meta {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        flex-wrap: wrap;
-        margin-bottom: 0.75rem;
-    }
-    .playbook-card .pb-footer-meta {
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-        flex-wrap: wrap;
-        margin-bottom: 0.75rem;
-        font-size: 0.75rem;
-        color: var(--text-secondary);
-    }
-    .playbook-card .pb-footer-meta i {
-        font-size: 0.7rem;
-        opacity: 0.7;
-    }
-
     /* ── Trigger badges ── */
     .trigger-badge {
         font-size: 0.7rem;
@@ -95,113 +39,6 @@
     .cat-phishing { background: rgba(6,182,212,0.15); color: #22d3ee; }
     .cat-forensics { background: rgba(34,197,94,0.15); color: #4ade80; }
     .cat-general { background: rgba(148,163,184,0.15); color: #94a3b8; }
-
-    /* ── Stats bar ── */
-    .playbook-stats-bar {
-        display: flex;
-        gap: 1.5rem;
-        flex-wrap: wrap;
-        padding: 0.75rem 1rem;
-        background: var(--bg-secondary);
-        border: 1px solid var(--border-color);
-        border-radius: 8px;
-        margin-bottom: 1rem;
-    }
-    .stat-item {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-    }
-    .stat-item .stat-icon {
-        width: 32px;
-        height: 32px;
-        border-radius: 6px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 0.85rem;
-    }
-    .stat-item .stat-icon.si-playbooks { background: rgba(88,166,255,0.15); color: var(--color-accent); }
-    .stat-item .stat-icon.si-steps { background: rgba(139,92,246,0.15); color: #a78bfa; }
-    .stat-item .stat-icon.si-tools { background: rgba(245,158,11,0.15); color: #fbbf24; }
-    .stat-item .stat-icon.si-categories { background: rgba(34,197,94,0.15); color: #4ade80; }
-    .stat-item .stat-value {
-        font-size: 1.1rem;
-        font-weight: 700;
-        color: var(--text-primary);
-        line-height: 1;
-    }
-    .stat-item .stat-label {
-        font-size: 0.7rem;
-        color: var(--text-secondary);
-        text-transform: uppercase;
-        letter-spacing: 0.3px;
-        line-height: 1;
-    }
-
-    /* ── Search and filter bar ── */
-    .playbook-toolbar {
-        display: flex;
-        gap: 0.75rem;
-        flex-wrap: wrap;
-        align-items: center;
-        margin-bottom: 1rem;
-    }
-    .playbook-search-wrap {
-        position: relative;
-        flex: 1;
-        min-width: 220px;
-        max-width: 360px;
-    }
-    .playbook-search-wrap i {
-        position: absolute;
-        left: 0.75rem;
-        top: 50%;
-        transform: translateY(-50%);
-        color: var(--text-secondary);
-        font-size: 0.85rem;
-    }
-    .playbook-search-wrap input {
-        padding-left: 2.25rem;
-        background: var(--bg-tertiary);
-        border: 1px solid var(--border-color);
-        color: var(--text-primary);
-        border-radius: 6px;
-        font-size: 0.85rem;
-        height: 36px;
-    }
-    .playbook-search-wrap input::placeholder { color: var(--text-secondary); opacity: 0.7; }
-    .playbook-search-wrap input:focus {
-        border-color: var(--color-accent);
-        box-shadow: 0 0 0 2px rgba(88,166,255,0.15);
-        outline: none;
-    }
-    .filter-btn-group {
-        display: flex;
-        gap: 0.25rem;
-        flex-wrap: wrap;
-    }
-    .filter-btn {
-        font-size: 0.72rem;
-        padding: 0.3rem 0.6rem;
-        border-radius: 5px;
-        border: 1px solid var(--border-color);
-        background: transparent;
-        color: var(--text-secondary);
-        cursor: pointer;
-        transition: all 0.15s;
-        white-space: nowrap;
-    }
-    .filter-btn:hover {
-        border-color: var(--color-accent);
-        color: var(--text-primary);
-    }
-    .filter-btn.active {
-        background: rgba(88,166,255,0.15);
-        border-color: var(--color-accent);
-        color: var(--color-accent);
-        font-weight: 600;
-    }
 
     /* ── Flowchart-like step display ── */
     .playbook-steps {
@@ -403,127 +240,110 @@
         border-color: var(--color-danger) !important;
     }
 
-    /* ── Duration estimate ── */
-    .duration-estimate {
-        font-size: 0.72rem;
-        color: var(--text-secondary);
-        display: inline-flex;
-        align-items: center;
-        gap: 0.25rem;
-    }
-
-    /* ── Last run info ── */
-    .last-run-info {
-        font-size: 0.68rem;
-        color: var(--text-secondary);
-        opacity: 0.8;
-    }
 </style>
 {% endblock %}
 
 {% block content %}
-<!-- Header -->
-<div class="d-flex justify-content-between align-items-center mb-3">
-    <p class="mb-0" style="color: var(--text-secondary);">
-        Pre-configured investigation workflows that automate common security operations.
-    </p>
-    <button class="btn btn-accent btn-sm" onclick="Playbooks.loadPlaybooks()">
-        <i class="bi bi-arrow-clockwise me-1"></i>Refresh
+<section class="playbooks-page" aria-label="Security playbooks">
+{% set tool_names = namespace(values=[]) %}
+{% for pb in playbooks | default([]) %}
+    {% set definition_steps = pb.steps | default(pb.steps_json | default([]), true) %}
+    {% for step in definition_steps %}
+        {% if step.tool is defined and step.tool is string and step.tool | trim and (step.tool | trim) not in tool_names.values %}
+            {% set tool_names.values = tool_names.values + [step.tool | trim] %}
+        {% endif %}
+    {% endfor %}
+{% endfor %}
+<header class="playbooks-heading">
+    <div class="playbooks-heading-copy">
+        <h1>SECURITY <span>PLAYBOOKS</span></h1>
+        <p>Pre-configured investigation workflows</p>
+    </div>
+    <button type="button" id="refreshPlaybooksBtn" class="btn playbooks-refresh" onclick="Playbooks.loadPlaybooks()">
+        <i class="bi bi-arrow-clockwise me-1" aria-hidden="true"></i>Refresh
     </button>
-</div>
+</header>
 
-<!-- Stats Bar -->
-<div class="playbook-stats-bar" id="playbookStatsBar">
-    <div class="stat-item">
-        <div class="stat-icon si-playbooks"><i class="bi bi-journal-code"></i></div>
-        <div>
-            <div class="stat-value" id="statTotalPlaybooks">0</div>
-            <div class="stat-label">Playbooks</div>
-        </div>
+<div class="playbook-stats-bar playbooks-stats" id="playbookStatsBar" aria-label="Playbook statistics">
+    <div class="stat-item playbooks-stat playbooks-stat-highlight">
+        <div class="stat-label">Playbooks</div>
+        <div class="stat-value" id="statTotalPlaybooks">0</div>
     </div>
-    <div class="stat-item">
-        <div class="stat-icon si-steps"><i class="bi bi-list-check"></i></div>
-        <div>
-            <div class="stat-value" id="statTotalSteps">0</div>
-            <div class="stat-label">Total Steps</div>
-        </div>
+    <div class="stat-item playbooks-stat">
+        <div class="stat-label">Total Steps</div>
+        <div class="stat-value" id="statTotalSteps">0</div>
     </div>
-    <div class="stat-item">
-        <div class="stat-icon si-tools"><i class="bi bi-wrench-adjustable"></i></div>
-        <div>
-            <div class="stat-value" id="statUniqueTools">0</div>
-            <div class="stat-label">Unique Tools</div>
-        </div>
+    <div class="stat-item playbooks-stat" id="statUniqueToolsTile">
+        <div class="stat-label">Unique Tools</div>
+        <div class="stat-value" id="statUniqueTools">{{ tool_names.values | length }}</div>
     </div>
-    <div class="stat-item">
-        <div class="stat-icon si-categories"><i class="bi bi-tags"></i></div>
-        <div>
-            <div class="stat-value" id="statCategories">0</div>
-            <div class="stat-label">Categories</div>
-        </div>
+    <div class="stat-item playbooks-stat">
+        <div class="stat-label">Categories</div>
+        <div class="stat-value" id="statCategories">0</div>
     </div>
 </div>
 
-<!-- Search & Filter Toolbar -->
-<div class="playbook-toolbar">
-    <div class="playbook-search-wrap">
-        <i class="bi bi-search"></i>
-        <input type="text" class="form-control" id="playbookSearchInput" placeholder="Search playbooks by name or description...">
-    </div>
-    <div class="filter-btn-group" id="categoryFilters">
-        <button class="filter-btn active" data-category="all"><i class="bi bi-grid-3x3-gap me-1"></i>All</button>
-        <button class="filter-btn" data-category="threat-intel"><i class="bi bi-shield-exclamation me-1"></i>Threat Intel</button>
-        <button class="filter-btn" data-category="incident-response"><i class="bi bi-exclamation-triangle me-1"></i>Incident Response</button>
-        <button class="filter-btn" data-category="malware-analysis"><i class="bi bi-bug me-1"></i>Malware Analysis</button>
-        <button class="filter-btn" data-category="phishing"><i class="bi bi-envelope-exclamation me-1"></i>Phishing</button>
-        <button class="filter-btn" data-category="forensics"><i class="bi bi-fingerprint me-1"></i>Forensics</button>
+<div id="playbookCategoryMeter" class="playbooks-meter" aria-hidden="true"></div>
+
+<div class="playbook-toolbar playbooks-toolbar">
+    <label class="playbook-search-wrap playbooks-search">
+        <span class="playbooks-search-prompt" aria-hidden="true">&gt;_</span>
+        <input type="search" class="form-control" id="playbookSearchInput" placeholder="search playbooks by name or description…" autocomplete="off" aria-label="Search playbooks by name or description">
+        <kbd class="playbooks-search-hint" aria-hidden="true">/</kbd>
+    </label>
+    <div class="filter-btn-group playbooks-filters" id="categoryFilters" role="group" aria-label="Filter playbooks by category">
+        <button type="button" class="filter-btn active" data-category="all">All</button>
+        <button type="button" class="filter-btn" data-category="threat-intel">Threat Intel</button>
+        <button type="button" class="filter-btn" data-category="incident-response">Incident Response</button>
+        <button type="button" class="filter-btn" data-category="malware-analysis">Malware Analysis</button>
+        <button type="button" class="filter-btn" data-category="phishing">Phishing</button>
+        <button type="button" class="filter-btn" data-category="forensics">Forensics</button>
     </div>
 </div>
 
-<!-- Playbook Cards -->
-<div class="row g-3" id="playbookGrid">
+<div class="playbooks-grid" id="playbookGrid">
     {% if playbooks %}
         {% for pb in playbooks %}
-        <div class="col-xl-4 col-md-6 playbook-col"
+        {% set pb_cat = (pb.category | default('general') | lower | replace('_', '-') | replace(' ', '-')) %}
+        {% set tt = (pb.trigger_type | default('manual')) | lower %}
+        <div class="playbook-col playbooks-col"
              data-pb-name="{{ pb.name | default('') | e }}"
              data-pb-desc="{{ pb.description | default('') | e }}"
-             data-pb-category="{{ pb.category | default('') | e }}">
-            <div class="playbook-card">
-                <div class="pb-title">
-                    <i class="bi bi-journal-code me-2 text-accent"></i>{{ pb.name | default('Unnamed') | e }}
+             data-pb-category="{{ pb_cat | e }}">
+            <article class="playbook-card playbooks-card">
+                <div class="pb-title playbooks-card-heading">
+                    <i class="bi {% if pb_cat == 'threat-intel' %}bi-shield-exclamation{% elif pb_cat == 'incident-response' %}bi-exclamation-triangle{% elif pb_cat == 'malware-analysis' %}bi-bug{% elif pb_cat == 'phishing' %}bi-envelope-exclamation{% elif pb_cat == 'forensics' %}bi-fingerprint{% else %}bi-journal-code{% endif %} me-2 text-accent" aria-hidden="true"></i>
+                    <span>{{ pb.name | default('Unnamed') | e }}</span>
                 </div>
-                <div class="pb-desc">{{ pb.description | default('No description available.') | e }}</div>
-                <div class="pb-meta">
-                    {% set tt = (pb.trigger_type | default('manual')) | lower %}
+                <p class="pb-desc playbooks-card-description">{{ pb.description | default('No description available.') | e }}</p>
+                <div class="pb-meta playbooks-card-tags">
                     <span class="trigger-badge trigger-{{ tt }}">{{ tt }}</span>
-                    <small class="text-muted">{{ pb.step_count | default((pb.steps | default([])) | length) }} steps</small>
+                    <small class="playbooks-step-count">{{ pb.step_count | default((pb.steps | default([])) | length) }} steps</small>
+                    <span class="category-badge cat-{{ pb_cat }}">{{ pb.category | default('General') | e }}</span>
                 </div>
-                <div class="d-flex gap-2">
-                    <button class="btn btn-outline-secondary btn-sm flex-grow-1 playbook-view-btn"
+                <div class="d-flex gap-2 playbooks-card-actions">
+                    <button type="button" class="btn btn-outline-secondary btn-sm flex-grow-1 playbook-view-btn playbooks-view-btn"
                             title="View Details"
                             data-playbook-id="{{ pb.id | default(pb.name | default('')) | e }}">
-                        <i class="bi bi-eye me-1"></i>View
+                        <i class="bi bi-eye me-1" aria-hidden="true"></i>View
                     </button>
-                    <button class="btn btn-accent btn-sm flex-grow-1 playbook-run-btn"
+                    <button type="button" class="btn btn-accent btn-sm flex-grow-1 playbook-run-btn playbooks-run-btn"
                             data-playbook-id="{{ pb.id | default(pb.name | default('')) | e }}"
                             data-playbook-name="{{ pb.name | default('') | e }}">
-                        <i class="bi bi-play-fill me-1"></i>Run
+                        <i class="bi bi-play-fill me-1" aria-hidden="true"></i>Run
                     </button>
                 </div>
-            </div>
+            </article>
         </div>
         {% endfor %}
     {% else %}
-        <div class="col-12">
-            <div class="card">
-                <div class="card-body text-center py-5 text-muted">
-                    <i class="bi bi-journal-x fs-1 d-block mb-2 opacity-50"></i>
-                    No playbooks found. Add YAML playbooks to the <code>data/playbooks/</code> directory.
-                </div>
-            </div>
+        <div class="playbooks-empty">
+            <i class="bi bi-journal-x fs-1 d-block mb-2 opacity-50" aria-hidden="true"></i>
+            No playbooks found. Add YAML playbooks to the <code>data/playbooks/</code> directory.
         </div>
     {% endif %}
 </div>
+</section>
 
 <!-- Run Playbook Modal -->
 <div class="modal fade" id="runPlaybookModal" tabindex="-1" aria-hidden="true">
@@ -719,9 +539,9 @@ var Playbooks = (function () {
             var steps = pb.steps || [];
             var sc = steps.length || pb.step_count || 0;
             totalSteps += sc;
-            steps.forEach(function(s) {
-                var t = s.tool || s.type;
-                if (t) allTools[t] = true;
+            var tools = Array.isArray(pb.tools) ? pb.tools : collectTools(steps);
+            tools.forEach(function(tool) {
+                if (typeof tool === 'string' && tool.trim()) allTools[tool.trim()] = true;
             });
             var cat = resolveCategory(pb);
             cats[cat] = true;

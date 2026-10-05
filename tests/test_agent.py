@@ -1555,26 +1555,54 @@ class TestFastAPIEndpoints:
     def test_get_playbooks_from_store(self, agent_store):
         from starlette.testclient import TestClient
 
-        agent_store.save_playbook("PB1", "Desc", [{"name": "s", "tool": "t"}])
+        agent_store.save_playbook("PB1", "Desc", [
+            {
+                "name": "s",
+                "tool": "t",
+                "params": {"secret_value": "must not be exposed"},
+                "condition": "private_condition",
+            },
+            {"name": "action", "action": "final_answer"},
+        ])
         app = self._build_app(agent_store)
         client = TestClient(app)
 
         resp = client.get("/api/playbooks")
         assert resp.status_code == 200
         data = resp.json()
-        assert len(data["playbooks"]) >= 1
+        playbook = next(pb for pb in data["playbooks"] if pb["name"] == "PB1")
+        assert playbook["tools"] == ["t"]
+        assert "steps" not in playbook
+        assert "secret_value" not in resp.text
+        assert "private_condition" not in resp.text
 
     def test_get_playbooks_from_engine(self, agent_store, playbook_engine):
         from starlette.testclient import TestClient
 
-        playbook_engine.register_playbook("Engine PB", "From engine", [{"name": "s", "tool": "t"}])
+        playbook_engine.register_playbook("Engine PB", "From engine", [
+            {
+                "name": "first",
+                "tool": "tool_z",
+                "params": {"sensitive": "not in list"},
+                "condition": "hidden condition",
+            },
+            {"name": "second", "tool": "tool_a"},
+            {"name": "repeat", "tool": "tool_z"},
+            {"name": "finish", "action": "final_answer"},
+        ])
         app = self._build_app(agent_store, playbook_engine=playbook_engine)
         client = TestClient(app)
 
         resp = client.get("/api/playbooks")
         assert resp.status_code == 200
-        names = [p["name"] for p in resp.json()["playbooks"]]
-        assert "Engine PB" in names
+        playbook = next(
+            pb for pb in resp.json()["playbooks"] if pb["name"] == "Engine PB"
+        )
+        assert playbook["tools"] == ["tool_a", "tool_z"]
+        assert all(isinstance(name, str) for name in playbook["tools"])
+        assert "steps" not in playbook
+        assert "sensitive" not in resp.text
+        assert "hidden condition" not in resp.text
 
     def test_get_mcp_servers_empty(self, agent_store):
         from starlette.testclient import TestClient

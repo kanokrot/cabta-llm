@@ -855,11 +855,30 @@ def is_tool_allowed(role: str, tool: Any) -> bool:
 
 def serialize_playbook(playbook: Mapping[str, Any], role: str, *, detail: bool = False) -> dict[str, Any]:
     authorize_flow(role, "playbook")
+    steps = playbook.get("steps")
+    if not isinstance(steps, list):
+        steps = playbook.get("steps_json")
+        if isinstance(steps, str):
+            try:
+                steps = json.loads(steps)
+            except (TypeError, json.JSONDecodeError):
+                steps = []
+    if not isinstance(steps, list):
+        steps = []
+
     output = {
         key: playbook.get(key)
         for key in ("id", "name", "category", "description", "step_count", "source", "trigger_type")
         if playbook.get(key) is not None
     }
+    if not detail:
+        output["tools"] = sorted({
+            tool.strip()
+            for step in steps
+            if isinstance(step, Mapping)
+            and isinstance((tool := step.get("tool")), str)
+            and tool.strip()
+        })
     if detail and role in {INCIDENT_RESPONDER, ADMIN}:
         output["steps"] = []
         if isinstance(playbook.get("steps"), list):
