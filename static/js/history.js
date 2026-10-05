@@ -30,6 +30,13 @@
     var summaryController = new AbortController();
     var requestNumber = 0;
     var searchTimer = null;
+    var rowsById = Object.create(null);
+    var activeRow = null;
+    var previousBodyOverflow = "";
+    var drawer = document.getElementById("historyDrawer");
+    var drawerBackdrop = document.getElementById("historyDrawerBackdrop");
+    var drawerBody = document.getElementById("historyDrawerBody");
+    var drawerClose = document.getElementById("historyDrawerClose");
 
     function groupClass(group) {
         return "history-g-" + (GROUPS.indexOf(group) >= 0 ? group : "unknown");
@@ -182,13 +189,136 @@
         return String(Math.floor(hours / 24)) + "d ago";
     }
 
+    function appendDetail(dl, label, value, className) {
+        var dt = document.createElement("dt");
+        dt.textContent = label;
+        var dd = document.createElement("dd");
+        if (className) dd.className = className;
+        dd.textContent = value === null || value === undefined || value === ""
+            ? "-" : String(value);
+        dl.append(dt, dd);
+    }
+
+    function renderDrawer(item) {
+        drawerBody.replaceChildren();
+
+        var group = item.verdict_group || "unknown";
+        var groupClassName = groupClass(group);
+        var heading = document.createElement("h3");
+        heading.textContent = targetFor(item);
+
+        var verdict = document.createElement("span");
+        verdict.className = "history-verdict history-drawer-verdict " + groupClassName;
+        verdict.textContent = item.verdict || LABELS[group] || "UNKNOWN";
+
+        var score = null;
+        if (item.score !== null && item.score !== undefined) {
+            score = Math.max(0, Math.min(100, numberValue(item.score)));
+        }
+        var scoreBlock = null;
+        if (score !== null) {
+            scoreBlock = document.createElement("div");
+            scoreBlock.className = "history-drawer-score " + groupClassName;
+            var scoreLabel = document.createElement("div");
+            scoreLabel.className = "history-drawer-score-label";
+            scoreLabel.textContent = "Risk score";
+            var scoreValue = document.createElement("div");
+            scoreValue.className = "history-drawer-score-value";
+            scoreValue.textContent = String(score);
+            var scoreSuffix = document.createElement("small");
+            scoreSuffix.textContent = "/100";
+            scoreValue.appendChild(scoreSuffix);
+            scoreBlock.append(scoreLabel, scoreValue);
+        }
+
+        var details = document.createElement("dl");
+        appendDetail(details, "ID", item.id);
+        appendDetail(details, "Type", item.analysis_type);
+        appendDetail(details, "Target", targetFor(item));
+        appendDetail(details, "Status", item.status, "history-drawer-status " + groupClassName);
+        appendDetail(details, "Created", item.created_at);
+        appendDetail(details, "Completed", item.completed_at);
+
+        var report = document.createElement("a");
+        report.className = "history-button history-drawer-report";
+        report.href = "/report/" + encodeURIComponent(String(item.id || ""));
+        report.textContent = "Open full report";
+
+        drawerBody.append(heading, verdict);
+        if (scoreBlock) drawerBody.appendChild(scoreBlock);
+        drawerBody.append(details);
+
+        if (item.status === "failed") {
+            var error = document.createElement("p");
+            error.className = "history-drawer-error";
+            error.textContent = item.current_step || "Analysis failed.";
+            drawerBody.appendChild(error);
+        }
+        drawerBody.appendChild(report);
+    }
+
+    function openDrawer(item, row) {
+        if (!item) return;
+        activeRow = row;
+        renderDrawer(item);
+        drawer.hidden = false;
+        drawerBackdrop.hidden = false;
+        drawer.classList.add("is-open");
+        previousBodyOverflow = document.body.style.overflow;
+        document.body.style.overflow = "hidden";
+        drawerClose.focus();
+    }
+
+    function closeDrawer(restoreFocus) {
+        if (drawer.hidden) return;
+        drawer.classList.remove("is-open");
+        drawer.hidden = true;
+        drawerBackdrop.hidden = true;
+        document.body.style.overflow = previousBodyOverflow;
+        previousBodyOverflow = "";
+        if (restoreFocus !== false && activeRow && document.body.contains(activeRow)) {
+            activeRow.focus();
+        }
+        activeRow = null;
+    }
+
+    function drawerFocusables() {
+        return Array.prototype.slice.call(drawer.querySelectorAll(
+            "button, a[href], input, select, textarea, [tabindex]:not([tabindex='-1'])"
+        ));
+    }
+
+    function handleDrawerKeydown(event) {
+        if (drawer.hidden) return;
+        if (event.key === "Escape") {
+            event.preventDefault();
+            closeDrawer();
+            return;
+        }
+        if (event.key !== "Tab") return;
+        var focusables = drawerFocusables();
+        if (!focusables.length) return;
+        var first = focusables[0];
+        var last = focusables[focusables.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+            event.preventDefault();
+            last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+            event.preventDefault();
+            first.focus();
+        }
+    }
+
     function renderRows(items) {
         var body = document.getElementById("tb");
+        closeDrawer(false);
+        rowsById = Object.create(null);
         body.replaceChildren();
 
         items.forEach(function (item) {
             var group = item.verdict_group || "unknown";
             var id = String(item.id || "");
+            rowsById[id] = item;
             var row = document.createElement("tr");
             row.className = "history-row " + groupClass(group);
             row.dataset.id = id;
@@ -297,6 +427,8 @@
         var currentRequest = ++requestNumber;
         if (listController) listController.abort();
         listController = new AbortController();
+        closeDrawer(false);
+        rowsById = Object.create(null);
 
         var params = new URLSearchParams({
             limit: String(state.limit),
@@ -392,12 +524,17 @@
             changePage(-1);
         } else if (event.target.id === "historyNext" && state.offset + state.limit < Number.MAX_SAFE_INTEGER) {
             changePage(1);
+        } else if (event.target === drawerBackdrop) {
+            closeDrawer();
+        } else if (event.target.closest("#historyDrawerClose")) {
+            closeDrawer();
         } else if (row && !event.target.closest("a")) {
-            window.location.assign("/report/" + encodeURIComponent(row.dataset.id));
+            openDrawer(rowsById[row.dataset.id], row);
         }
     });
 
     root.addEventListener("keydown", function (event) {
+        handleDrawerKeydown(event);
         var target = event.target;
         var editing = target.matches && target.matches("input, textarea, select") || target.isContentEditable;
         if (event.key === "/" && !event.ctrlKey && !event.metaKey && !event.altKey && !editing) {
@@ -408,9 +545,11 @@
             target.click();
         } else if (event.key === "Enter" && target.matches && target.matches(".history-row")) {
             event.preventDefault();
-            window.location.assign("/report/" + encodeURIComponent(target.dataset.id));
+            openDrawer(rowsById[target.dataset.id], target);
         }
     });
+
+    drawerClose.addEventListener("click", closeDrawer);
 
     document.getElementById("dt").addEventListener("change", function (event) {
         changeState("push", function () { state.range = event.target.value; });

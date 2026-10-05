@@ -107,6 +107,22 @@
             <button type="button" id="historyNext" class="history-button">Next</button>
         </span>
     </div>
+
+    <div id="historyDrawerBackdrop" class="history-drawer-backdrop" hidden></div>
+    <aside id="historyDrawer"
+           class="history-drawer"
+           role="dialog"
+           aria-modal="true"
+           aria-labelledby="historyDrawerTitle"
+           hidden>
+        <div class="history-drawer-header">
+            <h2 id="historyDrawerTitle">Analysis detail</h2>
+            <button type="button" id="historyDrawerClose" class="history-button">
+                Close
+            </button>
+        </div>
+        <div id="historyDrawerBody" class="history-drawer-body"></div>
+    </aside>
 </section>
 {% endblock %}
 

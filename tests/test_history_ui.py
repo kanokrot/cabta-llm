@@ -18,7 +18,8 @@ def test_history_template_has_static_shell_and_seven_cards() -> None:
     for element_id in (
         "historyPage", "stats", "dist", "q", "ty", "dt", "chips",
         "historySummaryError", "historyLoading", "historyError", "tb",
-        "em", "cnt", "historyPrev", "historyNext",
+        "em", "cnt", "historyPrev", "historyNext", "historyDrawer",
+        "historyDrawerBackdrop", "historyDrawerBody", "historyDrawerClose",
     ):
         assert f'id="{element_id}"' in source
 
@@ -39,6 +40,13 @@ def test_history_template_has_static_shell_and_seven_cards() -> None:
     assert "{{ jobs" not in source
     assert "{% if jobs" not in source
     assert "{% for job" not in source
+    history_section = source.split('<section id="historyPage"', 1)[1].split("</section>", 1)[0]
+    assert 'id="historyDrawer"' in history_section
+    assert 'id="historyDrawerBackdrop"' in history_section
+    assert 'id="historyDrawerBody"' in history_section
+    assert 'id="historyDrawerClose"' in history_section
+    assert 'role="dialog"' in history_section
+    assert 'aria-modal="true"' in history_section
 
 
 def test_history_js_uses_dom_text_rendering_and_scoped_events() -> None:
@@ -46,6 +54,9 @@ def test_history_js_uses_dom_text_rendering_and_scoped_events() -> None:
 
     assert "innerHTML" not in source
     assert "textContent" in source
+    assert "event.key === \"Escape\"" in source
+    assert "encodeURIComponent" in source
+    assert "historyDrawer" in source
     assert 'getElementById("historyPage")' in source
     assert 'document.addEventListener("click"' not in source
     assert "AbortController" in source
