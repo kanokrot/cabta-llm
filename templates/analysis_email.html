@@ -845,14 +845,26 @@
         width: 90px;
     }
     .ea-recent-score-fill { height: 100%; }
-    .ea-recent-score-fill.ea-score-safe,
-    .ea-recent-verdict.ea-score-safe { background: rgba(var(--bs-success-rgb), 0.9); color: rgba(var(--bs-success-rgb), 1); }
-    .ea-recent-score-fill.ea-score-medium,
-    .ea-recent-verdict.ea-score-medium { background: rgba(var(--bs-warning-rgb), 0.9); color: rgba(var(--bs-warning-rgb), 1); }
-    .ea-recent-score-fill.ea-score-phishing,
-    .ea-recent-verdict.ea-score-phishing { background: rgba(var(--bs-danger-rgb), 0.9); color: rgba(var(--bs-danger-rgb), 1); }
-    .ea-recent-score-fill.ea-score-unknown,
-    .ea-recent-verdict.ea-score-unknown { background: var(--text-primary); color: var(--text-primary); }
+    .ea-recent-score-fill.ea-score-safe { background: rgba(var(--bs-success-rgb), 0.9); }
+    .ea-recent-verdict.ea-score-safe {
+        background: color-mix(in srgb, var(--bs-success) 14%, transparent);
+        color: var(--bs-success);
+    }
+    .ea-recent-score-fill.ea-score-medium { background: rgba(var(--bs-warning-rgb), 0.9); }
+    .ea-recent-verdict.ea-score-medium {
+        background: color-mix(in srgb, var(--bs-warning) 14%, transparent);
+        color: var(--bs-warning);
+    }
+    .ea-recent-score-fill.ea-score-phishing { background: rgba(var(--bs-danger-rgb), 0.9); }
+    .ea-recent-verdict.ea-score-phishing {
+        background: color-mix(in srgb, var(--bs-danger) 14%, transparent);
+        color: var(--bs-danger);
+    }
+    .ea-recent-score-fill.ea-score-unknown { background: var(--text-primary); }
+    .ea-recent-verdict.ea-score-unknown {
+        background: color-mix(in srgb, var(--text-primary) 10%, transparent);
+        color: var(--text-primary);
+    }
 
     /* E2.2 contrast and layout corrections */
     .ea-upload-card .email-drop-zone {
@@ -2342,9 +2354,9 @@
             if (scoreField !== null && typeof scoreField !== 'undefined' && scoreField !== '' && isFinite(Number(scoreField))) {
                 scoreValue = Math.max(0, Math.min(100, Number(scoreField)));
             }
-            var storedVerdict = r.verdict === null || typeof r.verdict === 'undefined' ? '' : String(r.verdict).toUpperCase();
+            var rawVerdict = r.verdict === null || typeof r.verdict === 'undefined' ? '' : String(r.verdict);
+            var storedVerdict = rawVerdict.toUpperCase();
             var scoreBand = storedVerdict === 'PHISHING' || storedVerdict === 'MALICIOUS' ? 'ea-score-phishing' : storedVerdict === 'SUSPICIOUS' ? 'ea-score-medium' : storedVerdict === 'CLEAN' ? 'ea-score-safe' : 'ea-score-unknown';
-            var scoreLabel = scoreBand === 'ea-score-safe' ? 'Safe' : scoreBand === 'ea-score-medium' ? 'Medium' : scoreBand === 'ea-score-phishing' ? 'Phishing' : 'Unknown';
 
             var item = document.createElement('div');
             item.className = 'recent-item ea-recent-row';
@@ -2367,18 +2379,11 @@
 
             var result = document.createElement('div');
             result.className = 'ea-recent-result';
-            if (r.verdict !== null && typeof r.verdict !== 'undefined' && r.verdict !== '') {
-                var verdict = document.createElement('span');
-                verdict.className = 'ea-recent-verdict ' + scoreBand;
-                verdict.textContent = String(r.verdict).toUpperCase();
-                result.appendChild(verdict);
-            }
+            var verdict = document.createElement('span');
+            verdict.className = 'ea-recent-verdict ' + scoreBand;
+            verdict.textContent = rawVerdict || 'UNKNOWN';
+            result.appendChild(verdict);
             if (scoreValue !== null) {
-                var level = document.createElement('span');
-                level.className = 'ea-recent-level ' + scoreBand;
-                level.textContent = scoreLabel.toUpperCase();
-                result.appendChild(level);
-
                 var track = document.createElement('span');
                 track.className = 'ea-recent-score-track';
                 var fill = document.createElement('span');
@@ -2611,13 +2616,21 @@
                     }
 
                     /* --- Save to recent analyses in localStorage --- */
+                    var recentRiskScore = data.phishingRisk ? data.phishingRisk.score : 0;
+                    var recentSummary = data.phishingRisk && data.phishingRisk.indicatorSummary;
+                    if (recentSummary && typeof recentSummary === 'object') {
+                        var recentFound = Number(recentSummary.found);
+                        var recentCheckable = Number(recentSummary.checkable);
+                        recentRiskScore = isFinite(recentFound) && isFinite(recentCheckable) && recentCheckable > 0
+                            ? Math.round(100 * recentFound / recentCheckable) : null;
+                    }
                     saveRecentAnalysis({
                         filename: uploadedFile.name,
                         subject: data.subject || uploadedFile.name,
                         sender: data.sender ? data.sender.email : '',
                         verdict: data.verdict || null,
                         date: new Date().toLocaleString(),
-                        riskScore: data.phishingRisk ? data.phishingRisk.score : 0
+                        riskScore: recentRiskScore
                     });
                 },
                 onError: function (err) {
