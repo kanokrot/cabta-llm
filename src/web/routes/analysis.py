@@ -5,6 +5,7 @@ Analysis API endpoints.
 
 import asyncio
 import hashlib
+import inspect
 import logging
 import tempfile
 import threading
@@ -107,6 +108,50 @@ async def _read_file_upload_with_limit(file: UploadFile) -> bytes:
 # Background analysis helpers
 # ------------------------------------------------------------------
 
+def _step_manifest(step_definitions):
+    return [
+        {'key': key, 'label': label, 'state': 'pending'}
+        for key, label in step_definitions
+    ]
+
+
+def _step_callback(mgr, job_id, step_definitions):
+    steps = _step_manifest(step_definitions)
+    by_key = {step['key']: step for step in steps}
+
+    def on_step(step_key, state):
+        step = by_key.get(step_key)
+        if step is None:
+            return
+        step['state'] = state
+        done = sum(
+            item['state'] in {'completed', 'skipped'} for item in steps
+        )
+        progress = round(100 * done / len(steps)) if steps else 0
+        update_steps = getattr(mgr, 'update_steps', None)
+        if callable(update_steps):
+            update_steps(
+                job_id,
+                steps,
+                progress,
+                current_step=step['label'],
+            )
+
+    return steps, on_step
+
+
+async def _analyze_with_steps(analyzer, path, job_id, user_id, on_step):
+    analyze = analyzer.analyze
+    parameters = inspect.signature(analyze).parameters.values()
+    accepts_callback = (
+        'on_step' in inspect.signature(analyze).parameters
+        or any(parameter.kind == inspect.Parameter.VAR_KEYWORD for parameter in parameters)
+    )
+    kwargs = {'analysis_id': job_id, 'user_id': user_id}
+    if accepts_callback:
+        kwargs['on_step'] = on_step
+    return await analyze(path, **kwargs)
+
 def _run_email_analysis_bg(
     mgr,
     job_id: str,
@@ -116,32 +161,22 @@ def _run_email_analysis_bg(
 ) -> None:
     """Run email analysis in a background thread."""
     try:
-        mgr.update_progress(job_id, 5, 'Loading email analyzer...')
-        from src.tools.email_analyzer import EmailAnalyzer
+        from src.tools.email_analyzer import EmailAnalyzer, EMAIL_ANALYSIS_STEPS
         config = _load_config()
         analyzer = EmailAnalyzer(config)
         if shared_email_analyzer is not None:
             analyzer.ioc_investigator = getattr(shared_email_analyzer, 'ioc_investigator', None)
             analyzer.file_analyzer = getattr(shared_email_analyzer, 'file_analyzer', None)
 
-        mgr.update_progress(job_id, 10, 'Parsing email headers...')
-        mgr.update_progress(job_id, 20, 'Analyzing authentication (SPF/DKIM/DMARC)...')
-        mgr.update_progress(job_id, 35, 'Running forensics analysis...')
-        mgr.update_progress(job_id, 45, 'Checking link mismatches...')
-        mgr.update_progress(job_id, 55, 'Detecting lookalike domains...')
-        mgr.update_progress(job_id, 65, 'Analyzing HTML obfuscation...')
+        _, on_step = _step_callback(mgr, job_id, EMAIL_ANALYSIS_STEPS)
 
-        result = asyncio.run(
-            analyzer.analyze(eml_path, analysis_id=job_id, user_id=user_id)
-        )
-
-        mgr.update_progress(job_id, 80, 'Generating detection rules...')
-        mgr.update_progress(job_id, 85, 'Running AI analysis...')
+        result = asyncio.run(_analyze_with_steps(
+            analyzer, eml_path, job_id, user_id, on_step,
+        ))
 
         verdict = result.get('verdict', 'UNKNOWN')
         score = result.get('composite_score', result.get('base_phishing_score', 0))
 
-        mgr.update_progress(job_id, 95, 'Saving results...')
         mgr.complete_job(job_id, result, verdict=verdict, score=score)
 
     except Exception as e:
@@ -154,28 +189,19 @@ def _run_file_analysis_bg(
 ) -> None:
     """Run file/malware analysis in a background thread."""
     try:
-        mgr.update_progress(job_id, 5, 'Loading malware analyzer...')
-        from src.tools.malware_analyzer import MalwareAnalyzer
+        from src.tools.malware_analyzer import MalwareAnalyzer, MALWARE_ANALYSIS_STEPS
         config = _load_config()
         analyzer = MalwareAnalyzer(config)
 
-        mgr.update_progress(job_id, 10, 'Computing file hashes...')
-        mgr.update_progress(job_id, 15, 'Running PE analysis...')
-        mgr.update_progress(job_id, 25, 'Analyzing strings (FLOSS)...')
-        mgr.update_progress(job_id, 35, 'Running YARA rules...')
-        mgr.update_progress(job_id, 45, 'Computing entropy...')
-        mgr.update_progress(job_id, 55, 'Querying sandbox APIs...')
+        _, on_step = _step_callback(mgr, job_id, MALWARE_ANALYSIS_STEPS)
 
-        result = asyncio.run(
-            analyzer.analyze(file_path, analysis_id=job_id, user_id=user_id)
-        )
+        result = asyncio.run(_analyze_with_steps(
+            analyzer, file_path, job_id, user_id, on_step,
+        ))
 
         verdict = result.get('verdict', 'UNKNOWN')
         score = result.get('composite_score', result.get('threat_score', 0))
 
-        mgr.update_progress(job_id, 85, 'Generating MITRE ATT&CK mapping...')
-        mgr.update_progress(job_id, 90, 'Generating detection rules...')
-        mgr.update_progress(job_id, 95, 'Saving results...')
         mgr.complete_job(job_id, result, verdict=verdict, score=score)
 
     except Exception as e:
@@ -280,6 +306,7 @@ async def analyze_file(
     ),
 ):
     """Upload and analyze a file."""
+    from src.tools.malware_analyzer import MALWARE_ANALYSIS_STEPS
     mgr = request.app.state.analysis_manager
 
     # Read file content
@@ -299,6 +326,7 @@ async def analyze_file(
             'sha256': sha256,
             'size': len(content),
             'temp_path': tmp_path,
+            '_analysis_steps': _step_manifest(MALWARE_ANALYSIS_STEPS),
         },
         user_id=current_user['id'],
     )
@@ -329,6 +357,7 @@ async def analyze_email(
     ),
 ):
     """Upload and analyze an email (.eml)."""
+    from src.tools.email_analyzer import EMAIL_ANALYSIS_STEPS
     mgr = request.app.state.analysis_manager
 
     content = await _read_email_upload_with_limit(file)
@@ -344,6 +373,7 @@ async def analyze_email(
             'filename': file.filename,
             'sha256': sha256,
             'temp_path': tmp_path,
+            '_analysis_steps': _step_manifest(EMAIL_ANALYSIS_STEPS),
         },
         user_id=current_user['id'],
     )

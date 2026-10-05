@@ -59,6 +59,26 @@ _SUSPICIOUS_EMAIL_TLDS = (
     '.work', '.gq', '.tk', '.ml', '.ga', '.cf',
 )
 
+EMAIL_ANALYSIS_STEPS = (
+    ('parsing', 'Parse email'),
+    ('headers', 'Analyze headers'),
+    ('forensics', 'Email forensics'),
+    ('authentication', 'Authentication checks'),
+    ('link_analysis', 'Link mismatch detection'),
+    ('lookalike_detection', 'Lookalike domain detection'),
+    ('html_obfuscation', 'HTML obfuscation analysis'),
+    ('qr_detection', 'QR code detection'),
+    ('brand_impersonation', 'Brand impersonation detection'),
+    ('template_fingerprint', 'Template fingerprinting'),
+    ('threat_indicators', 'Threat indicator checks'),
+    ('bec_detection', 'BEC detection'),
+    ('scoring', 'Indicator scoring'),
+    ('ioc_investigation', 'IOC investigation'),
+    ('attachment_analysis', 'Attachment analysis'),
+    ('llm_analysis', 'AI analysis'),
+    ('detection_rules', 'Detection rule generation'),
+)
+
 
 def _is_allowlisted_email_url(url: str) -> bool:
     """Return whether a URL host matches the shared IOC domain allowlist."""
@@ -154,6 +174,7 @@ class EmailAnalyzer:
     
     async def analyze(
         self, email_path: str, analysis_id: str = None, user_id: int = None,
+        on_step=None,
     ) -> Dict:
         """
         Comprehensive email analysis with SOC-grade techniques.
@@ -170,20 +191,36 @@ class EmailAnalyzer:
         raw_collector = RawOutputCollector()
         raw_collector.record_pipeline_step('init', 'email_analysis_start', 'started')
         capability_errors = []
+        active_step = None
+
+        def report_step(step_key, state):
+            nonlocal active_step
+            if state == 'started':
+                active_step = step_key
+            elif state in ('completed', 'skipped', 'failed') and active_step == step_key:
+                active_step = None
+            if on_step is not None:
+                try:
+                    on_step(step_key, state)
+                except Exception as exc:
+                    logger.warning('[EMAIL] Step callback failed: %s', exc)
         
         try:
             # Parse email
+            report_step('parsing', 'started')
             with open(email_path, 'rb') as f:
                 msg = email.message_from_binary_file(f, policy=policy.default)
             
             # ==================== BASIC EXTRACTION ====================
             email_data = await self._extract_email_data(msg)
             raw_collector.record_pipeline_step('parsing', 'basic_extraction', 'completed')
+            report_step('parsing', 'completed')
             
             # ==================== ADVANCED ANALYSIS ====================
             
             # 1. Advanced Header Analysis
             logger.info("[EMAIL] Performing advanced header analysis...")
+            report_step('headers', 'started')
             header_analysis = self.advanced_analyzer.analyze_headers(msg)
             
             # Capture headers for raw output
@@ -200,9 +237,11 @@ class EmailAnalyzer:
                 'raw': str(msg)[:5000]
             })
             raw_collector.record_pipeline_step('headers', 'header_analysis', 'completed')
+            report_step('headers', 'completed')
             
             # 2. DFIR-Grade Email Forensics (NEW!)
             logger.info("[EMAIL] Performing DFIR-grade forensics...")
+            report_step('forensics', 'started')
             forensics = EmailForensics.perform_full_forensics(
                 msg, 
                 email_data['from'],
@@ -210,8 +249,10 @@ class EmailAnalyzer:
             )
             raw_collector.capture_forensics_results(forensics)
             raw_collector.record_pipeline_step('forensics', 'dfir_forensics', 'completed')
+            report_step('forensics', 'completed')
             
             # 3. Authentication Check
+            report_step('authentication', 'started')
             email_data['spf'] = self._check_spf(msg)
             email_data['dkim'] = self._check_dkim(msg)
             email_data['dmarc'] = self._check_dmarc(msg)
@@ -225,32 +266,42 @@ class EmailAnalyzer:
                 'overall_pass': all(r.lower() == 'pass' for r in [email_data['spf'], email_data['dkim'], email_data['dmarc']] if r)
             })
             raw_collector.record_pipeline_step('auth', 'authentication_check', 'completed')
+            report_step('authentication', 'completed')
             
             # 3. Link-Text Mismatch Detection
             logger.info("[EMAIL] Detecting link-text mismatches...")
+            report_step('link_analysis', 'started')
             link_mismatches = self.advanced_analyzer.detect_link_text_mismatch(email_data['body_html'])
+            report_step('link_analysis', 'completed')
             
             # 4. Lookalike Domain Detection
             logger.info("[EMAIL] Detecting lookalike domains...")
+            report_step('lookalike_detection', 'started')
             all_domains = email_data['domains'] + [
                 url.split('/')[2] if '//' in url else url 
                 for url in email_data['urls']
             ]
             lookalike_domains = self.advanced_analyzer.detect_lookalike_domains(list(set(all_domains)))
+            report_step('lookalike_detection', 'completed')
             
             # 5. HTML Obfuscation Analysis
             logger.info("[EMAIL] Analyzing HTML obfuscation...")
+            report_step('html_obfuscation', 'started')
             html_obfuscation = self.advanced_analyzer.analyze_html_obfuscation(email_data['body_html'])
+            report_step('html_obfuscation', 'completed')
             
             # 6. QR Code Detection
             logger.info("[EMAIL] Detecting QR codes...")
+            report_step('qr_detection', 'started')
             qr_detection = self.advanced_analyzer.detect_qr_codes(
                 email_data['body_html'], 
                 email_data['attachments']
             )
+            report_step('qr_detection', 'completed')
             
             # 7. Brand Impersonation Detection
             logger.info("[EMAIL] Detecting brand impersonation...")
+            report_step('brand_impersonation', 'started')
             brand_impersonation = self.advanced_analyzer.detect_brand_impersonation(
                 email_data['from'],
                 email_data['subject'],
@@ -269,12 +320,16 @@ class EmailAnalyzer:
                     'count': 0,
                 }
             
+            report_step('brand_impersonation', 'completed')
+
             # 8. Email Template Fingerprinting
             logger.info("[EMAIL] Fingerprinting email template...")
+            report_step('template_fingerprint', 'started')
             template_fingerprint = self.advanced_analyzer.fingerprint_email_template(
                 email_data['body_html'],
                 email_data['subject']
             )
+            report_step('template_fingerprint', 'completed')
             
             # 9. Transfer forensics score to email_data for base scoring
             email_data['forensics_score'] = forensics.get('forensics_score', 0)
@@ -282,6 +337,7 @@ class EmailAnalyzer:
 
             # 10. Enhanced Threat Indicator Checks (10 new checks)
             logger.info("[EMAIL] Running enhanced threat indicator checks...")
+            report_step('threat_indicators', 'started')
             threat_indicators = EmailThreatIndicators.run_all_checks(
                 msg=msg,
                 html_body=email_data['body_html'],
@@ -298,9 +354,11 @@ class EmailAnalyzer:
                 f"score_impact=+{threat_indicators['total_score_impact']}"
             )
             raw_collector.record_pipeline_step('threat_indicators', 'enhanced_checks', 'completed')
+            report_step('threat_indicators', 'completed')
 
             # 11. BEC (Business Email Compromise) Detection
             logger.info("[EMAIL] Running BEC detection...")
+            report_step('bec_detection', 'started')
             from_name, from_email_addr = parseaddr(email_data['from'])
             auth_results_header = msg.get('Authentication-Results', '')
             bec_email_data = {
@@ -318,8 +376,10 @@ class EmailAnalyzer:
                 f"indicators={bec_results['indicator_count']}"
             )
             raw_collector.record_pipeline_step('bec_detection', 'bec_analysis', 'completed')
+            report_step('bec_detection', 'completed')
 
             # ==================== INDICATOR SCORING ====================
+            report_step('scoring', 'started')
             indicator_summary = self._build_indicator_summary(
                 email_data,
                 header_analysis,
@@ -349,14 +409,18 @@ class EmailAnalyzer:
                 auth_presence=auth_presence,
                 indicator_summary=indicator_summary,
             )
+            report_step('scoring', 'completed')
             
             # ==================== CROSS-TOOL INTEGRATION ====================
             
             # Investigate IOCs
             ioc_results = []
             if self.ioc_investigator:
+                report_step('ioc_investigation', 'started')
                 ioc_results = await self._investigate_iocs(email_data, capability_errors)
+                report_step('ioc_investigation', 'completed')
             else:
+                report_step('ioc_investigation', 'skipped')
                 _append_capability_error(
                     capability_errors,
                     'ioc_investigator',
@@ -367,10 +431,13 @@ class EmailAnalyzer:
             # Analyze attachments
             attachment_results = []
             if self.file_analyzer:
+                report_step('attachment_analysis', 'started')
                 attachment_results = await self._analyze_attachments(
                     msg, email_data, capability_errors
                 )
+                report_step('attachment_analysis', 'completed')
             else:
+                report_step('attachment_analysis', 'skipped')
                 _append_capability_error(
                     capability_errors,
                     'file_analyzer',
@@ -389,6 +456,7 @@ class EmailAnalyzer:
             llm_analysis = {}
             rag_context = []
             if self.config.get('analysis', {}).get('enable_llm', True):
+                report_step('llm_analysis', 'started')
                 if self.rag_kb:
                     try:
                         rag_query = (
@@ -433,8 +501,12 @@ class EmailAnalyzer:
                     email_context,
                     rag_context=rag_context,
                 )
+                report_step('llm_analysis', 'completed')
+            else:
+                report_step('llm_analysis', 'skipped')
             
             # ==================== FINAL RESULT ====================
+            report_step('detection_rules', 'started')
             result = {
                 'email_data': email_data,
                 'advanced_analysis': {
@@ -485,6 +557,7 @@ class EmailAnalyzer:
                     'malicious_iocs': [r.get('ioc') for r in ioc_results if r.get('verdict') == 'MALICIOUS'][:10]
                 })
             }
+            report_step('detection_rules', 'completed')
 
             if 'ioc' not in result:
                 result['ioc'] = email_data.get('from', 'unknown')
@@ -547,6 +620,8 @@ class EmailAnalyzer:
             return result
         
         except Exception as e:
+            if active_step:
+                report_step(active_step, 'failed')
             logger.error(f"[EMAIL] Analysis failed: {e}", exc_info=True)
             return {'error': str(e)}
     

@@ -624,11 +624,32 @@ def serialize_response(payload: Dict[str, Any], *, role: str, flow: str) -> dict
 
 def serialize_status(job: Dict[str, Any], role: str = SOC) -> dict[str, Any]:
     authorize_flow(role, "analysis")
+    params = job.get("params")
+    if not isinstance(params, Mapping):
+        params = {}
+    steps = []
+    for raw_step in params.get("_analysis_steps", []):
+        if not isinstance(raw_step, Mapping):
+            continue
+        key = _text(raw_step.get("key"), 100)
+        label = _text(raw_step.get("label"), 200)
+        state = _text(raw_step.get("state"), 20)
+        if not key or not label or state not in {
+            "pending", "started", "completed", "skipped", "failed"
+        }:
+            continue
+        steps.append({"key": key, "label": label, "state": state})
+    steps_done = sum(
+        step["state"] in {"completed", "skipped"} for step in steps
+    )
     return {
         "analysis_id": job.get("id"), "status": job.get("status"),
         "progress": job.get("progress", 0),
         "current_step": _text(job.get("current_step", ""), 200),
         "verdict": job.get("verdict"), "score": job.get("score"),
+        "steps": steps,
+        "steps_total": len(steps),
+        "steps_done": steps_done,
     }
 
 
