@@ -149,6 +149,54 @@ def test_patch_incident_report_updates_fields(client_and_store):
     assert response.json()["findings"] == ["Confirmed"]
 
 
+def test_incident_report_serializes_all_attack_evidence_fields_after_post_and_patch(
+    client_and_store,
+):
+    client, store = client_and_store
+    case_id = store.create_case("Incident report serializer round trip")
+    evidence_fields = {
+        "attack_outcome": "Account compromised",
+        "occurrence_note": "Suspicious login followed by data access",
+        "detected_at": "2026-08-24 05:16",
+        "detection_device": "EDR-17",
+    }
+    payload = {
+        "threat_type": "Credential theft",
+        "threat_description": "Test incident",
+        "attacker_ip": "198.51.100.10",
+        "target_ip": "10.0.0.9",
+        "affected_username": "analyst-test",
+        **evidence_fields,
+        "severity_4tier": "High",
+        "findings": ["Unexpected sign-in"],
+        "analysis": ["Source IP was unfamiliar"],
+        "impact": ["One account accessed"],
+        "remediation": ["Reset credentials"],
+        "reference": ["CASE-ROUND-TRIP"],
+    }
+
+    created = client.post(f"/cases/{case_id}/incident-report", json=payload)
+    fetched_after_post = client.get(f"/cases/{case_id}/incident-report")
+    print("POST response evidence fields:", {key: created.json()[key] for key in evidence_fields})
+    print("GET after POST evidence fields:", {key: fetched_after_post.json()[key] for key in evidence_fields})
+
+    patched_value = "Account contained before data exfiltration"
+    patched = client.patch(
+        f"/cases/{case_id}/incident-report", json={"attack_outcome": patched_value}
+    )
+    fetched_after_patch = client.get(f"/cases/{case_id}/incident-report")
+    expected_after_patch = {**evidence_fields, "attack_outcome": patched_value}
+    print("PATCH response evidence fields:", {key: patched.json()[key] for key in evidence_fields})
+    print("GET after PATCH evidence fields:", {key: fetched_after_patch.json()[key] for key in evidence_fields})
+
+    assert created.status_code == 200
+    assert fetched_after_post.status_code == 200
+    assert {key: fetched_after_post.json()[key] for key in evidence_fields} == evidence_fields
+    assert patched.status_code == 200
+    assert fetched_after_patch.status_code == 200
+    assert {key: fetched_after_patch.json()[key] for key in evidence_fields} == expected_after_patch
+
+
 def test_get_incident_report_returns_404_when_missing(client_and_store):
     client, store = client_and_store
     case_id = store.create_case("No incident report")

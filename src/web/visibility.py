@@ -897,7 +897,8 @@ def serialize_case(case: Mapping[str, Any], role: str) -> dict[str, Any]:
 def serialize_case_report(report: Mapping[str, Any], role: str) -> dict[str, Any]:
     authorize_flow(role, "case")
     allowed = ("case_id", "threat_type", "threat_description", "attacker_ip", "target_ip",
-               "affected_username", "findings", "analysis", "impact", "remediation", "reference",
+               "affected_username", "attack_outcome", "occurrence_note", "detected_at",
+               "detection_device", "findings", "analysis", "impact", "remediation", "reference",
                "severity_4tier", "created_at", "updated_at")
     output = {}
     for key in allowed:

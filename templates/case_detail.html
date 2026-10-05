@@ -7,6 +7,7 @@
 {% block page_subtitle %}<span class="page-subtitle">{{ case.title | default('') | e }}</span>{% endblock %}
 
 {% block extra_head %}
+<link rel="stylesheet" href="/static/css/case_detail.css?v=1">
 <style>
     .case-meta dt {
         font-weight: 600;
@@ -40,213 +41,187 @@
 {% endblock %}
 
 {% block content %}
-<!-- Back button + status controls -->
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <a href="/cases" class="btn btn-outline-secondary">
-        <i class="bi bi-arrow-left me-1"></i>Back to Cases
-    </a>
-    <div class="d-flex align-items-center gap-2">
-        <label for="statusSelect" class="form-label mb-0" style="color: var(--text-secondary); font-size: 0.85rem;">
-            Status:
-        </label>
-        <select id="statusSelect" class="form-select form-select-sm" style="width: auto;">
-            <option value="Open" {% if case.status == 'Open' %}selected{% endif %}>Open</option>
-            <option value="Investigating" {% if case.status == 'Investigating' %}selected{% endif %}>Investigating</option>
-            <option value="Resolved" {% if case.status == 'Resolved' %}selected{% endif %}>Resolved</option>
-            <option value="Closed" {% if case.status == 'Closed' %}selected{% endif %}>Closed</option>
-        </select>
-    </div>
-</div>
+<div class="case-detail-page">
+    <a href="/cases" class="case-detail-back">&larr; Back to cases</a>
+    <header class="case-detail-header">
+        <div>
+            <h1>Case <b>Detail</b></h1>
+            <div class="case-detail-subtitle">Summary · incident report · linked analyses · notes</div>
+        </div>
+        <a id="downloadIncidentReportPdfBtn" class="case-detail-download disabled"
+           href="#" aria-disabled="true">&#8681; Download PDF</a>
+    </header>
 
-<!-- Case Overview Card -->
-<div class="card mb-4">
-    <div class="card-header">
-        <h5 class="mb-0"><i class="bi bi-folder2-open me-2"></i>{{ case.title | e }}</h5>
-    </div>
-    <div class="card-body">
-        <div class="row">
-            <div class="col-lg-8">
-                {% if case.description %}
-                <p style="color: var(--text-primary); white-space: pre-wrap;">{{ case.description | e }}</p>
-                {% else %}
-                <p style="color: var(--text-secondary);">No description provided.</p>
-                {% endif %}
+    <section class="card case-summary-card" aria-labelledby="caseSummaryTitle">
+        <div class="case-summary-top">
+            <div class="case-summary-info">
+                <div class="case-summary-id-row"><span class="case-id-chip" title="{{ case.id | e }}">{{ case.id | e }}</span></div>
+                <h2 id="caseSummaryTitle">{{ case.title | default('Untitled case') | e }}</h2>
+                <p>{{ case.description | default('') | e if case.description else 'No description provided.' }}</p>
             </div>
-            <div class="col-lg-4">
-                <dl class="case-meta">
-                    <dt>Case ID</dt>
-                    <dd><code>{{ case.id | e }}</code></dd>
-                    <dt>Severity</dt>
-                    <dd>
-                        {% if case.severity == 'critical' %}
-                            <span class="badge badge-danger">Critical</span>
-                        {% elif case.severity == 'high' %}
-                            <span class="badge" style="background-color: #e65100;">High</span>
-                        {% elif case.severity == 'medium' %}
-                            <span class="badge badge-warning">Medium</span>
-                        {% elif case.severity == 'low' %}
-                            <span class="badge badge-info">Low</span>
-                        {% else %}
-                            <span class="badge badge-info">{{ case.severity | default('N/A') | e }}</span>
-                        {% endif %}
-                    </dd>
-                    <dt>Status</dt>
-                    <dd>
-                        {% if case.status == 'Open' %}
-                            <span class="badge badge-primary" id="statusBadge">Open</span>
-                        {% elif case.status == 'Investigating' %}
-                            <span class="badge badge-warning" id="statusBadge">Investigating</span>
-                        {% elif case.status == 'Resolved' %}
-                            <span class="badge badge-success" id="statusBadge">Resolved</span>
-                        {% elif case.status == 'Closed' %}
-                            <span class="badge badge-info" id="statusBadge">Closed</span>
-                        {% else %}
-                            <span class="badge badge-info" id="statusBadge">{{ case.status | default('N/A') | e }}</span>
-                        {% endif %}
-                    </dd>
-                    <dt>Created</dt>
-                    <dd>{{ case.created_at | default('N/A') | e }}</dd>
-                </dl>
+            <div class="case-summary-status">
+                <label class="case-status-label" for="statusSelect">Status</label>
+                <div class="case-status-segments" id="statusSelect" role="group" aria-label="Case status">
+            {% for status in ['Open', 'Investigating', 'Resolved', 'Closed'] %}
+            <button type="button" class="case-status-segment{% if case.status == status %} is-current{% endif %}" data-case-status="{{ status }}"
+                    aria-current="{% if case.status == status %}step{% else %}false{% endif %}"
+                    {% if case.status == status %}aria-pressed="true"{% else %}aria-pressed="false"{% endif %}>
+                <span>{{ status }}</span>
+            </button>
+            {% endfor %}
+                </div>
+                <div id="caseStatusMessage" class="case-status-message" role="status" aria-live="polite"></div>
             </div>
         </div>
-    </div>
-</div>
 
-<!-- Incident Report -->
-<div class="card mb-4">
-    <div class="card-header d-flex justify-content-between align-items-center">
-        <h5 class="mb-0"><i class="bi bi-file-earmark-text me-2"></i>รายงานเหตุการณ์ภัยคุกคาม</h5>
-        <a id="downloadIncidentReportPdfBtn" class="btn btn-sm btn-outline-primary disabled"
-           href="#" aria-disabled="true">
-            <i class="bi bi-file-earmark-pdf me-1"></i>ดาวน์โหลด PDF
-        </a>
-    </div>
-    <div class="card-body">
-        <div id="incidentReportStatus" class="small mb-3" style="color: var(--text-secondary);">
-            กำลังโหลดข้อมูลรายงาน...
+        <div class="case-summary-tiles">
+            <div class="case-summary-tile"><span>Case ID</span><strong>{{ case.id | e }}</strong></div>
+            <div class="case-summary-tile"><span>Severity</span><span class="case-severity-badge" data-severity="{{ case.severity | default('') | lower | e }}">{{ case.severity | default('N/A') | upper | e }}</span></div>
+            <div class="case-summary-tile"><span>Status</span><strong id="statusBadge" class="case-status-value case-status-open"><span class="case-status-bullet" aria-hidden="true">&bull;</span><span class="case-status-text">{{ case.status | default('Open') | lower | e }}</span></strong></div>
+            <div class="case-summary-tile"><span>Analyses</span><strong id="caseAnalysisCount">{{ case.analyses | length }}</strong></div>
+            <div class="case-summary-tile"><span>Notes</span><strong id="caseNoteCount">{{ case.notes | length }}</strong></div>
+            <div class="case-summary-tile"><span>Created</span><time id="caseCreatedAt" data-created="{{ case.created_at | default('') | e }}">{{ case.created_at | default('N/A') | e }}</time></div>
         </div>
-        <form id="incidentReportForm">
-            <div class="row g-3">
-                <div class="col-md-6">
-                    <label for="incidentThreatType" class="form-label">ประเภทภัยคุกคาม</label>
+    </section>
+
+    <div class="case-detail-split">
+        <section class="card case-detail-report-card">
+<div class="case-report-heading">
+    <h2>Threat incident report</h2>
+    <small id="incidentReportStatus" class="case-report-status">Loading report...</small>
+</div>
+<div class="case-report-body">
+    <form id="incidentReportForm">
+        <section class="case-report-section">
+            <h3>Overview</h3>
+            <div class="case-report-grid">
+                <div class="case-report-field">
+                    <label for="incidentThreatType">Threat type</label>
                     <input id="incidentThreatType" name="threat_type" type="text" class="form-control">
                 </div>
-                <div class="col-md-6">
-                    <label for="incidentSeverity" class="form-label">ระดับความรุนแรง</label>
+                <div class="case-report-field">
+                    <label for="incidentSeverity">Severity</label>
                     <select id="incidentSeverity" name="severity_4tier" class="form-select">
-                        <option value="">-- เลือกระดับ --</option>
-                        <option value="Critical" {% if case.severity == 'critical' %}selected{% endif %}>Critical</option>
-                        <option value="High" {% if case.severity == 'high' %}selected{% endif %}>High</option>
-                        <option value="Medium" {% if case.severity == 'medium' %}selected{% endif %}>Medium</option>
+                        <option value="">Select severity</option>
                         <option value="Low" {% if case.severity == 'low' %}selected{% endif %}>Low</option>
+                        <option value="Medium" {% if case.severity == 'medium' %}selected{% endif %}>Medium</option>
+                        <option value="High" {% if case.severity == 'high' %}selected{% endif %}>High</option>
+                        <option value="Critical" {% if case.severity == 'critical' %}selected{% endif %}>Critical</option>
                     </select>
                 </div>
-                <div class="col-12">
-                    <label for="incidentThreatDescription" class="form-label">รายละเอียดภัยคุกคาม</label>
-                    <textarea id="incidentThreatDescription" name="threat_description" class="form-control" rows="3"></textarea>
+            </div>
+            <div class="case-report-field case-report-field-wide">
+                <label for="incidentThreatDescription">Threat description</label>
+                <textarea id="incidentThreatDescription" name="threat_description" class="form-control" rows="3"></textarea>
+            </div>
+        </section>
+
+        <section class="case-report-section">
+            <h3>Attack evidence</h3>
+            <div class="case-report-grid">
+                <div class="case-report-field">
+                    <label for="incidentAttackerIp">Attacker IP</label>
+                    <input id="incidentAttackerIp" name="attacker_ip" type="text" class="form-control case-report-mono">
                 </div>
-                <div class="col-md-6">
-                    <label for="incidentAttackerIp" class="form-label">IP ผู้โจมตี</label>
-                    <input id="incidentAttackerIp" name="attacker_ip" type="text" class="form-control">
+                <div class="case-report-field">
+                    <label for="incidentTargetIp">Target IP</label>
+                    <input id="incidentTargetIp" name="target_ip" type="text" class="form-control case-report-mono">
                 </div>
-                <div class="col-md-6">
-                    <label for="incidentTargetIp" class="form-label">IP เป้าหมาย</label>
-                    <input id="incidentTargetIp" name="target_ip" type="text" class="form-control">
-                </div>
-                <div class="col-md-6">
-                    <label for="incidentAffectedUsername" class="form-label">ชื่อผู้ใช้ที่ได้รับผลกระทบ</label>
+                <div class="case-report-field">
+                    <label for="incidentAffectedUsername">Affected username</label>
                     <input id="incidentAffectedUsername" name="affected_username" type="text" class="form-control">
                 </div>
-                <div class="col-md-6">
-                    <label for="incidentAttackOutcome" class="form-label">ผลลัพธ์การโจมตี</label>
+                <div class="case-report-field">
+                    <label for="incidentAttackOutcome">Attack outcome</label>
                     <input id="incidentAttackOutcome" name="attack_outcome" type="text" class="form-control">
                 </div>
-                <div class="col-md-6">
-                    <label for="incidentDetectedAt" class="form-label">เวลาที่ตรวจพบ</label>
-                    <input id="incidentDetectedAt" name="detected_at" type="text" class="form-control"
-                           placeholder="YYYY-MM-DD HH:MM">
+                <div class="case-report-field">
+                    <label for="incidentDetectedAt">Detected at</label>
+                    <input id="incidentDetectedAt" name="detected_at" type="text" class="form-control case-report-mono" placeholder="YYYY-MM-DD HH:MM">
                 </div>
-                <div class="col-md-6">
-                    <label for="incidentDetectionDevice" class="form-label">อุปกรณ์ที่ตรวจพบ</label>
+                <div class="case-report-field">
+                    <label for="incidentDetectionDevice">Detection device</label>
                     <input id="incidentDetectionDevice" name="detection_device" type="text" class="form-control">
                 </div>
-                <div class="col-12">
-                    <label for="incidentOccurrenceNote" class="form-label">หมายเหตุการเกิดเหตุ</label>
-                    <textarea id="incidentOccurrenceNote" name="occurrence_note" class="form-control" rows="2"></textarea>
-                </div>
             </div>
+            <div class="case-report-field case-report-field-wide">
+                <label for="incidentOccurrenceNote">Incident notes</label>
+                <textarea id="incidentOccurrenceNote" name="occurrence_note" class="form-control" rows="2"></textarea>
+            </div>
+        </section>
 
-            <hr class="my-4" style="border-color: var(--border-color);">
-            <p class="small mb-3" style="color: var(--text-secondary);">ช่องรายการด้านล่าง: กรอกหนึ่งรายการต่อหนึ่งบรรทัด</p>
-            <div class="row g-3">
-                <div class="col-md-6">
-                    <label for="incidentFindings" class="form-label">ผลการตรวจสอบ</label>
+        <section class="case-report-section">
+            <h3>Investigation</h3>
+            <p class="case-report-hint">List fields: one item per line</p>
+            <div class="case-report-grid">
+                <div class="case-report-field">
+                    <label for="incidentFindings">Findings</label>
                     <textarea id="incidentFindings" name="findings" class="form-control" rows="4"></textarea>
                 </div>
-                <div class="col-md-6">
-                    <label for="incidentAnalysis" class="form-label">การวิเคราะห์</label>
+                <div class="case-report-field">
+                    <label for="incidentAnalysis">Analysis</label>
                     <textarea id="incidentAnalysis" name="analysis" class="form-control" rows="4"></textarea>
                 </div>
-                <div class="col-md-6">
-                    <label for="incidentImpact" class="form-label">ผลกระทบ</label>
+                <div class="case-report-field">
+                    <label for="incidentImpact">Impact</label>
                     <textarea id="incidentImpact" name="impact" class="form-control" rows="4"></textarea>
                 </div>
-                <div class="col-md-6">
-                    <label for="incidentRemediation" class="form-label">การแก้ไขและป้องกัน</label>
+                <div class="case-report-field">
+                    <label for="incidentRemediation">Remediation &amp; prevention</label>
                     <textarea id="incidentRemediation" name="remediation" class="form-control" rows="4"></textarea>
                 </div>
-                <div class="col-12">
-                    <label for="incidentReference" class="form-label">เอกสารอ้างอิง</label>
-                    <textarea id="incidentReference" name="reference" class="form-control" rows="3"></textarea>
-                </div>
             </div>
-            <div class="mt-4 d-flex justify-content-end">
-                <button type="submit" class="btn btn-primary" id="saveIncidentReportBtn">
-                    <i class="bi bi-save me-1"></i>บันทึกรายงาน
-                </button>
+            <div class="case-report-field case-report-field-wide">
+                <label for="incidentReference">References</label>
+                <textarea id="incidentReference" name="reference" class="form-control" rows="3"></textarea>
             </div>
-        </form>
-    </div>
+        </section>
+    </form>
 </div>
+<div class="case-report-footer">
+    <span id="incidentReportSaveState" class="case-report-save-state">NOT SAVED YET</span>
+    <button type="submit" form="incidentReportForm" class="btn btn-primary case-report-save-button" id="saveIncidentReportBtn">Save report</button>
+</div>
+</section>
 
+<div class="case-detail-side-stack">
 <!-- Linked Analyses -->
-<div class="card mb-4">
-    <div class="card-header d-flex justify-content-between align-items-center">
-        <h5 class="mb-0"><i class="bi bi-link-45deg me-2"></i>Linked Analyses</h5>
-        <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#linkAnalysisModal">
-            <i class="bi bi-plus-lg me-1"></i>Link Analysis
-        </button>
+<section class="card case-detail-linked-card">
+    <div class="card-header case-card-heading case-linked-heading">
+        <h5 class="mb-0">Linked Analyses</h5>
+        <div class="case-linked-heading-actions">
+            <span id="linkedAnalysisCount" class="case-linked-count">{{ case.analyses | length }}</span>
+            <button type="button" class="case-detail-card-button" data-bs-toggle="modal" data-bs-target="#linkAnalysisModal">+ Link</button>
+        </div>
     </div>
-    <div class="card-body p-0">
+    <div class="card-body case-card-body p-0">
         <div class="table-responsive">
-            <table class="table table-striped table-hover mb-0">
+            <table class="table table-hover mb-0 case-analyses-table">
                 <thead>
-                    <tr style="background-color: var(--bg-tertiary);">
-                        <th>Analysis ID</th>
-                        <th>Linked At</th>
-                        <th>Actions</th>
+                    <tr>
+                        <th scope="col">Analysis ID</th>
+                        <th scope="col">Linked At</th>
+                        <th scope="col">Actions</th>
                     </tr>
                 </thead>
                 <tbody id="analysesTableBody">
                     {% if case.analyses %}
                         {% for analysis in case.analyses %}
-                        <tr>
+                        <tr data-analysis-id="{{ analysis.analysis_id | e }}">
                             <td>
-                                <a href="/report/{{ analysis.analysis_id | e }}" style="color: var(--color-primary); text-decoration: none;">
-                                    <code>{{ analysis.analysis_id | e }}</code>
+                                <a href="/report/{{ analysis.analysis_id | e }}" class="case-analysis-link">
+                                    <span class="case-analysis-id-chip">{{ analysis.analysis_id | e }}</span>
                                 </a>
                             </td>
-                            <td>{{ analysis.linked_at | default('') | e }}</td>
+                            <td><time class="case-linked-at" data-case-date="{{ analysis.linked_at | default('') | e }}">{{ analysis.linked_at | default('') | e }}</time></td>
                             <td>
-                                <a href="/report/{{ analysis.analysis_id | e }}" class="btn btn-sm btn-outline-primary" title="View Report">
-                                    <i class="bi bi-eye"></i>
-                                </a>
+                                <a href="/report/{{ analysis.analysis_id | e }}" class="case-detail-card-button" title="View Report">View</a>
                             </td>
                         </tr>
                         {% endfor %}
                     {% else %}
                         <tr id="noAnalysesRow">
-                            <td colspan="3" class="text-center py-4" style="color: var(--text-secondary);">
+                            <td colspan="3" class="text-center py-4 case-analyses-empty">
                                 No analyses linked to this case yet.
                             </td>
                         </tr>
@@ -255,50 +230,50 @@
             </table>
         </div>
     </div>
-</div>
+</section>
 
 <!-- Notes Section -->
-<div class="card mb-4">
-    <div class="card-header">
-        <h5 class="mb-0"><i class="bi bi-chat-left-text me-2"></i>Notes</h5>
+<section class="card case-detail-notes-card">
+    <div class="card-header case-card-heading case-notes-heading">
+        <h5 class="mb-0">Notes</h5>
+        <span id="noteHeadingCount" class="case-note-count">{{ case.notes | length }}</span>
     </div>
-    <div class="card-body">
+    <div class="card-body case-card-body">
         <!-- Existing notes -->
         <div id="notesContainer">
             {% if case.notes %}
                 {% for note in case.notes %}
                 <div class="note-card">
                     <div class="note-meta">
-                        <i class="bi bi-person me-1"></i><strong>{{ note.author | default('Unknown') | e }}</strong>
-                        <span class="ms-2"><i class="bi bi-clock me-1"></i>{{ note.created_at | default('') | e }}</span>
+                        <strong class="case-note-author">{{ note.author | default('Unknown') | e }}</strong>
+                        <span class="case-note-separator" aria-hidden="true"> · </span>
+                        <time class="case-note-date" data-case-date="{{ note.created_at | default('') | e }}">{{ note.created_at | default('') | e }}</time>
                     </div>
                     <div class="note-content">{{ note.content | e }}</div>
                 </div>
                 {% endfor %}
             {% else %}
-                <p id="noNotesMessage" style="color: var(--text-secondary);">No notes yet. Add a note below.</p>
+            <p id="noNotesMessage" class="case-notes-empty">No notes yet. Add a note below.</p>
             {% endif %}
         </div>
 
-        <hr style="border-color: var(--border-color);">
+        <hr class="case-notes-divider">
 
         <!-- Add note form -->
         <form id="addNoteForm">
-            <div class="mb-3">
-                <label for="noteAuthor" class="form-label">Author</label>
-                <input type="text" id="noteAuthor" class="form-control" required
-                       placeholder="Your name">
+            <div class="case-note-field">
+                <label for="noteAuthor">Author</label>
+                <input type="text" id="noteAuthor" class="form-control" required placeholder="Your name">
             </div>
-            <div class="mb-3">
-                <label for="noteContent" class="form-label">Note</label>
-                <textarea id="noteContent" class="form-control" rows="3" required
-                          placeholder="Add investigation notes, observations, or updates..."></textarea>
+            <div class="case-note-field">
+                <label for="noteContent">Note</label>
+                <textarea id="noteContent" class="form-control" rows="3" required placeholder="Add investigation notes, observations, or updates…"></textarea>
             </div>
-            <button type="submit" class="btn btn-primary" id="addNoteBtn">
-                <i class="bi bi-plus-lg me-1"></i>Add Note
-            </button>
+            <button type="submit" class="case-detail-card-button case-note-add-button" id="addNoteBtn">+ Add note</button>
         </form>
     </div>
+</section>
+</div>
 </div>
 
 <!-- Link Analysis Modal -->
@@ -332,6 +307,7 @@
         </div>
     </div>
 </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -359,6 +335,8 @@
 
         function setIncidentReportExists(exists) {
             reportExists = exists;
+            var saveState = document.getElementById('incidentReportSaveState');
+            if (saveState) saveState.textContent = exists ? 'SAVED' : 'NOT SAVED YET';
             if (!incidentPdfBtn) return;
             if (exists) {
                 incidentPdfBtn.href = incidentApiUrl + '/pdf?download=1';
@@ -412,14 +390,14 @@
                     if (report) {
                         populateIncidentReport(report);
                         setIncidentReportExists(true);
-                        incidentStatus.textContent = 'โหลดรายงานที่บันทึกไว้แล้ว';
+                        incidentStatus.textContent = 'Saved report loaded';
                     } else {
                         setIncidentReportExists(false);
-                        incidentStatus.textContent = 'ยังไม่มีรายงาน — บันทึกเพื่อสร้างรายงานใหม่';
+                        incidentStatus.textContent = 'No report yet — save to create one';
                     }
                 })
                 .catch(function (err) {
-                    incidentStatus.textContent = 'โหลดรายงานไม่สำเร็จ: ' + err.message;
+                    incidentStatus.textContent = 'Failed to load report: ' + err.message;
                     console.error('[BTA Case] Incident report load failed:', err.message);
                 });
 
@@ -440,16 +418,16 @@
                 .then(function (report) {
                     populateIncidentReport(report);
                     setIncidentReportExists(true);
-                    incidentStatus.textContent = method === 'POST' ? 'สร้างรายงานแล้ว' : 'บันทึกการแก้ไขแล้ว';
+                    incidentStatus.textContent = method === 'POST' ? 'Report created' : 'Report updated';
                     if (window.BTADashboard && window.BTADashboard.showToast) {
-                        window.BTADashboard.showToast('บันทึกรายงานเหตุการณ์สำเร็จ', 'success');
+                        window.BTADashboard.showToast('Incident report saved successfully', 'success');
                     }
                 })
                 .catch(function (err) {
-                    incidentStatus.textContent = 'บันทึกรายงานไม่สำเร็จ: ' + err.message;
+                    incidentStatus.textContent = 'Failed to save report: ' + err.message;
                     console.error('[BTA Case] Incident report save failed:', err.message);
                     if (window.BTADashboard && window.BTADashboard.showToast) {
-                        window.BTADashboard.showToast('บันทึกรายงานไม่สำเร็จ: ' + err.message, 'error');
+                        window.BTADashboard.showToast('Failed to save report: ' + err.message, 'error');
                     }
                 })
                 .finally(function () {
@@ -465,13 +443,43 @@
         }
 
         /* --------------------------------------------------
-           Status Update (capitalized values)
+           Status stepper
         -------------------------------------------------- */
-        var statusSelect = document.getElementById('statusSelect');
+        var statusStepper = document.getElementById('statusSelect');
+        var statusMessage = document.getElementById('caseStatusMessage');
+        var statusBadge = document.getElementById('statusBadge');
+        var statusButtons = statusStepper ? Array.prototype.slice.call(
+            statusStepper.querySelectorAll('[data-case-status]')
+        ) : [];
+        var currentStatus = {{ case.status | default('Open') | tojson }};
 
-        if (statusSelect) {
-            statusSelect.addEventListener('change', function () {
-                var newStatus = statusSelect.value;
+        function renderCaseStatus(status) {
+            var normalizedStatus = status.toLowerCase();
+            statusButtons.forEach(function (button) {
+                var active = button.getAttribute('data-case-status') === status;
+                button.setAttribute('aria-current', active ? 'step' : 'false');
+                button.setAttribute('aria-pressed', active ? 'true' : 'false');
+                button.classList.toggle('is-current', active);
+            });
+            if (statusBadge) {
+                statusBadge.className = 'case-status-value case-status-' + normalizedStatus;
+                var statusText = statusBadge.querySelector('.case-status-text');
+                if (statusText) statusText.textContent = normalizedStatus;
+            }
+        }
+
+        if (statusStepper) {
+            renderCaseStatus(currentStatus);
+            statusStepper.addEventListener('click', function (event) {
+                var button = event.target.closest('[data-case-status]');
+                if (!button || button.disabled) return;
+                var previousStatus = currentStatus;
+                var newStatus = button.getAttribute('data-case-status');
+                if (newStatus === previousStatus) return;
+
+                statusButtons.forEach(function (step) { step.disabled = true; });
+                if (statusMessage) statusMessage.textContent = '';
+                renderCaseStatus(newStatus);
 
                 fetch('/api/cases/' + encodeURIComponent(caseId) + '/status', {
                     method: 'PATCH',
@@ -483,29 +491,65 @@
                     return response.json();
                 })
                 .then(function () {
-                    var badge = document.getElementById('statusBadge');
-                    if (badge) {
-                        var classMap = {
-                            'Open': 'badge badge-primary',
-                            'Investigating': 'badge badge-warning',
-                            'Resolved': 'badge badge-success',
-                            'Closed': 'badge badge-info'
-                        };
-                        badge.textContent = newStatus;
-                        badge.className = classMap[newStatus] || 'badge badge-info';
-                        badge.id = 'statusBadge';
-                    }
+                    currentStatus = newStatus;
+                    if (statusMessage) statusMessage.textContent = 'Status updated to ' + newStatus + '.';
                     if (window.BTADashboard && window.BTADashboard.showToast) {
                         window.BTADashboard.showToast('Status updated to ' + newStatus + '.', 'success');
                     }
                 })
                 .catch(function (err) {
+                    renderCaseStatus(previousStatus);
+                    if (statusMessage) statusMessage.textContent = 'Failed to update status: ' + err.message;
                     console.error('[BTA Case] Status update failed:', err.message);
                     if (window.BTADashboard && window.BTADashboard.showToast) {
                         window.BTADashboard.showToast('Failed to update status: ' + err.message, 'error');
                     }
+                })
+                .finally(function () {
+                    statusButtons.forEach(function (step) { step.disabled = false; });
                 });
             });
+        }
+
+        /* --------------------------------------------------
+           Summary tile counts and Created date
+        -------------------------------------------------- */
+        function formatCaseDate(value) {
+            if (!value) return value;
+            var date = new Date(value.length === 19 ? value + 'Z' : value);
+            if (Number.isNaN(date.getTime())) return value;
+            var months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            function pad(number) { return number < 10 ? '0' + number : String(number); }
+            return pad(date.getUTCDate()) + ' ' + months[date.getUTCMonth()] + ' ' + date.getUTCFullYear() +
+                ' · ' + pad(date.getUTCHours()) + ':' + pad(date.getUTCMinutes()) + ' UTC';
+        }
+
+        function formatCaseDates() {
+            document.querySelectorAll('[data-case-date]').forEach(function (element) {
+                var rawValue = element.getAttribute('data-case-date') || '';
+                element.textContent = formatCaseDate(rawValue) || rawValue;
+            });
+        }
+
+        formatCaseDates();
+
+        var createdAt = document.getElementById('caseCreatedAt');
+        if (createdAt) {
+            var createdValue = createdAt.getAttribute('data-created') || '';
+            createdAt.textContent = formatCaseDate(createdValue) || createdValue || 'N/A';
+        }
+
+        var analysisCount = {{ case.analyses | length }};
+        var noteCount = {{ case.notes | length }};
+        function updateSummaryCounts() {
+            var analysisCountElement = document.getElementById('caseAnalysisCount');
+            var noteCountElement = document.getElementById('caseNoteCount');
+            var linkedAnalysisCountElement = document.getElementById('linkedAnalysisCount');
+            var noteHeadingCountElement = document.getElementById('noteHeadingCount');
+            if (analysisCountElement) analysisCountElement.textContent = String(analysisCount);
+            if (noteCountElement) noteCountElement.textContent = String(noteCount);
+            if (linkedAnalysisCountElement) linkedAnalysisCountElement.textContent = String(analysisCount);
+            if (noteHeadingCountElement) noteHeadingCountElement.textContent = String(noteCount);
         }
 
         /* --------------------------------------------------
@@ -550,21 +594,21 @@
                         var meta = document.createElement('div');
                         meta.className = 'note-meta';
 
-                        var personIcon = document.createElement('i');
-                        personIcon.className = 'bi bi-person me-1';
-                        meta.appendChild(personIcon);
-
                         var authorStrong = document.createElement('strong');
+                        authorStrong.className = 'case-note-author';
                         authorStrong.textContent = author;
                         meta.appendChild(authorStrong);
 
-                        var timeSpan = document.createElement('span');
-                        timeSpan.className = 'ms-2';
-                        var clockIcon = document.createElement('i');
-                        clockIcon.className = 'bi bi-clock me-1';
-                        timeSpan.appendChild(clockIcon);
-                        timeSpan.appendChild(document.createTextNode(data.created_at || 'Just now'));
-                        meta.appendChild(timeSpan);
+                        var separator = document.createElement('span');
+                        separator.className = 'case-note-separator';
+                        separator.setAttribute('aria-hidden', 'true');
+                        separator.textContent = ' · ';
+                        meta.appendChild(separator);
+
+                        var noteDate = document.createElement('time');
+                        noteDate.className = 'case-note-date';
+                        noteDate.textContent = formatCaseDate(data.created_at) || data.created_at || 'Just now';
+                        meta.appendChild(noteDate);
 
                         card.appendChild(meta);
 
@@ -575,6 +619,9 @@
 
                         container.appendChild(card);
                     }
+
+                    noteCount += 1;
+                    updateSummaryCounts();
 
                     contentInput.value = '';
 
@@ -623,35 +670,47 @@
                     if (noRow) noRow.remove();
 
                     var tbody = document.getElementById('analysesTableBody');
+                    var analysisAlreadyLinked = tbody && Array.prototype.some.call(
+                        tbody.querySelectorAll('tr[data-analysis-id]'),
+                        function (row) { return row.getAttribute('data-analysis-id') === analysisId; }
+                    );
                     if (tbody) {
                         var tr = document.createElement('tr');
+                        tr.setAttribute('data-analysis-id', analysisId);
 
                         var tdId = document.createElement('td');
                         var link = document.createElement('a');
                         link.href = '/report/' + encodeURIComponent(analysisId);
-                        link.style.cssText = 'color: var(--color-primary); text-decoration: none;';
-                        var code = document.createElement('code');
-                        code.textContent = analysisId;
-                        link.appendChild(code);
+                        link.className = 'case-analysis-link';
+                        var idChip = document.createElement('span');
+                        idChip.className = 'case-analysis-id-chip';
+                        idChip.textContent = analysisId;
+                        link.appendChild(idChip);
                         tdId.appendChild(link);
                         tr.appendChild(tdId);
 
                         var tdLinked = document.createElement('td');
-                        tdLinked.textContent = data.linked_at || 'Just now';
+                        var linkedTime = document.createElement('time');
+                        linkedTime.className = 'case-linked-at';
+                        linkedTime.textContent = formatCaseDate(data.linked_at) || data.linked_at || 'Just now';
+                        tdLinked.appendChild(linkedTime);
                         tr.appendChild(tdLinked);
 
                         var tdActions = document.createElement('td');
                         var viewBtn = document.createElement('a');
                         viewBtn.href = '/report/' + encodeURIComponent(analysisId);
-                        viewBtn.className = 'btn btn-sm btn-outline-primary';
+                        viewBtn.className = 'case-detail-card-button';
                         viewBtn.title = 'View Report';
-                        var eyeIcon = document.createElement('i');
-                        eyeIcon.className = 'bi bi-eye';
-                        viewBtn.appendChild(eyeIcon);
+                        viewBtn.textContent = 'View';
                         tdActions.appendChild(viewBtn);
                         tr.appendChild(tdActions);
 
                         tbody.appendChild(tr);
+                    }
+
+                    if (!analysisAlreadyLinked) {
+                        analysisCount += 1;
+                        updateSummaryCounts();
                     }
 
                     analysisIdInput.value = '';
