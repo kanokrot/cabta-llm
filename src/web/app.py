@@ -656,40 +656,12 @@ def _register_page_routes(app: FastAPI) -> None:
             return RedirectResponse('/login?next=%2Fhistory', status_code=303)
 
         role = current_user.get("role")
-        if role == "admin":
-            raw_jobs = app.state.analysis_manager.list_jobs(limit=100)
-        elif role == TEAM_LEAD:
-            raw_jobs = app.state.analysis_manager.list_jobs(
-                limit=100,
-                user_ids=get_user_ids_by_role("SOC Analyst Tier 1-2"),
-            )
-        else:
-            user_id = current_user.get("id")
-            if user_id is None:
-                redirect = _page_auth_redirect(request)
-                if redirect is not None:
-                    return redirect
-                return RedirectResponse('/login?next=%2Fhistory', status_code=303)
-            raw_jobs = app.state.analysis_manager.list_jobs(
-                limit=100,
-                user_id=user_id,
-            )
-        # Normalize field names for templates
-        jobs = []
-        for j in raw_jobs:
-            params = j.get('params') or {}
-            if isinstance(params, str):
-                import json as _json
-                try:
-                    params = _json.loads(params)
-                except Exception:
-                    params = {}
-            j['type'] = j.get('analysis_type', '')
-            j['target'] = params.get('value', params.get('filename', j.get('id', '')))
-            jobs.append(j)
-        return templates.TemplateResponse(request, 'history.html', {
-            'jobs': jobs,
-        })
+        if role != "admin" and role != TEAM_LEAD and current_user.get("id") is None:
+            redirect = _page_auth_redirect(request)
+            if redirect is not None:
+                return redirect
+            return RedirectResponse('/login?next=%2Fhistory', status_code=303)
+        return templates.TemplateResponse(request, 'history.html', {})
 
     @app.get('/cases', response_class=HTMLResponse, include_in_schema=False)
     async def cases_page(request: Request):

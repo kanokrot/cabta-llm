@@ -111,7 +111,11 @@ def test_analyst_history_page_contains_own_job_only(tmp_path, monkeypatch) -> No
         response = client.get("/history")
 
     assert response.status_code == 200
-    assert "analyst-target" in response.text
+    assert 'id="historyPage"' in response.text
+    assert 'id="historyLoading"' in response.text
+    assert 'id="historyError"' in response.text
+    assert 'id="tb"' in response.text
+    assert "analyst-target" not in response.text
     assert "other-target" not in response.text
     assert "outside-team-target" not in response.text
 
@@ -124,9 +128,13 @@ def test_admin_history_page_contains_all_jobs(tmp_path, monkeypatch) -> None:
         response = client.get("/history")
 
     assert response.status_code == 200
-    assert "analyst-target" in response.text
-    assert "other-target" in response.text
-    assert "outside-team-target" in response.text
+    assert 'id="historyPage"' in response.text
+    assert 'id="historyLoading"' in response.text
+    assert 'id="historyError"' in response.text
+    assert 'id="tb"' in response.text
+    assert "analyst-target" not in response.text
+    assert "other-target" not in response.text
+    assert "outside-team-target" not in response.text
 
 
 def test_team_lead_history_page_contains_analyst_jobs_only(tmp_path, monkeypatch) -> None:
@@ -138,8 +146,12 @@ def test_team_lead_history_page_contains_analyst_jobs_only(tmp_path, monkeypatch
         response = client.get("/history")
 
     assert response.status_code == 200
-    assert "analyst-target" in response.text
-    assert "other-target" in response.text
+    assert 'id="historyPage"' in response.text
+    assert 'id="historyLoading"' in response.text
+    assert 'id="historyError"' in response.text
+    assert 'id="tb"' in response.text
+    assert "analyst-target" not in response.text
+    assert "other-target" not in response.text
     assert "outside-team-target" not in response.text
 
 
