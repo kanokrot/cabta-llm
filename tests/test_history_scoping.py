@@ -366,6 +366,29 @@ def test_history_list_sort_and_order_support_all_sort_keys(tmp_path) -> None:
         assert status_desc[0]["status"] == "running" or status_desc[0]["status"] == "queued"
 
 
+def test_history_list_score_sort_puts_nulls_last_for_both_orders(tmp_path) -> None:
+    app = _summary_app(tmp_path, _user(ADMIN, 900))
+    manager = app.state.analysis_manager
+    low = manager.create_job("ioc", {"value": "score-low"}, user_id=101)
+    high = manager.create_job("ioc", {"value": "score-high"}, user_id=101)
+    queued = manager.create_job("ioc", {"value": "score-queued"}, user_id=101)
+    failed = manager.create_job("ioc", {"value": "score-failed"}, user_id=101)
+    manager.complete_job(low, {}, verdict="CLEAN", score=10)
+    manager.complete_job(high, {}, verdict="CLEAN", score=90)
+    manager.fail_job(failed, "failed")
+
+    with TestClient(app) as client:
+        asc = _history_response(client, sort="score", order="asc")["items"]
+        desc = _history_response(client, sort="score", order="desc")["items"]
+
+    assert [item.get("score") for item in asc[:2]] == [10, 90]
+    assert all(item.get("score") is None for item in asc[2:])
+    assert {item["id"] for item in asc[2:]} == {queued, failed}
+    assert [item.get("score") for item in desc[:2]] == [90, 10]
+    assert all(item.get("score") is None for item in desc[2:])
+    assert {item["id"] for item in desc[2:]} == {queued, failed}
+
+
 def test_history_list_pagination_validation_and_legacy_status(tmp_path) -> None:
     app = _summary_app(tmp_path, _user(ADMIN, 900))
     manager = app.state.analysis_manager

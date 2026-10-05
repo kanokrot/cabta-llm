@@ -30,7 +30,7 @@ _HISTORY_GROUPS = (
 )
 _HISTORY_SORTS = {
     "date": "created_at",
-    "score": "score",
+    "score": "(score IS NULL) ASC, score",
     "type": "analysis_type",
     "status": "status",
     "verdict": (
