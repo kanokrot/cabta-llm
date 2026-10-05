@@ -10,9 +10,9 @@ import logging
 import tempfile
 import threading
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Optional
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import JSONResponse
 
 from ..models import (
@@ -483,24 +483,45 @@ async def get_analysis_status(
 @router.get('/history/')
 async def get_history(
     request: Request,
-    limit: int = 50,
-    offset: int = 0,
+    limit: int = Query(default=25, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
     status: Optional[str] = None,
+    group: Optional[Literal[
+        "malicious", "suspicious", "clean", "unknown", "failed", "in_progress",
+    ]] = Query(default=None),
+    analysis_type: Optional[Literal["ioc", "file", "email"]] = Query(
+        default=None, alias="type"
+    ),
+    q: Optional[str] = Query(default=None, max_length=200),
+    range_name: Literal["all", "24h", "7d"] = Query(default="all", alias="range"),
+    sort: Literal["date", "score", "verdict", "type", "status"] = Query(
+        default="date"
+    ),
+    order: Literal["asc", "desc"] = Query(default="desc"),
     current_user: dict = Depends(get_current_user),
 ):
     """Get analysis history."""
     mgr = request.app.state.analysis_manager
     role = current_user.get("role")
+    filters = {
+        "limit": limit,
+        "offset": offset,
+        "status": status,
+        "group": group,
+        "analysis_type": analysis_type,
+        "q": q,
+        "range_name": range_name,
+        "sort": sort,
+        "order": order,
+    }
     if role == "admin":
-        jobs = mgr.list_jobs(limit=limit, offset=offset, status=status)
+        page = mgr.list_history_page(**filters)
     elif role == TEAM_LEAD:
-        jobs = mgr.list_jobs(
-            limit=limit,
-            offset=offset,
-            status=status,
+        page = mgr.list_history_page(
+            **filters,
             user_ids=get_user_ids_by_role("SOC Analyst Tier 1-2"),
         )
-        for job in jobs:
+        for job in page["items"]:
             if job.get("user_id") != current_user["id"]:
                 record_cross_user_read(
                     request,
@@ -511,14 +532,20 @@ async def get_history(
                     resource_id=job["id"],
                 )
     else:
-        jobs = mgr.list_jobs(
-            limit=limit,
-            offset=offset,
-            status=status,
+        page = mgr.list_history_page(
+            **filters,
             user_id=current_user["id"],
         )
+
+    items = []
+    for job in page["items"]:
+        item = serialize_analysis_job(job, role=role)
+        item["verdict_group"] = job["verdict_group"]
+        items.append(item)
+
     return {
-        'items': [serialize_analysis_job(job, role=role) for job in jobs],
+        'items': items,
+        'total': page["total"],
         'limit': limit,
         'offset': offset,
     }

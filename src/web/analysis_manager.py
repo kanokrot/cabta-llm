@@ -11,7 +11,7 @@ import logging
 import sqlite3
 import threading
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Sequence
 
@@ -24,6 +24,57 @@ VERDICT_GROUPS = {
     "suspicious": ("SUSPICIOUS", "SPAM"),
     "clean": ("CLEAN",),
 }
+
+_HISTORY_GROUPS = (
+    "malicious", "suspicious", "clean", "unknown", "failed", "in_progress",
+)
+_HISTORY_SORTS = {
+    "date": "created_at",
+    "score": "score",
+    "type": "analysis_type",
+    "status": "status",
+    "verdict": (
+        "CASE verdict_group "
+        "WHEN 'malicious' THEN 0 "
+        "WHEN 'suspicious' THEN 1 "
+        "WHEN 'clean' THEN 2 "
+        "WHEN 'unknown' THEN 3 "
+        "WHEN 'failed' THEN 4 "
+        "WHEN 'in_progress' THEN 5 "
+        "ELSE 6 END"
+    ),
+}
+
+
+def _verdict_group_sql() -> tuple[str, list[str]]:
+    parts = [
+        "CASE",
+        "WHEN status = 'failed' THEN 'failed'",
+        "WHEN status IN ('queued', 'running') THEN 'in_progress'",
+    ]
+    values = []
+    for group_name, verdicts in VERDICT_GROUPS.items():
+        placeholders = ", ".join("?" for _ in verdicts)
+        parts.append(
+            f"WHEN status = 'completed' AND verdict IN ({placeholders}) "
+            f"THEN '{group_name}'"
+        )
+        values.extend(verdicts)
+    parts.append("ELSE 'unknown' END")
+    return " ".join(parts), values
+
+
+def _history_target_sql() -> str:
+    return (
+        "CASE WHEN json_valid(params) THEN "
+        "COALESCE(json_extract(params, '$.value'), "
+        "json_extract(params, '$.filename'), id) "
+        "ELSE id END"
+    )
+
+
+def _escape_like(value: str) -> str:
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
 class AnalysisManager:
@@ -227,6 +278,106 @@ class AnalysisManager:
         conn.close()
         return [self._row_to_dict(cur.description, r) for r in rows]
 
+    def list_history_page(
+        self,
+        limit: int = 25,
+        offset: int = 0,
+        status: Optional[str] = None,
+        user_id: Optional[int] = None,
+        user_ids: Optional[Sequence[int]] = None,
+        group: Optional[str] = None,
+        analysis_type: Optional[str] = None,
+        q: Optional[str] = None,
+        range_name: str = "all",
+        sort: str = "date",
+        order: str = "desc",
+    ) -> Dict:
+        """Return one filtered, sorted, role-scoped history page and its total."""
+        if not 1 <= limit <= 100:
+            raise ValueError("limit must be between 1 and 100")
+        if offset < 0:
+            raise ValueError("offset must be non-negative")
+        if group is not None and group not in _HISTORY_GROUPS:
+            raise ValueError("invalid history group")
+        if analysis_type is not None and analysis_type not in {"ioc", "file", "email"}:
+            raise ValueError("invalid analysis type")
+        if range_name not in {"all", "24h", "7d"}:
+            raise ValueError("invalid history range")
+        if sort not in _HISTORY_SORTS:
+            raise ValueError("invalid history sort")
+        if order not in {"asc", "desc"}:
+            raise ValueError("invalid history order")
+
+        conn = self._connect()
+        try:
+            group_sql, group_params = _verdict_group_sql()
+            base_sql = (
+                "WITH history AS ("
+                "SELECT analysis_jobs.*, "
+                f"{_history_target_sql()} AS history_target, "
+                f"{group_sql} AS verdict_group "
+                "FROM analysis_jobs)"
+            )
+            clauses = []
+            params = list(group_params)
+
+            if user_id is not None:
+                clauses.append("user_id = ?")
+                params.append(user_id)
+            if user_ids is not None:
+                if not user_ids:
+                    clauses.append("1 = 0")
+                else:
+                    placeholders = ", ".join("?" for _ in user_ids)
+                    clauses.append(f"user_id IN ({placeholders})")
+                    params.extend(user_ids)
+            if status:
+                clauses.append("status = ?")
+                params.append(status)
+            if group:
+                clauses.append("verdict_group = ?")
+                params.append(group)
+            if analysis_type:
+                clauses.append("analysis_type = ?")
+                params.append(analysis_type)
+            if range_name != "all":
+                hours = 24 if range_name == "24h" else 24 * 7
+                cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+                clauses.append("created_at >= ?")
+                params.append(cutoff.isoformat())
+            if q:
+                pattern = f"%{_escape_like(q)}%"
+                clauses.append(
+                    "(id LIKE ? ESCAPE '\\' "
+                    "OR analysis_type LIKE ? ESCAPE '\\' "
+                    "OR history_target LIKE ? ESCAPE '\\')"
+                )
+                params.extend([pattern, pattern, pattern])
+
+            where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
+            total = conn.execute(
+                f"{base_sql} SELECT COUNT(*) FROM history{where}",
+                params,
+            ).fetchone()[0]
+
+            direction = "ASC" if order == "asc" else "DESC"
+            rows_sql = (
+                f"{base_sql} SELECT * FROM history{where} "
+                f"ORDER BY {_HISTORY_SORTS[sort]} {direction}, id {direction} "
+                "LIMIT ? OFFSET ?"
+            )
+            cur = conn.execute(rows_sql, [*params, limit, offset])
+            rows = cur.fetchall()
+            description = cur.description
+            items = []
+            for row in rows:
+                item = self._row_to_dict(description, row)
+                item.pop("history_target", None)
+                items.append(item)
+            return {"items": items, "total": total}
+        finally:
+            conn.close()
+
     def get_history_summary(
         self,
         user_id: Optional[int] = None,
@@ -247,37 +398,22 @@ class AnalysisManager:
                 clauses.append(f"user_id IN ({placeholders})")
                 scope_params.extend(user_ids)
 
+        group_sql, group_params = _verdict_group_sql()
+        group_names = (*VERDICT_GROUPS.keys(), "unknown", "failed", "in_progress")
         select_parts = ["COUNT(*) AS total"]
-        query_params = []
-        for group_name, verdicts in VERDICT_GROUPS.items():
-            verdict_placeholders = ", ".join("?" for _ in verdicts)
+        query_params = [*group_params]
+        for group_name in group_names:
             select_parts.append(
-                "SUM(CASE WHEN status = 'completed' "
-                f"AND verdict IN ({verdict_placeholders}) "
-                f"THEN 1 ELSE 0 END) AS {group_name}"
+                "SUM(CASE WHEN verdict_group = ? THEN 1 ELSE 0 END) "
+                f"AS {group_name}"
             )
-            query_params.extend(verdicts)
-
-        known_verdicts = tuple(
-            verdict for verdicts in VERDICT_GROUPS.values() for verdict in verdicts
-        )
-        known_placeholders = ", ".join("?" for _ in known_verdicts)
-        select_parts.append(
-            "SUM(CASE WHEN "
-            "(status = 'completed' AND "
-            f"(verdict IS NULL OR verdict NOT IN ({known_placeholders}))) "
-            "OR status NOT IN ('queued', 'running', 'completed', 'failed') "
-            "THEN 1 ELSE 0 END) AS unknown"
-        )
-        query_params.extend(known_verdicts)
-        select_parts.extend([
-            "SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed",
-            "SUM(CASE WHEN status IN ('queued', 'running') THEN 1 ELSE 0 END) AS in_progress",
-        ])
+            query_params.append(group_name)
 
         where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
         row = conn.execute(
-            f"SELECT {', '.join(select_parts)} FROM analysis_jobs{where}",
+            f"WITH history AS ("
+            f"SELECT *, {group_sql} AS verdict_group FROM analysis_jobs) "
+            f"SELECT {', '.join(select_parts)} FROM history{where}",
             [*query_params, *scope_params],
         ).fetchone()
         conn.close()

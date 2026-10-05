@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import sqlite3
+from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
+
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -58,6 +62,9 @@ def _client_for_page(app: FastAPI, monkeypatch, user: dict) -> TestClient:
 
 def _summary_app(tmp_path, user: dict | None = None) -> FastAPI:
     app = _page_app(tmp_path)
+    app.state.agent_store = SimpleNamespace(
+        add_cross_user_read_audit=lambda **kwargs: "audit-id"
+    )
     app.include_router(analysis_routes.router, prefix="/api/analysis")
     if user is not None:
         app.dependency_overrides[get_current_user] = lambda: user
@@ -214,3 +221,210 @@ def test_history_summary_unauthenticated_gets_normal_api_denial(tmp_path) -> Non
         response = client.get("/api/analysis/history/summary")
 
     assert response.status_code == 401
+
+
+def _history_response(client: TestClient, **params) -> dict:
+    response = client.get("/api/analysis/history/", params=params)
+    assert response.status_code == 200
+    payload = response.json()
+    assert set(payload) == {"items", "total", "limit", "offset"}
+    return payload
+
+
+def _assert_history_summary_equivalence(client: TestClient) -> None:
+    summary_response = client.get("/api/analysis/history/summary")
+    assert summary_response.status_code == 200
+    summary = summary_response.json()
+    groups = ("malicious", "suspicious", "clean", "unknown", "failed", "in_progress")
+    counts = {
+        group: _history_response(client, group=group)["total"]
+        for group in groups
+    }
+    assert counts == {group: summary[group] for group in groups}
+    assert sum(counts.values()) == summary["total"]
+
+
+def test_history_list_group_totals_equal_summary_for_admin(tmp_path) -> None:
+    app = _summary_app(tmp_path, _user(ADMIN, 900))
+    _seed_summary_jobs(app.state.analysis_manager)
+
+    with TestClient(app) as client:
+        _assert_history_summary_equivalence(client)
+
+
+def test_history_list_group_totals_equal_summary_for_team_lead(tmp_path, monkeypatch) -> None:
+    app = _summary_app(tmp_path, _user(TEAM_LEAD, 303))
+    _seed_summary_jobs(app.state.analysis_manager)
+    monkeypatch.setattr(analysis_routes, "get_user_ids_by_role", lambda role: [101, 202])
+
+    with TestClient(app) as client:
+        _assert_history_summary_equivalence(client)
+
+
+def test_history_list_group_totals_equal_summary_for_analyst(tmp_path) -> None:
+    app = _summary_app(tmp_path, _user(SOC, 101))
+    _seed_summary_jobs(app.state.analysis_manager)
+
+    with TestClient(app) as client:
+        _assert_history_summary_equivalence(client)
+
+
+def test_history_list_type_and_q_filters_match_target_id_and_type(tmp_path) -> None:
+    app = _summary_app(tmp_path, _user(ADMIN, 900))
+    manager = app.state.analysis_manager
+    target_job = manager.create_job("ioc", {"value": "literal-target"}, user_id=101)
+    manager.create_job("file", {"filename": "other-target.bin"}, user_id=101)
+
+    with TestClient(app) as client:
+        assert _history_response(client, type="ioc")["total"] == 1
+        assert _history_response(client, q="literal-target")["total"] == 1
+        assert _history_response(client, q=target_job)["total"] == 1
+        assert _history_response(client, q="file")["total"] == 1
+        assert _history_response(client, q="literal_%")["total"] == 0
+
+
+def test_history_list_date_ranges_use_created_at(tmp_path) -> None:
+    app = _summary_app(tmp_path, _user(ADMIN, 900))
+    manager = app.state.analysis_manager
+    old_job = manager.create_job("ioc", {"value": "old"}, user_id=101)
+    week_job = manager.create_job("ioc", {"value": "week"}, user_id=101)
+    recent_job = manager.create_job("ioc", {"value": "recent"}, user_id=101)
+    now = datetime.now(timezone.utc)
+    with sqlite3.connect(str(manager._db_path)) as connection:
+        connection.executemany(
+            "UPDATE analysis_jobs SET created_at = ? WHERE id = ?",
+            [
+                ((now - timedelta(days=8)).isoformat(), old_job),
+                ((now - timedelta(days=2)).isoformat(), week_job),
+                ((now - timedelta(hours=2)).isoformat(), recent_job),
+            ],
+        )
+        connection.commit()
+
+    with TestClient(app) as client:
+        assert _history_response(client, range="all")["total"] == 3
+        assert _history_response(client, range="7d")["total"] == 2
+        assert _history_response(client, range="24h")["total"] == 1
+
+
+def test_history_list_sort_and_order_support_all_sort_keys(tmp_path) -> None:
+    app = _summary_app(tmp_path, _user(ADMIN, 900))
+    manager = app.state.analysis_manager
+    date_old = manager.create_job("email", {"filename": "old"}, user_id=101)
+    date_new = manager.create_job("file", {"filename": "new"}, user_id=101)
+    score_low = manager.create_job("ioc", {"value": "low"}, user_id=101)
+    score_high = manager.create_job("ioc", {"value": "high"}, user_id=101)
+    malicious = manager.create_job("ioc", {"value": "malicious"}, user_id=101)
+    suspicious = manager.create_job("ioc", {"value": "suspicious"}, user_id=101)
+    clean = manager.create_job("ioc", {"value": "clean"}, user_id=101)
+    unknown = manager.create_job("ioc", {"value": "unknown"}, user_id=101)
+    failed = manager.create_job("ioc", {"value": "failed"}, user_id=101)
+    queued = manager.create_job("ioc", {"value": "queued"}, user_id=101)
+    manager.complete_job(score_low, {}, verdict="CLEAN", score=10)
+    manager.complete_job(score_high, {}, verdict="CLEAN", score=90)
+    manager.complete_job(malicious, {}, verdict="PHISHING", score=1)
+    manager.complete_job(suspicious, {}, verdict="SPAM", score=2)
+    manager.complete_job(clean, {}, verdict="CLEAN", score=3)
+    manager.complete_job(unknown, {}, verdict="UNKNOWN", score=4)
+    manager.fail_job(failed, "failed")
+    with sqlite3.connect(str(manager._db_path)) as connection:
+        connection.executemany(
+            "UPDATE analysis_jobs SET created_at = ? WHERE id = ?",
+            [
+                ((datetime.now(timezone.utc) - timedelta(days=2)).isoformat(), date_old),
+                ((datetime.now(timezone.utc) + timedelta(days=1)).isoformat(), date_new),
+            ],
+        )
+        connection.commit()
+
+    with TestClient(app) as client:
+        date_items = _history_response(client, sort="date", order="asc")["items"]
+        assert date_items[0]["id"] == date_old
+        assert date_items[-1]["id"] == date_new
+        date_desc = _history_response(client, sort="date", order="desc")["items"]
+        assert date_desc[0]["id"] == date_new
+        score_items = _history_response(
+            client, sort="score", order="asc", group="clean"
+        )["items"]
+        assert score_items[0]["id"] == clean
+        score_desc = _history_response(client, sort="score", order="desc")["items"]
+        assert score_desc[0]["id"] == score_high
+        verdict_items = _history_response(client, sort="verdict", order="asc")["items"]
+        verdict_order = [
+            "malicious", "suspicious", "clean", "unknown", "failed", "in_progress"
+        ]
+        assert list(dict.fromkeys(item["verdict_group"] for item in verdict_items)) == verdict_order
+        verdict_desc = _history_response(client, sort="verdict", order="desc")["items"]
+        assert list(dict.fromkeys(item["verdict_group"] for item in verdict_desc)) == list(reversed(verdict_order))
+        type_items = _history_response(client, sort="type", order="asc")["items"]
+        type_desc = _history_response(client, sort="type", order="desc")["items"]
+        assert type_items[0]["analysis_type"] == "email"
+        assert type_desc[0]["analysis_type"] == "ioc"
+        status_items = _history_response(client, sort="status", order="asc")["items"]
+        status_desc = _history_response(client, sort="status", order="desc")["items"]
+        assert status_items[0]["status"] == "completed"
+        assert status_desc[0]["status"] == "running" or status_desc[0]["status"] == "queued"
+
+
+def test_history_list_pagination_validation_and_legacy_status(tmp_path) -> None:
+    app = _summary_app(tmp_path, _user(ADMIN, 900))
+    manager = app.state.analysis_manager
+    failed = manager.create_job("ioc", {"value": "failed"}, user_id=101)
+    manager.create_job("ioc", {"value": "queued"}, user_id=101)
+    manager.fail_job(failed, "failed")
+
+    with TestClient(app) as client:
+        assert _history_response(client, limit=1)["total"] == 2
+        beyond = _history_response(client, limit=1, offset=2)
+        assert beyond["total"] == 2
+        assert beyond["items"] == []
+        assert _history_response(client, status="failed")["total"] == 1
+        assert client.get("/api/analysis/history/", params={"limit": 101}).status_code == 422
+        assert client.get("/api/analysis/history/", params={"limit": 0}).status_code == 422
+        for key, value in (
+            ("group", "bad"),
+            ("type", "bad"),
+            ("range", "bad"),
+            ("sort", "bad"),
+            ("order", "bad"),
+        ):
+            assert client.get("/api/analysis/history/", params={key: value}).status_code == 422
+
+
+def test_history_list_invalid_json_row_is_searchable_by_id(tmp_path) -> None:
+    app = _summary_app(tmp_path, _user(ADMIN, 900))
+    manager = app.state.analysis_manager
+    job_id = manager.create_job("ioc", {"value": "valid"}, user_id=101)
+    with sqlite3.connect(str(manager._db_path)) as connection:
+        connection.execute(
+            "UPDATE analysis_jobs SET params = ? WHERE id = ?",
+            ("{invalid-json", job_id),
+        )
+        connection.commit()
+
+    with TestClient(app) as client:
+        payload = _history_response(client, q=job_id)
+        assert payload["total"] == 1
+        assert payload["items"][0]["id"] == job_id
+
+
+def test_history_list_filters_keep_role_scoping(tmp_path, monkeypatch) -> None:
+    app = _summary_app(tmp_path, _user(SOC, 101))
+    _seed_jobs(app.state.analysis_manager)
+    with TestClient(app) as client:
+        analyst_payload = _history_response(client)
+    assert [item["id"] for item in analyst_payload["items"]] == [
+        app.state.analysis_manager.list_jobs(user_id=101)[0]["id"]
+    ]
+
+    lead_app = _summary_app(tmp_path / "lead", _user(TEAM_LEAD, 900))
+    _seed_jobs(lead_app.state.analysis_manager)
+    monkeypatch.setattr(analysis_routes, "get_user_ids_by_role", lambda role: [101, 202])
+    with TestClient(lead_app) as client:
+        lead_payload = _history_response(client)
+    assert lead_payload["total"] == 2
+
+    admin_app = _summary_app(tmp_path / "admin", _user(ADMIN, 900))
+    _seed_jobs(admin_app.state.analysis_manager)
+    with TestClient(admin_app) as client:
+        assert _history_response(client)["total"] == 3
