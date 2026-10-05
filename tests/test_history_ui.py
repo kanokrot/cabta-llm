@@ -31,8 +31,14 @@ def test_history_template_has_static_shell_and_seven_cards() -> None:
     assert len(re.findall(r'class="history-stat(?:\s|[\"])', source)) == 7
     assert "{% block page_title %}" in source
     assert "{% block page_subtitle %}" in source
-    assert "<h1" not in source
-    assert "jobs" not in source.lower()
+    assert source.count("<h1") == 1
+    history_section = source.split('<section id="historyPage"', 1)[1].split("</section>", 1)[0]
+    assert history_section.count("<h1") == 1
+    assert "{% block page_title %}{% endblock %}" in source
+    assert "{% block page_subtitle %}{% endblock %}" in source
+    assert "{{ jobs" not in source
+    assert "{% if jobs" not in source
+    assert "{% for job" not in source
 
 
 def test_history_js_uses_dom_text_rendering_and_scoped_events() -> None:
@@ -73,9 +79,12 @@ def test_history_css_is_scoped() -> None:
         flags=re.DOTALL,
     )
 
+    chrome_selector = "body:has(.history-page) .sub-header"
+    assert chrome_selector in source
+
     assert re.search(
         r"(?m)^\s*(?:body|header|h1|table|button)(?:\s|[,{:#.])",
-        source,
+        source.replace(chrome_selector, ""),
     ) is None
 
     for match in re.finditer(r"([^{}]+)\{", source):
@@ -87,4 +96,5 @@ def test_history_css_is_scoped() -> None:
             assert (
                 selector.startswith(".history-page")
                 or selector.startswith('[data-theme="light"] .history-page')
+                or selector == chrome_selector
             )

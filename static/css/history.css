@@ -11,7 +11,17 @@
     --history-fail: #7a8fa0;
     --history-unknown: #5f8896;
     --history-progress: #22e5ff;
+    padding-top: 56px;
     color: var(--history-tx);
+}
+
+body:has(.history-page) .sub-header {
+    height: 0;
+    min-height: 0;
+    margin-top: 0 !important;
+    overflow: hidden;
+    padding: 0;
+    border: 0;
 }
 
 [data-theme="light"] .history-page {
@@ -31,6 +41,30 @@
 .history-page .history-g-failed { --history-color: var(--history-fail); }
 .history-page .history-g-unknown { --history-color: var(--history-unknown); }
 .history-page .history-g-in_progress { --history-color: var(--history-progress); }
+
+.history-page .history-heading {
+    margin-bottom: 20px;
+}
+
+.history-page .history-heading h1 {
+    margin: 0;
+    font-size: 22px;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    text-shadow: 0 0 14px var(--history-acc);
+}
+
+.history-page .history-heading h1 em {
+    color: var(--history-acc);
+    font-style: normal;
+}
+
+.history-page .history-heading-subtitle {
+    color: var(--history-mut);
+    font-size: 11px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+}
 
 .history-page .history-stats {
     display: grid;
@@ -194,6 +228,14 @@
     white-space: nowrap;
 }
 
+.history-page .history-table th,
+.history-page .history-table th .history-sort {
+    font-size: 10px;
+    letter-spacing: .18em;
+    line-height: 1.2;
+    text-transform: uppercase;
+}
+
 .history-page .history-sort {
     padding: 0;
     color: inherit;
@@ -234,6 +276,7 @@
 .history-page .history-type {
     color: var(--history-acc);
     border: 1px solid var(--history-line);
+    text-transform: uppercase;
 }
 
 .history-page .history-verdict {
