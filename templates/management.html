@@ -1,93 +1,130 @@
 {% extends "base.html" %}
 
 {% block title %}{% if current_user.role == 'admin' %}Access Requests{% else %}Team Management{% endif %} - Blue Team Assistant{% endblock %}
-{% block page_title %}{% if current_user.role == 'admin' %}Access Requests{% else %}Team Management{% endif %}{% endblock %}
-{% block page_subtitle %}<span class="page-subtitle">{% if current_user.role == 'admin' %}Admin review queue{% else %}Invite team members{% endif %}</span>{% endblock %}
+{% block page_title %}{% endblock %}
+{% block page_subtitle %}{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="/static/css/management.css?v=1">
+{% endblock %}
 
 {% block content %}
-{% if current_user.role == 'Team Lead' %}
-<div class="card">
-    <div class="card-header">
-        <h5 class="mb-1"><i class="bi bi-person-plus me-2 text-accent"></i>Invite team member</h5>
-        <p class="text-muted small mb-0">Team Leads can invite SOC operators directly.</p>
-    </div>
-    <div class="card-body">
-        <form id="team-member-invite-form">
-            <div class="mb-3">
-                <label class="form-label" for="team-member-email">Email</label>
-                <input class="form-control" id="team-member-email" name="email" type="email"
-                       maxlength="254" autocomplete="email" required>
-            </div>
-            <div class="mb-3">
-                <label class="form-label" for="team-member-role">Role</label>
-                <select class="form-control" id="team-member-role" name="role" required>
-                    <option value="">Select a role</option>
-                    {% for role in team_member_roles | sort %}
-                    <option value="{{ role | e }}">{{ role }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <button class="btn btn-accent" type="submit">
-                <i class="bi bi-send me-1"></i>Send invitation
-            </button>
-        </form>
-    </div>
-</div>
-{% else %}
-<div class="card">
-    <div class="card-header d-flex justify-content-between align-items-center">
+<div class="container-fluid mgmt-page">
+    {% if current_user.role == 'Team Lead' %}
+    <div class="mgmt-heading">
         <div>
-            <h5 class="mb-1"><i class="bi bi-person-plus me-2 text-accent"></i>Pending access requests</h5>
-            <p class="text-muted small mb-0">Approving a request sends the existing invitation email.</p>
+            <h1>TEAM <em>MANAGEMENT</em></h1>
+            <p class="mgmt-heading-subtitle">INVITE TEAM MEMBERS</p>
         </div>
-        <span class="badge text-bg-secondary" id="request-count">{{ pending_requests | length }}</span>
     </div>
-    <div class="card-body p-0">
-        {% if pending_requests %}
-        <div class="table-responsive">
-            <table class="table table-hover align-middle mb-0" id="access-request-table">
-                <thead>
-                    <tr>
-                        <th>Name</th>
-                        <th>Email</th>
-                        <th>Requested role</th>
-                        <th>Reason</th>
-                        <th>Submitted</th>
-                        <th class="text-end">Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                {% for item in pending_requests %}
-                    <tr data-request-id="{{ item.id }}">
-                        <td>{{ item.name }}</td>
-                        <td>{{ item.email }}</td>
-                        <td><span class="badge text-bg-secondary">{{ item.requested_role }}</span></td>
-                        <td class="text-break" style="min-width: 220px;">{{ item.reason }}</td>
-                        <td class="text-muted small">{{ item.created_at }}</td>
-                        <td class="text-end text-nowrap">
-                            <button type="button" class="btn btn-sm btn-accent me-1"
-                                    onclick="AccessRequests.decide({{ item.id }}, 'approve', this)">
-                                <i class="bi bi-check-lg me-1"></i>Approve
-                            </button>
-                            <button type="button" class="btn btn-sm btn-outline-danger"
-                                    onclick="AccessRequests.decide({{ item.id }}, 'reject', this)">
-                                <i class="bi bi-x-lg me-1"></i>Reject
-                            </button>
-                        </td>
-                    </tr>
-                {% endfor %}
-                </tbody>
-            </table>
+    <section class="card mgmt-invite-card">
+        <div class="card-header mgmt-invite-header">
+            <h5 class="mb-1 mgmt-card-title"><i class="bi bi-person-plus me-2 text-accent" aria-hidden="true"></i>Invite team member</h5>
+            <p class="text-muted small mb-0">Team Leads can invite SOC operators directly.</p>
         </div>
-        {% else %}
-        <div class="p-5 text-center text-muted" id="empty-access-requests">
-            <i class="bi bi-inbox fs-2 d-block mb-2"></i>
-            No pending access requests.
+        <div class="card-body mgmt-invite-body">
+            <form id="team-member-invite-form">
+                <div class="mb-3">
+                    <label class="form-label" for="team-member-email">Email</label>
+                    <input class="form-control" id="team-member-email" name="email" type="email"
+                           maxlength="254" autocomplete="email" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label" for="team-member-role">Role</label>
+                    <select class="form-control" id="team-member-role" name="role" required>
+                        <option value="">Select a role</option>
+                        {% for role in team_member_roles | sort %}
+                        <option value="{{ role | e }}">{{ role | e }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <button class="btn btn-accent" type="submit">
+                    <i class="bi bi-send me-1"></i>Send invitation
+                </button>
+            </form>
         </div>
-        {% endif %}
+    </section>
+    {% else %}
+    <div class="mgmt-heading">
+        <div>
+            <h1>ACCESS <em>REQUESTS</em></h1>
+            <p class="mgmt-heading-subtitle">ADMIN REVIEW QUEUE · INVITATION FLOW</p>
+        </div>
     </div>
+
+    <section class="mgmt-stats" aria-label="Access request totals">
+        <div class="mgmt-stat mgmt-stat-pending" aria-current="true">
+            <span class="mgmt-stat-label">Pending</span>
+            <strong id="pending-request-count">{{ pending_requests | length }}</strong>
+        </div>
+        <div class="mgmt-stat mgmt-stat-unavailable" title="Approved request history is not available from this queue API.">
+            <span class="mgmt-stat-label">Approved</span>
+            <strong aria-label="Unavailable">—</strong>
+        </div>
+        <div class="mgmt-stat mgmt-stat-unavailable" title="Rejected request history is not available from this queue API.">
+            <span class="mgmt-stat-label">Rejected</span>
+            <strong aria-label="Unavailable">—</strong>
+        </div>
+    </section>
+
+    <div class="mgmt-distribution" id="pending-request-distribution" data-has-pending="{{ 'true' if pending_requests else 'false' }}" role="img" aria-label="Pending request proportion"></div>
+
+    <section class="card mgmt-queue-card">
+        <header class="card-header d-flex justify-content-between align-items-center mgmt-queue-header">
+            <h5 class="mb-1 mgmt-card-title"><i class="bi bi-person-plus me-2 text-accent" aria-hidden="true"></i>PENDING ACCESS REQUESTS</h5>
+            <span class="mgmt-queue-note">APPROVING SENDS THE INVITATION EMAIL</span>
+            <span class="badge text-bg-secondary mgmt-count-badge" id="request-count">{{ pending_requests | length }}</span>
+        </header>
+        <div class="card-body p-0 mgmt-queue-body">
+            {% if pending_requests %}
+            <div class="table-responsive mgmt-table-shell">
+                <table class="table table-hover align-middle mb-0 mgmt-table" id="access-request-table">
+                    <thead>
+                        <tr>
+                            <th>Requester</th>
+                            <th>Email</th>
+                            <th>Requested Role</th>
+                            <th>Received</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    {% for item in pending_requests %}
+                        <tr class="mgmt-row" data-request-id="{{ item.id }}">
+                            <td class="mgmt-requester">
+                                <strong>{{ item.name | e }}</strong>
+                                <span class="text-break mgmt-reason">{{ item.reason | e }}</span>
+                            </td>
+                            <td class="mgmt-email">{{ item.email | e }}</td>
+                            <td><span class="badge text-bg-secondary mgmt-role-chip">{{ item.requested_role | e }}</span></td>
+                            <td class="text-muted small mgmt-received">
+                                <time class="mgmt-relative-time" datetime="{{ item.created_at | e }}" title="{{ item.created_at | e }}">{{ item.created_at | e }}</time>
+                            </td>
+                            <td class="text-end text-nowrap mgmt-actions">
+                                <button type="button" class="btn btn-sm btn-accent me-1 mgmt-action mgmt-approve"
+                                        onclick="AccessRequests.decide({{ item.id }}, 'approve', this)">
+                                    <i class="bi bi-check-lg me-1" aria-hidden="true"></i>Approve
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-danger mgmt-action mgmt-reject"
+                                        onclick="AccessRequests.decide({{ item.id }}, 'reject', this)">
+                                    <i class="bi bi-x-lg me-1" aria-hidden="true"></i>Reject
+                                </button>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% endif %}
+            <div class="p-5 text-center text-muted mgmt-empty" id="empty-access-requests" {% if pending_requests %}hidden{% endif %}>
+                <i class="bi bi-inbox fs-2 d-block mb-2" aria-hidden="true"></i>
+                <h3 class="mgmt-empty-title">Queue is clear</h3>
+                <p>No pending access requests.</p>
+            </div>
+        </div>
+    </section>
+    {% endif %}
 </div>
-{% endif %}
 {% endblock %}
 
 {% block scripts %}
@@ -167,5 +204,6 @@ var AccessRequests = (function () {
     return { decide: decide };
 }());
 </script>
+<script src="/static/js/management.js?v=1"></script>
 {% endif %}
 {% endblock %}

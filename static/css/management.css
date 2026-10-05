@@ -1,0 +1,346 @@
+.mgmt-page {
+    padding: 56px 20px 20px;
+    color: var(--text-primary);
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+body:has(.mgmt-page) div[class~="sub-header"] {
+    display: none;
+}
+
+.mgmt-page .mgmt-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: 20px;
+}
+
+.mgmt-page .mgmt-heading h1 {
+    margin: 0 0 4px;
+    color: var(--text-primary);
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    text-shadow: 0 0 14px var(--color-info);
+}
+
+.mgmt-page .mgmt-heading h1 em {
+    color: var(--color-info);
+    font-style: normal;
+}
+
+.mgmt-page .mgmt-heading-subtitle {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+
+.mgmt-page .mgmt-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.mgmt-page .mgmt-stat {
+    display: flex;
+    min-height: 92px;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 12px 14px;
+    border: 1px solid var(--border-color);
+    border-radius: 0;
+    background: var(--bg-card);
+}
+
+.mgmt-page .mgmt-stat-pending {
+    --mgmt-stat-color: var(--color-info);
+}
+
+.mgmt-page .mgmt-stat-pending-active,
+.mgmt-page:has(.mgmt-row) .mgmt-stat-pending {
+    --mgmt-stat-color: var(--color-warning);
+}
+
+.mgmt-page .mgmt-stat-pending-empty {
+    --mgmt-stat-color: var(--color-info);
+}
+
+.mgmt-page .mgmt-stat-pending-active,
+.mgmt-page .mgmt-stat-pending-empty,
+.mgmt-page:has(.mgmt-row) .mgmt-stat-pending {
+    border-color: var(--mgmt-stat-color);
+    box-shadow: 0 0 18px -4px var(--mgmt-stat-color);
+}
+
+.mgmt-page .mgmt-stat-unavailable {
+    --mgmt-stat-color: var(--text-muted);
+}
+
+.mgmt-page .mgmt-stat-label {
+    color: var(--text-muted);
+    font-size: 10px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+}
+
+.mgmt-page .mgmt-stat strong {
+    color: var(--mgmt-stat-color, var(--color-info));
+    font-size: 30px;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.15;
+}
+
+.mgmt-page .mgmt-stat:hover,
+.mgmt-page .mgmt-stat.mgmt-stat-pending-active {
+    border-color: var(--mgmt-stat-color, var(--color-info));
+    box-shadow: 0 0 18px -4px var(--mgmt-stat-color, var(--color-info));
+}
+
+.mgmt-page .mgmt-distribution {
+    --mgmt-distribution-color: var(--color-info);
+    height: 6px;
+    margin-bottom: 16px;
+    border-radius: 0;
+    background: var(--mgmt-distribution-color);
+    box-shadow: 0 0 8px var(--mgmt-distribution-color);
+    transition: background-color 160ms ease, box-shadow 160ms ease;
+}
+
+.mgmt-page .mgmt-distribution[data-has-pending="true"] {
+    --mgmt-distribution-color: var(--color-warning);
+}
+
+.mgmt-page .mgmt-queue-card,
+.mgmt-page .mgmt-invite-card {
+    overflow: hidden;
+    border: 1px solid var(--border-color);
+    border-radius: 0;
+    background: var(--bg-card);
+}
+
+.mgmt-page .mgmt-queue-header {
+    display: flex;
+    min-height: 54px;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.mgmt-page .mgmt-card-title {
+    margin: 0;
+    color: var(--text-primary);
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+}
+
+.mgmt-page .mgmt-card-title i {
+    margin-right: 8px;
+    color: var(--color-info);
+}
+
+.mgmt-page .mgmt-queue-note {
+    margin-left: auto;
+    color: var(--text-muted);
+    font-size: 0.62rem;
+    letter-spacing: 0.08em;
+    text-align: right;
+}
+
+.mgmt-page .mgmt-count-badge {
+    border-radius: 0;
+    font-variant-numeric: tabular-nums;
+    border: 1px solid var(--color-info);
+    /* Bootstrap .text-bg-secondary forces these two properties with !important. */
+    color: var(--color-info) !important;
+    background-color: color-mix(in srgb, var(--color-info) 10%, transparent) !important;
+}
+
+.mgmt-page .mgmt-queue-body {
+    padding: 0;
+}
+
+.mgmt-page .mgmt-table-shell {
+    overflow-x: auto;
+}
+
+.mgmt-page .mgmt-table {
+    width: 100%;
+    margin: 0;
+    color: var(--text-primary);
+}
+
+.mgmt-page .mgmt-table th {
+    padding: 11px 14px;
+    border-bottom-color: var(--border-color);
+    color: var(--text-muted);
+    font-size: 0.65rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.mgmt-page .mgmt-table td {
+    padding: 11px 14px;
+    border-bottom-color: var(--border-color);
+    vertical-align: middle;
+}
+
+.mgmt-page .mgmt-row > td:first-child {
+    border-left: 3px solid var(--color-warning);
+}
+
+.mgmt-page .mgmt-requester {
+    min-width: 190px;
+}
+
+.mgmt-page .mgmt-requester strong {
+    display: block;
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.mgmt-page .mgmt-reason {
+    display: block;
+    max-width: 340px;
+    margin-top: 3px;
+    color: var(--text-muted);
+    font-size: 0.76rem;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+}
+
+.mgmt-page .mgmt-email {
+    overflow-wrap: anywhere;
+}
+
+.mgmt-page .mgmt-role-chip {
+    display: inline-block;
+    padding: 2px 8px;
+    border: 1px solid var(--border-color);
+    border-radius: 0;
+    /* Bootstrap .text-bg-secondary forces these two properties with !important. */
+    color: var(--text-primary) !important;
+    background-color: color-mix(in srgb, var(--text-muted) 10%, transparent) !important;
+    white-space: nowrap;
+}
+
+.mgmt-page .mgmt-received {
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    white-space: nowrap;
+}
+
+.mgmt-page .mgmt-actions {
+    min-width: 170px;
+}
+
+.mgmt-page .mgmt-action {
+    margin-left: 4px;
+    padding: 4px 8px;
+    border: 1px solid;
+    border-radius: 0;
+    font: inherit;
+    font-size: 0.76rem;
+    line-height: 1.35;
+}
+
+.mgmt-page .mgmt-approve {
+    border-color: var(--color-success);
+    color: var(--color-success);
+    background: color-mix(in srgb, var(--color-success) 10%, var(--bg-card));
+}
+
+.mgmt-page .mgmt-approve:hover,
+.mgmt-page .mgmt-approve:focus-visible {
+    color: var(--color-success);
+    background: color-mix(in srgb, var(--color-success) 18%, var(--bg-card));
+}
+
+.mgmt-page .mgmt-reject {
+    border-color: var(--color-danger);
+    color: var(--color-danger);
+    background: color-mix(in srgb, var(--color-danger) 10%, var(--bg-card));
+}
+
+.mgmt-page .mgmt-reject:hover,
+.mgmt-page .mgmt-reject:focus-visible {
+    color: var(--color-danger);
+    background: color-mix(in srgb, var(--color-danger) 18%, var(--bg-card));
+}
+
+.mgmt-page .mgmt-action:focus-visible {
+    outline: 2px solid currentColor;
+    outline-offset: 2px;
+}
+
+.mgmt-page .mgmt-empty,
+.mgmt-page #empty-access-requests {
+    min-height: 180px;
+    padding: 40px 24px;
+    color: var(--text-muted);
+    text-align: center;
+}
+
+.mgmt-page .mgmt-empty > i,
+.mgmt-page #empty-access-requests > i {
+    display: block;
+    margin-bottom: 8px;
+    color: var(--color-info);
+    font-size: 2rem;
+}
+
+.mgmt-page .mgmt-empty-title {
+    margin: 0 0 4px;
+    color: var(--text-primary);
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+.mgmt-page .mgmt-empty p,
+.mgmt-page #empty-access-requests p {
+    margin: 0;
+    color: var(--text-muted);
+}
+
+.mgmt-page #empty-access-requests[hidden] {
+    display: none;
+}
+
+.mgmt-page .mgmt-table-hidden {
+    display: none;
+}
+
+.mgmt-page .mgmt-invite-header {
+    padding: 14px;
+    border-bottom: 1px solid var(--border-color);
+    background: var(--bg-card);
+}
+
+.mgmt-page .mgmt-invite-body {
+    padding: 16px 14px;
+}
+
+@media (max-width: 767.98px) {
+    .mgmt-page .mgmt-queue-header {
+        flex-wrap: wrap;
+    }
+
+    .mgmt-page .mgmt-queue-note {
+        order: 3;
+        width: 100%;
+        margin-left: 0;
+        text-align: left;
+    }
+
+    .mgmt-page .mgmt-actions {
+        min-width: 150px;
+    }
+}
