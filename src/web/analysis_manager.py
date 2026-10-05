@@ -253,6 +253,58 @@ class AnalysisManager:
             msg['tool_source'] = tool_source
         self._notify(job_id, msg)
 
+    def update_steps(
+        self,
+        job_id: str,
+        steps: List[Dict[str, Any]],
+        progress: int,
+        current_step: str = '',
+    ) -> None:
+        """Persist analyzer step states in the existing job params JSON."""
+        safe_steps = [
+            {
+                'key': str(step.get('key', '')),
+                'label': str(step.get('label', '')),
+                'state': str(step.get('state', 'pending')),
+            }
+            for step in steps
+            if isinstance(step, dict)
+        ]
+        with self._lock:
+            conn = self._connect()
+            row = conn.execute(
+                "SELECT params FROM analysis_jobs WHERE id = ?", (job_id,)
+            ).fetchone()
+            params = {}
+            if row and row[0]:
+                try:
+                    params = json.loads(row[0])
+                except (TypeError, json.JSONDecodeError):
+                    params = {}
+            if not isinstance(params, dict):
+                params = {}
+            params['_analysis_steps'] = safe_steps
+            conn.execute(
+                """UPDATE analysis_jobs
+                   SET params = ?, status = 'running', progress = ?, current_step = ?
+                   WHERE id = ?""",
+                (json.dumps(params, default=str), min(progress, 100), current_step, job_id),
+            )
+            conn.commit()
+            conn.close()
+
+        steps_done = sum(
+            step['state'] in {'completed', 'skipped'} for step in safe_steps
+        )
+        self._notify(job_id, {
+            'type': 'progress',
+            'progress': min(progress, 100),
+            'step': current_step,
+            'steps': safe_steps,
+            'steps_total': len(safe_steps),
+            'steps_done': steps_done,
+        })
+
     def complete_job(
         self,
         job_id: str,
