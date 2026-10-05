@@ -25,10 +25,11 @@ body:has(.tickets-page) .sub-header {
 
 .tickets-page .tickets-heading h4 {
     color: var(--text-primary);
-    font-size: 1.15rem;
+    font-size: 22px;
     font-weight: 700;
-    letter-spacing: 0.13em;
+    letter-spacing: 0.14em;
     text-transform: uppercase;
+    text-shadow: 0 0 14px var(--color-info);
 }
 
 .tickets-page .tickets-heading h4 em {
@@ -37,8 +38,9 @@ body:has(.tickets-page) .sub-header {
 }
 
 .tickets-page .tickets-heading-subtitle {
-    font-size: 0.72rem;
-    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    font-size: 11px;
+    letter-spacing: 0.12em;
     text-transform: uppercase;
 }
 
@@ -49,14 +51,14 @@ body:has(.tickets-page) .sub-header {
 
 .tickets-page .tickets-stats {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
     gap: 12px;
     margin-bottom: 12px;
 }
 
 .tickets-page .tickets-stat {
     display: flex;
-    min-height: 82px;
+    min-height: 92px;
     flex-direction: column;
     justify-content: space-between;
     padding: 12px 14px;
@@ -67,16 +69,22 @@ body:has(.tickets-page) .sub-header {
 
 .tickets-page .tickets-stat-label {
     color: var(--text-muted);
-    font-size: 0.68rem;
-    letter-spacing: 0.1em;
+    font-size: 10px;
+    letter-spacing: 0.16em;
     text-transform: uppercase;
 }
 
 .tickets-page .tickets-stat strong {
     color: var(--tickets-stat-color, var(--color-info));
-    font-size: 1.5rem;
+    font-size: 30px;
     font-variant-numeric: tabular-nums;
-    line-height: 1;
+    line-height: 1.15;
+}
+
+.tickets-page .tickets-stat:hover,
+.tickets-page .tickets-stat.is-active {
+    border-color: var(--tickets-stat-color, var(--color-info));
+    box-shadow: 0 0 18px -4px var(--tickets-stat-color, var(--color-info));
 }
 
 .tickets-page .tickets-stat-malicious {
@@ -110,6 +118,7 @@ body:has(.tickets-page) .sub-header {
     min-width: 0;
     height: 100%;
     background: var(--tickets-segment-color, var(--color-info));
+    box-shadow: 0 0 8px var(--tickets-segment-color, var(--color-info));
     transition: flex-basis 160ms ease;
 }
 
