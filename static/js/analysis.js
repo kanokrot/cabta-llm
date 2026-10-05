@@ -158,7 +158,15 @@
         // Overview tab
         var ov = '<div class="mb-3">';
         ov += '<h5>Verdict: <span class="badge bg-' + emailVerdictColor(res.verdict) + '">' + (res.verdict || 'UNKNOWN') + '</span></h5>';
-        if (res.composite_score !== undefined) {
+        if (res.indicator_summary && typeof res.indicator_summary === 'object') {
+            var overviewFound = Number(res.indicator_summary.found);
+            var overviewCheckable = Number(res.indicator_summary.checkable);
+            var overviewUnknown = String(res.verdict || '').toUpperCase() === 'UNKNOWN'
+                || !isFinite(overviewFound) || !isFinite(overviewCheckable) || overviewCheckable === 0;
+            ov += overviewUnknown
+                ? '<p><strong>No checks available</strong></p>'
+                : '<p><strong>Indicators found:</strong> ' + overviewFound + ' of ' + overviewCheckable + '</p>';
+        } else if (res.composite_score !== undefined) {
             ov += '<p><strong>Phishing Score:</strong> ' + res.composite_score + '/100</p>';
         }
         if (res.email_data) {
@@ -243,9 +251,16 @@
 
         /* Phishing risk */
         // Include only factors with a level supported by the underlying result.
-        if (res.composite_score !== undefined || res.base_phishing_score !== undefined) {
+        if ((res.indicator_summary && typeof res.indicator_summary === 'object')
+            || res.composite_score !== undefined || res.base_phishing_score !== undefined) {
             var factors = [];
-            if (res.email_data) {
+            if (res.indicator_summary && Array.isArray(res.indicator_summary.factors)) {
+                res.indicator_summary.factors.forEach(function (factor) {
+                    if (factor && typeof factor === 'object') {
+                        factors.push({ label: factor.label || factor.key || '', state: factor.state });
+                    }
+                });
+            } else if (res.email_data) {
                 ['spf', 'dkim', 'dmarc'].forEach(function (protocol) {
                     var authLevel = emailAuthFactorLevel(res.email_data[protocol]);
                     if (authLevel) factors.push({ label: protocol.toUpperCase(), level: authLevel });
@@ -278,11 +293,23 @@
                 var headerLevel = emailCountFactorLevel(headerAnomalies, true);
                 if (headerLevel) factors.push({ label: 'Header anomalies', level: headerLevel });
             }
-            var phishingScore = res.composite_score !== undefined ? res.composite_score : res.base_phishing_score;
-            output.phishingRisk = {
-                score: phishingScore,
-                factors: factors
-            };
+            if (res.indicator_summary && typeof res.indicator_summary === 'object') {
+                output.phishingRisk = {
+                    score: null,
+                    factors: factors,
+                    indicatorSummary: {
+                        found: res.indicator_summary.found,
+                        checkable: res.indicator_summary.checkable,
+                        verdict: res.verdict
+                    }
+                };
+            } else {
+                var phishingScore = res.composite_score !== undefined ? res.composite_score : res.base_phishing_score;
+                output.phishingRisk = {
+                    score: phishingScore,
+                    factors: factors
+                };
+            }
         }
 
         /* Sender info */
@@ -374,7 +401,7 @@
         if (!verdict) return 'secondary';
         var v = verdict.toUpperCase();
         if (v === 'PHISHING' || v === 'MALICIOUS') return 'danger';
-        if (v === 'SUSPICIOUS' || v === 'SPAM') return 'warning';
+        if (v === 'SUSPICIOUS') return 'warning';
         if (v === 'CLEAN') return 'success';
         return 'secondary';
     }

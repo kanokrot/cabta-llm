@@ -272,6 +272,7 @@
     .risk-factor.risk-medium { color: #fd7e14; background: rgba(253,126,20,0.1); }
     .risk-factor.risk-low    { color: #198754; background: rgba(25,135,84,0.1); }
     .risk-factor.risk-unknown { color: var(--text-primary); }
+    .risk-factor.risk-unavailable { color: var(--text-secondary); }
 
     /* ── Sender Analysis Card ── */
     .sender-card {
@@ -1562,7 +1563,38 @@
      * ======================================================== */
 
     /* --- Phishing Risk Bar --- */
-    function renderPhishingRisk(score, factors) {
+    function renderPhishingRisk(score, factors, indicatorSummary) {
+        if (indicatorSummary && typeof indicatorSummary === 'object') {
+            var foundCount = Number(indicatorSummary.found);
+            var checkableCount = Number(indicatorSummary.checkable);
+            var unknownVerdict = String(indicatorSummary.verdict || '').toUpperCase() === 'UNKNOWN';
+            var noChecks = unknownVerdict || !isFinite(foundCount) || !isFinite(checkableCount) || checkableCount === 0;
+            var safeFound = isFinite(foundCount) ? Math.max(0, foundCount) : 0;
+            var safeCheckable = isFinite(checkableCount) ? Math.max(0, checkableCount) : 0;
+            var ratio = safeCheckable > 0 ? Math.max(0, Math.min(100, safeFound / safeCheckable * 100)) : 0;
+            var countText = noChecks ? 'No checks available' : 'Indicators found: ' + safeFound + ' of ' + safeCheckable;
+            var countClass = noChecks ? 'text-muted' : '';
+            var indicatorHtml = '<div class="phishing-risk-container">'
+                + '<div class="d-flex justify-content-between align-items-center mb-1">'
+                + '<span class="fw-semibold ' + countClass + '"><i class="bi bi-list-check me-2"></i>' + countText + '</span>'
+                + '</div>'
+                + '<div class="phishing-risk-track ' + countClass + '"><div class="phishing-risk-thumb" style="left:' + ratio + '%;color:var(--text-primary)"></div></div>'
+                + '<div class="phishing-risk-labels"><span>0</span><span>' + safeCheckable + '</span></div>';
+            if (factors && factors.length) {
+                indicatorHtml += '<div class="mt-3">';
+                for (var indicatorIndex = 0; indicatorIndex < factors.length; indicatorIndex++) {
+                    var indicator = factors[indicatorIndex] || {};
+                    var state = indicator.state === 'found' || indicator.state === 'clear' ? indicator.state : 'unavailable';
+                    var stateClass = state === 'found' ? 'risk-medium' : state === 'clear' ? 'risk-low' : 'risk-unavailable';
+                    var stateIcon = state === 'found' ? 'bi-exclamation-circle-fill' : state === 'clear' ? 'bi-check-circle-fill' : 'bi-dash-circle';
+                    var stateText = state === 'unavailable' ? ' — Not checked' : '';
+                    indicatorHtml += '<span class="risk-factor ' + stateClass + '"><i class="bi ' + stateIcon + '"></i> '
+                        + escHtmlLocal(indicator.label || '') + stateText + '</span>';
+                }
+                indicatorHtml += '</div>';
+            }
+            return indicatorHtml + '</div>';
+        }
         if (typeof score !== 'number') return '';
         var s = Math.max(0, Math.min(100, Math.round(score)));
         var label = s < 30 ? 'Low Risk' : s < 60 ? 'Medium Risk' : s < 80 ? 'High Risk' : 'Critical Risk';
@@ -2311,8 +2343,8 @@
                 scoreValue = Math.max(0, Math.min(100, Number(scoreField)));
             }
             var storedVerdict = r.verdict === null || typeof r.verdict === 'undefined' ? '' : String(r.verdict).toUpperCase();
-            var scoreBand = storedVerdict === 'PHISHING' || storedVerdict === 'MALICIOUS' ? 'ea-score-phishing' : storedVerdict === 'SUSPICIOUS' || storedVerdict === 'SPAM' ? 'ea-score-medium' : storedVerdict === 'CLEAN' ? 'ea-score-safe' : scoreValue === null ? 'ea-score-unknown' : scoreValue < 30 ? 'ea-score-safe' : scoreValue < 60 ? 'ea-score-medium' : 'ea-score-phishing';
-            var scoreLabel = scoreBand === 'ea-score-safe' ? 'Safe' : scoreBand === 'ea-score-medium' ? 'Medium' : scoreBand === 'ea-score-phishing' ? 'Phishing' : '';
+            var scoreBand = storedVerdict === 'PHISHING' || storedVerdict === 'MALICIOUS' ? 'ea-score-phishing' : storedVerdict === 'SUSPICIOUS' ? 'ea-score-medium' : storedVerdict === 'CLEAN' ? 'ea-score-safe' : 'ea-score-unknown';
+            var scoreLabel = scoreBand === 'ea-score-safe' ? 'Safe' : scoreBand === 'ea-score-medium' ? 'Medium' : scoreBand === 'ea-score-phishing' ? 'Phishing' : 'Unknown';
 
             var item = document.createElement('div');
             item.className = 'recent-item ea-recent-row';
@@ -2470,7 +2502,7 @@
 
                     /* Phishing Risk Bar */
                     if (data.phishingRisk) {
-                        overviewHtml += renderPhishingRisk(data.phishingRisk.score, data.phishingRisk.factors);
+                        overviewHtml += renderPhishingRisk(data.phishingRisk.score, data.phishingRisk.factors, data.phishingRisk.indicatorSummary);
                     }
 
                     /* Sender Analysis Card */
@@ -2626,7 +2658,7 @@
 
                             /* Reuse the same rendering logic as onComplete */
                             var overviewHtml = '';
-                            if (data.phishingRisk) overviewHtml += renderPhishingRisk(data.phishingRisk.score, data.phishingRisk.factors);
+                            if (data.phishingRisk) overviewHtml += renderPhishingRisk(data.phishingRisk.score, data.phishingRisk.factors, data.phishingRisk.indicatorSummary);
                             if (data.sender) overviewHtml += renderSenderCard(data.sender);
                             if (data.overview) overviewHtml += data.overview;
                             if (overviewHtml) setSanitizedHTML(document.getElementById('resultOverview'), overviewHtml);

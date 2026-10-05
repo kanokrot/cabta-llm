@@ -396,8 +396,8 @@ Capability limitations:
 {self._format_rag_section(rag_context)}
 Based on the above tool analysis, provide your professional assessment in JSON format:
 {{
-    "verdict": "PHISHING/SPAM/SUSPICIOUS/CLEAN",
-    "analysis": "Your concise analysis (2-3 sentences) explaining WHY this is phishing/spam/clean based on the tool findings. Reference specific detections (e.g., 'lookalike domain paypa1.com', 'malicious attachment detected', 'links to known C2 infrastructure').",
+    "verdict": "PHISHING/SUSPICIOUS/CLEAN/UNKNOWN",
+    "analysis": "Your concise analysis (2-3 sentences) explaining WHY this is phishing/clean/unknown based on the tool findings. Reference specific detections (e.g., 'lookalike domain paypa1.com', 'malicious attachment detected', 'links to known C2 infrastructure').",
     "recommendations": [
         "Block sender domain immediately",
         "Hunt for similar emails in mail gateway",
