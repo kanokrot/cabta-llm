@@ -1,33 +1,89 @@
 {% extends "base.html" %}
 {% block title %}Incident Tickets - CABTA{% endblock %}
-{% block page_title %}Incident Tickets{% endblock %}
-{% block page_subtitle %}<span class="page-subtitle">Auto-generated tickets from investigation verdicts</span>{% endblock %}
+{% block page_title %}{% endblock %}
+{% block page_subtitle %}{% endblock %}
+{% block extra_head %}
+<link rel="stylesheet" href="/static/css/tickets.css?v=1">
+{% endblock %}
 {% block content %}
-<div class="container-fluid py-4">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <div>
-            <h4 class="mb-1"><i class="bi bi-ticket-perforated me-2"></i>Incident Tickets</h4>
-            <p class="text-muted mb-0">Auto-generated incident tickets from IOC / file / email investigations</p>
+{% set counts = namespace(total=tickets|length, malicious=0, suspicious=0, clean=0, unknown=0) %}
+{% for t in tickets %}
+    {% set ticket_verdict = t.verdict|default('UNKNOWN', true)|upper %}
+    {% if ticket_verdict == 'MALICIOUS' %}
+        {% set counts.malicious = counts.malicious + 1 %}
+    {% elif ticket_verdict == 'SUSPICIOUS' %}
+        {% set counts.suspicious = counts.suspicious + 1 %}
+    {% elif ticket_verdict == 'CLEAN' %}
+        {% set counts.clean = counts.clean + 1 %}
+    {% else %}
+        {% set counts.unknown = counts.unknown + 1 %}
+    {% endif %}
+{% endfor %}
+<div class="container-fluid py-4 tickets-page">
+    <div class="d-flex justify-content-between align-items-center mb-4 tickets-heading">
+        <div class="tickets-heading-copy">
+            <h4 class="mb-1"><i class="bi bi-ticket-perforated me-2"></i>Incident <em>Tickets</em></h4>
+            <p class="text-muted mb-0 tickets-heading-subtitle">Auto-generated incident tickets from IOC / file / email investigations</p>
         </div>
-        <span class="badge bg-secondary">{{ tickets|length }} ticket(s)</span>
+        <span class="badge bg-secondary tickets-count-badge">{{ tickets|length }} ticket(s)</span>
     </div>
 
+    <section class="tickets-stats" aria-label="Ticket verdict totals">
+        <div class="tickets-stat tickets-stat-total">
+            <span class="tickets-stat-label">Total tickets</span>
+            <strong id="ticketCountTotal">{{ counts.total }}</strong>
+        </div>
+        <div class="tickets-stat tickets-stat-malicious">
+            <span class="tickets-stat-label">Malicious</span>
+            <strong id="ticketCountMalicious">{{ counts.malicious }}</strong>
+        </div>
+        <div class="tickets-stat tickets-stat-suspicious">
+            <span class="tickets-stat-label">Suspicious</span>
+            <strong id="ticketCountSuspicious">{{ counts.suspicious }}</strong>
+        </div>
+        <div class="tickets-stat tickets-stat-clean">
+            <span class="tickets-stat-label">Clean</span>
+            <strong id="ticketCountClean">{{ counts.clean }}</strong>
+        </div>
+        <div class="tickets-stat tickets-stat-unknown">
+            <span class="tickets-stat-label">Unknown</span>
+            <strong id="ticketCountUnknown">{{ counts.unknown }}</strong>
+        </div>
+    </section>
+
+    <div id="ticketDistribution" class="tickets-distribution" role="img" aria-label="Ticket verdict proportions"></div>
+
+    <section class="tickets-toolbar" aria-label="Search and filter tickets">
+        <label class="tickets-search">
+            <span class="tickets-search-icon" aria-hidden="true">⌕</span>
+            <input id="ticketSearch" type="search" placeholder="Search tickets…" autocomplete="off" aria-label="Search tickets">
+        </label>
+        <div class="tickets-filters" role="group" aria-label="Filter by verdict">
+            <button class="tickets-filter tickets-filter-active" type="button" data-filter="ALL" aria-pressed="true">All <span id="ticketFilterCountAll" class="tickets-filter-count">{{ counts.total }}</span></button>
+            <button class="tickets-filter" type="button" data-filter="MALICIOUS" aria-pressed="false">Malicious <span id="ticketFilterCountMalicious" class="tickets-filter-count">{{ counts.malicious }}</span></button>
+            <button class="tickets-filter" type="button" data-filter="SUSPICIOUS" aria-pressed="false">Suspicious <span id="ticketFilterCountSuspicious" class="tickets-filter-count">{{ counts.suspicious }}</span></button>
+            <button class="tickets-filter" type="button" data-filter="CLEAN" aria-pressed="false">Clean <span id="ticketFilterCountClean" class="tickets-filter-count">{{ counts.clean }}</span></button>
+            <button class="tickets-filter" type="button" data-filter="UNKNOWN" aria-pressed="false">Unknown <span id="ticketFilterCountUnknown" class="tickets-filter-count">{{ counts.unknown }}</span></button>
+        </div>
+    </section>
+
     {% if not tickets %}
-    <div class="card">
-        <div class="card-body text-center py-5 text-muted">
+    <div class="card tickets-empty-card">
+        <div class="card-body text-center py-5 text-muted tickets-empty-state">
             <i class="bi bi-inbox fs-1 d-block mb-2"></i>
             No incident tickets yet. Tickets are created automatically when an
             investigation verdict matches the configured trigger list.
         </div>
     </div>
     {% else %}
-    <div class="card">
+    <div class="card tickets-table-card">
         <div class="table-responsive">
-            <table class="table table-hover align-middle mb-0">
+            <table class="table table-hover align-middle mb-0 tickets-table">
                 <thead>
                     <tr>
                         <th>Ticket ID</th>
                         <th>IOC</th>
+                        <th>Summary</th>
                         <th>Verdict</th>
                         <th>Status</th>
                         <th>Created</th>
@@ -37,37 +93,40 @@
                 </thead>
                 <tbody>
                     {% for t in tickets %}
-                    <tr>
-                        <td><code class="small">{{ t.ticket_id[:8] }}...</code></td>
-                        <td><strong>{{ t.ioc }}</strong></td>
+                    {% set ticket_verdict = t.verdict|default('UNKNOWN', true)|upper %}
+                    {% set ticket_search = [t.ticket_id|default('', true), t.ioc|default('', true), t.summary|default('', true), t.analysis_id|default('', true), t.verdict|default('', true), t.status|default('', true)]|join(' ') %}
+                    <tr class="tickets-row" data-verdict="{{ ticket_verdict|e }}" data-status="{{ t.status|default('', true)|lower|e }}" data-search="{{ ticket_search|e }}">
+                        <td><code class="small">{{ (t.ticket_id|default('', true))[:8]|e }}...</code></td>
+                        <td><strong>{{ t.ioc|default('', true)|e }}</strong></td>
+                        <td class="tickets-summary">{{ t.summary|default('', true)|e }}</td>
                         <td>
-                            {% if t.verdict == 'MALICIOUS' %}
-                                <span class="badge bg-danger">MALICIOUS</span>
-                            {% elif t.verdict == 'SUSPICIOUS' %}
-                                <span class="badge bg-warning text-dark">SUSPICIOUS</span>
-                            {% elif t.verdict == 'CLEAN' %}
-                                <span class="badge bg-success">CLEAN</span>
+                            {% if ticket_verdict == 'MALICIOUS' %}
+                                <span class="badge bg-danger tickets-verdict tickets-verdict-malicious">MALICIOUS</span>
+                            {% elif ticket_verdict == 'SUSPICIOUS' %}
+                                <span class="badge bg-warning text-dark tickets-verdict tickets-verdict-suspicious">SUSPICIOUS</span>
+                            {% elif ticket_verdict == 'CLEAN' %}
+                                <span class="badge bg-success tickets-verdict tickets-verdict-clean">CLEAN</span>
                             {% else %}
-                                <span class="badge bg-secondary">UNKNOWN</span>
+                                <span class="badge bg-secondary tickets-verdict tickets-verdict-unknown">UNKNOWN</span>
                             {% endif %}
                         </td>
                         <td>
-                            <span class="badge {% if t.status == 'open' %}bg-info text-dark{% else %}bg-secondary{% endif %}">
-                                {{ t.status }}
+                            <span class="badge {% if t.status == 'open' %}bg-info text-dark{% else %}bg-secondary{% endif %} tickets-status">
+                                {{ t.status|default('', true)|e }}
                             </span>
                         </td>
-                        <td class="small text-muted">{{ t.created_at }}</td>
-                        <td><code class="small">{{ t.analysis_id }}</code></td>
+                        <td class="small text-muted">{{ t.created_at|default('', true)|e }}</td>
+                        <td><code class="small">{{ t.analysis_id|default('', true)|e }}</code></td>
                         <td class="small">
                             {% if t.recommendations %}
                                 <button class="btn btn-sm btn-outline-secondary" type="button"
-                                        data-bs-toggle="collapse" data-bs-target="#rec-{{ t.id }}">
+                                        data-bs-toggle="collapse" data-bs-target="#rec-{{ t.id|e }}">
                                     View
                                 </button>
-                                <div class="collapse mt-2" id="rec-{{ t.id }}">
+                                <div class="collapse mt-2" id="rec-{{ t.id|e }}">
                                     <ul class="mb-0 ps-3">
                                         {% for r in t.recommendations %}
-                                        <li>{{ r }}</li>
+                                        <li>{{ r|e }}</li>
                                         {% endfor %}
                                     </ul>
                                 </div>
@@ -80,7 +139,11 @@
                 </tbody>
             </table>
         </div>
+        <div id="ticketFilteredEmpty" class="tickets-filtered-empty" hidden>No tickets match the current search or filter.</div>
     </div>
     {% endif %}
 </div>
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/tickets.js?v=1"></script>
 {% endblock %}

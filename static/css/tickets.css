@@ -1,0 +1,324 @@
+.tickets-page {
+    --tickets-verdict-malicious: var(--color-danger);
+    --tickets-verdict-suspicious: var(--color-warning);
+    --tickets-verdict-clean: var(--color-success);
+    --tickets-verdict-unknown: var(--color-info);
+    --tickets-status-open: var(--color-info);
+    --tickets-status-closed: var(--color-success);
+    --tickets-status-default: var(--text-muted);
+    padding: 56px 20px 20px !important;
+    color: var(--text-primary);
+}
+
+body:has(.tickets-page) .sub-header {
+    height: 0;
+    min-height: 0;
+    margin-top: 0 !important;
+    overflow: hidden;
+    padding: 0;
+    border: 0;
+}
+
+.tickets-page .tickets-heading {
+    margin-bottom: 20px !important;
+}
+
+.tickets-page .tickets-heading h4 {
+    color: var(--text-primary);
+    font-size: 1.15rem;
+    font-weight: 700;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+}
+
+.tickets-page .tickets-heading h4 em {
+    color: var(--color-info);
+    font-style: normal;
+}
+
+.tickets-page .tickets-heading-subtitle {
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.tickets-page .tickets-count-badge {
+    border-radius: 0;
+    padding: 0.5rem 0.75rem;
+}
+
+.tickets-page .tickets-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.tickets-page .tickets-stat {
+    display: flex;
+    min-height: 82px;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 12px 14px;
+    border: 1px solid var(--border-color);
+    border-radius: 0;
+    background: var(--bg-card);
+}
+
+.tickets-page .tickets-stat-label {
+    color: var(--text-muted);
+    font-size: 0.68rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+}
+
+.tickets-page .tickets-stat strong {
+    color: var(--tickets-stat-color, var(--color-info));
+    font-size: 1.5rem;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+}
+
+.tickets-page .tickets-stat-malicious {
+    --tickets-stat-color: var(--tickets-verdict-malicious);
+}
+
+.tickets-page .tickets-stat-suspicious {
+    --tickets-stat-color: var(--tickets-verdict-suspicious);
+}
+
+.tickets-page .tickets-stat-clean {
+    --tickets-stat-color: var(--tickets-verdict-clean);
+}
+
+.tickets-page .tickets-stat-unknown {
+    --tickets-stat-color: var(--tickets-verdict-unknown);
+}
+
+.tickets-page .tickets-distribution {
+    display: flex;
+    height: 6px;
+    gap: 2px;
+    margin-bottom: 16px;
+    overflow: hidden;
+    border-radius: 0;
+    background: var(--border-color);
+}
+
+.tickets-page .tickets-distribution-segment {
+    display: block;
+    min-width: 0;
+    height: 100%;
+    background: var(--tickets-segment-color, var(--color-info));
+    transition: flex-basis 160ms ease;
+}
+
+.tickets-page .tickets-segment-malicious {
+    --tickets-segment-color: var(--tickets-verdict-malicious);
+}
+
+.tickets-page .tickets-segment-suspicious {
+    --tickets-segment-color: var(--tickets-verdict-suspicious);
+}
+
+.tickets-page .tickets-segment-clean {
+    --tickets-segment-color: var(--tickets-verdict-clean);
+}
+
+.tickets-page .tickets-segment-unknown {
+    --tickets-segment-color: var(--tickets-verdict-unknown);
+}
+
+.tickets-page .tickets-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+    padding: 10px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 0;
+    background: var(--bg-card);
+}
+
+.tickets-page .tickets-search {
+    display: flex;
+    min-width: 180px;
+    align-items: center;
+    gap: 8px;
+    flex: 1 1 220px;
+    color: var(--text-muted);
+}
+
+.tickets-page .tickets-search-icon {
+    color: var(--color-info);
+    font-size: 1.2rem;
+    line-height: 1;
+}
+
+.tickets-page .tickets-search input {
+    width: 100%;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: var(--text-primary);
+    font: inherit;
+}
+
+.tickets-page .tickets-search input::placeholder {
+    color: var(--text-muted);
+}
+
+.tickets-page .tickets-filters {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+}
+
+.tickets-page .tickets-filter {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 9px;
+    border: 1px solid var(--border-color);
+    border-radius: 0;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.72rem;
+    transition: border-color 120ms ease, color 120ms ease, background-color 120ms ease;
+}
+
+.tickets-page .tickets-filter:hover {
+    color: var(--text-primary);
+}
+
+.tickets-page .tickets-filter.tickets-filter-active {
+    border-color: var(--color-info);
+    color: var(--text-primary);
+    background: color-mix(in srgb, var(--color-info) 10%, var(--bg-card));
+}
+
+.tickets-page .tickets-filter:focus-visible {
+    outline: 2px solid var(--color-info);
+    outline-offset: 2px;
+}
+
+.tickets-page .tickets-filter-count {
+    color: var(--color-info);
+    font-variant-numeric: tabular-nums;
+}
+
+.tickets-page .tickets-table-card,
+.tickets-page .tickets-empty-card {
+    overflow: hidden;
+    border: 1px solid var(--border-color);
+    border-radius: 0;
+    background: var(--bg-card);
+}
+
+.tickets-page .tickets-table {
+    margin: 0;
+    color: var(--text-primary);
+}
+
+.tickets-page .tickets-table th {
+    padding: 11px 14px;
+    border-bottom-color: var(--border-color);
+    color: var(--text-muted);
+    font-size: 0.65rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.tickets-page .tickets-table td {
+    padding: 11px 14px;
+    border-bottom-color: var(--border-color);
+    vertical-align: middle;
+}
+
+.tickets-page .tickets-row {
+    --tickets-row-status-color: var(--tickets-status-default);
+    --tickets-status-chip-color: var(--border-color);
+}
+
+.tickets-page .tickets-row[data-status="open"] {
+    --tickets-row-status-color: var(--tickets-status-open);
+    --tickets-status-chip-color: var(--tickets-status-open);
+}
+
+.tickets-page .tickets-row[data-status="closed"],
+.tickets-page .tickets-row[data-status="resolved"] {
+    --tickets-row-status-color: var(--tickets-status-closed);
+    --tickets-status-chip-color: var(--tickets-status-closed);
+}
+
+.tickets-page .tickets-row > td:first-child {
+    border-left: 3px solid var(--tickets-row-status-color);
+}
+
+.tickets-page .tickets-summary {
+    min-width: 160px;
+    max-width: 300px;
+}
+
+.tickets-page .tickets-verdict-malicious {
+    --tickets-chip-color: var(--tickets-verdict-malicious);
+}
+
+.tickets-page .tickets-verdict-suspicious {
+    --tickets-chip-color: var(--tickets-verdict-suspicious);
+}
+
+.tickets-page .tickets-verdict-clean {
+    --tickets-chip-color: var(--tickets-verdict-clean);
+}
+
+.tickets-page .tickets-verdict-unknown {
+    --tickets-chip-color: var(--tickets-verdict-unknown);
+}
+
+.tickets-page .tickets-status {
+    --tickets-chip-color: var(--tickets-status-chip-color, var(--border-color));
+    border-radius: 0;
+    white-space: nowrap;
+}
+
+.tickets-page .tickets-verdict {
+    border-radius: 0;
+}
+
+.tickets-page .tickets-status,
+.tickets-page .tickets-verdict {
+    border: 1px solid var(--tickets-chip-color, var(--border-color));
+    /* Bootstrap .bg-* and .text-dark utilities use !important; keep ticket tint/text theme-aware. */
+    color: var(--tickets-chip-color, var(--text-primary)) !important;
+    background-color: color-mix(in srgb, var(--tickets-chip-color, var(--border-color)) 10%, transparent) !important;
+}
+
+.tickets-page .tickets-empty-state {
+    min-height: 180px;
+    padding: 40px 24px !important;
+}
+
+.tickets-page .tickets-filtered-empty {
+    padding: 24px;
+    color: var(--text-muted);
+    text-align: center;
+}
+
+@media (max-width: 767.98px) {
+    .tickets-page .tickets-toolbar {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .tickets-page .tickets-filters {
+        justify-content: flex-start;
+    }
+}
