@@ -2387,3 +2387,26 @@ to this one dataset.
 - [x] Worktree มีไฟล์ค้าง: `src/scoring/intelligent_scoring.py` เป็น tracked file ที่แก้ไขแล้วยังไม่ commit; `scripts/eval/eval_results_group_a_v3_rich*.jsonl`, `paired_bootstrap_f1_ci.py`, `grid_search_boost_v2.py` เป็น untracked; `evidence/` ถูก ignore. สถานะ: `git status --short`; ignore rule: `.gitignore`.
 - [x] `paired_bootstrap_f1_ci.py` ย้อนคะแนน 2-source ด้วย `1.20`, ส่วน `grid_search_boost_v2.py` ใช้ `1.15`; ทั้งคู่เป็นการคำนวณแบบย้อนจากไฟล์ v3_rich/count และสมมติฐานต่างกัน. Gate ยืนยันว่า v3_rich ตรงกับ count+`1.15/1.30` (`894/894`), ไม่ใช่การย้อนด้วย `1.20`; ใช้ `recompute_boost.py` คำนวณจาก `sources.*.score` แทน. หลักฐาน: `scripts/eval/paired_bootstrap_f1_ci.py`, `scripts/eval/grid_search_boost_v2.py`, `evidence/source_weights_2026-09-21/final_boost_2026-09-21/gate_results.txt`, `evidence/source_weights_2026-09-21/final_boost_2026-09-21/recompute_boost.py`.
 - [ ] คำสั่งทำซ้ำที่บันทึกไว้ (ไม่ได้รันซ้ำในงานนี้): `D:\ai_cti_automate\evidence\source_weights_2026-09-21\final_boost_2026-09-21\run_all.ps1 -Set S1`; `D:\ai_cti_automate\evidence\source_weights_2026-09-21\final_boost_2026-09-21\run_all.ps1 -Set S3`; `D:\ai_cti_automate\evidence\source_weights_2026-09-21\final_boost_2026-09-21\run_sweep.ps1`. หลักฐาน: `evidence/source_weights_2026-09-21/final_boost_2026-09-21/run_all.ps1`, `run_sweep.ps1`.
+## ข้อจำกัดคะแนน Email/Malware
+
+หัวข้อนี้บันทึกข้อจำกัดของหน้าวิเคราะห์ Email และ Malware ซึ่งเป็นหน้าสำหรับนักวิเคราะห์ดูเท่านั้น และไม่ควรถูกรวมเข้า IOC scoring (Flow A)
+
+### Email
+
+- คะแนน Email ปัจจุบันนับสัดส่วนปัจจัยที่ตรวจได้และพบ โดยทุกปัจจัยมีน้ำหนักเท่ากัน; ปัจจัยที่มีสถานะ `unavailable` ไม่ถูกนับในตัวตั้งหรือตัวหาร (`src/scoring/intelligent_scoring.py:440-458`).
+- กลุ่มปัจจัยปลอมตัวที่ทำให้ verdict เป็น `PHISHING` มีเพียง `brand_impersonation`, `lookalike_domain` และ `mixed_script` (`src/tools/email_analyzer.py:815-823`). `link_mismatch` ยังนับเป็นปัจจัยและทำให้เป็น `SUSPICIOUS` ได้ แต่ไม่อยู่ในกลุ่มปลอมตัวนี้ (`src/tools/email_analyzer.py:730-731`, `:824-826`).
+- Verdict ของ Email มี 4 ค่า: `UNKNOWN` เมื่อ `checkable == 0`, `PHISHING` เมื่อพบปัจจัยปลอมตัว, `SUSPICIOUS` เมื่อพบปัจจัยอื่น และ `CLEAN` เมื่อไม่พบปัจจัย (`src/tools/email_analyzer.py:813-826`).
+- ผล IOC และผลวิเคราะห์ไฟล์แนบยังถูกแสดงเป็นหลักฐานเสริม แต่ไม่เข้าคะแนน Email; โค้ดกำหนด `composite_score = base_score` และระบุข้อจำกัดนี้ไว้โดยตรง (`src/tools/email_analyzer.py:381-386`).
+- ใน production wiring สำเนา IOC investigator และ MalwareAnalyzer สำหรับ Email จะถูกสร้างเมื่อ instance ต้นฉบับมีอยู่ และตั้ง `notification_manager = None`; สำเนาใช้ resource ที่คัดลอกแบบ shallow copy (`src/web/app.py:318-334`).
+- `create_on_verdict_email` เป็น key แยกจาก IOC/Malware และค่าจริงใน `config.yaml` คือรายการว่าง `[]` (`config.yaml:137-143`). โค้ด Email มีค่า fallback `['PHISHING', 'SUSPICIOUS']` เฉพาะกรณีไม่มี key (`src/tools/email_analyzer.py:540-543`).
+
+### Malware / File
+
+- File scoring ใช้ `FILE_TOOL_WEIGHTS` ดังนี้: `capa=0.25`, `floss=0.15`, `diec=0.12`, `pe_analysis=0.15`, `static_analysis=0.10`, `binwalk=0.08`, `yara=0.15`, `threat_intel=0.20`, `strings=0.10`, `shellcode=0.15`, `packer=0.12` (`src/scoring/tool_based_scoring.py:42-55`).
+- Verdict ทั่วไปของ File ใช้ `MALICIOUS` ที่คะแนนตั้งแต่ 70, `SUSPICIOUS` ที่คะแนนตั้งแต่ 40 และต่ำกว่านั้นเป็น `CLEAN` (`src/scoring/tool_based_scoring.py:86-90`, `:125-133`). นอกจากนี้ ransomware มีการบังคับคะแนนขั้นต่ำแยกที่ 70 และ 40 (`src/scoring/tool_based_scoring.py:600-607`).
+- MalwareAnalyzer เรียก `ToolBasedScoring.calculate_file_score` เพื่อสร้าง `composite_score` และ verdict (`src/tools/malware_analyzer.py:463-468`).
+
+### Ticketing และการแจ้งเตือน
+
+- Malware และ IOC ใช้ key ร่วมกันคือ `ticketing.create_on_verdict`; Malware อ่านที่ `src/tools/malware_analyzer.py:643-646` และ IOC อ่านที่ `src/tools/ioc_investigator.py:427-431`. ค่าใน config ปัจจุบันคือ `MALICIOUS`, `SUSPICIOUS`, `CLEAN`, `UNKNOWN` (`config.yaml:137-142`).
+- ข้อความว่า Email copy ไม่มี `notification_manager` เป็นจริงเฉพาะเมื่อ production wiring มี `email_analyzer` และต้นฉบับ IOC investigator/MalwareAnalyzer ตามเงื่อนไขใน `src/web/app.py:325-334`; ไม่ใช่ guarantee เมื่อ instance ต้นฉบับสร้างไม่สำเร็จ.
