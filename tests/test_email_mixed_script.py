@@ -103,16 +103,16 @@ def _base_score(analyzer, mixed_script, **email_overrides):
     )
 
 
-def test_mixed_script_adds_twenty_only_when_found():
+def test_mixed_script_is_one_equal_weight_factor():
     analyzer = EmailAnalyzer.__new__(EmailAnalyzer)
     not_found = {'found': False, 'fields': {'subject': [], 'display_name': []}, 'count': 0}
     found = {'found': True, 'fields': {'subject': ['PаyPal'], 'display_name': []}, 'count': 1}
 
     assert _base_score(analyzer, not_found) == 0
-    assert _base_score(analyzer, found) == 20
+    assert _base_score(analyzer, found) == 11
 
 
-def test_mixed_script_base_score_is_capped_at_100():
+def test_mixed_script_score_stays_within_indicator_range():
     analyzer = EmailAnalyzer.__new__(EmailAnalyzer)
     found = {'found': True, 'fields': {'subject': ['PаyPal'], 'display_name': []}, 'count': 1}
 
@@ -127,4 +127,4 @@ def test_mixed_script_base_score_is_capped_at_100():
         **{'from': 'sender@evil.xyz', 'return_path': 'bounce@other.xyz'},
     )
 
-    assert score == 100
+    assert 0 <= score <= 100

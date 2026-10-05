@@ -68,7 +68,6 @@ def _build_email_analyzer(monkeypatch):
     analyzer._investigate_iocs = investigate_iocs
     analyzer.file_analyzer = None
     analyzer.rag_kb = None
-    analyzer._calculate_base_phishing_score = MagicMock(return_value=70)
     analyzer._check_spf = MagicMock(return_value='pass')
     analyzer._check_dkim = MagicMock(return_value='pass')
     analyzer._check_dmarc = MagicMock(return_value='pass')
@@ -132,10 +131,10 @@ async def test_email_analyzer_passes_calculated_scores_and_lookalikes(monkeypatc
 
     result = await analyzer.analyze('message.eml')
 
-    assert result['composite_score'] == 70
+    assert result['composite_score'] == 12
     context = analyzer.llm_analyzer.analyze_email.await_args.args[0]
-    assert context['base_score'] == 70
-    assert context['composite_score'] == 70
+    assert context['base_score'] == 12
+    assert context['composite_score'] == 12
     assert context['forensics_score'] == 12
     assert [item['domain'] for item in context['lookalike_domains']] == [
         'example.com',

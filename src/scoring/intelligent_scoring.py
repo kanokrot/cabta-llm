@@ -437,71 +437,22 @@ class IntelligentScoring:
         return max(0, min(100, int(score)))
     
     @staticmethod
-    def calculate_email_score(base_score: int, ioc_results: list, attachment_results: list) -> int:
-        """The email composite is the strongest available 0-100 evidence score.
-        It must not be lower than evidence found in the email itself, so the base
-        email score and any independently computed IOC or attachment score are
-        compared without weights; absent evidence is excluded rather than treated
-        as a score that could reduce the result.
+    def calculate_email_score(indicator_summary: dict) -> int:
+        """Score email evidence by the proportion of checkable factors found.
+
+        Every checkable indicator has the same weight.  Unavailable checks are
+        excluded from the denominator, so a missing header or analyzer cannot
+        lower the result or masquerade as a clear finding.
         """
-        def normalize_score(value):
-            if value is None:
-                return None
-            try:
-                numeric = float(value)
-            except (TypeError, ValueError):
-                return None
-            if numeric != numeric:
-                return None
-            return max(0.0, min(100.0, numeric))
+        if not isinstance(indicator_summary, dict):
+            return 0
 
-        scores = []
-        normalized_base = normalize_score(base_score)
-        if normalized_base is not None:
-            scores.append(normalized_base)
-
-        if ioc_results:
-            ioc_score = 0
-            malicious_count = sum(1 for r in ioc_results if r.get('verdict') == 'MALICIOUS')
-            suspicious_count = sum(1 for r in ioc_results if r.get('verdict') == 'SUSPICIOUS')
-            
-            if malicious_count > 0:
-                ioc_score = 100
-            elif suspicious_count >= 2:
-                ioc_score = 80
-            elif suspicious_count == 1:
-                ioc_score = 60
-            else:
-                threat_scores = [
-                    r.get('threat_score', 0) if r.get('threat_score') is not None else 0
-                    for r in ioc_results
-                ]
-                avg_threat_score = sum(threat_scores) / len(ioc_results)
-                ioc_score = avg_threat_score
-
-            normalized_ioc = normalize_score(ioc_score)
-            if normalized_ioc is not None:
-                scores.append(normalized_ioc)
-
-        if attachment_results:
-            attachment_score = 0
-            malicious_count = sum(1 for r in attachment_results if r.get('verdict') == 'MALICIOUS')
-            suspicious_count = sum(1 for r in attachment_results if r.get('verdict') == 'SUSPICIOUS')
-            
-            if malicious_count > 0:
-                attachment_score = 100
-            elif suspicious_count > 0:
-                attachment_score = 75
-            else:
-                threat_scores = [
-                    r.get('threat_score', 0) if r.get('threat_score') is not None else 0
-                    for r in attachment_results
-                ]
-                avg_threat_score = sum(threat_scores) / len(attachment_results)
-                attachment_score = avg_threat_score
-
-            normalized_attachment = normalize_score(attachment_score)
-            if normalized_attachment is not None:
-                scores.append(normalized_attachment)
-
-        return int(max(scores, default=0.0))
+        try:
+            found = int(indicator_summary.get('found', 0))
+            checkable = int(indicator_summary.get('checkable', 0))
+        except (TypeError, ValueError):
+            return 0
+        if checkable <= 0:
+            return 0
+        found = max(0, min(found, checkable))
+        return round(100 * found / checkable)

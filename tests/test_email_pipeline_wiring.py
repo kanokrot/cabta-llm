@@ -164,31 +164,31 @@ def test_wired_fake_tools_produce_ioc_and_attachment_results(tmp_path):
     assert not any(item["status"] == "not_connected" for item in result["capability_errors"])
 
 
-def test_missing_tools_are_reported_without_changing_local_result(tmp_path):
+def test_missing_tools_are_reported_and_indicator_score_is_local(tmp_path):
     analyzer = EmailAnalyzer(_config())
     result = _run_analyze(analyzer, _write_eml(tmp_path))
 
     statuses = {item["capability"]: item["status"] for item in result["capability_errors"]}
     assert statuses["ioc_investigator"] == "not_connected"
     assert statuses["file_analyzer"] == "not_connected"
-    assert result["composite_score"] == 25
-    assert result["base_phishing_score"] == 25
+    assert result["composite_score"] == 8
+    assert result["base_phishing_score"] == 8
 
 
-def test_malicious_ioc_and_attachment_use_strongest_evidence(tmp_path):
+def test_ioc_and_attachment_results_do_not_change_indicator_score(tmp_path):
     ioc_analyzer = EmailAnalyzer(_config())
     ioc_analyzer.ioc_investigator = FakeInvestigator({"verdict": "MALICIOUS", "threat_score": 100})
     ioc_result = _run_analyze(ioc_analyzer, _write_eml(tmp_path / "ioc", with_url=True))
-    base = ioc_result["base_phishing_score"]
-    assert ioc_result["composite_score"] == 100
+    assert ioc_result["composite_score"] == ioc_result["base_phishing_score"]
+    assert ioc_result["composite_score"] == 15
 
     attachment_analyzer = EmailAnalyzer(_config())
     attachment_analyzer.file_analyzer = FakeFileAnalyzer(
         {"verdict": "MALICIOUS", "threat_score": 100}
     )
     attachment_result = _run_analyze(attachment_analyzer, _write_eml(tmp_path / "attachment"))
-    base = attachment_result["base_phishing_score"]
-    assert attachment_result["composite_score"] == 100
+    assert attachment_result["composite_score"] == attachment_result["base_phishing_score"]
+    assert attachment_result["composite_score"] == 8
 
 
 def test_attachment_temp_file_cleanup_success_and_invalid_suffix(tmp_path):

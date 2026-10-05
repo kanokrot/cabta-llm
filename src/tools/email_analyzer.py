@@ -34,6 +34,31 @@ _IOC_STAGE_TIMEOUT_SECONDS = 60.0
 _ATTACHMENT_STAGE_TIMEOUT_SECONDS = 120.0
 _ATTACHMENT_SUFFIX_RE = re.compile(r'^\.[A-Za-z0-9]{1,10}$')
 
+_EMAIL_INDICATOR_LABELS = {
+    'spf_fail': 'SPF failure',
+    'dkim_fail': 'DKIM failure',
+    'dmarc_fail': 'DMARC failure',
+    'header_anomaly': 'Header anomaly',
+    'link_mismatch': 'Link mismatch',
+    'lookalike_domain': 'Lookalike domain',
+    'html_obfuscation': 'HTML obfuscation',
+    'qr_code': 'QR code',
+    'brand_impersonation': 'Brand impersonation',
+    'mixed_script': 'Mixed-script text',
+    'phishing_keyword': 'Phishing keyword',
+    'return_path_mismatch': 'Return-Path mismatch',
+    'suspicious_tld': 'Suspicious TLD',
+    'threat_indicator_finding': 'Threat indicator finding',
+    'bec_finding': 'BEC finding',
+    'spam_header': 'Spam header',
+    'forensics': 'Forensics finding',
+}
+
+_SUSPICIOUS_EMAIL_TLDS = (
+    '.bid', '.xyz', '.top', '.win', '.click', '.loan',
+    '.work', '.gq', '.tk', '.ml', '.ga', '.cf',
+)
+
 
 def _is_allowlisted_email_url(url: str) -> bool:
     """Return whether a URL host matches the shared IOC domain allowlist."""
@@ -104,7 +129,7 @@ class EmailAnalyzer:
     - **Email template fingerprinting** (campaign detection)
     - IOC extraction → Cross-tool integration
     - Attachment extraction → File analyzer integration
-    - **Composite scoring** (email + IOCs + attachments)
+    - **Equal-weight indicator scoring** (IOC/attachment results remain supplemental)
     """
     
     def __init__(self, config: Dict):
@@ -190,6 +215,7 @@ class EmailAnalyzer:
             email_data['spf'] = self._check_spf(msg)
             email_data['dkim'] = self._check_dkim(msg)
             email_data['dmarc'] = self._check_dmarc(msg)
+            auth_presence = self._authentication_header_presence(msg)
             
             # Capture authentication results
             raw_collector.capture_authentication_results({
@@ -293,7 +319,21 @@ class EmailAnalyzer:
             )
             raw_collector.record_pipeline_step('bec_detection', 'bec_analysis', 'completed')
 
-            # ==================== BASE SCORING ====================
+            # ==================== INDICATOR SCORING ====================
+            indicator_summary = self._build_indicator_summary(
+                email_data,
+                header_analysis,
+                link_mismatches,
+                lookalike_domains,
+                html_obfuscation,
+                qr_detection,
+                brand_impersonation,
+                threat_indicators,
+                bec_results,
+                mixed_script,
+                forensics=forensics,
+                auth_presence=auth_presence,
+            )
             base_score = self._calculate_base_phishing_score(
                 email_data,
                 header_analysis,
@@ -304,7 +344,10 @@ class EmailAnalyzer:
                 brand_impersonation,
                 threat_indicators,
                 bec_results,
-                mixed_script
+                mixed_script,
+                forensics=forensics,
+                auth_presence=auth_presence,
+                indicator_summary=indicator_summary,
             )
             
             # ==================== CROSS-TOOL INTEGRATION ====================
@@ -335,22 +378,12 @@ class EmailAnalyzer:
                     'Attachment scanning is not connected for this email.',
                 )
             
-            # ==================== COMPOSITE SCORING ====================
-            composite_score = IntelligentScoring.calculate_email_score(
-                base_score=base_score,
-                ioc_results=ioc_results,
-                attachment_results=attachment_results
-            )
-            
-            # Determine verdict
-            if composite_score >= 85:
-                verdict = 'PHISHING'
-            elif composite_score >= 60:
-                verdict = 'SUSPICIOUS'
-            elif composite_score >= 30:
-                verdict = 'SPAM'
-            else:
-                verdict = 'CLEAN'
+            # The IOC and attachment stages remain visible as supplemental
+            # evidence, but do not participate in the email indicator score.
+            composite_score = base_score
+
+            # Determine verdict from indicator states, not score thresholds.
+            verdict = self._determine_indicator_verdict(indicator_summary)
             
             # ==================== LLM ANALYSIS ====================
             llm_analysis = {}
@@ -417,6 +450,7 @@ class EmailAnalyzer:
                     'bec_analysis': bec_results,
                 },
                 'forensics': forensics,  # NEW: DFIR-grade forensics
+                'indicator_summary': indicator_summary,
                 'base_phishing_score': base_score,
                 'composite_score': composite_score,
                 'verdict': verdict,
@@ -488,9 +522,7 @@ class EmailAnalyzer:
             raw_collector.capture_scoring_details({
                 'composite': composite_score,
                 'base_phishing': base_score,
-                'authentication': 0 if all(r.lower() == 'pass' for r in [email_data['spf'], email_data['dkim'], email_data['dmarc']] if r) else 30,
-                'forensics': forensics.get('forensics_score', 0),
-                'ioc': sum(1 for r in ioc_results if r.get('verdict') == 'MALICIOUS') * 15,
+                'indicator_summary': indicator_summary,
                 'verdict': verdict
             })
             
@@ -529,6 +561,7 @@ class EmailAnalyzer:
             'subject': msg.get('Subject', ''),
             'date': msg.get('Date', ''),
             'reply_to': msg.get('Reply-To', ''),
+            'return_path': msg.get('Return-Path', ''),
             'body_text': '',
             'body_html': '',
             'attachments': [],
@@ -577,9 +610,221 @@ class EmailAnalyzer:
         email_data['urls'] = [unescape(url) for url in iocs['urls']]
         email_data['ips'] = iocs['ipv4']
         email_data['domains'] = iocs['domains']
+
+        spam_headers = self._extract_spam_headers(msg)
+        if spam_headers:
+            email_data['spam_headers'] = spam_headers
         
         return email_data
     
+    @staticmethod
+    def _authentication_header_presence(msg: email.message.Message) -> Dict[str, bool]:
+        """Identify whether each authentication result was actually supplied."""
+        auth_results = ' '.join(msg.get_all('Authentication-Results', []))
+        return {
+            'spf': bool(msg.get('Received-SPF', '').strip()),
+            'dkim': bool(re.search(r'\bdkim\s*=\s*\w+', auth_results, re.IGNORECASE)),
+            'dmarc': bool(re.search(r'\bdmarc\s*=\s*\w+', auth_results, re.IGNORECASE)),
+        }
+
+    @staticmethod
+    def _extract_spam_headers(msg: email.message.Message) -> Dict:
+        """Extract explicit spam headers without turning a missing header into clear."""
+        headers = {
+            name.lower(): value
+            for name, value in msg.items()
+            if name.lower().startswith('x-spam-')
+        }
+        if not headers:
+            return {}
+
+        result = {'headers': headers}
+        flag = msg.get('X-Spam-Flag', '') or msg.get('X-Spam-Status', '')
+        if flag:
+            result['x_spam_flag'] = flag.split(',', 1)[0].strip().upper()
+        return result
+
+    @staticmethod
+    def _find_phishing_keywords(email_data: Dict) -> List[str]:
+        keywords = (
+            'urgent', 'verify', 'suspend', 'click here', 'account', 'password',
+            'confirm', 'security alert', 'unusual activity', 'update payment',
+            'suspended', 'locked', 'expire', 'act now', 'limited time',
+        )
+        combined_text = ' '.join(
+            str(email_data.get(field, '')).lower()
+            for field in ('body_text', 'subject')
+        )
+        return [keyword for keyword in keywords if keyword in combined_text]
+
+    @staticmethod
+    def _independent_forensics_findings(forensics: Dict):
+        """Return findings not duplicated by auth or advanced header checks."""
+        if not isinstance(forensics, dict):
+            return None
+
+        findings = []
+        available = False
+        reputation = forensics.get('sender_reputation')
+        if isinstance(reputation, dict) and 'suspicious_patterns' in reputation:
+            available = True
+            findings.extend(reputation.get('suspicious_patterns') or [])
+
+        relay = forensics.get('relay_analysis')
+        if isinstance(relay, dict):
+            for key in ('suspicious_hops', 'time_anomalies', 'geo_anomalies'):
+                if key in relay:
+                    available = True
+                    findings.extend(relay.get(key) or [])
+
+        return findings if available else None
+
+    def _build_indicator_summary(
+        self,
+        email_data: Dict,
+        header_analysis: Dict,
+        link_mismatches: List,
+        lookalike_domains: List,
+        html_obfuscation: Dict,
+        qr_detection: Dict,
+        brand_impersonation: List,
+        threat_indicators: Dict = None,
+        bec_results: Dict = None,
+        mixed_script: Dict = None,
+        *,
+        forensics: Dict = None,
+        auth_presence: Dict[str, bool] = None,
+    ) -> Dict:
+        """Build equal-weight found/clear/unavailable indicator states."""
+        if auth_presence is None:
+            auth_presence = {
+                name: name in email_data
+                for name in ('spf', 'dkim', 'dmarc')
+            }
+
+        factors = []
+
+        def add_factor(key, available, found):
+            if not available:
+                state = 'unavailable'
+            else:
+                state = 'found' if found else 'clear'
+            factors.append({
+                'key': key,
+                'label': _EMAIL_INDICATOR_LABELS[key],
+                'state': state,
+            })
+
+        add_factor('spf_fail', auth_presence.get('spf', False),
+                   str(email_data.get('spf', '')).lower() == 'fail')
+        add_factor('dkim_fail', auth_presence.get('dkim', False),
+                   str(email_data.get('dkim', '')).lower() == 'fail')
+        add_factor('dmarc_fail', auth_presence.get('dmarc', False),
+                   str(email_data.get('dmarc', '')).lower() == 'fail')
+
+        header_available = isinstance(header_analysis, dict) and 'anomalies' in header_analysis
+        add_factor('header_anomaly', header_available,
+                   bool(header_analysis.get('anomalies')) if header_available else False)
+
+        html_available = bool(email_data.get('body_html'))
+        add_factor('link_mismatch', html_available and link_mismatches is not None,
+                   bool(link_mismatches))
+        add_factor('lookalike_domain', lookalike_domains is not None,
+                   bool(lookalike_domains))
+
+        html_keys = ('zero_size_fonts', 'hidden_elements', 'white_on_white', 'suspicious_css')
+        html_findings_available = (
+            html_available
+            and isinstance(html_obfuscation, dict)
+            and any(key in html_obfuscation for key in html_keys)
+        )
+        html_found = any(
+            html_obfuscation.get(key) for key in html_keys
+        ) if html_findings_available else False
+        add_factor('html_obfuscation', html_findings_available, html_found)
+
+        qr_available = (
+            (html_available or bool(email_data.get('attachments')))
+            and isinstance(qr_detection, dict)
+            and 'qr_codes_found' in qr_detection
+        )
+        add_factor('qr_code', qr_available,
+                   bool(qr_detection.get('qr_codes_found')) if qr_available else False)
+        add_factor('brand_impersonation', brand_impersonation is not None,
+                   bool(brand_impersonation))
+        add_factor('mixed_script', isinstance(mixed_script, dict) and 'found' in mixed_script,
+                   bool(mixed_script.get('found')) if isinstance(mixed_script, dict) else False)
+
+        keyword_available = 'body_text' in email_data and 'subject' in email_data
+        add_factor('phishing_keyword', keyword_available,
+                   bool(self._find_phishing_keywords(email_data)))
+
+        from_value = email_data.get('from', '')
+        return_path = email_data.get('return_path')
+        if return_path is None and isinstance(header_analysis, dict):
+            return_path = header_analysis.get('return_path')
+        from_email = parseaddr(from_value)[1]
+        return_email = parseaddr(return_path or '')[1]
+        return_available = bool(from_email and return_email)
+        from_domain = from_email.split('@')[-1].lower() if '@' in from_email else ''
+        return_domain = return_email.split('@')[-1].lower() if '@' in return_email else ''
+        add_factor('return_path_mismatch', return_available,
+                   return_domain != from_domain if return_available else False)
+
+        sender_domain = email_data.get('from_domain', '') or from_domain
+        add_factor('suspicious_tld', bool(sender_domain), any(
+            sender_domain.lower().endswith(tld) for tld in _SUSPICIOUS_EMAIL_TLDS
+        ))
+
+        threat_available = (
+            isinstance(threat_indicators, dict)
+            and 'active_checks' in threat_indicators
+        )
+        add_factor('threat_indicator_finding', threat_available,
+                   bool(threat_indicators.get('active_checks')) if threat_available else False)
+
+        bec_available = isinstance(bec_results, dict) and 'indicator_count' in bec_results
+        add_factor('bec_finding', bec_available,
+                   bool(bec_results.get('indicator_count')) if bec_available else False)
+
+        spam_available = 'spam_headers' in email_data
+        spam_headers = email_data.get('spam_headers') or {}
+        spam_flag = str(spam_headers.get('x_spam_flag', '')).strip().lower()
+        add_factor('spam_header', spam_available, spam_flag in {'yes', 'true', 'on'})
+
+        independent_forensics = self._independent_forensics_findings(forensics)
+        add_factor('forensics', independent_forensics is not None,
+                   bool(independent_forensics))
+
+        found = sum(item['state'] == 'found' for item in factors)
+        checkable = sum(item['state'] != 'unavailable' for item in factors)
+        return {
+            'found': found,
+            'checkable': checkable,
+            'factors': factors,
+        }
+
+    @staticmethod
+    def _determine_indicator_verdict(indicator_summary: Dict) -> str:
+        factor_states = {
+            item['key']: item['state']
+            for item in indicator_summary.get('factors', [])
+        }
+        if indicator_summary.get('checkable', 0) == 0:
+            return 'UNKNOWN'
+        if any(
+            factor_states.get(key) == 'found'
+            for key in (
+                'brand_impersonation',
+                'lookalike_domain',
+                'mixed_script',
+            )
+        ):
+            return 'PHISHING'
+        if indicator_summary.get('found', 0) > 0:
+            return 'SUSPICIOUS'
+        return 'CLEAN'
+
     def _calculate_base_phishing_score(
         self,
         email_data: Dict,
@@ -592,141 +837,27 @@ class EmailAnalyzer:
         threat_indicators: Dict = None,
         bec_results: Dict = None,
         mixed_script: Dict = None,
+        *,
+        forensics: Dict = None,
+        auth_presence: Dict[str, bool] = None,
+        indicator_summary: Dict = None,
     ) -> int:
-        """
-        Calculate base phishing score (email-only, before IOC/attachment analysis).
-        
-        Scoring factors:
-        - Authentication failures (30%)
-        - SPAM indicators (15%)
-        - Forensics score (10%)
-        - Header anomalies (10%)
-        - Link-text mismatches (15%)
-        - Lookalike domains (20%)
-        - HTML obfuscation (10%)
-        - QR codes (5%)
-        - Brand impersonation (20%)
-        - Phishing keywords (10%)
-        """
-        score = 0
-        
-        # ==================== AUTHENTICATION (max 30) ====================
-        spf = email_data.get('spf', 'unknown').lower()
-        dkim = email_data.get('dkim', 'unknown').lower()
-        dmarc = email_data.get('dmarc', 'unknown').lower()
-        
-        # SPF scoring
-        if spf == 'fail':
-            score += 15  # Critical
-        elif spf in ['softfail', 'none', 'unknown']:
-            score += 10  # Suspicious
-        
-        # DKIM scoring
-        if dkim == 'fail':
-            score += 15  # Critical
-        elif dkim in ['none', 'unknown']:
-            score += 5  # Suspicious
-        
-        # ==================== SPAM INDICATORS (max 15) ====================
-        # Check for X-Spam-* headers
-        spam_headers = email_data.get('spam_headers', {})
-        if spam_headers.get('x_spam_flag') == 'YES':
-            score += 15  # Clear SPAM indicator
-        elif spam_headers.get('x_spam_score', 0) > 5:
-            score += 10
-        
-        # ==================== FORENSICS SCORE (max 35) ====================
-        # Use forensics analysis risk score - HIGH = BAD
-        forensics_score = email_data.get('forensics_score', 0)
-        if forensics_score >= 80:
-            score += 35  # Critical forensics findings
-        elif forensics_score >= 60:
-            score += 25  # High forensics risk
-        elif forensics_score >= 40:
-            score += 15  # Medium forensics risk
-        elif forensics_score > 0:
-            score += 5   # Low forensics risk
-        
-        # ==================== HEADER ANOMALIES (max 10) ====================
-        anomaly_count = len(header_analysis.get('anomalies', []))
-        score += min(10, anomaly_count * 5)
-        
-        # ==================== LINK-TEXT MISMATCHES (max 15) ====================
-        if link_mismatches:
-            score += min(15, len(link_mismatches) * 8)
-        
-        # ==================== LOOKALIKE DOMAINS (max 20) ====================
-        if lookalike_domains:
-            score += 20  # Critical indicator
-        
-        # ==================== HTML OBFUSCATION (max 10) ====================
-        obfuscation_score = html_obfuscation.get('risk_score', 0)
-        score += min(10, obfuscation_score // 5)
-        
-        # ==================== QR CODES (max 5) ====================
-        if qr_detection.get('qr_codes_found', 0) > 0:
-            score += 5
-        
-        # ==================== BRAND IMPERSONATION (max 20) ====================
-        if brand_impersonation:
-            score += 20  # Critical indicator
-
-        # ==================== MIXED SCRIPT (same critical level as above) ====================
-        if mixed_script and mixed_script.get('found'):
-            score += 20  # Same critical indicator level as lookalike/brand
-        
-        # ==================== PHISHING KEYWORDS (max 10) ====================
-        phishing_keywords = [
-            'urgent', 'verify', 'suspend', 'click here', 'account', 'password',
-            'confirm', 'security alert', 'unusual activity', 'update payment',
-            'suspended', 'locked', 'expire', 'act now', 'limited time'
-        ]
-        body_text = email_data.get('body_text', '').lower()
-        subject = email_data.get('subject', '').lower()
-        combined_text = body_text + ' ' + subject
-        
-        keyword_matches = sum(1 for keyword in phishing_keywords if keyword in combined_text)
-        score += min(10, keyword_matches * 2)
-        
-        # ==================== SPAM IN SUBJECT (v1.0.0: weight increased) ====================
-        if '[spam]' in subject:
-            score += 40  # Gateway already flagged as SPAM - very strong indicator!
-        elif 'spam' in subject:
-            score += 20  # Spam keyword in subject
-        
-        # ==================== RETURN-PATH MISMATCH (NEW) ====================
-        from_domain = email_data.get('from', '').split('@')[-1].split('>')[0].lower() if '@' in email_data.get('from', '') else ''
-        return_path = email_data.get('return_path', '').split('@')[-1].split('>')[0].lower() if '@' in email_data.get('return_path', '') else ''
-        
-        if from_domain and return_path and from_domain != return_path:
-            score += 10  # Potential spoofing
-        
-        # ==================== SUSPICIOUS DOMAIN TLDs (NEW) ====================
-        suspicious_tlds = ['.bid', '.xyz', '.top', '.win', '.click', '.loan', '.work', '.gq', '.tk', '.ml', '.ga', '.cf']
-        if from_domain:
-            for tld in suspicious_tlds:
-                if from_domain.endswith(tld):
-                    score += 15  # Suspicious TLD often used in spam/phishing
-                    break
-
-        # ==================== ENHANCED THREAT INDICATORS ====================
-        if threat_indicators:
-            # Add aggregated score impact from all 10 enhanced checks
-            # Capped to prevent single category from dominating
-            ti_score = threat_indicators.get('total_score_impact', 0)
-            score += min(40, ti_score)  # Cap contribution at 40 points
-
-        # ==================== BEC DETECTION (max 30) ====================
-        if bec_results:
-            bec_score = bec_results.get('bec_score', 0)
-            if bec_score >= 70:
-                score += 30  # Critical BEC risk
-            elif bec_score >= 50:
-                score += 20  # High BEC risk
-            elif bec_score >= 30:
-                score += 10  # Medium BEC risk
-
-        return min(100, score)
+        """Return the equal-weight indicator score; legacy name retained for consumers."""
+        summary = indicator_summary or self._build_indicator_summary(
+            email_data,
+            header_analysis,
+            link_mismatches,
+            lookalike_domains,
+            html_obfuscation,
+            qr_detection,
+            brand_impersonation,
+            threat_indicators,
+            bec_results,
+            mixed_script,
+            forensics=forensics,
+            auth_presence=auth_presence,
+        )
+        return IntelligentScoring.calculate_email_score(summary)
     
     async def _investigate_iocs(
         self,
