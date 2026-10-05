@@ -8,6 +8,7 @@
     var GROUPS = ["malicious", "suspicious", "clean", "failed", "unknown", "in_progress"];
     var TYPES = ["", "ioc", "file", "email"];
     var SORTS = ["date", "score", "verdict", "type", "status"];
+    var HISTORY_EXPORT_CAP = 10000;
     var LABELS = {
         malicious: "Malicious",
         suspicious: "Suspicious",
@@ -30,6 +31,8 @@
     var summaryController = new AbortController();
     var requestNumber = 0;
     var searchTimer = null;
+    var lastHistoryTotal = 0;
+    var exportButton = document.getElementById("historyExport");
     var rowsById = Object.create(null);
     var activeRow = null;
     var previousBodyOverflow = "";
@@ -57,6 +60,28 @@
             window.clearTimeout(searchTimer);
             searchTimer = null;
         }
+    }
+
+    function setExportBusy(busy) {
+        if (exportButton) exportButton.disabled = busy;
+    }
+
+    function showExportLimitError() {
+        var error = document.getElementById("historyError");
+        error.textContent = "Export is limited to 10,000 analyses. Narrow the filters and try again.";
+        error.hidden = false;
+    }
+
+    function exportUrl() {
+        var params = new URLSearchParams();
+        if (state.group) params.set("group", state.group);
+        if (state.type) params.set("type", state.type);
+        if (state.q) params.set("q", state.q);
+        if (state.range !== "all") params.set("range", state.range);
+        if (state.sort !== "date") params.set("sort", state.sort);
+        if (state.order !== "desc") params.set("order", state.order);
+        var query = params.toString();
+        return "/api/analysis/history/export" + (query ? "?" + query : "");
     }
 
     function readUrl() {
@@ -429,6 +454,7 @@
         listController = new AbortController();
         closeDrawer(false);
         rowsById = Object.create(null);
+        setExportBusy(true);
 
         var params = new URLSearchParams({
             limit: String(state.limit),
@@ -456,6 +482,7 @@
 
             var items = Array.isArray(payload.items) ? payload.items : [];
             var total = numberValue(payload.total);
+            lastHistoryTotal = total;
             if (!items.length && total > 0 && state.offset >= total && clampAllowed) {
                 state.offset = Math.max(0, Math.floor((total - 1) / state.limit) * state.limit);
                 writeUrl("replace");
@@ -468,8 +495,11 @@
             document.getElementById("historyLoading").hidden = true;
             document.getElementById("em").hidden = items.length !== 0;
             updatePager(total);
+            setExportBusy(false);
         } catch (error) {
             if (error.name === "AbortError" || currentRequest !== requestNumber) return;
+            lastHistoryTotal = 0;
+            setExportBusy(false);
             showListError();
         }
     }
@@ -524,6 +554,12 @@
             changePage(-1);
         } else if (event.target.id === "historyNext" && state.offset + state.limit < Number.MAX_SAFE_INTEGER) {
             changePage(1);
+        } else if (event.target.closest("#historyExport")) {
+            if (lastHistoryTotal > HISTORY_EXPORT_CAP) {
+                showExportLimitError();
+            } else if (!exportButton.disabled) {
+                window.location.assign(exportUrl());
+            }
         } else if (event.target === drawerBackdrop) {
             closeDrawer();
         } else if (event.target.closest("#historyDrawerClose")) {

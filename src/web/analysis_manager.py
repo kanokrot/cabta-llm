@@ -278,6 +278,80 @@ class AnalysisManager:
         conn.close()
         return [self._row_to_dict(cur.description, r) for r in rows]
 
+    def _history_query_parts(
+        self,
+        *,
+        status: Optional[str] = None,
+        user_id: Optional[int] = None,
+        user_ids: Optional[Sequence[int]] = None,
+        group: Optional[str] = None,
+        analysis_type: Optional[str] = None,
+        q: Optional[str] = None,
+        range_name: str = "all",
+        sort: str = "date",
+        order: str = "desc",
+    ) -> tuple[str, str, list[Any], str]:
+        """Build the shared history query and its bound parameters."""
+        if group is not None and group not in _HISTORY_GROUPS:
+            raise ValueError("invalid history group")
+        if analysis_type is not None and analysis_type not in {"ioc", "file", "email"}:
+            raise ValueError("invalid analysis type")
+        if range_name not in {"all", "24h", "7d"}:
+            raise ValueError("invalid history range")
+        if sort not in _HISTORY_SORTS:
+            raise ValueError("invalid history sort")
+        if order not in {"asc", "desc"}:
+            raise ValueError("invalid history order")
+
+        group_sql, group_params = _verdict_group_sql()
+        base_sql = (
+            "WITH history AS ("
+            "SELECT analysis_jobs.*, "
+            f"{_history_target_sql()} AS history_target, "
+            f"{group_sql} AS verdict_group "
+            "FROM analysis_jobs)"
+        )
+        clauses = []
+        params = list(group_params)
+
+        if user_id is not None:
+            clauses.append("user_id = ?")
+            params.append(user_id)
+        if user_ids is not None:
+            if not user_ids:
+                clauses.append("1 = 0")
+            else:
+                placeholders = ", ".join("?" for _ in user_ids)
+                clauses.append(f"user_id IN ({placeholders})")
+                params.extend(user_ids)
+        if status:
+            clauses.append("status = ?")
+            params.append(status)
+        if group:
+            clauses.append("verdict_group = ?")
+            params.append(group)
+        if analysis_type:
+            clauses.append("analysis_type = ?")
+            params.append(analysis_type)
+        if range_name != "all":
+            hours = 24 if range_name == "24h" else 24 * 7
+            cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+            clauses.append("created_at >= ?")
+            params.append(cutoff.isoformat())
+        if q:
+            pattern = f"%{_escape_like(q)}%"
+            clauses.append(
+                "(id LIKE ? ESCAPE '\\' "
+                "OR analysis_type LIKE ? ESCAPE '\\' "
+                "OR history_target LIKE ? ESCAPE '\\')"
+            )
+            params.extend([pattern, pattern, pattern])
+
+        where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
+        direction = "ASC" if order == "asc" else "DESC"
+        order_sql = f"{_HISTORY_SORTS[sort]} {direction}, id {direction}"
+        return base_sql, where, params, order_sql
+
     def list_history_page(
         self,
         limit: int = 25,
@@ -297,73 +371,27 @@ class AnalysisManager:
             raise ValueError("limit must be between 1 and 100")
         if offset < 0:
             raise ValueError("offset must be non-negative")
-        if group is not None and group not in _HISTORY_GROUPS:
-            raise ValueError("invalid history group")
-        if analysis_type is not None and analysis_type not in {"ioc", "file", "email"}:
-            raise ValueError("invalid analysis type")
-        if range_name not in {"all", "24h", "7d"}:
-            raise ValueError("invalid history range")
-        if sort not in _HISTORY_SORTS:
-            raise ValueError("invalid history sort")
-        if order not in {"asc", "desc"}:
-            raise ValueError("invalid history order")
-
+        base_sql, where, params, order_sql = self._history_query_parts(
+            status=status,
+            user_id=user_id,
+            user_ids=user_ids,
+            group=group,
+            analysis_type=analysis_type,
+            q=q,
+            range_name=range_name,
+            sort=sort,
+            order=order,
+        )
         conn = self._connect()
         try:
-            group_sql, group_params = _verdict_group_sql()
-            base_sql = (
-                "WITH history AS ("
-                "SELECT analysis_jobs.*, "
-                f"{_history_target_sql()} AS history_target, "
-                f"{group_sql} AS verdict_group "
-                "FROM analysis_jobs)"
-            )
-            clauses = []
-            params = list(group_params)
-
-            if user_id is not None:
-                clauses.append("user_id = ?")
-                params.append(user_id)
-            if user_ids is not None:
-                if not user_ids:
-                    clauses.append("1 = 0")
-                else:
-                    placeholders = ", ".join("?" for _ in user_ids)
-                    clauses.append(f"user_id IN ({placeholders})")
-                    params.extend(user_ids)
-            if status:
-                clauses.append("status = ?")
-                params.append(status)
-            if group:
-                clauses.append("verdict_group = ?")
-                params.append(group)
-            if analysis_type:
-                clauses.append("analysis_type = ?")
-                params.append(analysis_type)
-            if range_name != "all":
-                hours = 24 if range_name == "24h" else 24 * 7
-                cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
-                clauses.append("created_at >= ?")
-                params.append(cutoff.isoformat())
-            if q:
-                pattern = f"%{_escape_like(q)}%"
-                clauses.append(
-                    "(id LIKE ? ESCAPE '\\' "
-                    "OR analysis_type LIKE ? ESCAPE '\\' "
-                    "OR history_target LIKE ? ESCAPE '\\')"
-                )
-                params.extend([pattern, pattern, pattern])
-
-            where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
             total = conn.execute(
                 f"{base_sql} SELECT COUNT(*) FROM history{where}",
                 params,
             ).fetchone()[0]
 
-            direction = "ASC" if order == "asc" else "DESC"
             rows_sql = (
                 f"{base_sql} SELECT * FROM history{where} "
-                f"ORDER BY {_HISTORY_SORTS[sort]} {direction}, id {direction} "
+                f"ORDER BY {order_sql} "
                 "LIMIT ? OFFSET ?"
             )
             cur = conn.execute(rows_sql, [*params, limit, offset])
@@ -375,6 +403,50 @@ class AnalysisManager:
                 item.pop("history_target", None)
                 items.append(item)
             return {"items": items, "total": total}
+        finally:
+            conn.close()
+
+    def export_history_rows(
+        self,
+        *,
+        cap: int,
+        status: Optional[str] = None,
+        user_id: Optional[int] = None,
+        user_ids: Optional[Sequence[int]] = None,
+        group: Optional[str] = None,
+        analysis_type: Optional[str] = None,
+        q: Optional[str] = None,
+        range_name: str = "all",
+        sort: str = "date",
+        order: str = "desc",
+    ) -> List[Dict]:
+        """Return up to cap+1 rows from one consistently filtered history query."""
+        if cap < 1:
+            raise ValueError("history export cap must be positive")
+
+        base_sql, where, params, order_sql = self._history_query_parts(
+            status=status,
+            user_id=user_id,
+            user_ids=user_ids,
+            group=group,
+            analysis_type=analysis_type,
+            q=q,
+            range_name=range_name,
+            sort=sort,
+            order=order,
+        )
+        conn = self._connect()
+        try:
+            cur = conn.execute(
+                f"{base_sql} SELECT * FROM history{where} "
+                f"ORDER BY {order_sql} LIMIT ?",
+                [*params, cap + 1],
+            )
+            description = cur.description
+            return [
+                self._row_to_dict(description, row)
+                for row in cur.fetchall()
+            ]
         finally:
             conn.close()
 

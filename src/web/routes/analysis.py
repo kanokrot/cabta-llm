@@ -4,6 +4,7 @@ Analysis API endpoints.
 """
 
 import asyncio
+import csv
 import hashlib
 import inspect
 import logging
@@ -13,7 +14,7 @@ from pathlib import Path
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from ..models import (
     AnalysisState,
@@ -29,6 +30,10 @@ from ..visibility import serialize_analysis_job, serialize_status
 logger = logging.getLogger(__name__)
 MAX_FILE_UPLOAD_BYTES = 50 * 1024 * 1024
 MAX_EMAIL_UPLOAD_BYTES = 25 * 1024 * 1024
+HISTORY_ADMIN_ROLE = "admin"
+HISTORY_ANALYST_ROLE = "SOC Analyst Tier 1-2"
+HISTORY_EXPORT_CAP = 10_000
+CSV_DANGEROUS_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
 router = APIRouter(
     dependencies=[
         Depends(require_role([
@@ -70,6 +75,72 @@ def _get_readable_job(request: Request, analysis_id: str, current_user: dict):
             resource_id=analysis_id,
         )
     return job
+
+
+def _history_scope(current_user: dict) -> dict:
+    role = current_user.get("role")
+    if role == HISTORY_ADMIN_ROLE:
+        return {}
+    if role == TEAM_LEAD:
+        return {"user_ids": get_user_ids_by_role(HISTORY_ANALYST_ROLE)}
+    return {"user_id": current_user["id"]}
+
+
+def _audit_team_lead_history_reads(
+    request: Request,
+    current_user: dict,
+    jobs: list[dict],
+) -> None:
+    if current_user.get("role") != TEAM_LEAD:
+        return
+    for job in jobs:
+        if job.get("user_id") != current_user["id"]:
+            record_cross_user_read(
+                request,
+                actor_user_id=current_user["id"],
+                actor_role=TEAM_LEAD,
+                target_user_id=job["user_id"],
+                resource_type="analysis",
+                resource_id=job["id"],
+            )
+
+
+def sanitize_csv_text(value) -> str:
+    """Preserve text while neutralizing spreadsheet formula prefixes."""
+    text = "" if value is None else str(value)
+    first_non_whitespace = 0
+    while (
+        first_non_whitespace < len(text)
+        and text[first_non_whitespace].isspace()
+        and text[first_non_whitespace] not in ("\t", "\r")
+    ):
+        first_non_whitespace += 1
+    if (
+        text.startswith(CSV_DANGEROUS_PREFIXES)
+        or (
+            first_non_whitespace < len(text)
+            and text[first_non_whitespace] in CSV_DANGEROUS_PREFIXES
+        )
+    ):
+        return "'" + text
+    return text
+
+
+def _history_csv_row(job: dict, role: str) -> list:
+    item = serialize_analysis_job(job, role=role)
+    target = item.get("ioc") or item.get("filename") or item.get("id") or ""
+    score = item.get("score")
+    return [
+        sanitize_csv_text(item.get("id")),
+        sanitize_csv_text(item.get("analysis_type")),
+        sanitize_csv_text(target),
+        sanitize_csv_text(item.get("verdict")),
+        sanitize_csv_text(job.get("verdict_group")),
+        "" if score is None else score,
+        sanitize_csv_text(item.get("status")),
+        sanitize_csv_text(item.get("created_at")),
+        sanitize_csv_text(item.get("completed_at")),
+    ]
 
 
 async def _read_email_upload_with_limit(file: UploadFile) -> bytes:
@@ -457,14 +528,7 @@ async def get_history_summary(
 ):
     """Get role-scoped analysis history summary counts."""
     mgr = request.app.state.analysis_manager
-    role = current_user.get("role")
-    if role == "admin":
-        return mgr.get_history_summary()
-    if role == TEAM_LEAD:
-        return mgr.get_history_summary(
-            user_ids=get_user_ids_by_role("SOC Analyst Tier 1-2"),
-        )
-    return mgr.get_history_summary(user_id=current_user["id"])
+    return mgr.get_history_summary(**_history_scope(current_user))
 
 
 @router.get('/{analysis_id}/status')
@@ -514,28 +578,8 @@ async def get_history(
         "sort": sort,
         "order": order,
     }
-    if role == "admin":
-        page = mgr.list_history_page(**filters)
-    elif role == TEAM_LEAD:
-        page = mgr.list_history_page(
-            **filters,
-            user_ids=get_user_ids_by_role("SOC Analyst Tier 1-2"),
-        )
-        for job in page["items"]:
-            if job.get("user_id") != current_user["id"]:
-                record_cross_user_read(
-                    request,
-                    actor_user_id=current_user["id"],
-                    actor_role=TEAM_LEAD,
-                    target_user_id=job["user_id"],
-                    resource_type="analysis",
-                    resource_id=job["id"],
-                )
-    else:
-        page = mgr.list_history_page(
-            **filters,
-            user_id=current_user["id"],
-        )
+    page = mgr.list_history_page(**filters, **_history_scope(current_user))
+    _audit_team_lead_history_reads(request, current_user, page["items"])
 
     items = []
     for job in page["items"]:
@@ -549,3 +593,71 @@ async def get_history(
         'limit': limit,
         'offset': offset,
     }
+
+
+@router.get('/history/export')
+async def export_history(
+    request: Request,
+    status: Optional[str] = None,
+    group: Optional[Literal[
+        "malicious", "suspicious", "clean", "unknown", "failed", "in_progress",
+    ]] = Query(default=None),
+    analysis_type: Optional[Literal["ioc", "file", "email"]] = Query(
+        default=None, alias="type"
+    ),
+    q: Optional[str] = Query(default=None, max_length=200),
+    range_name: Literal["all", "24h", "7d"] = Query(default="all", alias="range"),
+    sort: Literal["date", "score", "verdict", "type", "status"] = Query(
+        default="date"
+    ),
+    order: Literal["asc", "desc"] = Query(default="desc"),
+    current_user: dict = Depends(get_current_user),
+):
+    """Stream a role-scoped, filtered history CSV."""
+    mgr = request.app.state.analysis_manager
+    role = current_user.get("role")
+    filters = {
+        "status": status,
+        "group": group,
+        "analysis_type": analysis_type,
+        "q": q,
+        "range_name": range_name,
+        "sort": sort,
+        "order": order,
+    }
+    jobs = mgr.export_history_rows(
+        cap=HISTORY_EXPORT_CAP,
+        **filters,
+        **_history_scope(current_user),
+    )
+    if len(jobs) > HISTORY_EXPORT_CAP:
+        raise HTTPException(
+            status_code=413,
+            detail=f"History export exceeds the {HISTORY_EXPORT_CAP}-row limit",
+        )
+
+    _audit_team_lead_history_reads(request, current_user, jobs)
+
+    columns = [
+        "id", "type", "target", "verdict", "verdict_group",
+        "score", "status", "created_at", "completed_at",
+    ]
+
+    class _CsvBuffer:
+        def write(self, value: str) -> str:
+            return value
+
+    def generate():
+        writer = csv.writer(_CsvBuffer(), lineterminator="\r\n")
+        yield "\ufeff"
+        yield writer.writerow(columns)
+        for job in jobs:
+            yield writer.writerow(_history_csv_row(job, role))
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": 'attachment; filename="analysis-history.csv"',
+        },
+    )

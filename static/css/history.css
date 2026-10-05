@@ -43,8 +43,14 @@ body:has(.history-page) .sub-header {
 .history-page .history-g-in_progress { --history-color: var(--history-progress); }
 
 .history-page .history-heading {
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+    justify-content: space-between;
     margin-bottom: 20px;
 }
+
+.history-page .history-heading-copy { min-width: 0; }
 
 .history-page .history-drawer-backdrop {
     position: fixed;
@@ -480,5 +486,7 @@ body:has(.history-page) .sub-header {
 }
 
 @media (max-width: 600px) {
+    .history-page .history-heading { align-items: stretch; flex-direction: column; }
+    .history-page .history-heading .history-button { align-self: flex-start; }
     .history-page .history-drawer { width: 100vw; }
 }

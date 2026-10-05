@@ -11,8 +11,13 @@
 {% block content %}
 <section id="historyPage" class="history-page" aria-label="Analysis history">
     <div class="history-heading">
-        <h1>Analysis <em>History</em></h1>
+        <div class="history-heading-copy">
+            <h1>Analysis <em>History</em></h1>
         <div class="history-heading-subtitle">Past analysis jobs · IOC · FILE · EMAIL</div>
+        </div>
+        <button type="button" id="historyExport" class="history-button" disabled>
+            Export CSV
+        </button>
     </div>
 
     <div id="stats" class="history-stats">

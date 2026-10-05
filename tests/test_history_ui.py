@@ -20,6 +20,7 @@ def test_history_template_has_static_shell_and_seven_cards() -> None:
         "historySummaryError", "historyLoading", "historyError", "tb",
         "em", "cnt", "historyPrev", "historyNext", "historyDrawer",
         "historyDrawerBackdrop", "historyDrawerBody", "historyDrawerClose",
+        "historyExport",
     ):
         assert f'id="{element_id}"' in source
 
@@ -45,6 +46,7 @@ def test_history_template_has_static_shell_and_seven_cards() -> None:
     assert 'id="historyDrawerBackdrop"' in history_section
     assert 'id="historyDrawerBody"' in history_section
     assert 'id="historyDrawerClose"' in history_section
+    assert 'id="historyExport"' in history_section
     assert 'role="dialog"' in history_section
     assert 'aria-modal="true"' in history_section
 
@@ -57,6 +59,7 @@ def test_history_js_uses_dom_text_rendering_and_scoped_events() -> None:
     assert "event.key === \"Escape\"" in source
     assert "encodeURIComponent" in source
     assert "historyDrawer" in source
+    assert "/api/analysis/history/export" in source
     assert 'getElementById("historyPage")' in source
     assert 'document.addEventListener("click"' not in source
     assert "AbortController" in source
