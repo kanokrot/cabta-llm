@@ -19,6 +19,12 @@ logger = logging.getLogger(__name__)
 
 _DEFAULT_DB = Path.home() / '.blue-team-assistant' / 'cache' / 'analysis_jobs.db'
 
+VERDICT_GROUPS = {
+    "malicious": ("MALICIOUS", "PHISHING"),
+    "suspicious": ("SUSPICIOUS", "SPAM"),
+    "clean": ("CLEAN",),
+}
+
 
 class AnalysisManager:
     """Manage background analysis tasks.
@@ -220,6 +226,74 @@ class AnalysisManager:
         rows = cur.fetchall()
         conn.close()
         return [self._row_to_dict(cur.description, r) for r in rows]
+
+    def get_history_summary(
+        self,
+        user_id: Optional[int] = None,
+        user_ids: Optional[Sequence[int]] = None,
+    ) -> Dict:
+        """Return role-scoped, mutually exclusive history summary counts."""
+        conn = self._connect()
+        clauses = []
+        scope_params = []
+        if user_id is not None:
+            clauses.append("user_id = ?")
+            scope_params.append(user_id)
+        if user_ids is not None:
+            if not user_ids:
+                clauses.append("1 = 0")
+            else:
+                placeholders = ", ".join("?" for _ in user_ids)
+                clauses.append(f"user_id IN ({placeholders})")
+                scope_params.extend(user_ids)
+
+        select_parts = ["COUNT(*) AS total"]
+        query_params = []
+        for group_name, verdicts in VERDICT_GROUPS.items():
+            verdict_placeholders = ", ".join("?" for _ in verdicts)
+            select_parts.append(
+                "SUM(CASE WHEN status = 'completed' "
+                f"AND verdict IN ({verdict_placeholders}) "
+                f"THEN 1 ELSE 0 END) AS {group_name}"
+            )
+            query_params.extend(verdicts)
+
+        known_verdicts = tuple(
+            verdict for verdicts in VERDICT_GROUPS.values() for verdict in verdicts
+        )
+        known_placeholders = ", ".join("?" for _ in known_verdicts)
+        select_parts.append(
+            "SUM(CASE WHEN "
+            "(status = 'completed' AND "
+            f"(verdict IS NULL OR verdict NOT IN ({known_placeholders}))) "
+            "OR status NOT IN ('queued', 'running', 'completed', 'failed') "
+            "THEN 1 ELSE 0 END) AS unknown"
+        )
+        query_params.extend(known_verdicts)
+        select_parts.extend([
+            "SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed",
+            "SUM(CASE WHEN status IN ('queued', 'running') THEN 1 ELSE 0 END) AS in_progress",
+        ])
+
+        where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
+        row = conn.execute(
+            f"SELECT {', '.join(select_parts)} FROM analysis_jobs{where}",
+            [*query_params, *scope_params],
+        ).fetchone()
+        conn.close()
+
+        summary = {
+            "total": row[0] or 0,
+            "malicious": row[1] or 0,
+            "suspicious": row[2] or 0,
+            "clean": row[3] or 0,
+            "unknown": row[4] or 0,
+            "failed": row[5] or 0,
+            "in_progress": row[6] or 0,
+        }
+        if sum(summary[key] for key in summary if key != "total") != summary["total"]:
+            raise RuntimeError("Analysis history summary counts are inconsistent")
+        return summary
 
     def update_progress(
         self,

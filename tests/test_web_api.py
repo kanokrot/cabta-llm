@@ -91,6 +91,85 @@ class TestAnalysisManager:
         assert stats['clean_count'] == 1
         assert stats['suspicious_count'] == 1
 
+    def test_get_history_summary_groups_verdicts_and_statuses(self):
+        malicious = self.mgr.create_job('ioc', {'v': 'malicious'}, user_id=101)
+        phishing = self.mgr.create_job('email', {'filename': 'phishing.eml'}, user_id=101)
+        suspicious = self.mgr.create_job('ioc', {'v': 'suspicious'}, user_id=101)
+        spam = self.mgr.create_job('email', {'filename': 'spam.eml'}, user_id=101)
+        clean = self.mgr.create_job('file', {'filename': 'clean.txt'}, user_id=101)
+        unknown = self.mgr.create_job('ioc', {'v': 'unknown'}, user_id=101)
+        failed = self.mgr.create_job('file', {'filename': 'failed.bin'}, user_id=101)
+        queued = self.mgr.create_job('ioc', {'v': 'queued'}, user_id=101)
+        running = self.mgr.create_job('ioc', {'v': 'running'}, user_id=101)
+        other_user = self.mgr.create_job('ioc', {'v': 'other'}, user_id=202)
+
+        self.mgr.complete_job(malicious, {}, verdict='MALICIOUS', score=90)
+        self.mgr.complete_job(phishing, {}, verdict='PHISHING', score=85)
+        self.mgr.complete_job(suspicious, {}, verdict='SUSPICIOUS', score=55)
+        self.mgr.complete_job(spam, {}, verdict='SPAM', score=50)
+        self.mgr.complete_job(clean, {}, verdict='CLEAN', score=5)
+        self.mgr.complete_job(unknown, {}, verdict='UNKNOWN', score=0)
+        self.mgr.fail_job(failed, 'timeout')
+        self.mgr.update_progress(running, 25, 'working')
+        self.mgr.complete_job(other_user, {}, verdict='CLEAN', score=5)
+
+        summary = self.mgr.get_history_summary(user_id=101)
+
+        assert summary == {
+            'total': 9,
+            'malicious': 2,
+            'suspicious': 2,
+            'clean': 1,
+            'unknown': 1,
+            'failed': 1,
+            'in_progress': 2,
+        }
+        assert sum(summary[key] for key in summary if key != 'total') == summary['total']
+
+    def test_get_history_summary_scopes_multiple_user_ids(self):
+        malicious = self.mgr.create_job('ioc', {'v': 'malicious'}, user_id=101)
+        clean = self.mgr.create_job('ioc', {'v': 'clean'}, user_id=202)
+        suspicious = self.mgr.create_job('ioc', {'v': 'suspicious'}, user_id=303)
+
+        self.mgr.complete_job(malicious, {}, verdict='MALICIOUS', score=90)
+        self.mgr.complete_job(clean, {}, verdict='CLEAN', score=5)
+        self.mgr.complete_job(suspicious, {}, verdict='SUSPICIOUS', score=55)
+
+        assert self.mgr.get_history_summary(user_ids=[101, 202]) == {
+            'total': 2,
+            'malicious': 1,
+            'suspicious': 0,
+            'clean': 1,
+            'unknown': 0,
+            'failed': 0,
+            'in_progress': 0,
+        }
+
+    def test_get_history_summary_empty_user_ids_returns_zeros(self):
+        job_id = self.mgr.create_job('ioc', {'v': 'not-selected'}, user_id=101)
+        self.mgr.complete_job(job_id, {}, verdict='MALICIOUS', score=90)
+
+        assert self.mgr.get_history_summary(user_ids=[]) == {
+            'total': 0,
+            'malicious': 0,
+            'suspicious': 0,
+            'clean': 0,
+            'unknown': 0,
+            'failed': 0,
+            'in_progress': 0,
+        }
+
+    def test_get_history_summary_empty_database_returns_zeros(self):
+        assert self.mgr.get_history_summary() == {
+            'total': 0,
+            'malicious': 0,
+            'suspicious': 0,
+            'clean': 0,
+            'unknown': 0,
+            'failed': 0,
+            'in_progress': 0,
+        }
+
     def test_list_with_limit_offset(self):
         for i in range(10):
             self.mgr.create_job('ioc', {'v': str(i)})

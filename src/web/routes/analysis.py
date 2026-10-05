@@ -450,6 +450,23 @@ async def get_analysis(
     return serialize_analysis_job(job, role=current_user['role'])
 
 
+@router.get('/history/summary')
+async def get_history_summary(
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
+    """Get role-scoped analysis history summary counts."""
+    mgr = request.app.state.analysis_manager
+    role = current_user.get("role")
+    if role == "admin":
+        return mgr.get_history_summary()
+    if role == TEAM_LEAD:
+        return mgr.get_history_summary(
+            user_ids=get_user_ids_by_role("SOC Analyst Tier 1-2"),
+        )
+    return mgr.get_history_summary(user_id=current_user["id"])
+
+
 @router.get('/{analysis_id}/status')
 async def get_analysis_status(
     request: Request,
