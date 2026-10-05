@@ -2,138 +2,19 @@
 {% extends "base.html" %}
 
 {% block title %}Investigations - Blue Team Assistant{% endblock %}
-{% block page_title %}Investigations{% endblock %}
-{% block page_subtitle %}<span class="page-subtitle">Agent Investigation Sessions</span>{% endblock %}
-
-{% block header_actions %}
-<button class="btn btn-sm btn-accent" data-bs-toggle="modal" data-bs-target="#newInvestigationModal">
-    <i class="bi bi-plus-lg me-1"></i>New Investigation
-</button>
-{% endblock %}
+{% block page_title %}{% endblock %}
+{% block page_subtitle %}{% endblock %}
+{% block header_actions %}{% endblock %}
 
 {% block extra_head %}
+<link rel="stylesheet" href="/static/css/investigations.css?v=1">
 <style>
 /* ── Stat Cards Enhanced ── */
-.stat-card {
-    position: relative;
-    overflow: hidden;
-}
-.stat-icon-bg {
-    position: absolute;
-    right: -8px;
-    top: 50%;
-    transform: translateY(-50%);
-    font-size: 4rem;
-    opacity: 0.07;
-    pointer-events: none;
-    line-height: 1;
-}
-@keyframes pulse-active {
-    0%, 100% { transform: scale(1); opacity: 1; }
-    50% { transform: scale(1.08); opacity: 0.85; }
-}
-.stat-value.pulse-active {
-    animation: pulse-active 2s ease-in-out infinite;
-    display: inline-block;
-}
-
 /* ── Search Bar ── */
-.inv-search-input {
-    background: var(--bg-tertiary, #1a1a2e);
-    border: 1px solid var(--border-color, #333);
-    color: var(--text-primary, #e0e0e0);
-    border-radius: 6px;
-    padding: 0.3rem 0.6rem 0.3rem 2rem;
-    font-size: 0.85rem;
-    transition: border-color 0.2s, box-shadow 0.2s;
-    width: 220px;
-}
-.inv-search-input:focus {
-    outline: none;
-    border-color: var(--color-accent, #58a6ff);
-    box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.15);
-}
-.inv-search-wrap {
-    position: relative;
-}
-.inv-search-wrap i {
-    position: absolute;
-    left: 0.6rem;
-    top: 50%;
-    transform: translateY(-50%);
-    color: var(--text-muted, #888);
-    font-size: 0.8rem;
-    pointer-events: none;
-}
 
 /* ── View Toggle ── */
-.view-toggle .btn {
-    padding: 0.25rem 0.5rem;
-    font-size: 0.8rem;
-    border-color: var(--border-color, #444);
-    color: var(--text-secondary, #aaa);
-    background: transparent;
-}
-.view-toggle .btn.active {
-    background: var(--color-accent, #58a6ff);
-    border-color: var(--color-accent, #58a6ff);
-    color: #fff;
-}
-.view-toggle .btn:hover:not(.active) {
-    background: var(--bg-tertiary, #1a1a2e);
-}
 
 /* ── Card View Grid ── */
-.inv-card-grid {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 1rem;
-}
-@media (min-width: 768px) {
-    .inv-card-grid { grid-template-columns: repeat(2, 1fr); }
-}
-@media (min-width: 1200px) {
-    .inv-card-grid { grid-template-columns: repeat(3, 1fr); }
-}
-.inv-session-card {
-    background: var(--bg-secondary, #16213e);
-    border: 1px solid var(--border-color, #333);
-    border-radius: 8px;
-    padding: 1rem;
-    transition: border-color 0.2s, transform 0.15s;
-    display: flex;
-    flex-direction: column;
-    gap: 0.6rem;
-}
-.inv-session-card:hover {
-    border-color: var(--color-accent, #58a6ff);
-    transform: translateY(-2px);
-}
-.inv-session-card .card-goal {
-    font-size: 0.9rem;
-    color: var(--text-primary, #e0e0e0);
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-    line-height: 1.4;
-    min-height: 2.5em;
-}
-.inv-session-card .card-meta {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    flex-wrap: wrap;
-    font-size: 0.8rem;
-    color: var(--text-secondary, #aaa);
-}
-.inv-session-card .card-actions {
-    display: flex;
-    gap: 0.5rem;
-    margin-top: auto;
-    padding-top: 0.5rem;
-    border-top: 1px solid var(--border-color, #333);
-}
 
 /* ── Status Gradient Headers (Modal) ── */
 .modal-status-banner {
@@ -706,84 +587,89 @@
 {% endblock %}
 
 {% block content %}
+<div class="investigations-page">
+<div class="investigations-heading">
+    <div>
+        <h1>Agent <span>Investigations</span></h1>
+        <p>Investigation Sessions · Goals · Outcomes</p>
+    </div>
+    <button class="btn btn-sm btn-accent" data-bs-toggle="modal" data-bs-target="#newInvestigationModal">
+        <i class="bi bi-plus-lg me-1"></i>New Investigation
+    </button>
+</div>
+
 <!-- Stats Cards -->
-<div class="row g-3 mb-4">
+<div class="investigations-stats">
     <div class="col-xl-3 col-sm-6">
-        <div class="stat-card stat-card-primary">
-            <div class="stat-icon"><i class="bi bi-binoculars-fill"></i></div>
+        <div class="stat-card investigations-stat investigations-stat-total">
             <div class="stat-info">
-                <div class="stat-value" id="statTotal">{{ stats.total | default(0) }}</div>
                 <div class="stat-label">Total</div>
+                <div class="stat-value" id="statTotal">{{ stats.total | default(0) }}</div>
             </div>
-            <div class="stat-icon-bg"><i class="bi bi-binoculars-fill"></i></div>
         </div>
     </div>
     <div class="col-xl-3 col-sm-6">
-        <div class="stat-card stat-card-primary">
-            <div class="stat-icon"><i class="bi bi-arrow-repeat"></i></div>
+        <div class="stat-card investigations-stat">
             <div class="stat-info">
-                <div class="stat-value" id="statActive">{{ stats.active | default(0) }}</div>
                 <div class="stat-label">Active</div>
+                <div class="stat-value" id="statActive">{{ stats.active | default(0) }}</div>
             </div>
-            <div class="stat-icon-bg"><i class="bi bi-arrow-repeat"></i></div>
         </div>
     </div>
     <div class="col-xl-3 col-sm-6">
-        <div class="stat-card stat-card-success">
-            <div class="stat-icon"><i class="bi bi-check-circle-fill"></i></div>
+        <div class="stat-card investigations-stat">
             <div class="stat-info">
-                <div class="stat-value" id="statCompleted">{{ stats.completed | default(0) }}</div>
                 <div class="stat-label">Completed</div>
+                <div class="stat-value" id="statCompleted">{{ stats.completed | default(0) }}</div>
             </div>
-            <div class="stat-icon-bg"><i class="bi bi-check-circle-fill"></i></div>
         </div>
     </div>
     <div class="col-xl-3 col-sm-6">
-        <div class="stat-card stat-card-danger">
-            <div class="stat-icon"><i class="bi bi-x-octagon-fill"></i></div>
+        <div class="stat-card investigations-stat">
             <div class="stat-info">
-                <div class="stat-value" id="statFailed">{{ stats.failed | default(0) }}</div>
                 <div class="stat-label">Failed</div>
+                <div class="stat-value" id="statFailed">{{ stats.failed | default(0) }}</div>
             </div>
-            <div class="stat-icon-bg"><i class="bi bi-x-octagon-fill"></i></div>
         </div>
     </div>
+</div>
+
+<div class="investigations-meter" aria-hidden="true">
+    <span id="investigationsMeterCompleted" class="investigations-meter-segment investigations-meter-completed" style="width:0%"></span>
+    <span id="investigationsMeterFailed" class="investigations-meter-segment investigations-meter-failed" style="width:0%"></span>
 </div>
 
 <!-- Filter Bar -->
-<div class="card mb-4">
-    <div class="card-body py-2">
-        <div class="d-flex align-items-center gap-3 flex-wrap">
-            <label class="text-muted mb-0 small">Filter:</label>
-            <select id="statusFilter" class="form-select form-select-sm" style="width:auto;" onchange="Investigations.loadSessions()">
-                <option value="">All Statuses</option>
-                <option value="active">Active</option>
-                <option value="completed">Completed</option>
-                <option value="failed">Failed</option>
-            </select>
-            <div class="inv-search-wrap">
-                <i class="bi bi-search"></i>
-                <input type="text" id="goalSearchInput" class="inv-search-input" placeholder="Search by goal..." oninput="Investigations.filterByGoal()">
-            </div>
-            <div class="view-toggle btn-group ms-auto" role="group">
-                <button type="button" class="btn active" id="viewTableBtn" onclick="Investigations.setView('table')" title="Table view">
-                    <i class="bi bi-list-ul"></i>
-                </button>
-                <button type="button" class="btn" id="viewCardsBtn" onclick="Investigations.setView('cards')" title="Cards view">
-                    <i class="bi bi-grid-3x3-gap"></i>
-                </button>
-            </div>
-            <button class="btn btn-sm btn-ghost" onclick="Investigations.loadSessions()">
-                <i class="bi bi-arrow-clockwise me-1"></i>Refresh
-            </button>
-        </div>
+<div class="investigations-toolbar">
+    <label class="inv-search-wrap investigations-search">
+        <span class="investigations-search-prompt" aria-hidden="true">&gt;_</span>
+        <input type="text" id="goalSearchInput" class="inv-search-input" placeholder="search by goal or session id…" oninput="Investigations.filterByGoal()">
+        <kbd class="investigations-search-hint" aria-hidden="true">/</kbd>
+    </label>
+    <select id="statusFilter" class="form-select form-select-sm investigations-status-filter" onchange="Investigations.loadSessions()" aria-label="Status">
+        <option value="">All Statuses</option>
+        <option value="active">Active</option>
+        <option value="completed">Completed</option>
+        <option value="failed">Failed</option>
+    </select>
+    <div class="view-toggle btn-group investigations-view-toggle" role="group" aria-label="Session view">
+        <button type="button" class="btn active" id="viewTableBtn" onclick="Investigations.setView('table')" title="Table view" aria-label="Table view">
+            <i class="bi bi-list-ul"></i>
+        </button>
+        <button type="button" class="btn" id="viewCardsBtn" onclick="Investigations.setView('cards')" title="Cards view" aria-label="Grid view">
+            <i class="bi bi-grid-3x3-gap"></i>
+        </button>
     </div>
+    <button class="btn btn-sm btn-ghost investigations-refresh" onclick="Investigations.loadSessions()">
+        <i class="bi bi-arrow-clockwise me-1"></i>Refresh
+    </button>
 </div>
 
 <!-- Sessions Table View -->
-<div class="card" id="tableViewContainer">
-    <div class="card-header d-flex align-items-center justify-content-between">
-        <h6 class="mb-0"><i class="bi bi-list-ul me-2 text-accent"></i>Investigation Sessions</h6>
+<div class="card investigations-table-card" id="tableViewContainer">
+    <div class="card-header investigations-table-header">
+        <h6 class="mb-0">Investigation Sessions</h6>
+        <span class="investigations-shown-count" id="sessionsShownCount"></span>
     </div>
     <!-- Bulk Actions Bar -->
     <div class="bulk-actions-bar" id="bulkActionsBar">
@@ -819,6 +705,10 @@
             </table>
         </div>
     </div>
+    <footer class="investigations-table-footer">
+        <span id="sessionsLoadedCount"></span>
+        <span>Sorted by newest</span>
+    </footer>
 </div>
 
 <!-- Sessions Card View -->
@@ -935,6 +825,7 @@
             </div>
         </div>
     </div>
+</div>
 </div>
 {% endblock %}
 
@@ -1375,11 +1266,10 @@ var Investigations = (function() {
         }
         toggleIcon.className = 'bi bi-chevron-down';
         var detailRow = document.createElement('tr');
-        detailRow.className = 'detail-row';
+        detailRow.className = 'detail-row investigations-detail-row';
         var td = document.createElement('td');
         td.colSpan = 8;
-        td.style.background = 'var(--bg-tertiary)';
-        td.style.padding = '1rem';
+        td.className = 'investigations-detail-cell';
         td.textContent = 'Loading...';
         detailRow.appendChild(td);
         parentRow.parentNode.insertBefore(detailRow, parentRow.nextSibling);
@@ -1388,40 +1278,127 @@ var Investigations = (function() {
             .then(function(r) { return r.json(); })
             .then(function(data) {
                 while (td.firstChild) td.removeChild(td.firstChild);
-                var goalP = document.createElement('p');
-                var goalStrong = document.createElement('strong');
-                goalStrong.textContent = 'Goal: ';
-                goalP.appendChild(goalStrong);
-                goalP.appendChild(document.createTextNode(data.goal || 'N/A'));
-                td.appendChild(goalP);
+                var detail = document.createElement('div');
+                detail.className = 'investigations-detail';
 
-                if (data.result || data.summary) {
-                    var resP = document.createElement('p');
-                    var resStrong = document.createElement('strong');
-                    resStrong.textContent = 'Result: ';
-                    resP.appendChild(resStrong);
-                    resP.appendChild(document.createTextNode(data.result || data.summary));
-                    td.appendChild(resP);
+                function displayText(value) {
+                    return value == null ? '' : String(value);
                 }
 
-                var history = data.history || data.messages || [];
-                if (history.length) {
-                    var stepsTitle = document.createElement('strong');
-                    stepsTitle.textContent = 'Messages (' + history.length + '):';
-                    td.appendChild(stepsTitle);
-                    var list = document.createElement('ul');
-                    list.className = 'mt-2 mb-0';
-                    list.style.fontSize = '0.85rem';
-                    history.slice(0, 10).forEach(function(m) {
-                        var li = document.createElement('li');
-                        var roleSpan = document.createElement('strong');
-                        roleSpan.textContent = (m.role || 'system') + ': ';
-                        li.appendChild(roleSpan);
-                        li.appendChild(document.createTextNode((m.content || '').substring(0, 200)));
-                        list.appendChild(li);
+                function appendInlineText(target, value) {
+                    var raw = displayText(value);
+                    var codePattern = /`([^`]+)`/g;
+                    var cursor = 0;
+                    var match;
+                    while ((match = codePattern.exec(raw)) !== null) {
+                        if (match.index > cursor) {
+                            target.appendChild(document.createTextNode(raw.slice(cursor, match.index)));
+                        }
+                        var code = document.createElement('code');
+                        code.className = 'investigations-inline-code';
+                        code.textContent = match[1];
+                        target.appendChild(code);
+                        cursor = codePattern.lastIndex;
+                    }
+                    if (cursor < raw.length) {
+                        target.appendChild(document.createTextNode(raw.slice(cursor)));
+                    }
+                }
+
+                function makeSection(labelText, sectionClass) {
+                    var section = document.createElement('section');
+                    section.className = 'investigations-detail-section ' + sectionClass;
+                    var label = document.createElement('div');
+                    label.className = 'investigations-detail-label';
+                    label.textContent = labelText;
+                    section.appendChild(label);
+                    return section;
+                }
+
+                function appendDash(target) {
+                    var dash = document.createElement('span');
+                    dash.className = 'investigations-detail-empty';
+                    dash.textContent = '—';
+                    target.appendChild(dash);
+                }
+
+                var goalSection = makeSection('Goal', 'investigations-detail-goal-section');
+                var goalText = document.createElement('div');
+                goalText.className = 'investigations-detail-goal';
+                if (displayText(data.goal).trim()) appendInlineText(goalText, data.goal);
+                else appendDash(goalText);
+                goalSection.appendChild(goalText);
+                detail.appendChild(goalSection);
+
+                var resultText = displayText(data.result || data.summary);
+                var resultSection = makeSection('Result', 'investigations-detail-result-section');
+                var resultBlock = document.createElement('div');
+                resultBlock.className = 'investigations-result-block';
+                if (resultText.trim()) {
+                    var verdictMatch = /^Verdict:\s*(?:`([^`\s]+)`|([A-Za-z][A-Za-z_-]*))\s*/i.exec(resultText);
+                    if (verdictMatch) {
+                        var verdict = verdictMatch[1] || verdictMatch[2];
+                        var normalizedVerdict = verdict.toLowerCase();
+                        var verdictClass = 'investigations-verdict-neutral';
+                        if (['malicious', 'high'].indexOf(normalizedVerdict) !== -1) {
+                            verdictClass = 'investigations-verdict-red';
+                        } else if (['suspicious', 'medium'].indexOf(normalizedVerdict) !== -1) {
+                            verdictClass = 'investigations-verdict-amber';
+                        } else if (['clean', 'benign', 'low'].indexOf(normalizedVerdict) !== -1) {
+                            verdictClass = 'investigations-verdict-green';
+                        }
+                        var chip = document.createElement('span');
+                        chip.className = 'investigations-verdict-chip ' + verdictClass;
+                        chip.textContent = verdict;
+                        resultBlock.appendChild(chip);
+                        var remainder = resultText.slice(verdictMatch[0].length);
+                        if (remainder.trim()) {
+                            var resultRemainder = document.createElement('div');
+                            resultRemainder.className = 'investigations-result-text';
+                            appendInlineText(resultRemainder, remainder);
+                            resultBlock.appendChild(resultRemainder);
+                        }
+                    } else {
+                        var plainResult = document.createElement('div');
+                        plainResult.className = 'investigations-result-text';
+                        appendInlineText(plainResult, resultText);
+                        resultBlock.appendChild(plainResult);
+                    }
+                } else {
+                    appendDash(resultBlock);
+                }
+                resultSection.appendChild(resultBlock);
+                detail.appendChild(resultSection);
+
+                var history = Array.isArray(data.history) ? data.history :
+                    (Array.isArray(data.messages) ? data.messages : []);
+                var messagesSection = makeSection('Messages · ' + history.length, 'investigations-detail-messages-section');
+                if (!history.length) {
+                    appendDash(messagesSection);
+                } else {
+                    var messages = document.createElement('div');
+                    messages.className = 'investigations-messages';
+                    history.forEach(function(message) {
+                        message = message || {};
+                        var item = document.createElement('div');
+                        item.className = 'investigations-message';
+                        var roleText = displayText(message.role || 'system');
+                        var role = document.createElement('span');
+                        role.className = 'investigations-role-chip' +
+                            (roleText.toLowerCase() === 'user' ? ' investigations-role-user' : ' investigations-role-neutral');
+                        role.textContent = roleText;
+                        item.appendChild(role);
+                        var content = document.createElement('div');
+                        content.className = 'investigations-message-content';
+                        if (displayText(message.content).trim()) appendInlineText(content, message.content);
+                        else appendDash(content);
+                        item.appendChild(content);
+                        messages.appendChild(item);
                     });
-                    td.appendChild(list);
+                    messagesSection.appendChild(messages);
                 }
+                detail.appendChild(messagesSection);
+                td.appendChild(detail);
             })
             .catch(function() {
                 td.textContent = 'Failed to load detail.';
