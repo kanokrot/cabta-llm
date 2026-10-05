@@ -338,3 +338,9 @@ def sample_email_analysis_result():
 @pytest.fixture(autouse=True)
 def _force_canary_control_group(monkeypatch):
     monkeypatch.setenv("LLM_DGA_VLLM_CANARY_PERCENT", "0")
+
+
+@pytest.fixture(autouse=True)
+def _isolate_ticketing_database(monkeypatch, tmp_path):
+    """Keep tests that use default ticketing config out of the real DB."""
+    monkeypatch.setenv("TICKETING_DB_PATH", str(tmp_path / "tickets.db"))
