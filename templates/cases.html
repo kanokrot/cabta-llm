@@ -3,110 +3,131 @@
 {% extends "base.html" %}
 
 {% block title %}Cases - Blue Team Assistant{% endblock %}
-{% block page_title %}Case Management{% endblock %}
-{% block page_subtitle %}<span class="page-subtitle">Track and manage investigation cases</span>{% endblock %}
+{% block page_title %}{% endblock %}
+{% block page_subtitle %}{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="/static/css/cases.css?v=1">
+{% endblock %}
 
 {% block content %}
-<!-- Header row -->
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <div>
-        <p class="mb-0" style="color: var(--text-secondary);">
-            Track and manage investigation cases linked to analyses.
-        </p>
+{% set cases_role = request.state.user.role if request.state.user is defined and request.state.user else '' %}
+{% set cases_can_write = cases_role in ['SOC Analyst Tier 1-2', 'Incident Responder', 'Threat Hunter', 'admin'] %}
+<div class="cases-page">
+<div class="cases-heading">
+    <div class="cases-heading-copy">
+        <h1>CASE <em>MANAGEMENT</em></h1>
+        <div class="cases-heading-subtitle">INVESTIGATION CASES · LINKED ANALYSES · NOTES</div>
     </div>
-    <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#newCaseModal">
+    {% if cases_can_write %}<button type="button" class="btn btn-primary cases-new-case" data-bs-toggle="modal" data-bs-target="#newCaseModal">
         <i class="bi bi-plus-lg me-1"></i>New Case
-    </button>
+    </button>{% endif %}
+</div>
+
+<div class="cases-stats" aria-label="Case statistics">
+    <div class="cases-stat cases-stat-total">
+        <span>TOTAL</span><strong id="caseStatTotal">0</strong>
+    </div>
+    <div class="cases-stat cases-stat-open">
+        <span>OPEN</span><strong id="caseStatOpen">0</strong>
+    </div>
+    <div class="cases-stat cases-stat-critical">
+        <span>CRITICAL</span><strong id="caseStatCritical">0</strong>
+    </div>
+    <div class="cases-stat cases-stat-resolved">
+        <span>RESOLVED</span><strong id="caseStatResolved">0</strong>
+    </div>
+    <div class="cases-stat cases-stat-linked">
+        <span>LINKED ANALYSES</span><strong id="caseStatAnalyses">0</strong>
+    </div>
+</div>
+
+<div class="cases-distribution" aria-hidden="true">
+    <span id="caseStatOpenSegment" class="cases-distribution-segment cases-distribution-open"></span>
+    <span id="caseStatResolvedSegment" class="cases-distribution-segment cases-distribution-resolved"></span>
+</div>
+
+<div class="cases-toolbar">
+    <label class="cases-search">
+        <span aria-hidden="true">&gt;_</span>
+        <input type="search" id="caseSearch" autocomplete="off" placeholder="search case id, title, severity..." aria-label="Search cases">
+        <kbd>/</kbd>
+    </label>
+    <div class="cases-segments" role="group" aria-label="Filter cases">
+        <button type="button" data-case-filter="all" aria-pressed="true" class="is-active">ALL</button>
+        <button type="button" data-case-filter="open" aria-pressed="false">OPEN</button>
+        <button type="button" data-case-filter="resolved" aria-pressed="false">RESOLVED</button>
+    </div>
 </div>
 
 <!-- Cases Table -->
-<div class="card">
-    <div class="card-header d-flex justify-content-between align-items-center">
-        <h5 class="mb-0"><i class="bi bi-folder2-open me-2"></i>Cases</h5>
-        <div class="input-group" style="max-width: 300px;">
-            <span class="input-group-text" style="background-color: var(--bg-tertiary); border-color: var(--border-color); color: var(--text-secondary);">
-                <i class="bi bi-search"></i>
-            </span>
-            <input type="text" id="caseSearch" class="form-control" placeholder="Search cases...">
-        </div>
+<div class="cases-split">
+<div class="card cases-table-panel">
+    <div class="card-header cases-table-heading">
+        <h2><i class="bi bi-folder2-open" aria-hidden="true"></i>CASES</h2>
+        <span id="casesVisibleCount" class="cases-counter">{{ cases | length }} / {{ cases | length }}</span>
     </div>
     <div class="card-body p-0">
         <div class="table-responsive">
-            <table class="table table-striped table-hover mb-0" id="casesTable">
+            <table class="table table-striped table-hover mb-0 cases-table" id="casesTable">
                 <thead>
-                    <tr style="background-color: var(--bg-tertiary);">
-                        <th>Case ID</th>
-                        <th>Title</th>
-                        <th>Severity</th>
-                        <th>Status</th>
-                        <th>Analyses</th>
-                        <th>Notes</th>
-                        <th>Created</th>
-                        <th>Actions</th>
+                    <tr>
+                        <th scope="col">CASE ID</th>
+                        <th scope="col">TITLE</th>
+                        <th scope="col">SEVERITY</th>
+                        <th scope="col">STATUS</th>
+                        <th scope="col">ANALYSES</th>
+                        <th scope="col">NOTES</th>
+                        <th scope="col">CREATED</th>
                     </tr>
                 </thead>
                 <tbody id="casesTableBody">
                     {% if cases %}
                         {% for case in cases %}
                         <tr class="case-row"
+                            tabindex="0"
+                            aria-selected="false"
+                            data-case-id="{{ case.id | e }}"
                             data-title="{{ case.title | default('') | e }}"
-                            data-status="{{ case.status | default('') | e }}">
-                            <td><code>{{ case.id | e }}</code></td>
+                            data-status="{{ case.status | default('') | e }}"
+                            data-severity="{{ case.severity | default('') | e }}"
+                            data-analyses="{{ case.analysis_count | default(0) }}"
+                            data-notes="{{ case.note_count | default(0) }}"
+                            data-created="{{ case.created_at | default('') | e }}">
+                            <td><span class="cases-id">{{ case.id | e }}</span></td>
                             <td>
-                                <a href="/cases/{{ case.id | e }}" style="color: var(--color-primary); text-decoration: none;">
+                                <span class="cases-title">
                                     {{ case.title | e }}
-                                </a>
+                                </span>
                             </td>
                             <td>
-                                {% if case.severity == 'critical' %}
-                                    <span class="badge badge-danger">Critical</span>
-                                {% elif case.severity == 'high' %}
-                                    <span class="badge" style="background-color: #e65100;">High</span>
-                                {% elif case.severity == 'medium' %}
-                                    <span class="badge badge-warning">Medium</span>
-                                {% elif case.severity == 'low' %}
-                                    <span class="badge badge-info">Low</span>
-                                {% else %}
-                                    <span class="badge badge-info">{{ case.severity | default('N/A') | e }}</span>
-                                {% endif %}
+                                <span class="cases-severity" data-severity="{{ case.severity | default('') | e }}">{{ case.severity | default('N/A') | upper | e }}</span>
                             </td>
                             <td>
-                                {% if case.status == 'Open' %}
-                                    <span class="badge badge-primary">Open</span>
-                                {% elif case.status == 'Investigating' %}
-                                    <span class="badge badge-warning">Investigating</span>
-                                {% elif case.status == 'Resolved' %}
-                                    <span class="badge badge-success">Resolved</span>
-                                {% elif case.status == 'Closed' %}
-                                    <span class="badge badge-info">Closed</span>
-                                {% else %}
-                                    <span class="badge badge-info">{{ case.status | default('N/A') | e }}</span>
-                                {% endif %}
+                                <span class="cases-status" data-status="{{ case.status | default('') | e }}">
+                                    <span class="cases-status-dot" aria-hidden="true"></span>{{ case.status | default('N/A') | lower | e }}
+                                </span>
                             </td>
-                            <td>{{ case.analysis_count | default(0) }}</td>
-                            <td>{{ case.note_count | default(0) }}</td>
-                            <td>{{ case.created_at | default('') | e }}</td>
-                            <td>
-                                <a href="/cases/{{ case.id | e }}" class="btn btn-sm btn-outline-primary" title="View Case">
-                                    <i class="bi bi-eye"></i>
-                                </a>
-                            </td>
+                            <td class="cases-mono">{{ case.analysis_count | default(0) }}</td>
+                            <td class="cases-mono">{{ case.note_count | default(0) }}</td>
+                            <td class="cases-created cases-mono" data-created="{{ case.created_at | default('') | e }}" title="{{ case.created_at | default('') | e }}">{{ case.created_at | default('') | e }}</td>
                         </tr>
                         {% endfor %}
-                    {% else %}
-                        <tr id="noCasesRow">
-                            <td colspan="8" class="text-center py-4" style="color: var(--text-secondary);">
-                                <i class="bi bi-folder-x fs-3 d-block mb-2"></i>
-                                No cases found. Click "New Case" to create one.
-                            </td>
-                        </tr>
                     {% endif %}
+                    <tr id="noCasesRow" {% if cases %}hidden{% endif %}>
+                        <td colspan="7" class="cases-empty">No cases found. Click "New Case" to create one.</td>
+                    </tr>
                 </tbody>
             </table>
         </div>
     </div>
 </div>
+<aside id="caseDetail" class="cases-detail" aria-label="Selected case details" aria-live="polite" data-can-write="{{ 'true' if cases_can_write else 'false' }}">
+    <div class="cases-detail-empty">No case selected</div>
+</aside>
+</div>
 
+</div>
 <!-- New Case Modal -->
 <div class="modal fade" id="newCaseModal" tabindex="-1" aria-labelledby="newCaseModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg">
@@ -156,19 +177,421 @@
     (function () {
         'use strict';
 
-        /* Search filter */
+        /* Search and status filters */
         var searchInput = document.getElementById('caseSearch');
         var rows = document.querySelectorAll('.case-row');
+        var filterButtons = document.querySelectorAll('[data-case-filter]');
+        var emptyState = document.getElementById('noCasesRow');
+        var visibleCount = document.getElementById('casesVisibleCount');
+        var caseDetail = document.getElementById('caseDetail');
+        var caseDetailsCache = new Map();
+        var caseDetailsRequestVersion = new Map();
+        var selectedCaseId = null;
+        var selectionGeneration = 0;
+        var activeFilter = 'all';
 
-        if (searchInput) {
-            searchInput.addEventListener('input', function () {
-                var term = searchInput.value.toLowerCase();
-                rows.forEach(function (row) {
-                    var text = row.textContent.toLowerCase();
-                    row.style.display = (!term || text.indexOf(term) !== -1) ? '' : 'none';
+        function formatCaseDate(value) {
+            if (!value) return value;
+            var date = new Date(value.length === 19 ? value + 'Z' : value);
+            if (Number.isNaN(date.getTime())) return value;
+
+            var months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            function pad(number) { return number < 10 ? '0' + number : String(number); }
+            return pad(date.getUTCDate()) + ' ' + months[date.getUTCMonth()] + ' ' + date.getUTCFullYear() +
+                ' · ' + pad(date.getUTCHours()) + ':' + pad(date.getUTCMinutes()) + ' UTC';
+        }
+
+        document.querySelectorAll('.cases-page .cases-created').forEach(function (cell) {
+            cell.textContent = formatCaseDate(cell.dataset.created || '');
+        });
+
+        function makeElement(tag, className, value) {
+            var element = document.createElement(tag);
+            if (className) element.className = className;
+            if (value !== undefined && value !== null) element.textContent = String(value);
+            return element;
+        }
+
+        function makeSection(title, count) {
+            var section = makeElement('section', 'cases-detail-section');
+            var heading = makeElement('div', 'cases-detail-section-title');
+            heading.appendChild(makeElement('span', '', title));
+            heading.appendChild(makeElement('span', 'cases-detail-section-count', count));
+            var content = makeElement('div', 'cases-detail-section-content');
+            section.appendChild(heading);
+            section.appendChild(content);
+            return { section: section, content: content, count: heading.lastChild };
+        }
+
+        function showNoCaseSelected() {
+            if (!caseDetail) return;
+            caseDetail.replaceChildren(makeElement('div', 'cases-detail-empty', 'No case selected'));
+        }
+
+        function buildCaseDetail(row) {
+            caseDetail.replaceChildren();
+            var id = row.dataset.caseId || '';
+            var title = row.dataset.title || '';
+            var severity = row.dataset.severity || '';
+            var status = row.dataset.status || '';
+            var created = row.dataset.created || '';
+            var header = makeElement('div', 'cases-detail-header');
+            header.appendChild(makeElement('span', 'cases-id', id));
+            header.appendChild(makeElement('h2', 'cases-detail-title', title));
+            var badges = makeElement('div', 'cases-detail-badges');
+            var severityBadge = makeElement('span', 'cases-severity', severity.toUpperCase() || 'N/A');
+            severityBadge.dataset.severity = severity;
+            var statusBadge = makeElement('span', 'cases-status', status.toLowerCase() || 'N/A');
+            statusBadge.dataset.status = status;
+            statusBadge.prepend(makeElement('span', 'cases-status-dot'));
+            statusBadge.firstChild.setAttribute('aria-hidden', 'true');
+            badges.appendChild(severityBadge);
+            badges.appendChild(statusBadge);
+            header.appendChild(badges);
+            caseDetail.appendChild(header);
+
+            var tiles = makeElement('div', 'cases-detail-tiles');
+            var tileValues = {};
+            [['ANALYSES', row.dataset.analyses || '0', 'analyses'], ['NOTES', row.dataset.notes || '0', 'notes'], ['CREATED', formatCaseDate(created) || '—', 'created']]
+                .forEach(function (item) {
+                    var tile = makeElement('div', 'cases-detail-tile');
+                    tile.appendChild(makeElement('span', '', item[0]));
+                    var value = makeElement('strong', '', item[1]);
+                    tileValues[item[2]] = value;
+                    tile.appendChild(value);
+                    tiles.appendChild(tile);
+                });
+            caseDetail.appendChild(tiles);
+
+            var analysesSection = makeSection('LINKED ANALYSES', row.dataset.analyses || '0');
+            var notesSection = makeSection('NOTES', row.dataset.notes || '0');
+            var activitySection = makeSection('ACTIVITY', '');
+            caseDetail.appendChild(analysesSection.section);
+            caseDetail.appendChild(notesSection.section);
+            caseDetail.appendChild(activitySection.section);
+            var loading = makeElement('div', 'cases-detail-loading', 'Loading details…');
+            loading.setAttribute('role', 'status');
+            caseDetail.appendChild(loading);
+            var footer = makeElement('div', 'cases-detail-footer');
+            var formSlot = makeElement('div', 'cases-detail-form-slot');
+            footer.appendChild(formSlot);
+            var parts = {
+                analyses: analysesSection.content,
+                notes: notesSection.content,
+                activity: activitySection.content,
+                analysesCount: analysesSection.count,
+                notesCount: notesSection.count,
+                analysesTile: tileValues.analyses,
+                notesTile: tileValues.notes,
+                loading: loading,
+                formSlot: formSlot
+            };
+            if (caseDetail.dataset.canWrite === 'true') {
+                var actionButtons = makeElement('div', 'cases-detail-actions');
+                [['note', 'Add note'], ['analysis', 'Link analysis']].forEach(function (action) {
+                    var button = makeElement('button', 'btn btn-sm btn-outline-primary cases-detail-action', action[1]);
+                    button.type = 'button';
+                    button.addEventListener('click', function () {
+                        openInlineCaseForm(action[0], formSlot, row, parts, selectionGeneration);
+                    });
+                    actionButtons.appendChild(button);
+                });
+                footer.appendChild(actionButtons);
+            }
+            var fullCaseLink = makeElement('a', '', 'Open full case →');
+            fullCaseLink.href = '/cases/' + encodeURIComponent(id);
+            footer.appendChild(fullCaseLink);
+            caseDetail.appendChild(footer);
+
+            return parts;
+        }
+
+        function renderCaseDetails(parts, data, row) {
+            parts.analyses.replaceChildren();
+            parts.notes.replaceChildren();
+            parts.activity.replaceChildren();
+            parts.loading.remove();
+            var analyses = Array.isArray(data.analyses) ? data.analyses : [];
+            var notes = Array.isArray(data.notes) ? data.notes.slice() : [];
+            var analysisCount = Number.isFinite(Number(data.analysis_count)) ? Number(data.analysis_count) : analyses.length;
+            var noteCount = Number.isFinite(Number(data.note_count)) ? Number(data.note_count) : notes.length;
+            row.dataset.analyses = String(analysisCount);
+            row.dataset.notes = String(noteCount);
+            if (row.cells[4]) row.cells[4].textContent = String(analysisCount);
+            if (row.cells[5]) row.cells[5].textContent = String(noteCount);
+            parts.analysesCount.textContent = String(analysisCount);
+            parts.notesCount.textContent = String(noteCount);
+            parts.analysesTile.textContent = String(analysisCount);
+            parts.notesTile.textContent = String(noteCount);
+            if (window.updateCaseStats) window.updateCaseStats();
+            if (analyses.length) {
+                analyses.forEach(function (analysis) {
+                    var item = makeElement('div', 'cases-detail-list-item');
+                    var analysisId = analysis.analysis_id || '';
+                    var link = makeElement('a', '', analysisId);
+                    link.href = '/report/' + encodeURIComponent(analysisId);
+                    item.appendChild(link);
+                    item.appendChild(makeElement('time', '', formatCaseDate(analysis.linked_at) || ''));
+                    parts.analyses.appendChild(item);
+                });
+            } else {
+                parts.analyses.appendChild(makeElement('div', 'cases-detail-empty-line', 'Nothing linked yet. Attach an analysis from History.'));
+            }
+
+            notes.sort(function (a, b) { return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime(); });
+            if (notes.length) {
+                notes.slice(0, 5).forEach(function (note) {
+                    var item = makeElement('article', 'cases-detail-note');
+                    var meta = makeElement('div', 'cases-detail-note-meta');
+                    meta.appendChild(makeElement('strong', '', note.author || 'Unknown'));
+                    meta.appendChild(makeElement('time', '', formatCaseDate(note.created_at) || ''));
+                    item.appendChild(meta);
+                    item.appendChild(makeElement('p', '', note.content || ''));
+                    parts.notes.appendChild(item);
+                });
+                if (noteCount > 5) {
+                    var more = makeElement('a', 'cases-detail-more', '+' + (noteCount - 5) + ' more in full case');
+                    more.href = '/cases/' + encodeURIComponent(selectedCaseId);
+                    parts.notes.appendChild(more);
+                }
+            } else {
+                parts.notes.appendChild(makeElement('div', 'cases-detail-empty-line', 'No notes yet.'));
+            }
+
+            var activity = [];
+            if (selectedRowCreatedAt) activity.push({ label: 'Case opened', date: selectedRowCreatedAt, author: '' });
+            analyses.forEach(function (analysis) { activity.push({ label: 'Analysis linked', date: analysis.linked_at, author: '' }); });
+            notes.forEach(function (note) { activity.push({ label: 'Note added', date: note.created_at, author: note.author || '' }); });
+            activity.sort(function (a, b) { return new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime(); });
+            activity.slice(0, 8).forEach(function (event) {
+                var item = makeElement('div', 'cases-detail-activity-item');
+                item.appendChild(makeElement('strong', '', event.label + (event.author ? ' · ' + event.author : '')));
+                item.appendChild(makeElement('time', '', formatCaseDate(event.date) || ''));
+                parts.activity.appendChild(item);
+            });
+        }
+
+        var selectedRowCreatedAt = '';
+
+        function apiErrorMessage(response) {
+            return response.json().then(function (payload) {
+                return payload.detail || payload.message || 'HTTP ' + response.status;
+            }).catch(function () { return 'HTTP ' + response.status; });
+        }
+
+        function loadCaseDetails(row, parts, requestedId, generation) {
+            var requestVersion = (caseDetailsRequestVersion.get(requestedId) || 0) + 1;
+            caseDetailsRequestVersion.set(requestedId, requestVersion);
+            fetch('/api/cases/' + encodeURIComponent(requestedId), {
+                method: 'GET',
+                credentials: 'same-origin',
+                headers: { 'Accept': 'application/json' }
+            })
+            .then(function (response) {
+                if (!response.ok) return apiErrorMessage(response).then(function (message) { throw new Error(message); });
+                return response.json();
+            })
+            .then(function (data) {
+                if (caseDetailsRequestVersion.get(requestedId) !== requestVersion) return;
+                caseDetailsCache.set(requestedId, data);
+                if (selectedCaseId !== requestedId || generation !== selectionGeneration) return;
+                renderCaseDetails(parts, data, row);
+            })
+            .catch(function (error) {
+                if (caseDetailsRequestVersion.get(requestedId) !== requestVersion || selectedCaseId !== requestedId || generation !== selectionGeneration) return;
+                parts.loading.textContent = 'Could not load details: ' + error.message;
+                parts.loading.classList.add('cases-detail-error');
+            });
+        }
+
+        function openInlineCaseForm(kind, formSlot, row, parts, generation) {
+            formSlot.replaceChildren();
+            var caseId = row.dataset.caseId || '';
+            var form = makeElement('form', 'cases-detail-inline-form');
+            var authorInput = null;
+            var contentInput;
+            if (kind === 'note') {
+                authorInput = makeElement('input', 'form-control');
+                authorInput.type = 'text';
+                authorInput.required = true;
+                authorInput.placeholder = 'Your name';
+                authorInput.setAttribute('aria-label', 'Author');
+                form.appendChild(authorInput);
+                contentInput = makeElement('textarea', 'form-control');
+                contentInput.rows = 3;
+                contentInput.required = true;
+                contentInput.placeholder = 'Add a note';
+                contentInput.setAttribute('aria-label', 'Note');
+            } else {
+                contentInput = makeElement('input', 'form-control');
+                contentInput.type = 'text';
+                contentInput.required = true;
+                contentInput.placeholder = 'Enter the analysis ID to link';
+                contentInput.setAttribute('aria-label', 'Analysis ID');
+            }
+            form.appendChild(contentInput);
+            var errorLine = makeElement('div', 'cases-detail-form-error');
+            errorLine.setAttribute('role', 'alert');
+            errorLine.hidden = true;
+            form.appendChild(errorLine);
+            var controls = makeElement('div', 'cases-detail-form-controls');
+            var saveButton = makeElement('button', 'btn btn-sm btn-primary', kind === 'note' ? 'Save' : 'Link');
+            saveButton.type = 'submit';
+            saveButton.disabled = true;
+            var cancelButton = makeElement('button', 'btn btn-sm btn-outline-secondary', 'Cancel');
+            cancelButton.type = 'button';
+            cancelButton.addEventListener('click', function () { formSlot.replaceChildren(); });
+            controls.appendChild(saveButton);
+            controls.appendChild(cancelButton);
+            form.appendChild(controls);
+            formSlot.appendChild(form);
+
+            function updateSaveState() {
+                saveButton.disabled = !contentInput.value.trim() || (authorInput && !authorInput.value.trim());
+            }
+            contentInput.addEventListener('input', updateSaveState);
+            if (authorInput) authorInput.addEventListener('input', updateSaveState);
+            if (authorInput) authorInput.focus();
+            else contentInput.focus();
+
+            form.addEventListener('submit', function (event) {
+                event.preventDefault();
+                var value = contentInput.value.trim();
+                var author = authorInput ? authorInput.value.trim() : '';
+                if (!value || (authorInput && !author)) return;
+                saveButton.disabled = true;
+                errorLine.hidden = true;
+                var url = '/api/cases/' + encodeURIComponent(caseId);
+                var options = { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' } };
+                if (kind === 'note') {
+                    url += '/notes';
+                    options.body = JSON.stringify({ author: author, content: value });
+                } else {
+                    url += '/analyses?analysis_id=' + encodeURIComponent(value);
+                }
+                fetch(url, options)
+                .then(function (response) {
+                    if (!response.ok) return apiErrorMessage(response).then(function (message) { throw new Error(message); });
+                    return response.json();
+                })
+                .then(function () {
+                    caseDetailsCache.delete(caseId);
+                    if (caseDetail.contains(form)) formSlot.replaceChildren();
+                    if (window.BTADashboard && window.BTADashboard.showToast) {
+                        window.BTADashboard.showToast(kind === 'note' ? 'Note added.' : 'Analysis linked successfully.', 'success');
+                    }
+                    loadCaseDetails(row, parts, caseId, generation);
+                })
+                .catch(function (error) {
+                    if (selectedCaseId === caseId && generation === selectionGeneration && caseDetail.contains(form)) {
+                        errorLine.textContent = error.message;
+                        errorLine.hidden = false;
+                        saveButton.disabled = false;
+                    }
+                    if (window.BTADashboard && window.BTADashboard.showToast) {
+                        window.BTADashboard.showToast((kind === 'note' ? 'Failed to add note: ' : 'Failed to link analysis: ') + error.message, 'error');
+                    }
                 });
             });
         }
+
+        function selectCase(row) {
+            if (!row || row.style.display === 'none') return;
+            rows.forEach(function (item) {
+                var selected = item === row;
+                item.classList.toggle('is-selected', selected);
+                item.setAttribute('aria-selected', selected ? 'true' : 'false');
+            });
+            selectedCaseId = row.dataset.caseId || '';
+            selectionGeneration += 1;
+            selectedRowCreatedAt = row.dataset.created || '';
+            var generation = selectionGeneration;
+            var parts = buildCaseDetail(row);
+            if (caseDetailsCache.has(selectedCaseId)) {
+                renderCaseDetails(parts, caseDetailsCache.get(selectedCaseId), row);
+                return;
+            }
+            var requestedId = selectedCaseId;
+            loadCaseDetails(row, parts, requestedId, generation);
+        }
+
+        function clearCaseSelection() {
+            rows.forEach(function (row) {
+                row.classList.remove('is-selected');
+                row.setAttribute('aria-selected', 'false');
+            });
+            selectedCaseId = null;
+            selectionGeneration += 1;
+            selectedRowCreatedAt = '';
+            showNoCaseSelected();
+        }
+
+        function applyCaseFilters() {
+            var term = searchInput.value.trim().toLowerCase();
+            var visible = 0;
+            var visibleRows = [];
+
+            rows.forEach(function (row) {
+                var status = (row.dataset.status || '').toLowerCase();
+                var filterMatch = activeFilter === 'all' ||
+                    (activeFilter === 'open' && (status === 'open' || status === 'investigating')) ||
+                    (activeFilter === 'resolved' && (status === 'resolved' || status === 'closed'));
+                var searchable = [
+                    row.cells[0] ? row.cells[0].textContent : '',
+                    row.dataset.title || '',
+                    row.dataset.severity || '',
+                    row.dataset.status || ''
+                ].join(' ').toLowerCase();
+                var searchMatch = !term || searchable.indexOf(term) !== -1;
+                var show = filterMatch && searchMatch;
+
+                row.style.display = show ? '' : 'none';
+                if (show) {
+                    visible += 1;
+                    visibleRows.push(row);
+                }
+            });
+
+            if (emptyState) emptyState.hidden = visible !== 0;
+            if (visibleCount) visibleCount.textContent = visible + ' / ' + rows.length;
+            if (!visibleRows.length) clearCaseSelection();
+            else if (!selectedCaseId || !Array.from(rows).some(function (row) {
+                return row.dataset.caseId === selectedCaseId && row.style.display !== 'none';
+            })) selectCase(visibleRows[0]);
+        }
+
+        rows.forEach(function (row) {
+            row.addEventListener('click', function () { selectCase(row); });
+            row.addEventListener('keydown', function (event) {
+                if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    selectCase(row);
+                }
+            });
+        });
+
+        if (searchInput) searchInput.addEventListener('input', applyCaseFilters);
+        filterButtons.forEach(function (button) {
+            button.addEventListener('click', function () {
+                activeFilter = button.dataset.caseFilter;
+                filterButtons.forEach(function (item) {
+                    var active = item === button;
+                    item.classList.toggle('is-active', active);
+                    item.setAttribute('aria-pressed', active ? 'true' : 'false');
+                });
+                applyCaseFilters();
+            });
+        });
+
+        document.addEventListener('keydown', function (event) {
+            if (event.key !== '/' || event.ctrlKey || event.altKey || event.metaKey) return;
+            if (event.target.matches('input, textarea, select, [contenteditable="true"]')) return;
+            if (document.querySelector('.modal.show')) return;
+            event.preventDefault();
+            searchInput.focus();
+        });
+
+        applyCaseFilters();
 
         /* Create case via fetch JSON */
         var createBtn = document.getElementById('createCaseBtn');
@@ -225,6 +648,40 @@
                 });
             });
         }
+    })();
+</script>
+<script>
+    (function () {
+        var rows = document.querySelectorAll('.cases-page .case-row');
+        function updateCaseStats() {
+            var counts = { total: rows.length, open: 0, critical: 0, resolved: 0, analyses: 0 };
+
+            rows.forEach(function (row) {
+                var status = (row.dataset.status || '').toLowerCase();
+                var severity = (row.dataset.severity || '').toLowerCase();
+                var analyses = Number.parseInt(row.dataset.analyses || '0', 10);
+
+                if (status === 'open' || status === 'investigating') counts.open += 1;
+                if (severity === 'critical') counts.critical += 1;
+                if (status === 'resolved' || status === 'closed') counts.resolved += 1;
+                if (Number.isFinite(analyses)) counts.analyses += analyses;
+            });
+
+            document.getElementById('caseStatTotal').textContent = counts.total;
+            document.getElementById('caseStatOpen').textContent = counts.open;
+            document.getElementById('caseStatCritical').textContent = counts.critical;
+            document.getElementById('caseStatResolved').textContent = counts.resolved;
+            document.getElementById('caseStatAnalyses').textContent = counts.analyses;
+
+            var segmentedTotal = counts.open + counts.resolved;
+            var openSegment = document.getElementById('caseStatOpenSegment');
+            var resolvedSegment = document.getElementById('caseStatResolvedSegment');
+            openSegment.style.width = segmentedTotal ? (counts.open / segmentedTotal * 100) + '%' : '0%';
+            resolvedSegment.style.width = segmentedTotal ? (counts.resolved / segmentedTotal * 100) + '%' : '0%';
+        }
+
+        window.updateCaseStats = updateCaseStats;
+        updateCaseStats();
     })();
 </script>
 {% endblock %}
