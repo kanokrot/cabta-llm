@@ -19,6 +19,11 @@ def test_cases_template_and_css_match_list_layout() -> None:
     assert '<link rel="stylesheet" href="/static/css/cases.css?v=1">' in source
 
     assert "CASE <em>MANAGEMENT</em>" in source
+    assert re.search(
+        r"\.cases-page \.cases-heading h1\s*\{[^}]*text-shadow:\s*0 0 14px var\(--cases-accent\)\s*;",
+        css,
+        re.DOTALL,
+    )
     assert "INVESTIGATION CASES" in source and "LINKED ANALYSES" in source
     labels = re.findall(r"<span>(TOTAL|OPEN|CRITICAL|RESOLVED|LINKED ANALYSES)</span>", source)
     assert labels == ["TOTAL", "OPEN", "CRITICAL", "RESOLVED", "LINKED ANALYSES"]

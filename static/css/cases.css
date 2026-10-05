@@ -44,7 +44,7 @@ body:has(.cases-page) .sub-header {
     margin: 0;
     font-size: 22px;
     letter-spacing: .14em;
-    text-shadow: 0 0 14px color-mix(in srgb, var(--cases-accent) 35%, transparent);
+    text-shadow: 0 0 14px var(--cases-accent);
     text-transform: uppercase;
 }
 
