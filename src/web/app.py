@@ -35,7 +35,7 @@ from .routes import mcp_management as mcp_routes
 from .routes import access_requests as access_request_routes
 from .routes import gmail_settings as gmail_routes
 from . import websocket
-from .auth import TEAM_LEAD, get_current_user, require_role
+from .auth import TEAM_LEAD, get_current_user, get_user_ids_by_role, require_role
 from .analysis_manager import AnalysisManager
 from .case_store import CaseStore
 from .page_auth import (
@@ -648,7 +648,32 @@ def _register_page_routes(app: FastAPI) -> None:
 
     @app.get('/history', response_class=HTMLResponse, include_in_schema=False)
     async def history_page(request: Request):
-        raw_jobs = app.state.analysis_manager.list_jobs(limit=100)
+        current_user = getattr(request.state, "user", None)
+        if not current_user:
+            redirect = _page_auth_redirect(request)
+            if redirect is not None:
+                return redirect
+            return RedirectResponse('/login?next=%2Fhistory', status_code=303)
+
+        role = current_user.get("role")
+        if role == "admin":
+            raw_jobs = app.state.analysis_manager.list_jobs(limit=100)
+        elif role == TEAM_LEAD:
+            raw_jobs = app.state.analysis_manager.list_jobs(
+                limit=100,
+                user_ids=get_user_ids_by_role("SOC Analyst Tier 1-2"),
+            )
+        else:
+            user_id = current_user.get("id")
+            if user_id is None:
+                redirect = _page_auth_redirect(request)
+                if redirect is not None:
+                    return redirect
+                return RedirectResponse('/login?next=%2Fhistory', status_code=303)
+            raw_jobs = app.state.analysis_manager.list_jobs(
+                limit=100,
+                user_id=user_id,
+            )
         # Normalize field names for templates
         jobs = []
         for j in raw_jobs:
