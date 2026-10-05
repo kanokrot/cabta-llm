@@ -68,7 +68,7 @@ def test_investigations_page_renders_header_stats_meter_toolbar_and_footer() -> 
     assert 'id="viewCardsBtn"' in rendered
     assert 'id="sessionsShownCount"' in rendered
     assert 'id="sessionsLoadedCount"' in rendered
-    assert "Sorted by newest" in rendered
+    assert '<span id="sessionsLoadedCount"></span>' in rendered
 
 
 def test_investigations_page_keeps_inline_script_ids_and_handlers() -> None:
@@ -104,6 +104,11 @@ def test_investigations_page_keeps_inline_script_ids_and_handlers() -> None:
 
 def test_investigations_css_is_page_scoped_and_uses_square_corners() -> None:
     css = (ROOT / "static" / "css" / "investigations.css").read_text(encoding="utf-8-sig")
+    assert re.search(
+        r"\.investigations-page \.investigations-heading h1\s*\{[^}]*text-shadow:\s*0 0 14px var\(--color-info\)\s*;",
+        css,
+        re.DOTALL,
+    )
     assert ".investigations-page .investigations-stat-total" in css
     assert ".investigations-page .investigations-toolbar" in css
     assert ".investigations-page .investigations-table-card" in css
@@ -170,3 +175,45 @@ def test_investigations_expanded_detail_css_has_wrapping_square_components() -> 
 
     assert "overflow-wrap: anywhere" in css
     assert "var(--bg-tertiary)" in css
+
+
+def test_investigations_row_renderer_hooks_cover_status_date_search_and_counts() -> None:
+    template = (ROOT / "templates" / "agent_investigations.html").read_text(encoding="utf-8")
+    renderer = template.split("function makeStatusBadge", 1)[1].split(
+        "function onRowCheckChange", 1
+    )[0]
+    stats_renderer = template.split("function updateStats", 1)[1].split(
+        "function startNew", 1
+    )[0]
+
+    assert "innerHTML" not in renderer
+    assert "investigations-status investigations-status-' + kind" in renderer
+    assert "investigations-status-dot" in renderer
+    assert "investigations-status-label" in renderer
+    assert "formatCreatedAt(s.created_at || s.created || '-')" in renderer
+    assert "date.getUTCDate()" in renderer
+    assert "date.getUTCHours()" in renderer
+    assert "match[7].slice(0, 3)" in renderer
+    assert "sessionId.indexOf(query) !== -1 || goal.indexOf(query) !== -1" in renderer
+    assert "sessions.length + ' shown'" in renderer
+    assert "loadedCount + ' of ' + total + ' loaded · sorted by newest'" in renderer
+    assert "completed / total * 100" in stats_renderer
+    assert "failed / total * 100" in stats_renderer
+    assert "No sessions match." in renderer
+
+
+def test_investigations_row_status_css_is_dot_based_and_theme_aware() -> None:
+    css = (ROOT / "static" / "css" / "investigations.css").read_text(encoding="utf-8-sig")
+
+    assert ".investigations-page .investigations-status-dot" in css
+    assert ".investigations-page .investigations-status-completed" in css
+    assert ".investigations-page .investigations-status-failed" in css
+    assert ".investigations-page .investigations-status-active" in css
+    assert ".investigations-page .investigations-status-neutral" in css
+    assert "box-shadow: 0 0 8px var(--investigations-status-color)" in css
+    assert ":has(.investigations-status-completed)" in css
+    assert ":has(.investigations-status-failed)" in css
+    assert ":has(.investigations-status-active)" in css
+    assert "var(--color-info)" in css
+    assert "var(--color-success)" in css
+    assert "var(--color-danger)" in css

@@ -707,7 +707,6 @@
     </div>
     <footer class="investigations-table-footer">
         <span id="sessionsLoadedCount"></span>
-        <span>Sorted by newest</span>
     </footer>
 </div>
 
@@ -911,31 +910,68 @@ var Investigations = (function() {
             .catch(function() {});
     }
 
-    // Helper: create a status badge element
+    // Helper: render the same dot-and-label status in both list and grid views.
     function makeStatusBadge(status) {
-        var badge = document.createElement('span');
-        var st = (status || 'unknown').toLowerCase();
-        var badgeIcon;
-        if (st === 'active' || st === 'running') {
-            badge.className = 'badge bg-primary-subtle text-primary';
-            badgeIcon = icon('bi bi-arrow-repeat me-1');
-            badge.appendChild(badgeIcon);
-            badge.appendChild(document.createTextNode('Active'));
-        } else if (st === 'completed' || st === 'complete') {
-            badge.className = 'badge bg-success-subtle text-success';
-            badgeIcon = icon('bi bi-check-circle me-1');
-            badge.appendChild(badgeIcon);
-            badge.appendChild(document.createTextNode('Completed'));
-        } else if (st === 'failed' || st === 'error') {
-            badge.className = 'badge bg-danger-subtle text-danger';
-            badgeIcon = icon('bi bi-x-circle me-1');
-            badge.appendChild(badgeIcon);
-            badge.appendChild(document.createTextNode('Failed'));
-        } else {
-            badge.className = 'badge bg-secondary';
-            badge.textContent = st;
+        var st = status == null || status === '' ? 'unknown' : String(status).toLowerCase();
+        var kind = 'neutral';
+        if (st === 'active' || st === 'running') kind = 'active';
+        else if (st === 'completed' || st === 'complete') kind = 'completed';
+        else if (st === 'failed' || st === 'error') kind = 'failed';
+
+        var statusEl = document.createElement('span');
+        statusEl.className = 'investigations-status investigations-status-' + kind;
+        var dot = document.createElement('span');
+        dot.className = 'investigations-status-dot';
+        dot.setAttribute('aria-hidden', 'true');
+        var label = document.createElement('span');
+        label.className = 'investigations-status-label';
+        label.textContent = st;
+        statusEl.appendChild(dot);
+        statusEl.appendChild(label);
+        return statusEl;
+    }
+
+    function formatCreatedAt(value) {
+        var original = value == null ? '' : String(value);
+        var match = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?(Z|[+-]\d{2}:?\d{2})?$/i.exec(original);
+        if (!match) return original;
+
+        var year = Number(match[1]);
+        var month = Number(match[2]);
+        var day = Number(match[3]);
+        var hour = Number(match[4]);
+        var minute = Number(match[5]);
+        var second = Number(match[6]);
+        var calendarDate = new Date(Date.UTC(year, month - 1, day));
+        if (month < 1 || month > 12 || day < 1 ||
+            calendarDate.getUTCFullYear() !== year ||
+            calendarDate.getUTCMonth() !== month - 1 ||
+            calendarDate.getUTCDate() !== day ||
+            hour > 23 || minute > 59 || second > 59) {
+            return original;
         }
-        return badge;
+
+        var fraction = match[7] ? '.' + match[7].slice(0, 3).padEnd(3, '0') : '';
+        var zone = match[8] || 'Z';
+        if (/^[+-]\d{4}$/.test(zone)) zone = zone.slice(0, 3) + ':' + zone.slice(3);
+        var iso = match[1] + '-' + match[2] + '-' + match[3] + 'T' +
+            match[4] + ':' + match[5] + ':' + match[6] + fraction + zone;
+        var date = new Date(iso);
+        if (Number.isNaN(date.getTime())) return original;
+
+        var months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+            'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        function twoDigits(number) { return number < 10 ? '0' + number : String(number); }
+        return twoDigits(date.getUTCDate()) + ' ' + months[date.getUTCMonth()] + ' ' +
+            date.getUTCFullYear() + ' · ' + twoDigits(date.getUTCHours()) + ':' +
+            twoDigits(date.getUTCMinutes()) + ' UTC';
+    }
+
+    function updateLoadedCount(loadedCount) {
+        var loadedEl = document.getElementById('sessionsLoadedCount');
+        if (!loadedEl) return;
+        var total = document.getElementById('statTotal').textContent || '0';
+        loadedEl.textContent = loadedCount + ' of ' + total + ' loaded · sorted by newest';
     }
 
     function loadSessions() {
@@ -950,8 +986,9 @@ var Investigations = (function() {
                 _allSessions = sessions;
                 _selectedIds = [];
                 updateBulkBar();
-                applyGoalFilter();
                 updateStats(sessions);
+                applyGoalFilter();
+                updateLoadedCount(sessions.length);
             })
             .catch(function(err) {
                 var body = document.getElementById('sessionsBody');
@@ -973,7 +1010,9 @@ var Investigations = (function() {
             filtered = _allSessions;
         } else {
             filtered = _allSessions.filter(function(s) {
-                return (s.goal || '').toLowerCase().indexOf(query) !== -1;
+                var sessionId = String(s.session_id || s.id || '').toLowerCase();
+                var goal = String(s.goal || '').toLowerCase();
+                return sessionId.indexOf(query) !== -1 || goal.indexOf(query) !== -1;
             });
         }
         renderSessions(filtered);
@@ -1005,15 +1044,17 @@ var Investigations = (function() {
 
     function renderSessions(sessions) {
         var body = document.getElementById('sessionsBody');
+        var shownCount = document.getElementById('sessionsShownCount');
+        if (shownCount) shownCount.textContent = sessions.length + ' shown';
         while (body.firstChild) body.removeChild(body.firstChild);
 
         if (!sessions.length) {
             var tr = document.createElement('tr');
+            tr.className = 'investigations-empty-row';
             var td = document.createElement('td');
             td.colSpan = 8;
-            td.className = 'text-center py-5 text-muted';
-            td.appendChild(icon('bi bi-inbox fs-1 d-block mb-2 opacity-50'));
-            td.appendChild(document.createTextNode('No investigation sessions found. Start a new one!'));
+            td.className = 'investigations-empty-cell text-center py-5 text-muted';
+            td.textContent = 'No sessions match.';
             tr.appendChild(td);
             body.appendChild(tr);
             return;
@@ -1078,7 +1119,7 @@ var Investigations = (function() {
 
             // Created
             var tdCreated = document.createElement('td');
-            var small = el('small', 'text-muted', s.created_at || s.created || '-');
+            var small = el('small', 'text-muted', formatCreatedAt(s.created_at || s.created || '-'));
             tdCreated.appendChild(small);
             tr.appendChild(tdCreated);
 
@@ -1111,18 +1152,15 @@ var Investigations = (function() {
         while (grid.firstChild) grid.removeChild(grid.firstChild);
 
         if (!sessions.length) {
-            var empty = el('div', 'text-center text-muted py-5');
+            var empty = el('div', 'investigations-empty-card text-center text-muted py-5');
             empty.style.gridColumn = '1 / -1';
-            empty.appendChild(icon('bi bi-inbox fs-1 d-block mb-2 opacity-50'));
-            empty.appendChild(document.createTextNode('No investigation sessions found.'));
+            empty.textContent = 'No sessions match.';
             grid.appendChild(empty);
             return;
         }
 
         sessions.forEach(function(s) {
             var sid = s.session_id || s.id || '';
-            var status = (s.status || 'unknown').toLowerCase();
-
             var card = el('div', 'inv-session-card');
 
             // Goal
@@ -1143,6 +1181,10 @@ var Investigations = (function() {
                 (s.steps !== undefined ? s.steps : (s.step_count !== undefined ? s.step_count : '-')) + ' steps'
             ));
             metaDiv.appendChild(stepsSpan);
+
+            var createdSpan = el('span', 'investigations-card-created',
+                formatCreatedAt(s.created_at || s.created || '-'));
+            metaDiv.appendChild(createdSpan);
 
             // Duration
             if (s.duration) {
@@ -2614,7 +2656,7 @@ var Investigations = (function() {
         var total = sessions.length;
         var active = 0, completed = 0, failed = 0;
         sessions.forEach(function(s) {
-            var st = (s.status || '').toLowerCase();
+            var st = String(s.status || '').toLowerCase();
             if (st === 'active' || st === 'running') active++;
             else if (st === 'completed' || st === 'complete') completed++;
             else if (st === 'failed' || st === 'error') failed++;
@@ -2629,6 +2671,13 @@ var Investigations = (function() {
         }
         document.getElementById('statCompleted').textContent = completed;
         document.getElementById('statFailed').textContent = failed;
+
+        var completedMeter = document.getElementById('investigationsMeterCompleted');
+        var failedMeter = document.getElementById('investigationsMeterFailed');
+        var completedWidth = total ? (completed / total * 100) : 0;
+        var failedWidth = total ? (failed / total * 100) : 0;
+        if (completedMeter) completedMeter.style.width = completedWidth + '%';
+        if (failedMeter) failedMeter.style.width = failedWidth + '%';
     }
 
     function startNew() {

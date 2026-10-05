@@ -27,6 +27,7 @@ body:has(.investigations-page) .sub-header {
     font-weight: 700;
     letter-spacing: 0.14em;
     line-height: 1.1;
+    text-shadow: 0 0 14px var(--color-info);
     text-transform: uppercase;
 }
 
@@ -304,15 +305,15 @@ body:has(.investigations-page) .sub-header {
     border-left: 3px solid var(--text-muted);
 }
 
-.investigations-page #sessionsBody > tr:has(.badge.bg-success-subtle) > td:first-child {
+.investigations-page #sessionsBody > tr:has(.investigations-status-completed) > td:first-child {
     border-left-color: var(--color-success);
 }
 
-.investigations-page #sessionsBody > tr:has(.badge.bg-danger-subtle) > td:first-child {
+.investigations-page #sessionsBody > tr:has(.investigations-status-failed) > td:first-child {
     border-left-color: var(--color-danger);
 }
 
-.investigations-page #sessionsBody > tr:has(.badge.bg-primary-subtle) > td:first-child {
+.investigations-page #sessionsBody > tr:has(.investigations-status-active) > td:first-child {
     border-left-color: var(--color-info);
 }
 
@@ -455,15 +456,15 @@ body:has(.investigations-page) .sub-header {
     background: var(--bg-tertiary);
 }
 
-.investigations-page #sessionsBody > tr:has(.badge.bg-success-subtle) + .investigations-detail-row > td {
+.investigations-page #sessionsBody > tr:has(.investigations-status-completed) + .investigations-detail-row > td {
     border-left: 3px solid var(--color-success);
 }
 
-.investigations-page #sessionsBody > tr:has(.badge.bg-danger-subtle) + .investigations-detail-row > td {
+.investigations-page #sessionsBody > tr:has(.investigations-status-failed) + .investigations-detail-row > td {
     border-left: 3px solid var(--color-danger);
 }
 
-.investigations-page #sessionsBody > tr:has(.badge.bg-primary-subtle) + .investigations-detail-row > td {
+.investigations-page #sessionsBody > tr:has(.investigations-status-active) + .investigations-detail-row > td {
     border-left: 3px solid var(--color-info);
 }
 
@@ -617,4 +618,65 @@ body:has(.investigations-page) .sub-header {
     .investigations-page .investigations-message {
         gap: 7px;
     }
+}
+
+.investigations-page .investigations-status {
+    --investigations-status-color: var(--text-muted);
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    color: var(--investigations-status-color);
+    font-size: 0.78rem;
+    line-height: 1.4;
+    white-space: nowrap;
+}
+
+.investigations-page .investigations-status-completed {
+    --investigations-status-color: var(--color-success);
+}
+
+.investigations-page .investigations-status-failed {
+    --investigations-status-color: var(--color-danger);
+}
+
+.investigations-page .investigations-status-active {
+    --investigations-status-color: var(--color-info);
+}
+
+.investigations-page .investigations-status-neutral {
+    --investigations-status-color: var(--text-muted);
+}
+
+.investigations-page .investigations-status-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    flex: 0 0 6px;
+    border-radius: 50%;
+    background: var(--investigations-status-color);
+    box-shadow: 0 0 8px var(--investigations-status-color);
+}
+
+.investigations-page .investigations-status-label {
+    color: inherit;
+    text-transform: lowercase;
+}
+
+.investigations-page .investigations-card-created {
+    color: var(--text-muted);
+    font-family: var(--bs-font-monospace, monospace);
+    font-size: 0.68rem;
+}
+
+.investigations-page .investigations-empty-cell {
+    padding: 32px 16px !important;
+    color: var(--text-muted) !important;
+}
+
+.investigations-page .investigations-empty-card {
+    color: var(--text-muted);
+}
+
+.investigations-page .investigations-table-footer {
+    justify-content: flex-start;
 }
