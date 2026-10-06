@@ -505,3 +505,55 @@ def test_threat_hunter_tool_allowlist_denies_dangerous_tool() -> None:
 
     assert is_tool_allowed(THREAT_HUNTER, safe)
     assert not is_tool_allowed(THREAT_HUNTER, dangerous)
+
+
+def test_incident_responder_tool_allowlist_matches_threat_hunter() -> None:
+    from src.agent.mcp_tool_classification import classify_mcp_tool
+    from src.agent.tool_registry import ToolRegistry
+    from src.web.visibility import INCIDENT_RESPONDER, is_tool_allowed
+
+    safe_mcp = {
+        "name": "osint_tools.whois_lookup",
+        **classify_mcp_tool("osint_tools", "whois_lookup"),
+    }
+    unclassified = {
+        "name": "vulnerability-tools.cve_lookup",
+        **classify_mcp_tool("vulnerability-tools", "cve_lookup"),
+    }
+    sandbox = {"name": "sandbox", "category": "sandbox", "is_dangerous": False}
+    edr = {"name": "edr", "category": "edr", "is_dangerous": False}
+    dangerous = {"name": "dangerous", "category": "analysis", "is_dangerous": True}
+
+    registry = ToolRegistry()
+    registry.register_default_tools({})
+    local_extractor = registry.get_tool("extract_iocs")
+    assert local_extractor is not None
+    assert local_extractor.source == "local"
+
+    assert is_tool_allowed(INCIDENT_RESPONDER, safe_mcp)
+    assert is_tool_allowed(INCIDENT_RESPONDER, local_extractor)
+    assert not is_tool_allowed(INCIDENT_RESPONDER, dangerous)
+    assert not is_tool_allowed(INCIDENT_RESPONDER, unclassified)
+    assert not is_tool_allowed(INCIDENT_RESPONDER, sandbox)
+    assert not is_tool_allowed(INCIDENT_RESPONDER, edr)
+
+
+def test_tool_allowlist_other_role_results_remain_unchanged() -> None:
+    from src.agent.mcp_tool_classification import classify_mcp_tool
+    from src.web.visibility import INCIDENT_RESPONDER, is_tool_allowed
+
+    safe = {"name": "lookup", "category": "threat_intel", "is_dangerous": False}
+    dangerous = {"name": "contain", "category": "edr", "is_dangerous": True}
+    unclassified = {
+        "name": "vulnerability-tools.cve_lookup",
+        **classify_mcp_tool("vulnerability-tools", "cve_lookup"),
+    }
+
+    assert is_tool_allowed(THREAT_HUNTER, safe)
+    assert not is_tool_allowed(THREAT_HUNTER, dangerous)
+    assert not is_tool_allowed(THREAT_HUNTER, unclassified)
+    assert is_tool_allowed(ADMIN, dangerous)
+    assert is_tool_allowed(ADMIN, unclassified)
+    assert not is_tool_allowed(None, safe)
+    assert not is_tool_allowed("SOC Analyst Tier 1-2", safe)
+    assert not is_tool_allowed(INCIDENT_RESPONDER, unclassified)

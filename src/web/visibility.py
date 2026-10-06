@@ -910,7 +910,7 @@ def serialize_tool_definition(tool: Any, role: str = THREAT_HUNTER) -> Optional[
 
 def is_tool_allowed(role: str, tool: Any) -> bool:
     """Return whether an agent role may discover and execute a tool."""
-    if role not in {THREAT_HUNTER, ADMIN}:
+    if role not in {INCIDENT_RESPONDER, THREAT_HUNTER, ADMIN}:
         return False
     if role == ADMIN:
         return True
