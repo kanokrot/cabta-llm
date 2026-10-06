@@ -41,10 +41,42 @@
                 </div>
             </div>
         </div>
+        <div class="col-12">
+            <div class="card settings-section">
+                <div class="card-header">
+                    <h6 class="mb-0"><i class="bi bi-shield-check me-2 text-accent"></i>Threat intelligence API keys</h6>
+                    <span class="text-muted small">Extra cross-checks only; these keys do not affect scores or verdicts.</span>
+                </div>
+                <div class="card-body">
+                    <div id="userApiKeysError" class="alert alert-danger py-2" style="display:none;"></div>
+                    <div id="userApiKeysStatus" class="small text-muted mb-3">Loading key status...</div>
+                    <div class="row g-3 align-items-end">
+                        <div class="col-md-4">
+                            <label for="userApiKeySource" class="form-label">Source</label>
+                            <select id="userApiKeySource" class="form-select">
+                                <option value="virustotal">VirusTotal</option>
+                                <option value="abuseipdb">AbuseIPDB</option>
+                                <option value="otx">AlienVault OTX</option>
+                            </select>
+                        </div>
+                        <div class="col-md-5">
+                            <label for="userApiKeyValue" class="form-label">API key</label>
+                            <input id="userApiKeyValue" class="form-control" type="password" autocomplete="new-password" maxlength="4096" placeholder="Enter provider API key">
+                        </div>
+                        <div class="col-md-3 d-flex gap-2">
+                            <button id="userApiKeySave" type="button" class="btn btn-accent btn-sm">Save key</button>
+                            <button id="userApiKeyDelete" type="button" class="btn btn-outline-danger btn-sm">Delete</button>
+                        </div>
+                    </div>
+                    <p class="text-muted small mt-3 mb-0">Keys are encrypted at rest and used only for optional post-investigation enrichment.</p>
+                </div>
+            </div>
+        </div>
     </div>
 </section>
 {% endblock %}
 
 {% block scripts %}
 <script src="/static/js/gmail_settings.js?v=1"></script>
+<script src="/static/js/account_api_keys.js?v=1"></script>
 {% endblock %}
