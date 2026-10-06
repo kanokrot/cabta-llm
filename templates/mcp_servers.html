@@ -14,166 +14,33 @@
 
 {% block extra_head %}
 <style>
-    /* ── Status dots ─────────────────────────────────────────── */
     .status-dot-lg {
         display: inline-block;
-        width: 10px;
-        height: 10px;
+        width: 0.55rem;
+        height: 0.55rem;
         border-radius: 50%;
-        margin-right: 0.4rem;
-        vertical-align: middle;
+        margin-right: 0.35rem;
+        background: currentColor;
     }
-    .status-dot-lg.connected { background: var(--color-success); box-shadow: 0 0 6px var(--color-success); }
-    .status-dot-lg.disconnected { background: var(--color-danger); }
-    .status-dot-lg.not_installed { background: #f59e0b; }
-    .status-dot-lg.planned { background: #6b7280; }
-    .status-dot-lg.error { background: var(--color-warning); }
-
-    /* ── Status badges ───────────────────────────────────────── */
     .status-badge {
         display: inline-flex;
         align-items: center;
-        gap: 0.3rem;
-        padding: 0.2rem 0.55rem;
-        border-radius: 4px;
+        gap: 0.25rem;
+        padding: 0.25rem 0.55rem;
+        border: 1px solid currentColor;
+        border-radius: 999px;
         font-size: 0.75rem;
         font-weight: 600;
-    }
-    .status-badge.connected { background: rgba(34,197,94,0.15); color: var(--color-success); }
-    .status-badge.not_installed { background: rgba(245,158,11,0.15); color: #f59e0b; }
-    .status-badge.disconnected { background: rgba(239,68,68,0.15); color: var(--color-danger); }
-    .status-badge.planned { background: rgba(107,114,128,0.15); color: #9ca3af; }
-
-    /* ── Tools row ───────────────────────────────────────────── */
-    .tools-list-row td {
-        padding: 0.75rem 1rem;
-        background: var(--bg-tertiary);
-        border-top: 1px solid var(--border-color);
-    }
-    .tool-chip {
-        display: inline-flex;
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 0.3rem;
-        padding: 0.2rem 0.6rem;
-        border-radius: 4px;
-        background: var(--code-bg);
-        border: 1px solid var(--border-color);
-        font-size: 0.78rem;
-        color: var(--text-primary);
-        margin: 0.15rem;
-        cursor: pointer;
-        text-align: left;
-    }
-    .tool-chip:hover, .tool-chip:focus { border-color: var(--color-accent); outline: none; }
-    .tool-chip i { color: var(--color-accent); font-size: 0.7rem; }
-    .tool-chip-summary {
-        display: block;
-        max-width: 270px;
-        overflow: hidden;
-        text-overflow: ellipsis;
         white-space: nowrap;
-        color: var(--text-secondary);
-        font-size: 0.68rem;
     }
-    .mcp-tool-icon { flex: 0 0 auto; color: var(--color-accent); }
-    .tool-logo {
-        width: 20px;
-        height: 20px;
-        object-fit: contain;
-        padding: 2px;
-        border-radius: 4px;
-        background: rgba(255,255,255,0.88);
-        flex: 0 0 auto;
-    }
-    .tool-detail-logo { width: 48px; height: 48px; padding: 5px; }
-    .tool-detail-header { display: flex; align-items: center; gap: 0.75rem; }
-    .tool-detail-header h5 { margin: 0; }
-    .tool-technical-id { font-family: var(--bs-font-monospace); font-size: 0.75rem; color: var(--text-secondary); word-break: break-all; }
-    .tool-detail-section { margin-top: 1rem; }
-    .tool-detail-section h6 { color: var(--text-secondary); text-transform: uppercase; font-size: 0.72rem; letter-spacing: 0.04em; }
-    .tool-parameter-table th, .tool-parameter-table td { font-size: 0.78rem; vertical-align: top; }
-    .tool-safety-alert { border-left: 4px solid var(--color-danger); background: rgba(239,68,68,0.12); padding: 0.75rem; }
+    .status-badge.connected { color: var(--color-success); background: color-mix(in srgb, currentColor 12%, transparent); }
+    .status-badge.disconnected { color: var(--color-danger); background: color-mix(in srgb, currentColor 10%, transparent); }
+    .status-badge.planned { color: var(--text-secondary); background: color-mix(in srgb, currentColor 10%, transparent); }
+    .status-badge.requires_install { color: var(--color-warning); background: color-mix(in srgb, currentColor 12%, transparent); }
 
-    /* ── Transport badge ─────────────────────────────────────── */
-    .transport-badge {
-        font-size: 0.7rem;
-        padding: 0.15rem 0.45rem;
-        border-radius: 3px;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-    }
-    .transport-stdio { background: rgba(88,166,255,0.15); color: var(--color-accent); }
-    .transport-sse { background: rgba(34,197,94,0.15); color: var(--color-success); }
-    .transport-http { background: rgba(245,158,11,0.15); color: var(--color-warning); }
-
-    /* ── Category filter pills ───────────────────────────────── */
-    .category-filters {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.4rem;
-        margin-bottom: 1rem;
-    }
-    .category-pill {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.3rem;
-        padding: 0.3rem 0.7rem;
-        border-radius: 20px;
-        font-size: 0.78rem;
-        border: 1px solid var(--border-color);
-        background: var(--bg-tertiary);
-        color: var(--text-secondary);
-        cursor: pointer;
-        transition: all 0.15s ease;
-    }
-    .category-pill:hover, .category-pill.active {
-        background: var(--color-accent);
-        color: #fff;
-        border-color: var(--color-accent);
-    }
-    .category-pill .pill-count {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        min-width: 18px;
-        height: 18px;
-        border-radius: 9px;
-        background: rgba(255,255,255,0.2);
-        font-size: 0.68rem;
-        font-weight: 700;
-        padding: 0 4px;
-    }
-    .category-pill:not(.active) .pill-count {
-        background: var(--bg-secondary);
-    }
-
-    /* ── Install info popover ────────────────────────────────── */
-    .install-info {
-        font-size: 0.78rem;
-        max-width: 380px;
-    }
-    .install-info code {
-        display: block;
-        padding: 0.4rem 0.6rem;
-        margin-top: 0.3rem;
-        background: var(--code-bg);
-        border-radius: 4px;
-        font-size: 0.75rem;
-        word-break: break-all;
-    }
-    .install-info .install-note {
-        display: block;
-        margin-top: 0.3rem;
-        color: var(--text-secondary);
-        font-size: 0.72rem;
-    }
-
-    /* ── Summary cards ───────────────────────────────────────── */
     .summary-cards {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+        grid-template-columns: repeat(4, minmax(0, 1fr));
         gap: 0.75rem;
         margin-bottom: 1.25rem;
     }
@@ -181,309 +48,274 @@
         display: flex;
         align-items: center;
         gap: 0.75rem;
-        padding: 0.8rem 1rem;
-        border-radius: 8px;
-        background: var(--bg-tertiary);
+        min-width: 0;
+        padding: 0.9rem 1rem;
         border: 1px solid var(--border-color);
+        border-radius: 0.75rem;
+        background: var(--bg-secondary);
+        color: var(--text-primary);
     }
-    .summary-card .sc-icon {
-        font-size: 1.5rem;
-        width: 40px;
-        text-align: center;
-    }
-    .summary-card .sc-value {
-        font-size: 1.3rem;
-        font-weight: 700;
-        line-height: 1;
-    }
-    .summary-card .sc-label {
-        font-size: 0.72rem;
-        color: var(--text-secondary);
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-    }
+    .summary-card .sc-icon { font-size: 1.4rem; color: var(--color-accent); }
+    .summary-card .sc-value { font-size: 1.35rem; font-weight: 700; line-height: 1.1; }
+    .summary-card .sc-label { color: var(--text-secondary); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; }
 
-    /* ── Category group header ───────────────────────────────── */
-    .category-group-header {
-        display: flex;
+    .category-filters { display: flex; flex-wrap: wrap; gap: 0.45rem; margin-bottom: 1rem; }
+    .category-pill {
+        display: inline-flex;
         align-items: center;
-        gap: 0.5rem;
-        padding: 0.6rem 1rem;
-        background: var(--bg-tertiary);
-        border-bottom: 1px solid var(--border-color);
-        font-weight: 600;
-        font-size: 0.85rem;
+        gap: 0.4rem;
+        padding: 0.35rem 0.7rem;
+        border: 1px solid var(--border-color);
+        border-radius: 999px;
+        background: var(--bg-secondary);
         color: var(--text-secondary);
+        cursor: pointer;
+        font-size: 0.8rem;
     }
-    .category-group-header i {
-        color: var(--color-accent);
-    }
+    .category-pill:hover, .category-pill.active { border-color: var(--color-accent); background: color-mix(in srgb, var(--color-accent) 14%, var(--bg-secondary)); color: var(--color-accent); }
+    .pill-count { min-width: 1.25rem; text-align: center; font-size: 0.72rem; font-weight: 700; }
 
-    /* ── Check availability spinner ──────────────────────────── */
+    .server-list { display: grid; gap: 0.65rem; }
+    .server-row {
+        overflow: hidden;
+        border: 1px solid var(--border-color);
+        border-radius: 0.75rem;
+        background: var(--bg-secondary);
+        color: var(--text-primary);
+    }
+    .server-row-header {
+        display: grid;
+        grid-template-columns: auto minmax(10rem, 1fr) auto auto auto auto;
+        align-items: center;
+        gap: 0.8rem;
+        min-height: 4.25rem;
+        padding: 0.75rem 1rem;
+        cursor: pointer;
+    }
+    .server-row-header:hover { background: var(--bg-tertiary); }
+    .server-icon { display: inline-flex; align-items: center; justify-content: center; width: 2.5rem; height: 2.5rem; border-radius: 0.65rem; background: color-mix(in srgb, currentColor 12%, transparent); font-size: 1.2rem; }
+    .server-name-block { display: grid; min-width: 0; gap: 0.1rem; }
+    .server-display-name { overflow: hidden; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+    .server-technical-name { color: var(--text-secondary); font-family: var(--bs-font-monospace); font-size: 0.73rem; overflow-wrap: anywhere; }
+    .server-category {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.22rem 0.55rem;
+        border: 1px solid currentColor;
+        border-radius: 999px;
+        background: color-mix(in srgb, currentColor 10%, transparent);
+        font-size: 0.72rem;
+        font-weight: 600;
+        white-space: nowrap;
+    }
+    .category-recon { color: var(--color-accent); }
+    .category-malware { color: var(--color-danger); }
+    .category-forensics { color: var(--color-info); }
+    .category-intel { color: var(--color-success); }
+    .category-vuln { color: var(--color-warning); }
+    .category-other { color: var(--text-secondary); }
+    .server-tool-count { color: var(--text-secondary); font-size: 0.78rem; white-space: nowrap; }
+    .server-row-actions { display: inline-flex; align-items: center; gap: 0.25rem; }
+    .server-row-actions .btn { display: inline-flex; align-items: center; justify-content: center; width: 2rem; height: 2rem; padding: 0; }
+    .server-row-actions [hidden] { display: none !important; }
+    .server-expand-icon { color: var(--text-secondary); transition: transform 0.15s ease; }
+    .server-row.is-expanded .server-expand-icon { transform: rotate(90deg); }
+    .server-expanded-tools { padding: 0 1rem 1rem; }
+    .server-expanded-tools[hidden] { display: none; }
+    .tools-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.6rem; }
+    .tool-chip {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.5rem;
+        width: 100%;
+        min-width: 0;
+        padding: 0.75rem;
+        border: 1px solid var(--border-color);
+        border-radius: 0.65rem;
+        background: var(--bg-tertiary);
+        color: var(--text-primary);
+        cursor: pointer;
+        text-align: left;
+    }
+    .tool-chip:hover, .tool-chip:focus { border-color: var(--color-accent); outline: none; }
+    .tool-chip i, .mcp-tool-icon { color: var(--color-accent); }
+    .tool-chip-summary { display: block; color: var(--text-secondary); font-size: 0.75rem; }
+    .tool-logo { width: 20px; height: 20px; object-fit: contain; padding: 2px; border-radius: 4px; background: var(--bg-secondary); flex: 0 0 auto; }
+    .tool-detail-logo { width: 48px; height: 48px; padding: 5px; }
+    .tool-detail-header { display: flex; align-items: center; gap: 0.75rem; }
+    .tool-detail-header h5 { margin: 0; }
+    .tool-technical-id { color: var(--text-secondary); font-family: var(--bs-font-monospace); font-size: 0.75rem; overflow-wrap: anywhere; }
+    .tool-detail-section { margin-top: 1rem; }
+    .tool-detail-section h6 { color: var(--text-secondary); font-size: 0.72rem; letter-spacing: 0.04em; text-transform: uppercase; }
+    .tool-parameter-table th, .tool-parameter-table td { font-size: 0.78rem; vertical-align: top; }
+    .tool-safety-alert { border-left: 4px solid var(--color-danger); background: color-mix(in srgb, var(--color-danger) 12%, transparent); padding: 0.75rem; }
+
     .check-spinner {
         display: none;
-        width: 14px;
-        height: 14px;
+        width: 0.9rem;
+        height: 0.9rem;
         border: 2px solid var(--border-color);
         border-top-color: var(--color-accent);
         border-radius: 50%;
-        animation: spin 0.6s linear infinite;
+        animation: mcp-spin 0.6s linear infinite;
     }
-    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes mcp-spin { to { transform: rotate(360deg); } }
 
-    /* ── Package link badge ──────────────────────────────────── */
-    .package-link {
-        font-size: 0.68rem;
-        color: var(--color-accent);
-        text-decoration: none;
-        opacity: 0.8;
+    @media (max-width: 767.98px) {
+        .summary-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .server-row-header { grid-template-columns: auto minmax(0, 1fr) auto; gap: 0.55rem; }
+        .server-category { grid-column: 2; justify-self: start; }
+        .server-tool-count { grid-column: 3; grid-row: 2; }
+        .status-badge { grid-column: 2; grid-row: 3; justify-self: start; }
+        .server-row-actions { grid-column: 1 / -1; justify-self: end; }
     }
-    .package-link:hover { opacity: 1; text-decoration: underline; }
+    @media (max-width: 575.98px) {
+        .tools-grid { grid-template-columns: minmax(0, 1fr); }
+        .summary-card { padding: 0.7rem; }
+        .server-row-header { padding: 0.7rem; }
+    }
 </style>
 {% endblock %}
 
 {% block content %}
-<!-- Header description -->
 <div class="d-flex justify-content-between align-items-center mb-3">
     <p class="mb-0" style="color: var(--text-secondary);">
         Configure and manage MCP server connections.
     </p>
     <button class="btn btn-sm btn-ghost" onclick="MCPServers.loadServers()">
-        <i class="bi bi-arrow-clockwise me-1"></i>Refresh
+        <i class="bi bi-arrow-clockwise me-1" aria-hidden="true"></i>Refresh
     </button>
 </div>
 
-<!-- Summary cards -->
 {% set total_count = servers | length %}
-{% set connected_count = servers | selectattr('live_status', 'defined') | selectattr('live_status') | list | length %}
-{% set installable_count = servers | selectattr('status', 'equalto', 'requires_install') | list | length %}
-{% set planned_count = servers | selectattr('status', 'equalto', 'planned') | list | length %}
-<div class="summary-cards">
+<div class="summary-cards" aria-label="MCP server statistics">
     <div class="summary-card">
-        <div class="sc-icon text-accent"><i class="bi bi-hdd-network"></i></div>
-        <div>
-            <div class="sc-value">{{ total_count }}</div>
-            <div class="sc-label">Total</div>
-        </div>
+        <i class="sc-icon bi bi-hdd-network" aria-hidden="true"></i>
+        <div><div class="sc-value" id="serverCount">{{ total_count }}</div><div class="sc-label">Servers</div></div>
     </div>
     <div class="summary-card">
-        <div class="sc-icon" style="color:var(--color-success)"><i class="bi bi-check-circle-fill"></i></div>
-        <div>
-            <div class="sc-value" id="connectedCount">0</div>
-            <div class="sc-label">Connected</div>
-        </div>
+        <i class="sc-icon bi bi-check-circle" aria-hidden="true"></i>
+        <div><div class="sc-value" id="connectedCount">{{ connected_count }}</div><div class="sc-label">Connected</div></div>
     </div>
     <div class="summary-card">
-        <div class="sc-icon" style="color:#f59e0b"><i class="bi bi-download"></i></div>
-        <div>
-            <div class="sc-value">{{ installable_count }}</div>
-            <div class="sc-label">Installable</div>
-        </div>
+        <i class="sc-icon bi bi-tools" aria-hidden="true"></i>
+        <div><div class="sc-value" id="toolsAvailableCount">{{ tools_total }}</div><div class="sc-label">Tools available</div></div>
     </div>
     <div class="summary-card">
-        <div class="sc-icon" style="color:#6b7280"><i class="bi bi-clock-history"></i></div>
-        <div>
-            <div class="sc-value">{{ planned_count }}</div>
-            <div class="sc-label">Planned</div>
-        </div>
+        <i class="sc-icon bi bi-exclamation-circle" aria-hidden="true"></i>
+        <div><div class="sc-value" id="needAttentionCount">{{ attention_count }}</div><div class="sc-label">Need attention</div></div>
     </div>
 </div>
 
-<!-- Category filter pills -->
-<div class="category-filters" id="categoryFilters">
-    <span class="category-pill active" data-category="all">
-        <i class="bi bi-grid-3x3-gap"></i> All
+<div class="category-filters" id="categoryFilters" aria-label="Filter servers by category">
+    <button type="button" class="category-pill active" data-category="all" aria-pressed="true">
+        <i class="bi bi-grid-3x3-gap" aria-hidden="true"></i> All
         <span class="pill-count">{{ total_count }}</span>
-    </span>
+    </button>
     {% if active_categories is defined %}
     {% for cat in active_categories %}
     {% set cat_count = servers | selectattr('category', 'equalto', cat.key) | list | length %}
-    <span class="category-pill" data-category="{{ cat.key }}"
-          title="{{ cat.get('description', '') }}">
-        <i class="{{ cat.get('icon', 'bi-server') }}"></i>
-        {{ cat.get('label', cat.key) }}
+    <button type="button" class="category-pill" data-category="{{ cat.key | e }}" aria-pressed="false"
+            title="{{ cat.get('description', '') | e }}">
+        <i class="{{ cat.get('icon', 'bi-server') | e }}" aria-hidden="true"></i>
+        {{ cat.get('label', cat.key) | e }}
         <span class="pill-count">{{ cat_count }}</span>
-    </span>
+    </button>
     {% endfor %}
     {% endif %}
 </div>
 
-<!-- Status filter buttons -->
-<div class="d-flex gap-2 mb-3">
-    <button class="btn btn-sm btn-ghost status-filter-btn active" data-status="all"
-            title="Show all servers">
-        All
-    </button>
-    <button class="btn btn-sm btn-ghost status-filter-btn" data-status="requires_install"
-            title="Installable packages">
-        <i class="bi bi-download me-1" style="color:#f59e0b"></i>Installable
-    </button>
-    <button class="btn btn-sm btn-ghost status-filter-btn" data-status="planned"
-            title="No package yet">
-        <i class="bi bi-clock-history me-1" style="color:#6b7280"></i>Planned
-    </button>
-</div>
-
-<!-- Servers Table -->
-<div class="card">
-    <div class="card-header d-flex justify-content-between align-items-center">
-        <h6 class="mb-0"><i class="bi bi-hdd-network me-2 text-accent"></i>Configured Servers</h6>
-        <button class="btn btn-sm btn-outline-info" onclick="MCPServers.checkAll()"
-                title="Check availability of all servers">
-            <i class="bi bi-patch-check me-1"></i>Check All
-        </button>
-    </div>
-    <div class="card-body p-0">
-        <div class="table-responsive">
-            <table class="table table-hover mb-0" id="serversTable">
-                <thead>
-                    <tr>
-                        <th style="width:36px;"></th>
-                        <th>Name</th>
-                        <th>Transport</th>
-                        <th>Status</th>
-                        <th>Tools</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody id="serversBody">
-                    {% if servers %}
-                        {# Group servers by category #}
-                        {% set ns = namespace(current_cat='') %}
-                        {% for srv in servers %}
-                        {% set cat = srv.get('category', 'other') if srv.get is defined else 'other' %}
-                        {% set ls = srv.get('live_status', {}) if srv.get is defined else {} %}
-                        {% set is_connected = ls and ls.get('connected', false) if ls.get is defined else false %}
-                        {% set srv_status = srv.get('status', 'planned') if srv.get is defined else 'planned' %}
-                        {% if is_connected %}
-                            {% set display_status = 'connected' %}
-                        {% elif srv_status == 'requires_install' %}
-                            {% set display_status = 'not_installed' %}
-                        {% elif srv_status == 'planned' %}
-                            {% set display_status = 'planned' %}
-                        {% else %}
-                            {% set display_status = 'disconnected' %}
-                        {% endif %}
-                        {% set transport_val = (srv.transport | default('stdio')) | lower %}
-                        {% set install_cmd = srv.get('install_command', '') if srv.get is defined else '' %}
-                        {% set install_note = srv.get('install_note', '') if srv.get is defined else '' %}
-                        {% set package_url = srv.get('package_url', '') if srv.get is defined else '' %}
-
-                        {# Category group header #}
-                        {% if cat != ns.current_cat %}
-                        {% set ns.current_cat = cat %}
-                        {% set cat_meta = categories.get(cat, {}) if categories is defined and categories.get is defined else {} %}
-                        <tr class="category-header-row" data-category="{{ cat }}">
-                            <td colspan="6" class="p-0">
-                                <div class="category-group-header">
-                                    <i class="{{ cat_meta.get('icon', 'bi-server') if cat_meta.get is defined else 'bi-server' }}"></i>
-                                    {{ cat_meta.get('label', cat.replace('_', ' ').title()) if cat_meta.get is defined else cat.replace('_', ' ').title() }}
-                                    <small class="text-muted ms-2">{{ cat_meta.get('description', '') if cat_meta.get is defined else '' }}</small>
-                                </div>
-                            </td>
-                        </tr>
-                        {% endif %}
-
-                        <tr data-server-name="{{ srv.name | e }}"
-                            data-category="{{ cat }}"
-                            data-status="{{ srv_status }}">
-                            <td>
-                                {% if is_connected %}
-                                <button class="btn btn-sm btn-ghost p-0 toggle-tools-btn"
-                                        title="Show tools">
-                                    <i class="bi bi-chevron-right"></i>
-                                </button>
-                                {% endif %}
-                            </td>
-                            <td>
-                                <strong>{{ srv.name | default('Unknown') | e }}</strong>
-                                {% if package_url %}
-                                <a href="{{ package_url }}" target="_blank" rel="noopener" class="package-link ms-1"
-                                   title="Package page">
-                                    <i class="bi bi-box-arrow-up-right"></i>
-                                </a>
-                                {% endif %}
-                                {% if srv.description %}
-                                <small class="d-block text-muted">{{ srv.description | e }}</small>
-                                {% endif %}
-                                {% if install_note %}
-                                <small class="d-block" style="color:#9ca3af;font-size:0.7rem;">
-                                    <i class="bi bi-info-circle me-1"></i>{{ install_note | e }}
-                                </small>
-                                {% endif %}
-                            </td>
-                            <td><span class="transport-badge transport-{{ transport_val }}">{{ transport_val }}</span></td>
-                            <td>
-                                <span class="status-badge {{ display_status }}" id="status-{{ srv.name | e }}">
-                                    <span class="status-dot-lg {{ display_status }}"></span>
-                                    {% if display_status == 'connected' %}
-                                        Connected
-                                    {% elif display_status == 'not_installed' %}
-                                        Not Installed
-                                    {% elif display_status == 'planned' %}
-                                        Planned
-                                    {% else %}
-                                        Disconnected
-                                    {% endif %}
-                                </span>
-                                <span class="check-spinner" id="spinner-{{ srv.name | e }}"></span>
-                            </td>
-                            <td><span class="badge bg-secondary">{{ ls.get('tool_count', 0) if ls.get is defined else '-' }}</span></td>
-                            <td>
-                                <div class="d-flex gap-1 flex-wrap">
-                                    {# Check availability button #}
-                                    <button class="btn btn-sm btn-outline-warning server-check-btn"
-                                            title="Check availability"
-                                            data-server-name="{{ srv.name | e }}">
-                                        <i class="bi bi-patch-question"></i>
-                                    </button>
-                                    {% if is_connected %}
-                                    <button class="btn btn-sm btn-outline-secondary server-disconnect-btn"
-                                            title="Disconnect" data-server-name="{{ srv.name | e }}">
-                                        <i class="bi bi-pause-circle"></i>
-                                    </button>
-                                    {% else %}
-                                    <button class="btn btn-sm btn-accent server-connect-btn"
-                                            title="Connect" data-server-name="{{ srv.name | e }}">
-                                        <i class="bi bi-play-circle"></i>
-                                    </button>
-                                    {% endif %}
-                                    <button class="btn btn-sm btn-outline-info server-tools-btn"
-                                            title="List tools" data-server-name="{{ srv.name | e }}">
-                                        <i class="bi bi-tools"></i>
-                                    </button>
-                                    {% if install_cmd %}
-                                    <button class="btn btn-sm btn-outline-success server-install-info-btn"
-                                            title="Install info"
-                                            data-server-name="{{ srv.name | e }}"
-                                            data-install-cmd="{{ install_cmd | e }}"
-                                            data-install-note="{{ install_note | e }}">
-                                        <i class="bi bi-terminal"></i>
-                                    </button>
-                                    {% endif %}
-                                    <button class="btn btn-sm btn-outline-danger server-delete-btn"
-                                            title="Remove" data-server-name="{{ srv.name | e }}">
-                                        <i class="bi bi-trash"></i>
-                                    </button>
-                                </div>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    {% else %}
-                        <tr id="noServersRow">
-                            <td colspan="6" class="text-center py-5 text-muted">
-                                <i class="bi bi-hdd-network fs-1 d-block mb-2 opacity-50"></i>
-                                No MCP servers configured.<br>
-                                <small>Click "Add Server" to add your first MCP server.</small>
-                            </td>
-                        </tr>
-                    {% endif %}
-                </tbody>
-            </table>
+<div class="server-list" id="serversList" aria-label="MCP servers">
+    {% if servers %}
+    {% for srv in servers %}
+    {% set cat = srv.get('category', 'other') %}
+    {% set ls = srv.get('live_status', {}) or {} %}
+    {% set is_connected = ls.get('connected', false) if ls.get is defined else false %}
+    {% set srv_status = srv.get('status', 'disconnected') %}
+    {% if is_connected %}
+        {% set display_status = 'connected' %}
+        {% set status_label = 'Connected' %}
+    {% elif srv_status == 'planned' %}
+        {% set display_status = 'planned' %}
+        {% set status_label = 'Planned' %}
+    {% elif srv_status == 'requires_install' %}
+        {% set display_status = 'requires_install' %}
+        {% set status_label = 'Requires install' %}
+    {% else %}
+        {% set display_status = 'disconnected' %}
+        {% set status_label = 'Disconnected' %}
+    {% endif %}
+    {% set install_cmd = srv.get('install_command', '') %}
+    {% set install_note = srv.get('install_note', '') %}
+    {% set tool_count = ls.get('tool_count', 0) if ls.get is defined else 0 %}
+    <article class="server-row" data-server-row="true" data-server-name="{{ srv.name | e }}"
+             data-category="{{ cat | e }}" data-status="{{ srv_status | e }}"
+             data-connected="{{ 'true' if is_connected else 'false' }}">
+        <div class="server-row-header" role="button" tabindex="0" aria-expanded="false"
+             aria-label="Expand {{ srv.get('display_name', srv.name) | e }}">
+            <span class="server-icon category-{{ cat | replace('_', '-') | e }}">
+                <i class="{{ srv.get('icon', 'bi-server') | e }}" aria-hidden="true"></i>
+            </span>
+            <span class="server-name-block">
+                <span class="server-display-name">{{ srv.get('display_name', srv.name) | e }}</span>
+                <span class="server-technical-name">{{ srv.name | e }}</span>
+            </span>
+            <span class="server-category category-{{ cat | replace('_', '-') | e }}">{{ categories.get(cat, {}).get('label', cat | replace('_', ' ') | title) | e }}</span>
+            <span class="server-tool-count" data-tool-count>{{ tool_count }} tools</span>
+            <span class="status-badge {{ display_status }}" id="status-{{ srv.name | e }}">
+                <span class="status-dot-lg {{ display_status }}" aria-hidden="true"></span>
+                <span class="status-label">{{ status_label }}</span>
+            </span>
+            <span class="server-row-actions">
+                <span class="check-spinner" id="spinner-{{ srv.name | e }}" aria-hidden="true"></span>
+                <button type="button" class="btn btn-sm btn-outline-warning server-check-btn server-action"
+                        title="Check availability" aria-label="Check availability" data-server-name="{{ srv.name | e }}">
+                    <i class="bi bi-patch-question" aria-hidden="true"></i>
+                </button>
+                <button type="button" class="btn btn-sm btn-accent server-connect-btn server-action"
+                        title="Connect" aria-label="Connect" data-server-name="{{ srv.name | e }}" {% if is_connected %}hidden{% endif %}>
+                    <i class="bi bi-play-circle" aria-hidden="true"></i>
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary server-disconnect-btn server-action"
+                        title="Disconnect" aria-label="Disconnect" data-server-name="{{ srv.name | e }}" {% if not is_connected %}hidden{% endif %}>
+                    <i class="bi bi-pause-circle" aria-hidden="true"></i>
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-info server-tools-btn server-action"
+                        title="List tools" aria-label="List tools" data-server-name="{{ srv.name | e }}">
+                    <i class="bi bi-tools" aria-hidden="true"></i>
+                </button>
+                {% if install_cmd %}
+                <button type="button" class="btn btn-sm btn-outline-secondary server-install-info-btn server-action"
+                        title="Install information" aria-label="Install information"
+                        data-server-name="{{ srv.name | e }}" data-install-cmd="{{ install_cmd | e }}"
+                        data-install-note="{{ install_note | e }}">
+                    <i class="bi bi-terminal" aria-hidden="true"></i>
+                </button>
+                {% endif %}
+                <button type="button" class="btn btn-sm btn-outline-danger server-delete-btn server-action"
+                        title="Delete server" aria-label="Delete server" data-server-name="{{ srv.name | e }}">
+                    <i class="bi bi-trash" aria-hidden="true"></i>
+                </button>
+                <i class="bi bi-chevron-right server-expand-icon" aria-hidden="true"></i>
+            </span>
         </div>
+        <div class="server-expanded-tools" hidden></div>
+    </article>
+    {% endfor %}
+    {% else %}
+    <div class="text-center py-5 text-secondary" id="noServersRow">
+        <i class="bi bi-hdd-network fs-1 d-block mb-2" aria-hidden="true"></i>
+        No MCP servers configured. Add a server to get started.
     </div>
+    {% endif %}
 </div>
 
+<div class="d-flex justify-content-end mt-3">
+    <button type="button" class="btn btn-sm btn-outline-info" id="checkAllBtn" onclick="MCPServers.checkAll()">
+        <i class="bi bi-patch-check me-1" aria-hidden="true"></i>Check all
+    </button>
+</div>
 <!-- Add Server Modal -->
 <div class="modal fade" id="addServerModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg">
@@ -779,61 +611,28 @@ var MCPServers = (function () {
     /* ── Category filtering ──────────────────────────────────── */
     var categoryFilters = document.getElementById('categoryFilters');
     if (categoryFilters) {
-        categoryFilters.addEventListener('click', function(e) {
+        categoryFilters.addEventListener('click', function (e) {
             var pill = e.target.closest('.category-pill');
             if (!pill) return;
-            // Toggle active state
-            categoryFilters.querySelectorAll('.category-pill').forEach(function(p) {
-                p.classList.remove('active');
+            categoryFilters.querySelectorAll('.category-pill').forEach(function (item) {
+                item.classList.remove('active');
+                item.setAttribute('aria-pressed', 'false');
             });
             pill.classList.add('active');
-            var cat = pill.getAttribute('data-category');
+            pill.setAttribute('aria-pressed', 'true');
             filterTable();
         });
     }
-
-    /* ── Status filtering ────────────────────────────────────── */
-    document.querySelectorAll('.status-filter-btn').forEach(function(btn) {
-        btn.addEventListener('click', function() {
-            document.querySelectorAll('.status-filter-btn').forEach(function(b) {
-                b.classList.remove('active');
-            });
-            btn.classList.add('active');
-            filterTable();
-        });
-    });
 
     function filterTable() {
-        var activeCatPill = categoryFilters.querySelector('.category-pill.active');
-        var activeCat = activeCatPill ? activeCatPill.getAttribute('data-category') : 'all';
-        var activeStatusBtn = document.querySelector('.status-filter-btn.active');
-        var activeStatus = activeStatusBtn ? activeStatusBtn.getAttribute('data-status') : 'all';
-
-        var rows = document.querySelectorAll('#serversBody tr[data-server-name]');
-        var headerRows = document.querySelectorAll('#serversBody tr.category-header-row');
-        var visibleCategories = {};
-
-        rows.forEach(function(row) {
-            var rowCat = row.getAttribute('data-category');
-            var rowStatus = row.getAttribute('data-status');
-            var catMatch = (activeCat === 'all' || rowCat === activeCat);
-            var statusMatch = (activeStatus === 'all' || rowStatus === activeStatus);
-            var visible = catMatch && statusMatch;
-            row.style.display = visible ? '' : 'none';
-            if (visible) {
-                visibleCategories[rowCat] = true;
-            }
-        });
-
-        // Show/hide category headers
-        headerRows.forEach(function(hr) {
-            var hCat = hr.getAttribute('data-category');
-            hr.style.display = visibleCategories[hCat] ? '' : 'none';
+        if (!categoryFilters) return;
+        var activePill = categoryFilters.querySelector('.category-pill.active');
+        var activeCategory = activePill ? activePill.getAttribute('data-category') : 'all';
+        document.querySelectorAll('.server-row[data-server-row="true"]').forEach(function (row) {
+            row.hidden = activeCategory !== 'all' && row.getAttribute('data-category') !== activeCategory;
         });
     }
-
-    /* ── Toggle transport fields in modal ────────────────────── */
-    var transportSelect = document.getElementById('serverTransport');
+var transportSelect = document.getElementById('serverTransport');
     if (transportSelect) {
         transportSelect.addEventListener('change', function () {
             var isStdio = transportSelect.value === 'stdio';
@@ -845,7 +644,7 @@ var MCPServers = (function () {
     }
 
     /* ── Event delegation for table actions ──────────────────── */
-    document.getElementById('serversTable').addEventListener('click', function (e) {
+    document.getElementById('serversList').addEventListener('click', function (e) {
         var connectBtn = e.target.closest('.server-connect-btn');
         if (connectBtn) {
             connectServer(connectBtn.getAttribute('data-server-name'));
@@ -880,33 +679,39 @@ var MCPServers = (function () {
             );
             return;
         }
-        var toggleBtn = e.target.closest('.toggle-tools-btn');
-        if (toggleBtn) {
-            var row = toggleBtn.closest('tr');
-            var serverName = row.getAttribute('data-server-name');
-            toggleInlineTools(row, serverName, toggleBtn.querySelector('i'));
+        var header = e.target.closest('.server-row-header');
+        if (header) {
+            var row = header.closest('.server-row[data-server-row="true"]');
+            if (row && row.getAttribute('data-connected') === 'true') {
+                toggleInlineTools(row, row.getAttribute('data-server-name'), row.querySelector('.server-expand-icon'));
+            }
         }
     });
 
-    /* ── Toggle inline tools row ─────────────────────────────── */
+    document.getElementById('serversList').addEventListener('keydown', function (e) {
+        var header = e.target.closest('.server-row-header');
+        if (header && e.target === header && (e.key === 'Enter' || e.key === ' ')) {
+            e.preventDefault();
+            header.click();
+        }
+    });
+
     function toggleInlineTools(parentRow, serverName, icon) {
-        var existing = parentRow.nextElementSibling;
-        if (existing && existing.classList.contains('tools-list-row')) {
-            existing.remove();
-            icon.className = 'bi bi-chevron-right';
+        if (parentRow.getAttribute('data-connected') !== 'true') return;
+        var panel = parentRow.querySelector('.server-expanded-tools');
+        var header = parentRow.querySelector('.server-row-header');
+        if (!panel) return;
+        if (!panel.hidden) {
+            panel.hidden = true;
+            parentRow.classList.remove('is-expanded');
+            header.setAttribute('aria-expanded', 'false');
             return;
         }
-        icon.className = 'bi bi-chevron-down';
 
-        var toolRow = document.createElement('tr');
-        toolRow.className = 'tools-list-row';
-        var td = document.createElement('td');
-        td.colSpan = 6;
-        td.style.background = 'var(--bg-tertiary)';
-        td.style.padding = '0.75rem 1rem';
-        td.textContent = 'Loading tools...';
-        toolRow.appendChild(td);
-        parentRow.parentNode.insertBefore(toolRow, parentRow.nextSibling);
+        panel.hidden = false;
+        parentRow.classList.add('is-expanded');
+        header.setAttribute('aria-expanded', 'true');
+        panel.textContent = 'Loading tools...';
 
         fetch('/api/mcp/servers/' + encodeURIComponent(serverName) + '/tools')
         .then(function (r) {
@@ -915,30 +720,29 @@ var MCPServers = (function () {
         })
         .then(function (data) {
             var tools = data.tools || [];
-            while (td.firstChild) td.removeChild(td.firstChild);
+            while (panel.firstChild) panel.removeChild(panel.firstChild);
             if (!tools.length) {
-                td.textContent = 'No tools discovered.';
+                panel.textContent = 'No tools discovered.';
                 return;
             }
             var label = document.createElement('strong');
-            label.className = 'small d-block mb-2';
+            label.className = 'small d-block mb-2 text-secondary';
             label.textContent = 'Available Tools (' + tools.length + ')';
-            td.appendChild(label);
+            panel.appendChild(label);
 
             var container = document.createElement('div');
-            tools.forEach(function(t) {
-                container.appendChild(createToolChip(t, serverName));
+            container.className = 'tools-grid';
+            tools.forEach(function (tool) {
+                container.appendChild(createToolChip(tool, serverName));
             });
-            td.appendChild(container);
+            panel.appendChild(container);
         })
         .catch(function (err) {
-            td.textContent = 'Failed to load tools: ' + err.message;
-            td.className = 'text-danger';
+            panel.textContent = 'Failed to load tools: ' + err.message;
+            panel.className = 'server-expanded-tools text-danger';
         });
     }
-
-    /* ── Check server availability ───────────────────────────── */
-    function checkServer(serverName) {
+function checkServer(serverName) {
         var spinner = document.getElementById('spinner-' + serverName);
         var statusEl = document.getElementById('status-' + serverName);
         if (spinner) spinner.style.display = 'inline-block';
@@ -972,7 +776,7 @@ var MCPServers = (function () {
 
     /* ── Check all servers ───────────────────────────────────── */
     function checkAll() {
-        var rows = document.querySelectorAll('#serversBody tr[data-server-name]');
+        var rows = document.querySelectorAll('.server-row[data-server-row=true]');
         rows.forEach(function(row) {
             var name = row.getAttribute('data-server-name');
             if (name) {
@@ -1202,78 +1006,75 @@ var MCPServers = (function () {
     /* ── Refresh live status on page load ────────────────────── */
     function refreshLiveStatus() {
         fetch('/api/mcp/servers')
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
             var servers = data.servers || [];
             var connectedCount = 0;
-            servers.forEach(function(srv) {
-                var ls = srv.live_status || {};
-                var isConnected = ls.connected === true;
-                if (isConnected) connectedCount++;
+            var toolsTotal = 0;
+            var attentionCount = 0;
 
-                var row = document.querySelector('tr[data-server-name="' + srv.name + '"]');
+            servers.forEach(function (srv) {
+                var live = srv.live_status || {};
+                var isConnected = live.connected === true;
+                var rawStatus = String(srv.status || '').toLowerCase();
+                var toolCount = Number(live.tool_count) || 0;
+                if (isConnected) connectedCount++;
+                toolsTotal += toolCount;
+                if (rawStatus.indexOf('error') === 0 || live.connected === false) attentionCount++;
+
+                var row = Array.prototype.find.call(
+                    document.querySelectorAll('.server-row[data-server-row="true"]'),
+                    function (item) { return item.getAttribute('data-server-name') === srv.name; }
+                );
                 if (!row) return;
 
+                row.setAttribute('data-connected', isConnected ? 'true' : 'false');
                 var statusEl = document.getElementById('status-' + srv.name);
-                if (statusEl && isConnected) {
-                    statusEl.className = 'status-badge connected';
-                    // Clear and rebuild safely
-                    while (statusEl.firstChild) statusEl.removeChild(statusEl.firstChild);
-                    var dot = document.createElement('span');
-                    dot.className = 'status-dot-lg connected';
-                    statusEl.appendChild(dot);
-                    statusEl.appendChild(document.createTextNode('Connected'));
+                if (statusEl) {
+                    var state = 'disconnected';
+                    var label = 'Disconnected';
+                    if (isConnected) {
+                        state = 'connected';
+                        label = 'Connected';
+                    } else if (rawStatus === 'planned') {
+                        state = 'planned';
+                        label = 'Planned';
+                    } else if (rawStatus === 'requires_install') {
+                        state = 'requires_install';
+                        label = 'Requires install';
+                    }
+                    statusEl.className = 'status-badge ' + state;
+                    var dot = statusEl.querySelector('.status-dot-lg');
+                    if (dot) dot.className = 'status-dot-lg ' + state;
+                    var statusLabel = statusEl.querySelector('.status-label');
+                    if (statusLabel) statusLabel.textContent = label;
                 }
 
-                // Update tool count
-                if (isConnected && ls.tool_count) {
-                    var toolCell = row.querySelectorAll('td')[4];
-                    if (toolCell) {
-                        var badge = toolCell.querySelector('.badge');
-                        if (badge) badge.textContent = ls.tool_count;
-                    }
-                }
-
-                // Update action buttons: swap connect for disconnect
-                var actionsCell = row.querySelectorAll('td')[5];
-                if (actionsCell) {
-                    var connectBtn = actionsCell.querySelector('.server-connect-btn');
-                    var disconnectBtn = actionsCell.querySelector('.server-disconnect-btn');
-                    if (isConnected && connectBtn && !disconnectBtn) {
-                        var newBtn = document.createElement('button');
-                        newBtn.className = 'btn btn-sm btn-outline-secondary server-disconnect-btn';
-                        newBtn.title = 'Disconnect';
-                        newBtn.setAttribute('data-server-name', srv.name);
-                        var icon = document.createElement('i');
-                        icon.className = 'bi bi-pause-circle';
-                        newBtn.appendChild(icon);
-                        connectBtn.replaceWith(newBtn);
-                    }
-                }
-
-                // Add toggle tools chevron if connected
-                if (isConnected) {
-                    var chevronCell = row.querySelectorAll('td')[0];
-                    if (chevronCell && !chevronCell.querySelector('.toggle-tools-btn')) {
-                        var toggleBtn = document.createElement('button');
-                        toggleBtn.className = 'btn btn-sm btn-ghost p-0 toggle-tools-btn';
-                        toggleBtn.title = 'Show tools';
-                        var chevIcon = document.createElement('i');
-                        chevIcon.className = 'bi bi-chevron-right';
-                        toggleBtn.appendChild(chevIcon);
-                        chevronCell.appendChild(toggleBtn);
-                    }
+                var toolCountEl = row.querySelector('[data-tool-count]');
+                if (toolCountEl) toolCountEl.textContent = toolCount + ' tools';
+                var connectBtn = row.querySelector('.server-connect-btn');
+                var disconnectBtn = row.querySelector('.server-disconnect-btn');
+                if (connectBtn) connectBtn.hidden = isConnected;
+                if (disconnectBtn) disconnectBtn.hidden = !isConnected;
+                var header = row.querySelector('.server-row-header');
+                var panel = row.querySelector('.server-expanded-tools');
+                if (header && !isConnected && panel && !panel.hidden) {
+                    panel.hidden = true;
+                    row.classList.remove('is-expanded');
+                    header.setAttribute('aria-expanded', 'false');
                 }
             });
 
-            // Update connected counter
-            var counterEl = document.getElementById('connectedCount');
-            if (counterEl) counterEl.textContent = connectedCount;
+            var connectedEl = document.getElementById('connectedCount');
+            var toolsEl = document.getElementById('toolsAvailableCount');
+            var attentionEl = document.getElementById('needAttentionCount');
+            if (connectedEl) connectedEl.textContent = connectedCount;
+            if (toolsEl) toolsEl.textContent = toolsTotal;
+            if (attentionEl) attentionEl.textContent = attentionCount;
         })
-        .catch(function() {});
+        .catch(function () {});
     }
-
-    // Run on page load
+// Run on page load
     refreshLiveStatus();
 
     return {
