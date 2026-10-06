@@ -907,19 +907,26 @@ def serialize_playbook(playbook: Mapping[str, Any], role: str, *, detail: bool =
                     continue
                 safe_param: dict[str, Any] = {
                     "name": _text(param.get("name"), 200) or "",
-                    "description": _text(param.get("description"), 1000) or "",
                     "required": bool(param.get("required", False)),
+                    "type": _text(param.get("type"), 100) if isinstance(param.get("type"), str) else None,
+                    "description": _text(param.get("description"), 1000)
+                    if isinstance(param.get("description"), str) else None,
+                    "example": param.get("example"),
                 }
-                param_type = param.get("type")
-                if isinstance(param_type, str):
-                    safe_param["type"] = _text(param_type, 100) or ""
-                if "default" in param and isinstance(
-                    param["default"], (str, int, float, bool)
-                ):
-                    default = param["default"]
-                    safe_param["default"] = _text(default, 1000) if isinstance(default, str) else default
                 safe_params.append(safe_param)
         output["input_params"] = safe_params
+        overview = playbook.get("overview")
+        output["overview"] = [
+            _text(item, 500) or ""
+            for item in overview[:50]
+            if isinstance(item, str)
+        ] if isinstance(overview, list) else []
+        output_text = playbook.get("output")
+        output["output"] = _text(output_text, 4000) or "" if isinstance(output_text, str) else ""
+        output["approval_steps"] = sum(
+            1 for step in steps
+            if isinstance(step, Mapping) and step.get("requires_approval") is True
+        )
 
         def display_label(value: str) -> str:
             acronyms = {

@@ -4,22 +4,33 @@ description: >
   Basic host-level forensic triage - collect volatile memory evidence and disk artifacts,
   check file/IP/domain reputation, persistence check, analyze event logs, IOC extraction,
   ATT&CK mapping, and verdict determination.
+overview:
+  - Approve host collection and persistence checks
+  - Collect host details, running processes, connections, and logs
+  - Check file and network indicators against threat sources
+  - Map observed behavior and determine a verdict
+output: A forensic triage answer in Agent Chat (incident confirmed or benign). If an incident is confirmed, detection rules are also generated and saved with the session, not shown in Agent Chat yet; if rule generation fails the run ends before the final answer.
 trigger_type: manual
 input_params:
   - name: host_identifier
     description: Hostname or IP address of the affected host
+    example: WS-1042
     required: true
   - name: remote_username
     description: SSH account for the approved remote host
+    example: soc_analyst
     required: true
   - name: remote_key_path
     description: Path to the SSH private key for the approved remote host
+    example: 'C:\Users\analyst\.ssh\id_ed25519'
     required: true
   - name: suspicious_file_path
     description: Path to a suspicious file found on the host (if known)
+    example: 'C:\evidence\payload.exe'
     required: false
   - name: reported_by
     description: Who reported/flagged this host
+    example: 'Jordan Lee'
     required: false
 
 steps:

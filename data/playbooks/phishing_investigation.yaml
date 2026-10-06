@@ -3,13 +3,20 @@ category: Phishing
 description: >
   Email phishing investigation - header analysis, URL check,
   attachment analysis, sender verification, verdict determination.
+overview:
+  - Read the email and identify its indicators
+  - Check the sender, links, and attachments
+  - Review indicator matches and determine a verdict
+output: A phishing investigation answer in Agent Chat (phishing confirmed or benign). If phishing is confirmed, detection rules are also generated and saved with the session, not shown in Agent Chat yet; if rule generation fails the run ends before the final answer.
 trigger_type: manual
 input_params:
   - name: email_path
     description: Path to the email file (.eml/.msg)
+    example: 'C:\evidence\suspicious.eml'
     required: true
   - name: reported_by
     description: Who reported the phishing email
+    example: 'Jordan Lee'
     required: false
 
 steps:

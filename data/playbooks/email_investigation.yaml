@@ -4,17 +4,25 @@ description: >
   In-depth email investigation - header analysis, sender verification,
   URL and attachment analysis, threat intelligence check, verdict determination.
   More comprehensive than the phishing playbook - for all email threats.
+overview:
+  - Read the email and identify its indicators
+  - Check the sender, links, and attachments
+  - Review threat source matches and determine a verdict
+output: A final email investigation answer in Agent Chat (malicious or clean). If the email is malicious, detection rules are also generated and saved with the session, not shown in Agent Chat yet; if rule generation fails the run ends before the final answer.
 trigger_type: manual
 input_params:
   - name: eml_path
     description: Path to email file (.eml/.msg)
+    example: 'C:\evidence\suspicious.eml'
     required: true
   - name: reported_by
     description: Person who reported the email
+    example: 'Jordan Lee'
     required: false
   - name: investigation_type
     description: >
       Investigation type: phishing, bec, spam, malware_delivery, spear_phishing
+    example: phishing
     required: false
 
 steps:

@@ -4,19 +4,29 @@ description: >
   Comprehensive incident response playbook based on the NIST CSF 2.0 functions (Detect, Respond, Recover).
   Compliant with NIST SP 800-61 Rev. 3 and SANS IR steps. Automated IOC enrichment,
   threat intelligence check, forensic analysis, and detection rule generation using MCP tools.
+overview:
+  - Review the incident and extract indicators
+  - Check indicators and build an event timeline
+  - Approve containment, blocking, and quarantine actions
+  - Prepare detection rules and response recommendations
+output: An incident response answer in Agent Chat. Detection rules are generated and saved with the session; they are not shown in Agent Chat yet.
 trigger_type: manual
 input_params:
   - name: incident_description
     description: Incident description text
+    example: 'Several hosts reported repeated logins from an unfamiliar address.'
     required: true
   - name: incident_targets
     description: Affected systems (IP, hostname)
+    example: 'WS-1042, 10.20.4.18'
     required: false
   - name: incident_severity
     description: Initial severity level (low/medium/high/critical)
+    example: high
     required: false
   - name: evidence_log_path
     description: Path to collected log file(s)/directory to verify against after remediation
+    example: 'C:\evidence\incident_logs'
     required: false
 
 steps:

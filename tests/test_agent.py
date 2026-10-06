@@ -65,7 +65,7 @@ def test_playbook_detail_serializes_only_safe_input_and_tool_presentation_metada
                 "description": "Indicator to inspect",
                 "required": True,
                 "type": "string",
-                "default": "example.test",
+                "example": "example.test",
                 "value": "must-not-leak",
             }
         ],
@@ -89,10 +89,10 @@ def test_playbook_detail_serializes_only_safe_input_and_tool_presentation_metada
 
     assert payload["input_params"] == [{
         "name": "indicator",
-        "description": "Indicator to inspect",
         "required": True,
         "type": "string",
-        "default": "example.test",
+        "description": "Indicator to inspect",
+        "example": "example.test",
     }]
     assert payload["steps"] == [{
         "name": "check_blocklist",
@@ -135,8 +135,49 @@ def test_playbook_detail_normalizes_legacy_input_list():
     )
 
     assert payload["input_params"] == [{
-        "name": "file_path", "description": "File path", "required": True, "type": "string"
+        "name": "file_path", "required": True, "type": "string",
+        "description": "File path", "example": None,
     }]
+
+
+def test_builtin_playbook_detail_exposes_normalized_guided_run_fields():
+    agent_loop = MagicMock()
+    agent_loop.config = {}
+    engine = PlaybookEngine(agent_loop=agent_loop, agent_store=MagicMock())
+
+    alert = serialize_playbook(
+        engine.get_playbook("alert_triage"), INCIDENT_RESPONDER, detail=True
+    )
+    alert_text = next(param for param in alert["input_params"] if param["name"] == "alert_text")
+    example = alert_text.pop("example")
+    assert isinstance(example, str) and example.strip()
+    assert alert_text == {
+        "name": "alert_text",
+        "required": True,
+        "type": None,
+        "description": "Alert text (SIEM alert, EDR alert, email notification)",
+    }
+    assert isinstance(alert["overview"], list) and alert["overview"]
+    assert all(isinstance(stage, str) and stage.strip() for stage in alert["overview"])
+    assert isinstance(alert["output"], str) and alert["output"].strip()
+
+    malware = serialize_playbook(
+        engine.get_playbook("malware_analysis"), INCIDENT_RESPONDER, detail=True
+    )
+    file_path = next(param for param in malware["input_params"] if param["name"] == "file_path")
+    assert file_path["required"] is True
+    assert file_path["type"] == "string"
+
+    forensic = serialize_playbook(
+        engine.get_playbook("forensic_triage"), INCIDENT_RESPONDER, detail=True
+    )
+    assert forensic["approval_steps"] == 5
+
+    listed = serialize_playbook(
+        next(pb for pb in engine.list_playbooks() if pb["id"] == "alert_triage"),
+        INCIDENT_RESPONDER,
+    )
+    assert not {"input_params", "overview", "output", "approval_steps"}.intersection(listed)
 
 @pytest.fixture
 def agent_state():

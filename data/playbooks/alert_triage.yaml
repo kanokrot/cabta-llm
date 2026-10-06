@@ -4,17 +4,25 @@ description: >
   Security alert triage playbook - fast classification of incoming alerts,
   IOC extraction, threat intelligence enrichment, prioritization, and action determination.
   Automated multi-source threat intel check with MCP tools.
+overview:
+  - High-priority alerts start a separate Incident Response session
+  - That session can pause for approval
+  - Low-priority alerts end with a triage report in this session
+output: A high-priority alert starts a separate Incident Response session that can pause for approvals; a low-priority alert ends with a triage report in this session.
 auto_enrich_context: true
 trigger_type: manual
 input_params:
   - name: alert_text
     description: Alert text (SIEM alert, EDR alert, email notification)
+    example: 'Suspicious PowerShell from 10.20.4.18 contacted update-example.test'
     required: true
   - name: alert_source
     description: Alert source (SIEM, EDR, IDS, email)
+    example: SIEM
     required: false
   - name: alert_severity
     description: Source system severity level
+    example: high
     required: false
 
 steps:

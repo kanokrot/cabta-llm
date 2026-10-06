@@ -3,13 +3,20 @@ category: Threat Intel
 description: >
   Automated triage for suspicious IOCs (IP, domain, hash, URL).
   Enrichment using multiple free threat intelligence sources.
+overview:
+  - Identify whether the value is an IP, domain, hash, or URL
+  - Check available network details and threat source matches
+  - Determine a verdict and recommended next steps
+output: An IOC triage answer in Agent Chat. If the IOC is found malicious, detection rules are also generated and saved with the session; they are not shown in Agent Chat yet.
 trigger_type: manual
 input_params:
   - name: ioc
     description: IOC value (IP, domain, hash, or URL)
+    example: update-example.test
     required: true
   - name: ioc_type
     description: IOC type hint (ip, domain, hash, url) - auto-detected if omitted
+    example: domain
     required: false
 
 steps:

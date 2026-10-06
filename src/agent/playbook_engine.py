@@ -809,16 +809,24 @@ class PlaybookEngine:
         """Get a playbook definition by ID."""
         pb = self._cache.get(playbook_id)
         if pb:
+            steps = [
+                s.to_dict() if hasattr(s, "to_dict") else s
+                for s in pb.get("_parsed_steps", pb.get("steps", []))
+            ]
             return {
                 "id": pb.get("id", playbook_id),
                 "name": pb.get("name", playbook_id),
                 "description": pb.get("description", ""),
-                "steps": [
-                    s.to_dict() if hasattr(s, "to_dict") else s
-                    for s in pb.get("_parsed_steps", pb.get("steps", []))
-                ],
+                "steps": steps,
                 "source": pb.get("source", "unknown"),
                 "trigger_type": pb.get("trigger_type", "manual"),
+                "input_params": pb.get("input_params", pb.get("input", [])),
+                "overview": pb.get("overview", []),
+                "output": pb.get("output", ""),
+                "approval_steps": sum(
+                    1 for step in steps
+                    if isinstance(step, dict) and step.get("requires_approval") is True
+                ),
             }
         return None
 
