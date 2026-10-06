@@ -67,6 +67,14 @@ connect, status, and disconnect operations are bound to the authenticated user.
 OAuth state and tokens are persisted by `user_id`. The callback URI is
 `http://localhost:3003/api/settings/gmail/callback`.
 
+### Per-user threat intelligence API keys
+
+Authenticated users can add or remove their own VirusTotal, AbuseIPDB, and
+AlienVault OTX API keys from `/account`. These keys run optional cross-checks
+after an IOC investigation and appear as “Extra, non-scoring evidence”; they
+do not affect the investigation score, verdict, or source coverage. Keys are
+encrypted at rest and are never returned by the key management API.
+
 ---
 
 ## IOC Investigation
