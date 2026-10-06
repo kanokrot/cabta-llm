@@ -72,6 +72,37 @@ def test_sources_endpoint_masks_keys_and_accepts_alias_as_configured(monkeypatch
     assert {item["tier"] for item in payload["sources"]} == {"scoring", "report", "sandbox"}
 
 
+def test_source_status_uses_validator_and_never_previews_placeholder(monkeypatch, tmp_path):
+    placeholder = "YOUR_API_KEY"
+    valid = "livekey-abcdef012345"
+    client, _ = _client(_admin(), monkeypatch, tmp_path, {
+        "api_keys": {"virustotal": placeholder, "threatfox": "BURAYA_API_KEY", "abusech": valid, "shodan": 42},
+    })
+
+    response = client.get("/api/config/settings/sources")
+    assert response.status_code == 200
+    sources = {item["id"]: item for item in response.json()["sources"]}
+
+    assert sources["virustotal"]["configured"] is False
+    assert sources["virustotal"]["masked_preview"] == ""
+    assert sources["shodan"]["configured"] is False
+    assert sources["shodan"]["masked_preview"] == ""
+    assert placeholder not in response.text
+    assert sources["threatfox"]["configured"] is True
+    assert sources["threatfox"]["masked_preview"].startswith(valid[:4])
+    assert valid[4:] not in response.text
+
+
+def test_registry_uses_first_valid_alias_for_status_and_preview():
+    entry = next(item for item in settings_sources({
+        "threatfox": "REPLACE_ME",
+        "abusech": "alias-key-abcdef0123",
+    }) if item["id"] == "threatfox")
+
+    assert entry["configured"] is True
+    assert entry["masked_preview"].startswith("alia")
+
+
 @pytest.mark.parametrize("role", ["SOC Analyst Tier 1-2", "Incident Responder", "Threat Hunter", "Team Lead"])
 def test_sources_endpoint_is_admin_only(role, monkeypatch, tmp_path):
     user = {"id": 2, "email": "user@example.test", "role": role, "is_active": 1}
@@ -133,6 +164,19 @@ def test_settings_template_has_three_tabs_registry_js_and_restart_text():
     assert "@media (min-width: 992px)" in template
     assert "connecting wazuh? more" in template
     assert "info.config_path" in template and "info.data_dir" in template
+    assert "settings</h1>" in template
+    assert "admin only" in template
+    assert "counts toward threat score" in template
+    assert "shown in reports, never scored" in template
+    assert "file analysis, outside ioc scoring" in template
+    assert "no key needed:</strong> feodotracker, ssl blacklist, spamhaus, tor exit nodes, c2 trackers" in template
+    source_labels = {entry["label"] for entry in settings_sources() if entry["tier"] == "sandbox"}
+    assert source_labels == {"Triage", "Hybrid Analysis", "ANY.RUN", "Joe Sandbox"}
+
+
+def test_source_status_labels_invalid_keys_as_not_set():
+    source_js = (Path(__file__).parents[1] / "static" / "js" / "settings_sources.js").read_text(encoding="utf-8")
+    assert "source.configured ? 'Configured' : 'Not set'" in source_js
 
 
 def test_system_info_api_returns_real_nonempty_paths(monkeypatch, tmp_path):

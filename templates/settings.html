@@ -37,6 +37,10 @@
 
 {% block content %}
 <section class="settings-page">
+    <div class="d-flex align-items-center gap-2 mb-3">
+        <h1 class="h3 mb-0">Settings</h1>
+        <span class="badge badge-neutral">Admin only</span>
+    </div>
     <div class="settings-layout">
     <aside class="settings-side-nav" aria-label="Settings navigation">
         <nav class="settings-nav-list" role="tablist" aria-label="Settings sections">
@@ -103,9 +107,9 @@
             <div class="card-body">
                 <div id="sourcesError" class="alert alert-danger py-2" hidden></div>
                 <div class="table-responsive"><table class="table align-middle"><thead><tr><th>Source</th><th>Quota / plan</th><th>Status</th><th>API key</th><th></th></tr></thead>
-                    <tbody id="scoringSources"><tr><th colspan="5">Scoring</th></tr></tbody>
-                    <tbody id="reportSources"><tr><th colspan="5">Report-only</th></tr></tbody>
-                    <tbody id="sandboxSources"><tr><th colspan="5">Sandbox</th></tr></tbody>
+                    <tbody id="scoringSources"><tr><th colspan="5"><span class="status-badge me-2" style="color:var(--accent,#3b82f6);background:rgba(59,130,246,.12);border-color:rgba(59,130,246,.25)">Scoring</span>counts toward threat score</th></tr></tbody>
+                    <tbody id="reportSources"><tr><th colspan="5"><span class="status-badge me-2" style="color:var(--text-secondary);background:var(--bg-tertiary);border-color:var(--border-color)">Report-only</span>shown in reports, never scored</th></tr></tbody>
+                    <tbody id="sandboxSources"><tr><th colspan="5"><span class="status-badge me-2" style="color:#c084fc;background:rgba(168,85,247,.12);border-color:rgba(168,85,247,.25)">Sandbox</span>file analysis, outside IOC scoring</th></tr></tbody>
                 </table></div>
                 <p class="small text-muted mb-0"><strong>No key needed:</strong> FeodoTracker, SSL Blacklist, Spamhaus, Tor Exit Nodes, C2 Trackers.</p>
             </div>

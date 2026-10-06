@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from ..scoring.intelligent_scoring import NON_API_SCORING_SOURCES
+from ..utils.api_key_validator import get_valid_key
 
 
 _ENTRIES = (
@@ -38,14 +39,26 @@ _ENTRIES = (
 )
 
 
-def settings_sources() -> list[dict]:
-    """Return registry entries, deriving the scoring tier from production policy."""
+def settings_sources(api_keys: dict | None = None) -> list[dict]:
+    """Return registry entries and status derived from valid configured keys."""
+    api_keys = api_keys if isinstance(api_keys, dict) else {}
+    validation_keys = {
+        name: value if isinstance(value, str) else None
+        for name, value in api_keys.items()
+    }
     result = []
     for entry in _ENTRIES:
         item = dict(entry)
         item["config_keys"] = list(entry["config_keys"])
         if item["id"] in NON_API_SCORING_SOURCES:
             item["tier"] = "scoring"
+        valid_keys = [get_valid_key(validation_keys, name) for name in item["config_keys"]]
+        valid_key = next((key for key in valid_keys if key), None)
+        item["configured"] = valid_key is not None
+        item["masked_preview"] = (
+            valid_key[:4] + ("•" * max(0, len(valid_key) - 4))
+            if valid_key else ""
+        )
         result.append(item)
     return result
 

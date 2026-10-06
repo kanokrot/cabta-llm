@@ -171,21 +171,7 @@ async def get_settings_sources(
     if not isinstance(api_keys, dict):
         api_keys = {}
 
-    sources = []
-    for entry in settings_sources():
-        configured_value = next((api_keys.get(key) for key in entry['config_keys'] if api_keys.get(key)), '')
-        preview = ''
-        if isinstance(configured_value, str) and configured_value:
-            preview = (
-                configured_value[:4] + ('•' * (len(configured_value) - 4))
-                if len(configured_value) > 4 else '•' * max(4, len(configured_value))
-            )
-        sources.append({
-            **entry,
-            'configured': bool(configured_value),
-            'masked_preview': preview,
-        })
-    return {'sources': sources}
+    return {'sources': settings_sources(api_keys)}
 
 
 @router.post('/settings')

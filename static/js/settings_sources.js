@@ -27,7 +27,7 @@
     }
 
     function statusText(source) {
-        return source.configured ? 'Configured' : 'Not configured';
+        return source.configured ? 'Configured' : 'Not set';
     }
 
     function buildRow(source) {
