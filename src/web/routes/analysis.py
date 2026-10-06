@@ -311,6 +311,25 @@ def _run_ioc_analysis_bg(
             )
         )
 
+        # User-owned lookups are enrichment only and run after investigation
+        # (and therefore after all scoring, coverage, source accounting, and LLM work).
+        try:
+            from ..user_api_keys import cross_check_ioc
+
+            result["extra_evidence"] = asyncio.run(
+                cross_check_ioc(
+                    value,
+                    result.get("ioc_type") or ioc_type,
+                    user_id,
+                )
+            )
+        except Exception:
+            # Keep the investigation result intact and expose only generic statuses.
+            result["extra_evidence"] = [
+                {"source": source, "status": "unavailable"}
+                for source in ("virustotal", "abuseipdb", "otx")
+            ]
+
         verdict = result.get('verdict', 'UNKNOWN')
         score = result.get('threat_score', 0)
 
