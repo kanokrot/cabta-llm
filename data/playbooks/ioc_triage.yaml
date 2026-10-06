@@ -32,7 +32,7 @@ steps:
     params:
       ip: "{{ioc}}"
     condition:
-      if: "{{ioc_type}} == 'ip' or {{identify_ioc_type.ips}}"
+      if: "{{ioc_type}} == 'ip' or {{identify_ioc_type.iocs.ipv4}}"
     description: GeoIP location and ASN information
 
   - name: reverse_dns
@@ -40,7 +40,7 @@ steps:
     params:
       ip: "{{ioc}}"
     condition:
-      if: "{{ioc_type}} == 'ip' or {{identify_ioc_type.ips}}"
+      if: "{{ioc_type}} == 'ip' or {{identify_ioc_type.iocs.ipv4}}"
     description: Reverse DNS resolution
 
   - name: feodo_check
@@ -48,7 +48,7 @@ steps:
     params:
       ip: "{{ioc}}"
     condition:
-      if: "{{ioc_type}} == 'ip' or {{identify_ioc_type.ips}}"
+      if: "{{ioc_type}} == 'ip' or {{identify_ioc_type.iocs.ipv4}}"
     description: Feodo Tracker botnet C2 check
 
   - name: tor_check
@@ -56,7 +56,7 @@ steps:
     params:
       ip: "{{ioc}}"
     condition:
-      if: "{{ioc_type}} == 'ip' or {{identify_ioc_type.ips}}"
+      if: "{{ioc_type}} == 'ip' or {{identify_ioc_type.iocs.ipv4}}"
     description: Tor exit node check
 
   - name: blocklist_check
@@ -64,7 +64,7 @@ steps:
     params:
       ip: "{{ioc}}"
     condition:
-      if: "{{ioc_type}} == 'ip' or {{identify_ioc_type.ips}}"
+      if: "{{ioc_type}} == 'ip' or {{identify_ioc_type.iocs.ipv4}}"
     description: Spamhaus, DShield, Blocklist.de check
 
   # ===== Domain Analysis =====
@@ -106,7 +106,7 @@ steps:
     params:
       ip: "{{ioc}}"
     condition:
-      if: "{{ioc_type}} == 'ip' or {{identify_ioc_type.ips}}"
+      if: "{{ioc_type}} == 'ip' or {{identify_ioc_type.iocs.ipv4}}"
     description: Check open ports, CVEs, and services for IP via Shodan InternetDB (FREE)
 
   - name: crtsh_check

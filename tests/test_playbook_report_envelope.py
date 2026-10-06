@@ -32,6 +32,7 @@ class _MockPlaybookAgentLoop:
                 "body_text": "Routine message body",
                 "body_html": "",
                 "from": "sender@example.test",
+                "from_domain": "example.test",
                 "subject": "Routine message",
                 "attachments": [],
             },
