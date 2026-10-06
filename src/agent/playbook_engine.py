@@ -1437,6 +1437,7 @@ class PlaybookEngine:
         the given *context*. Shared by a fresh ``_execute_session`` start
         (step 0) and ``execute_from_step`` resuming after an approval gate."""
         step_index_map: Dict[int, int] = {id(s): i for i, s in enumerate(steps)}
+        errors_by_step: Dict[str, None] = {}
         try:
             while current_step is not None:
                 step_number += 1
@@ -1721,6 +1722,12 @@ class PlaybookEngine:
                     context, next_step_name = await self._execute_for_each(
                         session_id, current_step, context, step_number, role,
                     )
+                    iteration_results = context.get(f"{current_step.name}_results", [])
+                    if any(
+                        isinstance(result, dict) and "error" in result
+                        for result in iteration_results
+                    ):
+                        errors_by_step.setdefault(current_step.name, None)
 
                 else:
                     # Single execution
@@ -1790,6 +1797,8 @@ class PlaybookEngine:
 
                     # Store result in context
                     _store_single_step_result(context, current_step.name, result)
+                    if isinstance(result, dict) and "error" in result:
+                        errors_by_step.setdefault(current_step.name, None)
 
                     # Determine next step
                     success = not (isinstance(result, dict) and "error" in result)
@@ -1811,6 +1820,16 @@ class PlaybookEngine:
                 f"Playbook '{pb.get('name', playbook_id)}' completed "
                 f"({step_number} steps executed)"
             )
+            if errors_by_step:
+                failed_step_names = list(errors_by_step)
+                shown_names = ", ".join(failed_step_names[:5])
+                if len(failed_step_names) > 5:
+                    shown_names += ", …"
+                failed_count = len(failed_step_names)
+                summary += (
+                    f" — WARNING: {failed_count} step(s) failed or were denied: "
+                    f"{shown_names}"
+                )
             if highest_verdict:
                 summary += f" — highest verdict: {highest_verdict}"
 
