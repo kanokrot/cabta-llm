@@ -11,10 +11,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import aiohttp
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from ..auth import require_role
 from ..health_probes import get_detailed_health
+from ..settings_registry import primary_config_key, registered_config_keys, settings_sources
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -54,11 +55,26 @@ async def info(
     _admin_user: dict = Depends(require_role("admin")),
 ):
     """System information."""
+    config_path = _resolve_config_path().resolve()
+    from ...utils.config import load_config
+
+    loaded_config = load_config(str(config_path))
+    data_dir = loaded_config.get('data_dir')
+    if not data_dir:
+        data_dir = (loaded_config.get('cache') or {}).get('db_dir')
+    if not data_dir:
+        db_path = Path(os.getenv('AUTH_DB_PATH', 'src/db/auth.db')).expanduser()
+        data_dir = db_path.parent
+    data_path = Path(data_dir).expanduser()
+    if not data_path.is_absolute():
+        data_path = data_path.resolve()
     return {
         'app': 'Blue Team Assistant',
         'version': '2.0.0',
         'python': sys.version,
         'platform': platform.platform(),
+        'config_path': str(config_path),
+        'data_dir': str(data_path.resolve()),
     }
 
 
@@ -135,6 +151,43 @@ async def get_settings(
     return safe_config
 
 
+@router.get('/settings/sources')
+async def get_settings_sources(
+    _admin_user: dict = Depends(require_role("admin")),
+):
+    """Return the registry and masked status for configured intelligence keys."""
+    import yaml
+
+    config_file = _resolve_config_path()
+    try:
+        with open(config_file, 'r', encoding='utf-8') as f:
+            config = yaml.safe_load(f) or {}
+    except FileNotFoundError:
+        config = {}
+    except Exception:
+        config = {}
+
+    api_keys = config.get('api_keys', {}) if isinstance(config, dict) else {}
+    if not isinstance(api_keys, dict):
+        api_keys = {}
+
+    sources = []
+    for entry in settings_sources():
+        configured_value = next((api_keys.get(key) for key in entry['config_keys'] if api_keys.get(key)), '')
+        preview = ''
+        if isinstance(configured_value, str) and configured_value:
+            preview = (
+                configured_value[:4] + ('•' * (len(configured_value) - 4))
+                if len(configured_value) > 4 else '•' * max(4, len(configured_value))
+            )
+        sources.append({
+            **entry,
+            'configured': bool(configured_value),
+            'masked_preview': preview,
+        })
+    return {'sources': sources}
+
+
 @router.post('/settings')
 async def save_settings(
     request: Request,
@@ -143,7 +196,12 @@ async def save_settings(
     """Save application settings to config.yaml."""
     config_file = _resolve_config_path()
 
-    body = await request.json()
+    try:
+        body = await request.json()
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail='Invalid JSON body') from exc
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail='Settings body must be an object')
 
     # Load existing config to preserve keys that aren't being updated
     existing = {}
@@ -160,15 +218,55 @@ async def save_settings(
     # Merge sections
     for key in ('llm', 'agent', 'sandbox', 'mcp_servers'):
         if key in body:
+            if not isinstance(body[key], dict):
+                raise HTTPException(status_code=400, detail=f'{key} must be an object')
             existing[key] = body[key]
+
+    # Anthropic is an LLM credential stored beside API keys at runtime, but it
+    # is not an intelligence-source registry entry.
+    anthropic_key = body.get('anthropic_api_key')
+    if anthropic_key is not None:
+        if not isinstance(anthropic_key, str):
+            raise HTTPException(status_code=400, detail='anthropic_api_key must be a string')
+        if anthropic_key and '*' not in anthropic_key:
+            existing.setdefault('api_keys', {})['anthropic'] = anthropic_key
+
+    if 'analysis' in body:
+        analysis = body['analysis']
+        if not isinstance(analysis, dict) or any(
+            key not in {'enable_llm', 'enable_rag'} or not isinstance(value, bool)
+            for key, value in analysis.items()
+        ):
+            raise HTTPException(status_code=400, detail='analysis accepts only boolean enable_llm and enable_rag')
+        existing.setdefault('analysis', {}).update(analysis)
 
     # Handle API keys - only update keys that are actually provided (not masked)
     if 'api_keys' in body:
+        if not isinstance(body['api_keys'], dict):
+            raise HTTPException(status_code=400, detail='api_keys must be an object')
+        allowed_keys = registered_config_keys()
+        unknown = set(body['api_keys']) - allowed_keys
+        if unknown:
+            raise HTTPException(status_code=400, detail='Unknown API key name')
         if 'api_keys' not in existing:
             existing['api_keys'] = {}
         for k, v in body['api_keys'].items():
-            if v and '*' not in str(v):
-                existing['api_keys'][k] = v
+            if not isinstance(v, str):
+                raise HTTPException(status_code=400, detail='API key values must be strings')
+            if v and '*' not in v:
+                existing['api_keys'][primary_config_key(k)] = v
+
+    if 'clear_api_keys' in body:
+        clear_ids = body['clear_api_keys']
+        sources = {entry['id']: entry for entry in settings_sources()}
+        if not isinstance(clear_ids, list) or any(
+            not isinstance(source_id, str) or source_id not in sources for source_id in clear_ids
+        ):
+            raise HTTPException(status_code=400, detail='clear_api_keys must contain registered source ids')
+        api_keys = existing.setdefault('api_keys', {})
+        for source_id in clear_ids:
+            for config_key in sources[source_id]['config_keys']:
+                api_keys.pop(config_key, None)
 
     try:
         import yaml
@@ -176,7 +274,7 @@ async def save_settings(
         with open(config_file, 'w', encoding='utf-8') as f:
             yaml.dump(existing, f, default_flow_style=False, allow_unicode=True)
         logger.info("[CONFIG] Settings saved to %s", config_file)
-        return {'status': 'saved', 'message': 'Settings saved. Restart the server for changes to take full effect.'}
+        return {'status': 'saved', 'message': 'Settings written to config.yaml; restart to apply.'}
     except Exception as exc:
         logger.error("[CONFIG] Failed to save settings: %s", exc)
         return {'error': str(exc)}
