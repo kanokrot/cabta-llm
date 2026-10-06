@@ -7,6 +7,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from ..auth import get_current_user
 from ..user_api_keys import (
     ALLOWED_SOURCES,
+    DISABLED_REASON,
+    UserApiKeyCipher,
     UserApiKeyEncryptionUnavailable,
     UserApiKeyStore,
 )
@@ -45,7 +47,20 @@ def _validate_source(source: str) -> None:
 
 @router.get("/intel-keys")
 def list_intel_keys(current_user: dict = Depends(get_current_user)) -> dict:
-    return {"keys": UserApiKeyStore().list_metadata(int(current_user["id"]))}
+    try:
+        UserApiKeyCipher()
+    except UserApiKeyEncryptionUnavailable:
+        return {"enabled": False, "reason": DISABLED_REASON}
+    store = UserApiKeyStore()
+    rows = store.list_metadata(int(current_user["id"]))
+    user_keys = store.keys_for_lookup(int(current_user["id"])) if any(row["configured"] for row in rows) else {}
+    for row in rows:
+        key = user_keys.get(row["source"])
+        row["masked_suffix"] = "••••" + key[-4:] if key else None
+    return {
+        "enabled": True,
+        "keys": rows,
+    }
 
 
 @router.put("/intel-keys/{source}")
@@ -81,6 +96,12 @@ def delete_intel_key(
     current_user: dict = Depends(get_current_user),
 ) -> Response:
     _validate_source(source)
+    try:
+        UserApiKeyCipher()
+    except UserApiKeyEncryptionUnavailable:
+        raise HTTPException(
+            status_code=503, detail="API key storage is unavailable"
+        ) from None
     deleted = UserApiKeyStore().delete(int(current_user["id"]), source)
     if deleted:
         _audit(request, current_user, source, "delete")
