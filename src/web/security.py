@@ -16,6 +16,12 @@ LOGIN_RATE_LIMIT_MAX_ATTEMPTS = int(
 LOGIN_RATE_LIMIT_WINDOW_SECONDS = int(
     os.getenv("AUTH_LOGIN_WINDOW_SECONDS", str(15 * 60))
 )
+API_KEY_RATE_LIMIT_MAX_ATTEMPTS = int(
+    os.getenv("AUTH_API_KEY_MAX_ATTEMPTS", "10")
+)
+API_KEY_RATE_LIMIT_WINDOW_SECONDS = int(
+    os.getenv("AUTH_API_KEY_WINDOW_SECONDS", str(15 * 60))
+)
 
 
 class LoginRateLimiter:
@@ -89,6 +95,10 @@ class LoginRateLimiter:
 
 
 login_rate_limiter = LoginRateLimiter()
+api_key_rate_limiter = LoginRateLimiter(
+    max_attempts=API_KEY_RATE_LIMIT_MAX_ATTEMPTS,
+    window_seconds=API_KEY_RATE_LIMIT_WINDOW_SECONDS,
+)
 
 
 SESSION_COOKIE_NAME = "cabta_session"

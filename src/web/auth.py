@@ -7,6 +7,7 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import secrets
 import sqlite3
 import time
@@ -21,6 +22,7 @@ from .security import (
     CSRF_COOKIE_NAME,
     SESSION_COOKIE_NAME,
     UNSAFE_METHODS,
+    api_key_rate_limiter,
 )
 
 
@@ -29,6 +31,9 @@ JWT_SECRET_ENV = "AUTH_JWT_SECRET"
 ACCESS_TOKEN_TTL_SECONDS = 60 * 60
 INVITE_TOKEN_TTL_SECONDS = 48 * 60 * 60
 TEAM_LEAD = "Team Lead"
+API_KEY_SCOPE = "POST /api/playbooks/alert_triage/run"
+API_KEY_PREFIX = "cabta_live_"
+_API_KEY_PATTERN = re.compile(r"^cabta_live_([A-Za-z0-9]{8})_([A-Za-z0-9_-]+)$")
 
 VALID_ROLES = frozenset(
     {
@@ -192,6 +197,80 @@ def get_access_token(
     return token or request.cookies.get(SESSION_COOKIE_NAME)
 
 
+def _client_ip(request: Request) -> str:
+    return request.client.host if request.client else "unknown"
+
+
+def _api_key_rate_identifier(value: str) -> str:
+    match = re.match(r"^cabta_live_([A-Za-z0-9]{8})(?:_|$)", value)
+    return match.group(1) if match else "invalid"
+
+
+def _authenticate_api_key(key: str, request: Request) -> Dict[str, Any]:
+    identifier = _api_key_rate_identifier(key)
+    client_ip = _client_ip(request)
+    if api_key_rate_limiter.is_limited(identifier, client_ip):
+        retry_after = api_key_rate_limiter.retry_after(identifier, client_ip)
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many failed API key attempts",
+            headers={"Retry-After": str(retry_after)},
+        )
+
+    match = _API_KEY_PATTERN.fullmatch(key)
+    row = None
+    if match:
+        key_prefix = f"{API_KEY_PREFIX}{match.group(1)}"
+        with _connect() as connection:
+            row = connection.execute(
+                "SELECT api_keys.id AS key_id, api_keys.user_id, "
+                "api_keys.key_hash, api_keys.scope, api_keys.expires_at, "
+                "api_keys.revoked_at, users.id, users.email, users.username, "
+                "users.role, users.is_active FROM api_keys "
+                "JOIN users ON users.id = api_keys.user_id "
+                "WHERE api_keys.key_prefix = ?",
+                (key_prefix,),
+            ).fetchone()
+
+    valid = bool(
+        row
+        and hmac.compare_digest(
+            hashlib.sha256(key.encode("utf-8")).hexdigest(), row["key_hash"]
+        )
+        and row["revoked_at"] is None
+        and int(row["expires_at"]) > int(time.time())
+        and row["is_active"]
+    )
+    if not valid:
+        api_key_rate_limiter.record_failure(identifier, client_ip)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    if row["scope"] != API_KEY_SCOPE or (
+        request.method.upper(), request.url.path
+    ) != ("POST", "/api/playbooks/alert_triage/run"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="API key scope does not allow this request")
+
+    with _connect() as connection:
+        connection.execute(
+            "UPDATE api_keys SET last_used_at = ? WHERE id = ?",
+            (int(time.time()), int(row["key_id"])),
+        )
+        connection.commit()
+    request.state.api_key_id = int(row["key_id"])
+    request.state.api_key_scope = str(row["scope"])
+    return {
+        "id": int(row["id"]),
+        "email": row["email"],
+        "username": row["username"],
+        "role": row["role"],
+        "is_active": row["is_active"],
+    }
+
+
 def _require_cookie_csrf(request: Request) -> None:
     if request.method.upper() not in UNSAFE_METHODS:
         return
@@ -218,6 +297,26 @@ def get_current_user(
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
+    bearer_is_key = bool(token and token.startswith(API_KEY_PREFIX))
+    header_api_key = request.headers.get("X-API-Key") if request else None
+    if header_api_key is not None or bearer_is_key:
+        if request is None:
+            raise credentials_error
+        if header_api_key is not None and token is not None and not hmac.compare_digest(
+            header_api_key, token
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Conflicting authentication credentials",
+            )
+        api_key = header_api_key if header_api_key is not None else token
+        if SESSION_COOKIE_NAME in request.cookies:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Conflicting authentication credentials",
+            )
+        return _authenticate_api_key(api_key, request)
+
     cookie_token = request.cookies.get(SESSION_COOKIE_NAME) if request else None
     using_session_cookie = not token and bool(cookie_token)
     token = token or cookie_token
@@ -370,6 +469,8 @@ def consume_invite_token(token: str, username: str, password: str) -> Dict[str, 
 
 
 def revoke_token(token: str) -> None:
+    if token.startswith(API_KEY_PREFIX):
+        raise ValueError("API keys cannot be revoked as access tokens")
     payload = _decode_jwt(token)
     with _connect() as connection:
         connection.execute(
