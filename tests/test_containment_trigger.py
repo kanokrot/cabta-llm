@@ -38,3 +38,33 @@ def test_malwarebazaar_hash_not_found_returns_false():
         {"result": {"query_status": "hash_not_found"}, "server": "threat-intel-free", "tool": "malwarebazaar_hash_lookup"},
     ]
     assert _aggregate_malicious_flag(results) is False
+
+
+def test_kev_in_catalog_returns_true():
+    results = [
+        {"result": {"in_kev": True}, "server": "vulnerability-tools", "tool": "kev_check"},
+    ]
+    assert _aggregate_malicious_flag(results) is True
+
+
+def test_kev_not_in_catalog_returns_false():
+    results = [
+        {"result": {"in_kev": False}, "server": "vulnerability-tools", "tool": "kev_check"},
+    ]
+    assert _aggregate_malicious_flag(results) is False
+
+
+def test_kev_error_results_return_false():
+    results = [
+        {"error": "MCP request failed", "server": "vulnerability-tools", "tool": "kev_check"},
+        {"result": {"error": "KEV check failed", "in_kev": True}, "server": "vulnerability-tools", "tool": "kev_check"},
+    ]
+    assert _aggregate_malicious_flag(results) is False
+
+
+def test_existing_malicious_result_shapes_remain_supported():
+    results = [
+        {"result": {"malicious": True}, "server": "threat_intel_tools", "tool": "blocklist_check"},
+        {"result": {"query_status": "ok", "data": [{"sha256_hash": "abc"}]}, "server": "threat_intel_tools", "tool": "malwarebazaar_hash_lookup"},
+    ]
+    assert _aggregate_malicious_flag(results) is True

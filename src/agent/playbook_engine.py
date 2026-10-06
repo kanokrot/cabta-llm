@@ -362,10 +362,11 @@ _VERDICT_SEVERITY = {"MALICIOUS": 4, "PHISHING": 3, "SUSPICIOUS": 2, "SPAM": 1, 
 def _is_malicious_result(item) -> bool:
     """Check whether a single for_each iteration result indicates malicious.
     Tolerates MCP-wrapped results ({"result": {...}}), plain dicts, and
-    error dicts (treated as not malicious). Recognizes two shapes: a
+    error dicts (treated as not malicious). Recognizes three shapes: a
     top-level "malicious" boolean (blocklist_check, feodo_tracker_check),
     and MalwareBazaar's raw abuse.ch passthrough shape (query_status ==
-    "ok" with "data" means a known-malware match). Read-only, never raises."""
+    "ok" with "data" means a known-malware match), plus KEV's "in_kev"
+    boolean. Read-only, never raises."""
     if not isinstance(item, dict):
         return False
     if "error" in item:
@@ -373,7 +374,11 @@ def _is_malicious_result(item) -> bool:
     inner = item.get("result", item)
     if not isinstance(inner, dict):
         return False
+    if "error" in inner:
+        return False
     if inner.get("malicious") is True:
+        return True
+    if inner.get("in_kev") is True:
         return True
     # MalwareBazaar raw-passthrough shape: no "malicious" key,
     # instead query_status == "ok" means a known-malware match.
