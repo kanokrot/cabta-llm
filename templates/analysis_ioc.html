@@ -2800,6 +2800,41 @@
             });
         }
 
+        /* --- User-key lookups are explicitly separate from scored sources --- */
+        if (Array.isArray(data.extra_evidence) && data.extra_evidence.length) {
+            html += '<div class="ioc-detail-card mt-3">' +
+                '<h6 class="mb-2"><i class="bi bi-plus-circle me-2"></i>Extra, non-scoring evidence</h6>' +
+                '<p class="small text-muted">These optional lookups were run with your account keys after scoring. They do not change the score or verdict.</p>' +
+                '<div class="d-flex flex-column gap-2">';
+            data.extra_evidence.forEach(function (item) {
+                if (!item || typeof item !== 'object') return;
+                var sourceLabels = { virustotal: 'VirusTotal', abuseipdb: 'AbuseIPDB', otx: 'AlienVault OTX' };
+                var label = sourceLabels[item.source];
+                if (!label) return;
+                var statusLabels = {
+                    available: 'Lookup complete', not_found: 'No record found',
+                    not_applicable: 'Not applicable to this indicator', unavailable: 'Lookup unavailable'
+                };
+                var details = [];
+                var summary = item.summary || {};
+                Object.keys(summary).forEach(function (key) {
+                    var fieldLabels = {
+                        malicious: 'Malicious', suspicious: 'Suspicious', total_engines: 'Engines',
+                        confidence: 'Abuse confidence', reports: 'Reports', country: 'Country',
+                        pulses: 'Pulses', reputation: 'Reputation'
+                    };
+                    if (fieldLabels[key] && (typeof summary[key] === 'string' || typeof summary[key] === 'number')) {
+                        details.push(escHtml(fieldLabels[key]) + ': ' + escHtml(String(summary[key])));
+                    }
+                });
+                html += '<div class="border rounded p-2"><strong>' + escHtml(label) + '</strong>' +
+                    '<span class="text-muted ms-2">' + escHtml(statusLabels[item.status] || 'Lookup unavailable') + '</span>' +
+                    (details.length ? '<div class="small mt-1">' + details.join(' · ') + '</div>' : '') +
+                    '</div>';
+            });
+            html += '</div></div>';
+        }
+
         /* --- Recommended Actions (with checkboxes for analyst tracking) --- */
         var recs = data.recommendations || (data.llm_analysis && data.llm_analysis.action_items) || [];
         if (Array.isArray(recs) && recs.length > 0) {
