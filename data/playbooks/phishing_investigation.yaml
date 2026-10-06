@@ -101,28 +101,12 @@ steps:
     description: SSL certificate check for URL domains
 
   # ===== Attachment Analysis =====
-  - name: attachment_triage
-    tool: mcp:forensics_tools/file_metadata
-    for_each: "parse_email.email_data.attachments"
-    params:
-      file_path: "{{item.path}}"
-    description: Attachment metadata and hash analysis
-
   - name: attachment_hash_check
     tool: mcp:threat_intel_tools/malwarebazaar_hash_lookup
-    for_each: "parse_email.email_data.attachments"
+    for_each: "parse_email.attachment_analysis.results"
     params:
-      hash_value: "{{item.sha256}}"
+      hash_value: "{{item.hashes.sha256}}"
     description: Check attachment hashes on MalwareBazaar
-
-  - name: attachment_macro_check
-    tool: mcp:remnux_tools/olevba_analyze
-    for_each: "parse_email.email_data.attachments"
-    params:
-      file_path: "{{item.path}}"
-    condition:
-      if: "{{item.type}} in ['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'docm', 'xlsm']"
-    description: Macro check in Office attachments
 
   # ===== IP Reputation =====
   - name: sender_ip_check

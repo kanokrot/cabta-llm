@@ -194,67 +194,12 @@ steps:
     description: GeoIP information for IPs in the body
 
   # ===== Phase 5: Attachment Analysis =====
-  - name: attachment_metadata
-    tool: mcp:forensics_tools/file_metadata
-    for_each: "parse_email.email_data.attachments"
-    params:
-      file_path: "{{item.path}}"
-    description: Attachment metadata and hash analysis
-
   - name: attachment_hash_check
     tool: mcp:threat_intel_tools/malwarebazaar_hash_lookup
-    for_each: "parse_email.email_data.attachments"
+    for_each: "parse_email.attachment_analysis.results"
     params:
-      hash_value: "{{item.sha256}}"
+      hash_value: "{{item.hashes.sha256}}"
     description: Check attachment hashes in MalwareBazaar
-
-  - name: attachment_malwoverview
-    tool: mcp:malwoverview_tools/malwoverview_triage
-    for_each: "parse_email.email_data.attachments"
-    params:
-      file_path: "{{item.path}}"
-    description: Attachment triage with Malwoverview
-
-  - name: attachment_macro_check
-    tool: mcp:remnux_tools/olevba_analyze
-    for_each: "parse_email.email_data.attachments"
-    params:
-      file_path: "{{item.path}}"
-    condition:
-      if: "{{item.type}} in ['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'docm', 'xlsm', 'pptm']"
-    description: Macro/VBA analysis in Office documents
-
-  - name: attachment_ole_objects
-    tool: mcp:remnux_tools/oleobj_extract
-    for_each: "parse_email.email_data.attachments"
-    params:
-      file_path: "{{item.path}}"
-    condition:
-      if: "{{item.type}} in ['doc', 'docx', 'xls', 'xlsx', 'rtf', 'docm', 'xlsm']"
-    description: OLE object extraction - embedded files
-
-  - name: attachment_pe_check
-    tool: mcp:remnux_tools/pe_analyze
-    for_each: "parse_email.email_data.attachments"
-    params:
-      file_path: "{{item.path}}"
-    condition:
-      if: "{{item.type}} in ['exe', 'dll', 'scr', 'com', 'pif']"
-    description: PE file structural analysis
-
-  - name: attachment_entropy
-    tool: mcp:remnux_tools/file_entropy
-    for_each: "parse_email.email_data.attachments"
-    params:
-      file_path: "{{item.path}}"
-    description: Attachment entropy analysis - packing/encryption detection
-
-  - name: attachment_strings
-    tool: mcp:forensics_tools/string_analysis
-    for_each: "parse_email.email_data.attachments"
-    params:
-      file_path: "{{item.path}}"
-    description: String analysis in attachment files - suspicious string detection
 
   # ===== Phase 6: Comprehensive Threat Intel =====
   - name: threatfox_all
@@ -271,7 +216,7 @@ steps:
         {{sender_email_security.score}} < '2/3' or
         url_urlhaus_any_malicious == true or
         attachment_hash_check_any_malicious == true or
-        {{attachment_macro_check_any_suspicious}} or
+        {{parse_email.attachment_analysis.suspicious_attachments}} > 0 or
         {{sender_ip_check.blocklisted}} or
         {{sender_feodo.found}}
       then: confirm_malicious_email
