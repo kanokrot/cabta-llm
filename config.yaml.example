@@ -163,6 +163,15 @@ mcp_servers:
     description: ""
     env: null
     url: null
+  - args:
+    - -m
+    - src.mcp_servers.vulnerability_tools
+    command: python
+    description: ''
+    env: null
+    name: vulnerability-tools
+    transport: stdio
+    url: null
 
 # Notifications are disabled in the template to prevent accidental delivery.
 notifications:
