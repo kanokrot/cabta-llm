@@ -18,19 +18,19 @@ from ..visibility import serialize_gmail_status, serialize_gmail_summary
 
 router = APIRouter()
 admin_router = APIRouter()
-SETTINGS_PATH = "/settings"
+ACCOUNT_PATH = "/account"
 
 
 def _service() -> GmailOAuthService:
     return GmailOAuthService()
 
 
-def _settings_redirect(result: str, reason: str | None = None) -> RedirectResponse:
+def _account_redirect(result: str, reason: str | None = None) -> RedirectResponse:
     query = {"gmail": result}
     if reason:
         query["reason"] = reason
     return RedirectResponse(
-        f"{SETTINGS_PATH}?{urlencode(query)}", status_code=status.HTTP_302_FOUND
+        f"{ACCOUNT_PATH}?{urlencode(query)}", status_code=status.HTTP_302_FOUND
     )
 
 
@@ -57,16 +57,16 @@ def gmail_callback(
         user_id = service.resolve_pending_state(state)
         if error or not code:
             service.consume_authorization_state(state, user_id)
-            return _settings_redirect("error", "consent_denied" if error else "invalid_code")
+            return _account_redirect("error", "consent_denied" if error else "invalid_code")
         service.exchange_code(state, user_id, code)
-        return _settings_redirect("success")
+        return _account_redirect("success")
     except OAuthStateError as exc:
         raise HTTPException(status_code=400, detail="Invalid or expired OAuth state") from exc
     except GmailOAuthConfigurationError as exc:
-        return _settings_redirect("error", "configuration")
+        return _account_redirect("error", "configuration")
     except Exception:
         # Do not reflect Google's error text or authorization code to the browser.
-        return _settings_redirect("error", "invalid_code")
+        return _account_redirect("error", "invalid_code")
 
 
 @router.get("/status")

@@ -864,3 +864,10 @@ def _register_page_routes(app: FastAPI) -> None:
         if redirect is not None:
             return redirect
         return templates.TemplateResponse(request, 'settings.html', {})
+
+    @app.get('/account', response_class=HTMLResponse, include_in_schema=False)
+    async def account_page(request: Request):
+        redirect = _page_auth_redirect(request)
+        if redirect is not None:
+            return redirect
+        return templates.TemplateResponse(request, 'account.html', {})

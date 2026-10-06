@@ -19,9 +19,11 @@ from src.web.auth import get_current_user
 from src.web.gmail_oauth import (
     ALLOWED_SCOPES,
     GMAIL_REDIRECT_URI,
+    GmailOAuthConfigurationError,
     GmailOAuthService,
     OAuthStateError,
 )
+from src.web.routes import gmail_settings as gmail_settings_routes
 from src.web.routes.gmail_settings import router
 from src.web.token_crypto import TokenCipher
 
@@ -147,6 +149,61 @@ def test_unauthenticated_endpoints_are_rejected(tmp_path, monkeypatch):
         assert client.get("/api/settings/gmail/connect").status_code == 401
         assert client.get("/api/settings/gmail/status").status_code == 401
         assert client.delete("/api/settings/gmail").status_code == 401
+
+
+@pytest.mark.parametrize(
+    "scenario,query,expected_location",
+    [
+        ("success", "&code=auth-code", "/account?gmail=success"),
+        ("consent_denied", "&error=access_denied", "/account?gmail=error&reason=consent_denied"),
+        ("invalid_code", "", "/account?gmail=error&reason=invalid_code"),
+        ("configuration", "&code=auth-code", "/account?gmail=error&reason=configuration"),
+        ("unexpected", "&code=auth-code", "/account?gmail=error&reason=invalid_code"),
+    ],
+)
+def test_callback_redirects_to_account_for_success_and_redirecting_failures(
+    scenario, query, expected_location, monkeypatch
+):
+    class Service:
+        def resolve_pending_state(self, state):
+            assert state == "callback-state"
+            return 1
+
+        def consume_authorization_state(self, state, user_id):
+            assert (state, user_id) == ("callback-state", 1)
+
+        def exchange_code(self, state, user_id, code):
+            assert (state, user_id, code) == ("callback-state", 1, "auth-code")
+            if scenario == "configuration":
+                raise GmailOAuthConfigurationError("missing credentials")
+            if scenario == "unexpected":
+                raise RuntimeError("exchange failed")
+
+    monkeypatch.setattr(gmail_settings_routes, "_service", lambda: Service())
+    with TestClient(_app()) as client:
+        response = client.get(
+            "/api/settings/gmail/callback?state=callback-state" + query,
+            follow_redirects=False,
+        )
+
+    assert response.status_code == 302
+    assert response.headers["location"] == expected_location
+
+
+@pytest.mark.parametrize("query", ["", "?state=invalid-state&code=auth-code"])
+def test_callback_missing_or_invalid_state_still_returns_400(query, monkeypatch):
+    class Service:
+        def resolve_pending_state(self, state):
+            raise OAuthStateError("invalid state")
+
+    monkeypatch.setattr(gmail_settings_routes, "_service", lambda: Service())
+    with TestClient(_app()) as client:
+        response = client.get(
+            "/api/settings/gmail/callback" + query,
+            follow_redirects=False,
+        )
+
+    assert response.status_code == 400
 
 
 def test_status_never_exposes_ciphertext_and_is_owner_scoped(tmp_path, monkeypatch):

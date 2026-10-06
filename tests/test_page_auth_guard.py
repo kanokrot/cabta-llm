@@ -37,6 +37,7 @@ PROTECTED_PAGES = (
     "/management",
     "/mcp/servers",
     "/settings",
+    "/account",
 )
 
 
@@ -322,6 +323,26 @@ def test_agent_chat_pages_limited_to_threat_hunter_and_admin(
     else:
         assert response.status_code == 403
         assert response.json() == {"detail": "Insufficient permissions"}
+
+
+@pytest.mark.parametrize("role", sorted(VALID_ROLES))
+def test_account_page_allows_every_authenticated_role(role, monkeypatch, tmp_path) -> None:
+    token = _session_cookie_for_role(monkeypatch, tmp_path, role)
+    with TestClient(_middleware_app()) as client:
+        client.cookies.set(SESSION_COOKIE_NAME, token)
+        response = client.get("/account", follow_redirects=False)
+
+    assert response.status_code == 200
+
+
+@pytest.mark.parametrize("role", sorted(VALID_ROLES - {"admin"}))
+def test_settings_page_remains_admin_only(role, monkeypatch, tmp_path) -> None:
+    token = _session_cookie_for_role(monkeypatch, tmp_path, role)
+    with TestClient(_middleware_app()) as client:
+        client.cookies.set(SESSION_COOKIE_NAME, token)
+        response = client.get("/settings", follow_redirects=False)
+
+    assert response.status_code == 403
 
 
 @pytest.mark.parametrize(

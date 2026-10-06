@@ -30,6 +30,7 @@ HREFS = {
     "/tickets": set(ROLES),
     "/mcp/servers": {"admin"},
     "/settings": {"admin"},
+    "/account": set(ROLES),
     "/": {"Threat Hunter", "admin"},
 }
 
@@ -55,17 +56,23 @@ def test_more_menu_role_gates_and_unique_nav_links(tmp_path, monkeypatch, role: 
 
     with TestClient(_build_page_app(tmp_path)) as client:
         client.cookies.set("cabta_session", "test-token")
-        response = client.get("/dashboard")
+        response = client.get("/account")
 
     assert response.status_code == 200
     nav_start = response.text.index("<nav ")
     nav_end = response.text.index("</nav>", nav_start) + len("</nav>")
     nav_html = response.text[nav_start:nav_end]
+    account_link = next(
+        anchor for anchor in re.findall(r'<a\b[^>]*>', nav_html)
+        if 'href="/account"' in anchor
+    )
+    assert re.search(r'class="[^"]*\bactive\b[^"]*"', account_link)
+    assert "/static/js/gmail_settings.js" in response.text
 
     for href, roles in HREFS.items():
         nav_link_hrefs = []
         for anchor in re.findall(r'<a\b[^>]*>', nav_html):
-            if re.search(r'class="[^"]*(?:nav-link|dropdown-item)[^"]*"', anchor):
+            if re.search(r'class="[^"]*(?:nav-link|dropdown-item|navbar-user-account)[^"]*"', anchor):
                 href_match = re.search(r'href="([^"]+)"', anchor)
                 if href_match:
                     nav_link_hrefs.append(href_match.group(1))
@@ -79,3 +86,23 @@ def test_more_menu_role_gates_and_unique_nav_links(tmp_path, monkeypatch, role: 
     assert len(re.findall(r'<h6 class="dropdown-header">(?:<i[^>]*></i>)?System</h6>', nav_html)) == (
         1 if role == "admin" else 0
     )
+
+
+def test_settings_page_keeps_admin_settings_script_without_gmail_card(tmp_path, monkeypatch) -> None:
+    user = {
+        "id": 1,
+        "email": "admin@example.test",
+        "username": "admin-user",
+        "role": "admin",
+        "is_active": 1,
+    }
+    monkeypatch.setattr(page_auth, "get_current_user", lambda token, request=None: user)
+
+    with TestClient(_build_page_app(tmp_path)) as client:
+        client.cookies.set("cabta_session", "test-token")
+        response = client.get("/settings")
+
+    assert response.status_code == 200
+    assert "gmail" not in response.text.lower()
+    assert "var Settings = (function()" in response.text
+    assert "refreshOllamaModels" in response.text

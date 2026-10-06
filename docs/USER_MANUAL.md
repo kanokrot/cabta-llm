@@ -62,8 +62,9 @@ The `/management` page renders the pending access-request queue.
 
 ### Per-user Gmail OAuth
 
-Gmail connect, status, and disconnect operations are bound to the authenticated
-user. OAuth state and tokens are persisted by `user_id`. The callback URI is
+Link or unlink Gmail from the authenticated Account page at `/account`. Gmail
+connect, status, and disconnect operations are bound to the authenticated user.
+OAuth state and tokens are persisted by `user_id`. The callback URI is
 `http://localhost:3003/api/settings/gmail/callback`.
 
 ---
