@@ -146,11 +146,13 @@
             display: flex;
             align-items: center;
             gap: 0.25rem;
+            flex-wrap: nowrap;
         }
 
         .navbar-controls .btn-nav-icon {
             width: 34px;
             height: 34px;
+            flex: 0 0 34px;
             display: inline-flex;
             align-items: center;
             justify-content: center;
@@ -524,7 +526,6 @@
                 {% set nav_identity = nav_user.get('username') or nav_user.get('email') %}
                 <a href="/account" class="btn-nav-icon navbar-user-account {% if request.url.path == '/account' %}active{% endif %}" title="Account" aria-label="Account">
                     <i class="bi bi-person-gear"></i>
-                    <span class="d-none d-md-inline">Account</span>
                 </a>
                 <span class="navbar-user-badge" title="{{ nav_user.get('role', '') | e }}">
                     <i class="bi bi-person-circle"></i>
