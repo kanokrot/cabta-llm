@@ -9,7 +9,8 @@
 {% block extra_head %}
 <style>
     body:has(.mcp-servers-page) .sub-header { display: none; }
-    .mcp-servers-page { padding-top: 56px; }
+    .mcp-servers-page { padding-top: 56px; --history-acc: #22e5ff; --history-mut: var(--text-muted); }
+    [data-theme="light"] .mcp-servers-page { --history-acc: #0086a3; }
     .status-dot-lg {
         display: inline-block;
         width: 0.55rem;
@@ -60,8 +61,12 @@
     .summary-card .sc-value.attention-value { color: var(--color-warning); }
     .summary-card .sc-label { color: var(--text-secondary); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; }
 
-    .mcp-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
-    .mcp-toolbar-actions { display: flex; align-items: center; justify-content: flex-end; gap: 0.5rem; }
+    .mcp-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem; margin-bottom: 20px; }
+    .mcp-toolbar .history-heading-copy { min-width: 0; }
+    .mcp-toolbar .history-heading-copy h1 { margin: 0; font-size: 22px; letter-spacing: .14em; text-transform: uppercase; text-shadow: 0 0 14px var(--history-acc); }
+    .mcp-toolbar .history-heading-copy h1 em { color: var(--history-acc); font-style: normal; }
+    .mcp-toolbar .history-heading-subtitle { color: var(--history-mut); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; }
+    .mcp-toolbar-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 0.5rem; }
     .category-filters { display: flex; flex-wrap: wrap; gap: 0.45rem; margin-bottom: 1rem; }
     .category-pill {
         display: inline-flex;
@@ -197,8 +202,8 @@
 
     @media (max-width: 767.98px) {
         .summary-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-        .mcp-toolbar { align-items: flex-start; flex-direction: column; }
-        .mcp-toolbar-actions { width: 100%; justify-content: flex-end; }
+        .mcp-toolbar { align-items: center; }
+        .mcp-toolbar-actions { max-width: 100%; justify-content: flex-end; }
         .server-row-header { grid-template-columns: 40px minmax(0, 1fr) 112px; gap: 0.55rem; }
         .server-category { grid-column: 2; justify-self: start; }
         .server-tool-count { grid-column: 3; grid-row: 2; }
@@ -217,10 +222,11 @@
 
 {% block content %}
 <div class="mcp-servers-page">
-<div class="mcp-toolbar">
-    <p class="mb-0" style="color: var(--text-secondary);">
-        Configure and manage MCP server connections.
-    </p>
+<div class="mcp-toolbar history-heading">
+    <div class="history-heading-copy">
+        <h1>MCP <em>SERVERS</em></h1>
+        <div class="history-heading-subtitle">MODEL CONTEXT PROTOCOL · SERVER MANAGEMENT</div>
+    </div>
     <div class="mcp-toolbar-actions">
         <button type="button" class="btn btn-sm btn-outline-info" id="checkAllBtn" onclick="MCPServers.checkAll()">
             <i class="bi bi-patch-check me-1" aria-hidden="true"></i>Check all
