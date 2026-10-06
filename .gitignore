@@ -139,3 +139,7 @@ evidence/vt_independent_holdout_2026-09-25/flow_a_comparison.png
 
 # pytest temp dirs
 .pytest_tmp*/
+
+!scripts/adhoc/
+scripts/adhoc/*
+!scripts/adhoc/g3_fire_alerts.py
