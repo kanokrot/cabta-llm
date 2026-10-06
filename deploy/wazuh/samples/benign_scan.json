@@ -1,0 +1,16 @@
+{
+  "timestamp": "2026-10-06T09:30:00.000+0000",
+  "rule": {
+    "level": 4,
+    "id": "100210",
+    "description": "Internal vulnerability scanner activity during approved maintenance"
+  },
+  "agent": {
+    "id": "031",
+    "name": "scanner-01"
+  },
+  "data": {
+    "srcip": "10.20.4.5",
+    "dstip": "10.20.4.18"
+  }
+}

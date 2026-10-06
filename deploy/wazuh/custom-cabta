@@ -1,0 +1,174 @@
+#!/usr/bin/env python3
+"""Wazuh custom integration that submits one alert to CABTA Alert Triage."""
+
+from __future__ import annotations
+
+import json
+import os
+import sys
+import urllib.error
+import urllib.request
+from pathlib import Path
+from typing import Any
+
+
+def _load_severity_mapper():
+    source_root = Path(
+        os.environ.get(
+            "CABTA_SOURCE_ROOT",
+            str(Path(__file__).resolve().parents[2]),
+        )
+    ).expanduser()
+    if str(source_root) not in sys.path:
+        sys.path.insert(0, str(source_root))
+    try:
+        from src.utils.wazuh_severity import wazuh_level_to_severity
+    except ImportError as exc:
+        raise RuntimeError(
+            "Cannot import src.utils.wazuh_severity; set CABTA_SOURCE_ROOT "
+            "to the CABTA checkout on this host"
+        ) from exc
+    return wazuh_level_to_severity
+
+
+def _as_text(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, (dict, list)):
+        return json.dumps(value, ensure_ascii=False, sort_keys=True)
+    return str(value).strip()
+
+
+def _alert_text(alert: dict[str, Any]) -> str:
+    rule = alert.get("rule") if isinstance(alert.get("rule"), dict) else {}
+    agent = alert.get("agent") if isinstance(alert.get("agent"), dict) else {}
+    data = alert.get("data") if isinstance(alert.get("data"), dict) else {}
+
+    lines = []
+    description = _as_text(rule.get("description"))
+    if description:
+        lines.append(f"Rule description: {description}")
+    agent_name = _as_text(agent.get("name"))
+    if agent_name:
+        lines.append(f"Agent: {agent_name}")
+
+    for key, label in (("srcip", "Source IP"), ("dstip", "Destination IP"), ("url", "URL")):
+        value = _as_text(data.get(key))
+        if value:
+            lines.append(f"{label}: {value}")
+
+    hashes: list[str] = []
+    nested_hashes = data.get("hashes")
+    if isinstance(nested_hashes, dict):
+        for key, value in nested_hashes.items():
+            rendered = _as_text(value)
+            if rendered:
+                hashes.append(f"{key}={rendered}")
+    elif isinstance(nested_hashes, list):
+        hashes.extend(_as_text(value) for value in nested_hashes if _as_text(value))
+
+    for key in (
+        "md5", "sha1", "sha256", "sha512", "hash", "file_hash",
+        "md5_before", "md5_after", "sha1_before", "sha1_after",
+        "sha256_before", "sha256_after",
+    ):
+        value = _as_text(data.get(key))
+        if value:
+            hashes.append(f"{key}={value}")
+    if hashes:
+        lines.append("Hashes: " + "; ".join(hashes))
+
+    if not lines:
+        lines.append("Wazuh alert (no description or IOC fields supplied)")
+    return "\n".join(lines)
+
+
+def build_request(alert: dict[str, Any]) -> dict[str, Any]:
+    rule = alert.get("rule") if isinstance(alert.get("rule"), dict) else {}
+    level = rule.get("level")
+    if isinstance(level, bool):
+        raise ValueError("rule.level must be an integer from 0 through 15")
+    try:
+        level = int(level)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("rule.level must be an integer from 0 through 15") from exc
+
+    severity = _load_severity_mapper()(level)
+    return {
+        "params": {
+            "alert_text": _alert_text(alert),
+            "alert_source": "Wazuh",
+            "alert_severity": severity,
+        }
+    }
+
+
+def _target_url() -> str:
+    # Wazuh passes hook_url as argv[2]. CABTA_API_URL is useful for manual
+    # invocation and takes precedence when explicitly configured.
+    url = os.environ.get("CABTA_API_URL")
+    if not url and len(sys.argv) > 2:
+        url = sys.argv[2]
+    if not url:
+        raise RuntimeError("Set CABTA_API_URL or configure Wazuh hook_url")
+    return url
+
+
+def submit(alert_path: str) -> int:
+    api_key = os.environ.get("CABTA_API_KEY")
+    if not api_key:
+        raise RuntimeError("CABTA_API_KEY is not set")
+    with open(alert_path, "r", encoding="utf-8") as alert_file:
+        alert = json.load(alert_file)
+    if not isinstance(alert, dict):
+        raise ValueError("Wazuh alert JSON must be an object")
+
+    payload = json.dumps(build_request(alert)).encode("utf-8")
+    request = urllib.request.Request(
+        _target_url(),
+        data=payload,
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=20) as response:
+            response.read()
+    except urllib.error.HTTPError as exc:
+        if exc.code == 401:
+            message = "invalid or expired API key"
+        elif exc.code == 403:
+            message = "wrong API key scope or role"
+        elif exc.code == 429:
+            retry_after = exc.headers.get("Retry-After") if exc.headers else None
+            message = (
+                f"throttled; Retry-After: {retry_after}"
+                if retry_after
+                else "throttled; retry later"
+            )
+        else:
+            message = "CABTA request failed"
+        print(f"custom-cabta: {message}", file=sys.stderr)
+        return 1
+    except urllib.error.URLError:
+        print("custom-cabta: CABTA is unavailable", file=sys.stderr)
+        return 1
+    print("custom-cabta: submitted alert")
+    return 0
+
+
+def main() -> int:
+    if len(sys.argv) < 2:
+        print("Usage: custom-cabta <wazuh-alert-json> [hook-url]", file=sys.stderr)
+        return 2
+    try:
+        return submit(sys.argv[1])
+    except (OSError, ValueError, RuntimeError, json.JSONDecodeError, urllib.error.URLError) as exc:
+        print(f"custom-cabta: {exc}", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

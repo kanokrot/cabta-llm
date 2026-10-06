@@ -1,0 +1,13 @@
+{
+  "timestamp": "2026-10-06T09:35:00.000+0000",
+  "rule": {
+    "level": 8,
+    "id": "100330",
+    "description": "A scheduled task was created with an unusual configuration"
+  },
+  "agent": {
+    "id": "045",
+    "name": "file-server-02"
+  },
+  "data": {}
+}

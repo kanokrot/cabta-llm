@@ -13,11 +13,13 @@ load_dotenv()
 
 import asyncio
 from copy import copy
+from io import BytesIO
 import logging
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import quote
+from zipfile import ZIP_DEFLATED, ZipFile
 
 from fastapi import Depends, FastAPI, Form, Request
 from fastapi.staticfiles import StaticFiles
@@ -744,6 +746,37 @@ def _register_page_routes(app: FastAPI) -> None:
         return templates.TemplateResponse(request, 'playbooks.html', {
             'playbooks': playbooks,
         })
+
+    @app.get('/integrations', response_class=HTMLResponse, include_in_schema=False)
+    async def integrations_page(request: Request):
+        redirect = _page_auth_redirect(request)
+        if redirect is not None:
+            return redirect
+        return templates.TemplateResponse(request, 'integrations.html', {})
+
+    @app.get('/api/integrations/wazuh/download', include_in_schema=False)
+    async def download_wazuh_integration(
+        _current_user: dict = Depends(require_role(["Incident Responder", "admin"]))
+    ):
+        bundle_root = PROJECT_ROOT / 'deploy' / 'wazuh'
+        bundle_files = [
+            bundle_root / 'README.md',
+            bundle_root / 'custom-cabta',
+            bundle_root / 'ossec.conf',
+            *sorted((bundle_root / 'samples').glob('*.json')),
+        ]
+        archive = BytesIO()
+        with ZipFile(archive, 'w', compression=ZIP_DEFLATED) as zip_file:
+            for bundle_file in bundle_files:
+                if not bundle_file.is_file():
+                    continue
+                archive_name = Path('cabta-wazuh-integration') / bundle_file.relative_to(bundle_root)
+                zip_file.write(bundle_file, archive_name.as_posix())
+        return Response(
+            content=archive.getvalue(),
+            media_type='application/zip',
+            headers={'Content-Disposition': 'attachment; filename="cabta-wazuh-integration.zip"'},
+        )
 
     @app.get('/mcp/servers', response_class=HTMLResponse, include_in_schema=False)
     async def mcp_servers_page(

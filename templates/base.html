@@ -436,7 +436,7 @@
 
                     <!-- More dropdown -->
                     <div class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle {% if (request.url.path.startswith('/agent') and request.url.path != '/agent/chat') or request.url.path == '/history' or request.url.path.startswith('/cases') or request.url.path == '/management' or request.url.path == '/tickets' or request.url.path == '/mcp/servers' or request.url.path == '/settings' %}active-section{% endif %}"
+                        <a class="nav-link dropdown-toggle {% if (request.url.path.startswith('/agent') and request.url.path != '/agent/chat') or request.url.path == '/history' or request.url.path.startswith('/cases') or request.url.path == '/management' or request.url.path == '/tickets' or request.url.path == '/mcp/servers' or request.url.path == '/settings' or request.url.path == '/integrations' %}active-section{% endif %}"
                            href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                             <i class="bi bi-three-dots me-1"></i>More
                         </a>
@@ -454,6 +454,11 @@
                             <li>
                                 <a class="dropdown-item {% if request.url.path == '/agent/playbooks' %}active{% endif %}" href="/agent/playbooks">
                                     <i class="bi bi-journal-code"></i> Playbooks
+                                </a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item {% if request.url.path == '/integrations' %}active{% endif %}" href="/integrations">
+                                    <i class="bi bi-plug"></i> Integrations
                                 </a>
                             </li>
                             {% endif %}

@@ -1,0 +1,13 @@
+.integration-page {
+    padding-top: 56px;
+    color: var(--text-primary);
+}
+
+body:has(.integration-page) .sub-header {
+    height: 0;
+    min-height: 0;
+    margin-top: 0 !important;
+    overflow: hidden;
+    padding: 0;
+    border: 0;
+}
