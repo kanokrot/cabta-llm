@@ -229,9 +229,24 @@ def _server_category(entry: dict) -> str:
     return str(entry.get("category") or SERVER_CATEGORIES.get(entry.get("name", ""), "other"))
 
 
+def _server_display(entry: dict) -> dict:
+    """Return stable UI display fields for an MCP server."""
+    config = _decode_config(entry)
+    merged = {**config, **entry}
+    name = str(merged.get("name", ""))
+    display_name = merged.get("display_name")
+    if not display_name:
+        label = re.sub(r"(?:_tools|-tools)$", "", name)
+        display_name = re.sub(r"[_-]+", " ", label).title()
+    category = _server_category(merged)
+    icon = merged.get("icon") or CATEGORY_META.get(category, {}).get("icon") or "bi-server"
+    return {"display_name": str(display_name), "icon": str(icon)}
+
+
 def _sanitize_server(entry: dict, role: str) -> dict:
     name = str(entry.get("name", ""))
     status = entry.get("status") or "disconnected"
+    display = _server_display(entry)
     if role != "admin":
         live_status = entry.get("live_status")
         if not isinstance(live_status, dict):
@@ -245,6 +260,7 @@ def _sanitize_server(entry: dict, role: str) -> dict:
         return {
             "name": name,
             "category": _server_category(entry),
+            **display,
             "status": str(status),
             "tool_count": tool_count,
         }
@@ -253,6 +269,7 @@ def _sanitize_server(entry: dict, role: str) -> dict:
     output = {
         "name": name,
         "category": _server_category({**config, **entry}),
+        **display,
         "transport": entry.get("transport") or config.get("transport", "stdio"),
         "command": _redact_text(entry.get("command") or config.get("command")),
         "args": _safe_args(entry.get("args") if entry.get("args") is not None else config.get("args")),

@@ -108,6 +108,8 @@ ticketing:
 # MCP servers. Keep only the servers available in the local environment.
 mcp_servers:
   - name: "osint_tools"
+    display_name: "OSINT Toolkit"
+    icon: bi-globe
     category: recon
     command: "python"
     args: ["-m", "src.mcp_servers.osint_tools"]
@@ -116,6 +118,8 @@ mcp_servers:
     env: null
     url: null
   - name: "free_osint_tools"
+    display_name: "Free OSINT"
+    icon: bi-broadcast
     category: recon
     command: "python"
     args: ["-m", "src.mcp_servers.free_osint_tools"]
@@ -124,6 +128,8 @@ mcp_servers:
     env: null
     url: null
   - name: "network_tools"
+    display_name: "Network Recon"
+    icon: bi-diagram-3
     category: recon
     command: "python"
     args: ["-m", "src.mcp_servers.network_tools"]
@@ -132,6 +138,8 @@ mcp_servers:
     env: null
     url: null
   - name: "malwoverview_tools"
+    display_name: "Malwoverview"
+    icon: bi-bug
     category: malware
     command: "python"
     args: ["-m", "src.mcp_servers.malwoverview_tools"]
@@ -140,6 +148,8 @@ mcp_servers:
     env: null
     url: null
   - name: "forensics_tools"
+    display_name: "Forensics Lab"
+    icon: bi-fingerprint
     category: forensics
     command: "python"
     args: ["-m", "src.mcp_servers.forensics_tools"]
@@ -148,6 +158,8 @@ mcp_servers:
     env: null
     url: null
   - name: "remnux_tools"
+    display_name: "REMnux Analysis"
+    icon: bi-file-earmark-binary
     category: malware
     command: "python"
     args: ["-m", "src.mcp_servers.remnux_tools"]
@@ -156,6 +168,8 @@ mcp_servers:
     env: null
     url: null
   - name: "threat_intel_tools"
+    display_name: "Threat Intel Feeds"
+    icon: bi-shield-exclamation
     category: intel
     command: "python"
     args: ["-m", "src.mcp_servers.threat_intel_tools"]
@@ -164,6 +178,8 @@ mcp_servers:
     env: null
     url: null
   - name: "remote_tools"
+    display_name: "Remote Exec"
+    icon: bi-terminal
     category: recon
     command: "python"
     args: ["-m", "src.mcp_servers.remote_tools"]
@@ -179,6 +195,8 @@ mcp_servers:
     description: ''
     env: null
     name: vulnerability-tools
+    display_name: "Vulnerability Scan"
+    icon: bi-shield-check
     transport: stdio
     url: null
 

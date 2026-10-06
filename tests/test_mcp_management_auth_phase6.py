@@ -225,7 +225,9 @@ def test_server_listing_redacts_non_admin_and_admin_secrets(monkeypatch, tmp_pat
         if role == "admin":
             assert "command" in response.json()["servers"][0]
         else:
-            assert set(response.json()["servers"][0]) <= {"name", "category", "status", "tool_count"}
+            assert set(response.json()["servers"][0]) <= {
+                "name", "category", "display_name", "icon", "status", "tool_count"
+            }
 
 
 @pytest.mark.asyncio

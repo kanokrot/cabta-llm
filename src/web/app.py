@@ -789,15 +789,28 @@ def _register_page_routes(app: FastAPI) -> None:
                 pass
 
         # Category metadata for grouping/filtering
-        from src.web.routes.mcp_management import CATEGORY_META, _server_category
+        from src.web.routes.mcp_management import CATEGORY_META, _server_category, _server_display
         categories = CATEGORY_META
 
         # Collect unique categories present in the server list
         active_categories = []
         seen_cats = set()
+        tools_total = 0
+        connected_count = 0
+        attention_count = 0
         for s in merged:
             cat = _server_category(s)
             s['category'] = cat
+            s.update(_server_display(s))
+            live_status = s.get('live_status') or {}
+            tool_count = live_status.get('tool_count', 0) if isinstance(live_status, dict) else 0
+            tools_total += tool_count if isinstance(tool_count, int) and not isinstance(tool_count, bool) else 0
+            is_connected = isinstance(live_status, dict) and live_status.get('connected') is True
+            if is_connected:
+                connected_count += 1
+            status = str(s.get('status') or '').lower()
+            if status.startswith('error') or (isinstance(live_status, dict) and live_status.get('connected') is False):
+                attention_count += 1
             if cat not in seen_cats:
                 seen_cats.add(cat)
                 meta = categories.get(cat, {'label': cat.replace('_', ' ').title(), 'icon': 'bi-server'})
@@ -807,6 +820,9 @@ def _register_page_routes(app: FastAPI) -> None:
             'servers': merged,
             'categories': categories,
             'active_categories': active_categories,
+            'tools_total': tools_total,
+            'connected_count': connected_count,
+            'attention_count': attention_count,
         })
 
     @app.get('/settings', response_class=HTMLResponse, include_in_schema=False)
