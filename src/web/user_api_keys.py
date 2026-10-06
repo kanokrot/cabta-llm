@@ -17,6 +17,7 @@ from cryptography.fernet import Fernet, InvalidToken
 
 ALLOWED_SOURCES = ("virustotal", "abuseipdb", "otx")
 ENCRYPTION_KEY_ENV = "USER_API_KEY_ENCRYPTION_KEY"
+DISABLED_REASON = "Personal API keys are not enabled on this server."
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
