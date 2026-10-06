@@ -358,6 +358,8 @@
             </div>
             <div class="modal-body">
                 <p class="text-muted small mb-3" id="runPlaybookDesc"></p>
+                <button type="button" class="playbooks-description-toggle" id="runPlaybookDescToggle"
+                    aria-expanded="false" aria-controls="runPlaybookDesc" hidden>Show full description</button>
                 <div class="playbooks-run-summary" id="runPlaybookSummary"></div>
                 <form id="runPlaybookForm">
                     <input type="hidden" id="runPlaybookId">
@@ -740,6 +742,47 @@ var Playbooks = (function () {
     }
     var guideEnabled = readGuidePreference();
     var currentViewData = null;
+    var runDescriptionExpanded = false;
+    var viewDescriptionExpanded = false;
+
+    function setDescriptionExpanded(description, toggle, expanded) {
+        if (!description || !toggle) return;
+        description.classList.toggle('playbooks-description-clamped', guideEnabled && !expanded);
+        description.classList.toggle('playbooks-description-expanded', guideEnabled && expanded);
+        toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+        toggle.textContent = expanded ? 'Show less' : 'Show full description';
+    }
+
+    function refreshDescriptionToggle(description, toggle, expanded) {
+        if (!description || !toggle) return;
+        if (!guideEnabled) {
+            description.classList.remove('playbooks-description-clamped', 'playbooks-description-expanded');
+            toggle.hidden = true;
+            toggle.setAttribute('aria-expanded', 'false');
+            toggle.textContent = 'Show full description';
+            return;
+        }
+
+        setDescriptionExpanded(description, toggle, false);
+        var hasOverflow = description.scrollHeight > description.clientHeight;
+        toggle.hidden = !hasOverflow;
+        if (expanded && hasOverflow) setDescriptionExpanded(description, toggle, true);
+    }
+
+    function scheduleDescriptionToggleRefresh(description, toggle, expanded) {
+        window.requestAnimationFrame(function() {
+            refreshDescriptionToggle(description, toggle, expanded);
+        });
+    }
+
+    function bindDescriptionToggle(description, toggle, getExpanded, setExpanded) {
+        toggle.addEventListener('click', function() {
+            var expanded = !getExpanded();
+            setExpanded(expanded);
+            setDescriptionExpanded(description, toggle, expanded);
+            toggle.hidden = false;
+        });
+    }
 
     function syncGuideToggles() {
         document.querySelectorAll('[data-guide-toggle]').forEach(function(toggle) {
@@ -768,6 +811,14 @@ var Playbooks = (function () {
     var runExtraParams = {};
     var currentRunOutput = '';
     var currentRunParams = [];
+
+    var runDescriptionToggle = document.getElementById('runPlaybookDescToggle');
+    bindDescriptionToggle(
+        document.getElementById('runPlaybookDesc'),
+        runDescriptionToggle,
+        function() { return runDescriptionExpanded; },
+        function(expanded) { runDescriptionExpanded = expanded; }
+    );
 
     function setRunError(message) {
         var error = document.getElementById('runPlaybookError');
@@ -803,6 +854,14 @@ var Playbooks = (function () {
         var next = document.getElementById('runGuideNext');
         next.hidden = !guideEnabled || !currentRunOutput;
         document.getElementById('runGuideNextText').textContent = currentRunOutput;
+
+        var description = document.getElementById('runPlaybookDesc');
+        if (!guideEnabled) runDescriptionExpanded = false;
+        setDescriptionExpanded(description, runDescriptionToggle, runDescriptionExpanded);
+        runDescriptionToggle.hidden = true;
+        if (guideEnabled && description.textContent) {
+            scheduleDescriptionToggleRefresh(description, runDescriptionToggle, runDescriptionExpanded);
+        }
     }
 
     function setRunMode(mode) {
@@ -909,9 +968,14 @@ var Playbooks = (function () {
     function openRunModal(playbookId, playbookName) {
         currentRunOutput = '';
         currentRunParams = [];
+        runDescriptionExpanded = false;
         document.getElementById('runPlaybookId').value = playbookId;
         document.getElementById('runPlaybookTitle').textContent = 'Run: ' + playbookName;
         document.getElementById('runPlaybookDesc').textContent = '';
+        document.getElementById('runPlaybookDesc').classList.remove('playbooks-description-clamped', 'playbooks-description-expanded');
+        runDescriptionToggle.hidden = true;
+        runDescriptionToggle.setAttribute('aria-expanded', 'false');
+        runDescriptionToggle.textContent = 'Show full description';
         document.getElementById('playbookParams').value = '';
         document.getElementById('runPlaybookSummary').textContent = '';
         document.getElementById('runInputModeSwitch').hidden = true;
@@ -1225,6 +1289,7 @@ var Playbooks = (function () {
     function renderViewDetails(data) {
         var body = document.getElementById('viewPlaybookBody');
         while (body.firstChild) body.removeChild(body.firstChild);
+        viewDescriptionExpanded = false;
         var pbName = data.name || 'Playbook';
         var cat = resolveCategory(data);
         var catInfo = getCategoryInfo(cat);
@@ -1243,8 +1308,22 @@ var Playbooks = (function () {
 
         var description = document.createElement('p');
         description.className = 'text-muted';
+        description.id = 'viewPlaybookDescription';
         description.textContent = data.description || '';
-        if (description.textContent) body.appendChild(description);
+        var descriptionToggle = document.createElement('button');
+        descriptionToggle.type = 'button';
+        descriptionToggle.className = 'playbooks-description-toggle';
+        descriptionToggle.id = 'viewPlaybookDescriptionToggle';
+        descriptionToggle.setAttribute('aria-expanded', 'false');
+        descriptionToggle.setAttribute('aria-controls', description.id);
+        descriptionToggle.textContent = 'Show full description';
+        descriptionToggle.hidden = true;
+        bindDescriptionToggle(
+            description,
+            descriptionToggle,
+            function() { return viewDescriptionExpanded; },
+            function(expanded) { viewDescriptionExpanded = expanded; }
+        );
 
         var badges = document.createElement('div');
         badges.className = 'playbooks-view-badges';
@@ -1258,6 +1337,8 @@ var Playbooks = (function () {
             badge.textContent = entry[0];
             badges.appendChild(badge);
         });
+
+        if (!guideEnabled && description.textContent) body.appendChild(description);
         body.appendChild(badges);
 
         if (guideEnabled) {
@@ -1306,6 +1387,12 @@ var Playbooks = (function () {
             }
             appendTextSection(body, 'You get', typeof data.output === 'string' ? data.output : '');
             appendTextSection(body, 'Running this playbook', 'The run opens in Agent Chat.');
+        }
+
+        if (guideEnabled && description.textContent) {
+            body.appendChild(description);
+            body.appendChild(descriptionToggle);
+            scheduleDescriptionToggleRefresh(description, descriptionToggle, viewDescriptionExpanded);
         }
 
         var coverage = buildToolCoverage(steps, data.tool_display || {});
@@ -1357,6 +1444,7 @@ var Playbooks = (function () {
 
     function viewPlaybook(playbookId) {
         currentViewData = null;
+        viewDescriptionExpanded = false;
         var modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('viewPlaybookModal'));
         var body = document.getElementById('viewPlaybookBody');
         body.textContent = 'Loading...';
@@ -1387,6 +1475,26 @@ var Playbooks = (function () {
             body.appendChild(error);
         });
     }
+
+    document.getElementById('runPlaybookModal').addEventListener('shown.bs.modal', function() {
+        runDescriptionExpanded = false;
+        updateRunGuidePresentation();
+        scheduleDescriptionToggleRefresh(
+            document.getElementById('runPlaybookDesc'),
+            runDescriptionToggle,
+            runDescriptionExpanded
+        );
+    });
+
+    document.getElementById('viewPlaybookModal').addEventListener('shown.bs.modal', function() {
+        viewDescriptionExpanded = false;
+        var description = document.getElementById('viewPlaybookDescription');
+        var toggle = document.getElementById('viewPlaybookDescriptionToggle');
+        if (guideEnabled) {
+            setDescriptionExpanded(description, toggle, false);
+            scheduleDescriptionToggleRefresh(description, toggle, viewDescriptionExpanded);
+        }
+    });
 
     /* ── "Run this Playbook" button in view modal ── */
     document.getElementById('viewModalRunBtn').addEventListener('click', function() {

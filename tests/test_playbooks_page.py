@@ -298,3 +298,69 @@ def test_guided_playbook_modals_share_storage_backed_toggle_and_safe_form_render
     assert "definition.default" not in run_form_js
     assert ".default" not in run_form_js
     assert ".innerHTML" not in run_form_js
+
+
+def test_description_clamp_and_toggle_are_limited_to_guide_mode() -> None:
+    rendered = _render_playbooks()
+    css = (ROOT / "static" / "css" / "playbooks.css").read_text(encoding="utf-8-sig")
+    script_start = rendered.index("var Playbooks = (function ()")
+    script = rendered[script_start:rendered.index("</script>", script_start)]
+
+    assert 'id="runPlaybookDescToggle"' in rendered
+    assert 'aria-expanded="false" aria-controls="runPlaybookDesc"' in rendered
+    assert "Show full description" in script
+    assert "Show less" in script
+    assert "toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false')" in script
+    assert "description.classList.toggle('playbooks-description-clamped', guideEnabled && !expanded)" in script
+    assert "description.classList.toggle('playbooks-description-expanded', guideEnabled && expanded)" in script
+    assert "description.scrollHeight > description.clientHeight" in script
+    assert "shown.bs.modal" in script
+    assert "description.textContent = data.description || ''" in script
+
+    assert re.search(
+        r"\.playbooks-description-clamped\s*\{[^}]*-webkit-line-clamp:\s*2\s*;",
+        css,
+        re.DOTALL,
+    )
+    assert re.search(
+        r"\.playbooks-description-expanded\s*\{[^}]*white-space:\s*pre-line\s*;",
+        css,
+        re.DOTALL,
+    )
+    assert re.search(r"\.playbooks-description-toggle\[hidden\]\s*\{[^}]*display:\s*none\s*!important", css)
+
+
+def test_view_description_order_changes_only_in_guide_mode_and_resets_on_open() -> None:
+    rendered = _render_playbooks()
+    script_start = rendered.index("var Playbooks = (function ()")
+    script = rendered[script_start:rendered.index("</script>", script_start)]
+    render_view = script[
+        script.index("    function renderViewDetails("):
+        script.index("    function viewPlaybook(")
+    ]
+    view_open = script[
+        script.index("    function viewPlaybook("):
+        script.index("    /*", script.index("    function viewPlaybook("))
+    ]
+    run_open = script[
+        script.index("    function openRunModal("):
+        script.index("    document.getElementById('runFormModeBtn')")
+    ]
+
+    guide_order = [
+        render_view.index("body.appendChild(badges)"),
+        render_view.index("body.appendChild(what)"),
+        render_view.index("body.appendChild(provide)"),
+        render_view.index("if (guideEnabled && description.textContent)"),
+        render_view.index("body.appendChild(description)", render_view.index("if (guideEnabled && description.textContent)")),
+    ]
+    assert guide_order == sorted(guide_order)
+
+    non_guide_description = render_view.index(
+        "if (!guideEnabled && description.textContent) body.appendChild(description)"
+    )
+    assert non_guide_description < render_view.index("body.appendChild(badges)")
+    assert "viewDescriptionExpanded = false;" in view_open
+    assert "runDescriptionExpanded = false;" in run_open
+    assert "viewPlaybookModal').addEventListener('shown.bs.modal'" in script
+    assert "runPlaybookModal').addEventListener('shown.bs.modal'" in script

@@ -508,6 +508,39 @@ body:has(.playbooks-page) .sub-header {
     color: var(--text-primary);
 }
 
+.playbooks-description-clamped {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+}
+
+.playbooks-description-expanded {
+    white-space: pre-line;
+}
+
+.playbooks-description-toggle {
+    display: inline-block;
+    margin: -7px 0 14px;
+    padding: 0;
+    border: 0;
+    color: var(--color-info);
+    background: transparent;
+    font-size: 0.76rem;
+    font-weight: 600;
+    text-align: left;
+}
+
+.playbooks-description-toggle:hover,
+.playbooks-description-toggle:focus-visible {
+    color: var(--text-primary);
+    text-decoration: underline;
+}
+
+.playbooks-description-toggle[hidden] {
+    display: none !important;
+}
+
 .playbooks-guide-toggle {
     display: inline-flex;
     align-items: center;
