@@ -86,6 +86,7 @@ async def send_message(
                 input_data,
                 case_id=None,
                 user_id=current_user["id"],
+                role=current_user["role"],
             )
             return {
                 "session_id": session_id,
