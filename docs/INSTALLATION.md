@@ -143,13 +143,23 @@ mcp_servers:
     description: ""
     env: null
     url: null
+  - args:
+    - -m
+    - src.mcp_servers.vulnerability_tools
+    command: python
+    description: ''
+    env: null
+    name: vulnerability-tools
+    transport: stdio
+    url: null
 ```
 
 The template also includes the configured `network_tools`,
 `malwoverview_tools`, `forensics_tools`, `remnux_tools`, `threat_intel_tools`,
-and `remote_tools` servers. Some servers require external tools, services, or
-credentials. MCP connections are discovered and managed by CABTA from this
-configuration; do not use the legacy `src.server` entry for the current setup.
+`remote_tools`, and `vulnerability-tools` servers. Some servers require
+external tools, services, or credentials. MCP connections are discovered and
+managed by CABTA from this configuration; do not use the legacy `src.server`
+entry for the current setup.
 
 ## Troubleshooting
 
