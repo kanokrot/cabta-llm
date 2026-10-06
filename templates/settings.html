@@ -1,5 +1,4 @@
-{# Author: Ugur Ates #}
-{# Settings - Application configuration #}
+{# Application settings. #}
 {% extends "base.html" %}
 
 {% block title %}Settings - Blue Team Assistant{% endblock %}
@@ -9,306 +8,125 @@
 {% block extra_head %}
 <style>
     .settings-page { padding-top: 56px; }
-    body:has(.settings-page) .sub-header {
-        height: 0;
-        min-height: 0;
-        margin-top: 0 !important;
-        overflow: hidden;
-        padding: 0;
-        border: 0;
+    body:has(.settings-page) .sub-header { height: 0; min-height: 0; margin-top: 0 !important; overflow: hidden; padding: 0; border: 0; }
+    .settings-section { margin-bottom: 1.5rem; }
+    .settings-section .card-header { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
+    .settings-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1.25rem; }
+    .settings-nav-list { display: flex; flex-wrap: wrap; gap: .35rem; }
+    .settings-nav-link { color: var(--text-secondary); font-size: .9rem; font-weight: 500; padding: .55rem .75rem; border: 1px solid transparent; border-radius: 6px; background: transparent; text-align: left; transition: color .15s, background .15s; }
+    .settings-nav-link:hover, .settings-nav-link:focus { color: var(--text-primary); background: var(--bg-hover, rgba(255,255,255,.06)); }
+    .settings-nav-link.active { color: var(--accent, #3b82f6); background: rgba(59, 130, 246, .1); }
+    .settings-nav-note { margin: .75rem 0 0; font-size: .85rem; }
+    .settings-main { min-width: 0; }
+    @media (min-width: 992px) {
+        .settings-layout { grid-template-columns: 220px minmax(0, 1fr); align-items: start; gap: 1.5rem; }
+        .settings-side-nav { position: sticky; top: 76px; }
+        .settings-nav-list { flex-direction: column; }
+        .settings-nav-link { width: 100%; }
     }
-    .settings-section {
-        margin-bottom: 1.5rem;
-    }
-    .settings-section .card-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-    }
-    .provider-toggle {
-        display: flex;
-        border: 1px solid var(--border-color);
-        border-radius: 6px;
-        overflow: hidden;
-    }
-    .provider-toggle .toggle-option {
-        padding: 0.4rem 1rem;
-        cursor: pointer;
-        font-size: 0.85rem;
-        font-weight: 600;
-        background: var(--bg-tertiary);
-        color: var(--text-secondary);
-        border: none;
-        transition: background 0.2s, color 0.2s;
-    }
-    .provider-toggle .toggle-option.active {
-        background: var(--color-accent);
-        color: #fff;
-    }
-    .provider-toggle .toggle-option:not(:last-child) {
-        border-right: 1px solid var(--border-color);
-    }
-    .range-label {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-    }
-    .range-label .range-value {
-        font-weight: 700;
-        color: var(--color-accent);
-        min-width: 3ch;
-        text-align: right;
-    }
-    .api-key-field {
-        position: relative;
-    }
-    .api-key-field .toggle-visibility {
-        position: absolute;
-        right: 0.5rem;
-        top: 50%;
-        transform: translateY(-50%);
-        background: none;
-        border: none;
-        color: var(--text-secondary);
-        cursor: pointer;
-        padding: 0.2rem;
-    }
-    .api-key-field .toggle-visibility:hover {
-        color: var(--text-primary);
-    }
-    .save-indicator {
-        font-size: 0.8rem;
-        color: var(--color-success);
-        display: none;
-    }
-    .save-indicator.show {
-        display: inline;
-    }
+    .provider-toggle { display: flex; border: 1px solid var(--border-color); border-radius: 6px; overflow: hidden; }
+    .provider-toggle .toggle-option { padding: .4rem 1rem; cursor: pointer; font-size: .85rem; font-weight: 600; background: var(--bg-tertiary); color: var(--text-secondary); border: 0; }
+    .provider-toggle .toggle-option.active { background: var(--color-accent); color: #fff; }
+    .range-label { display: flex; justify-content: space-between; align-items: center; }
+    .range-label .range-value { font-weight: 700; color: var(--color-accent); min-width: 3ch; text-align: right; }
+    .save-indicator { font-size: .8rem; color: var(--color-success); display: none; }
+    .save-indicator.show { display: inline; }
+    .source-key-input { min-width: 13rem; }
 </style>
 {% endblock %}
 
 {% block content %}
 <section class="settings-page">
-<div class="row g-4">
-    <!-- LLM Configuration -->
-    <div class="col-lg-6">
-        <div class="card settings-section">
-            <div class="card-header">
-                <h6 class="mb-0"><i class="bi bi-cpu me-2 text-accent"></i>LLM Configuration</h6>
-                <span class="save-indicator" id="llmSaveIndicator"><i class="bi bi-check-circle-fill me-1"></i>Saved</span>
+    <div class="settings-layout">
+    <aside class="settings-side-nav" aria-label="Settings navigation">
+        <nav class="settings-nav-list" role="tablist" aria-label="Settings sections">
+            <button class="settings-nav-link active" id="general-tab" type="button" role="tab" aria-selected="true" aria-controls="general-panel" data-settings-tab="general">General</button>
+            <button class="settings-nav-link" id="sources-tab" type="button" role="tab" aria-selected="false" aria-controls="sources-panel" data-settings-tab="sources">Intelligence sources</button>
+            <button class="settings-nav-link" id="system-tab" type="button" role="tab" aria-selected="false" aria-controls="system-panel" data-settings-tab="system">System</button>
+        </nav>
+        <p class="settings-nav-note">Connecting Wazuh? More &rarr; <a href="/integrations">Integrations</a>.</p>
+    </aside>
+    <main class="settings-main">
+
+    <div id="general-panel" role="tabpanel" aria-labelledby="general-tab" data-settings-panel="general">
+        <div class="row g-4">
+            <div class="col-lg-6">
+                <div class="card settings-section">
+                    <div class="card-header"><h6 class="mb-0"><i class="bi bi-cpu me-2 text-accent"></i>LLM configuration</h6><span class="save-indicator" id="llmSaveIndicator">Saved</span></div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label class="form-label">Provider</label>
+                            <div class="provider-toggle" id="providerToggle">
+                                <button type="button" class="toggle-option active" data-value="ollama" onclick="Settings.setProvider('ollama')">Ollama</button>
+                                <button type="button" class="toggle-option" data-value="vllm" onclick="Settings.setProvider('vllm')">vLLM</button>
+                            </div>
+                        </div>
+                        <div id="ollamaFields">
+                            <div class="mb-3"><label class="form-label" for="ollamaEndpoint">Ollama endpoint URL</label><input type="url" id="ollamaEndpoint" class="form-control" value="http://localhost:11434"></div>
+                            <div class="mb-3"><label class="form-label" for="ollamaModel">Model name</label><div class="input-group"><select id="ollamaModel" class="form-select"><option value="llama3.1:8b">llama3.1:8b (default)</option></select><button type="button" class="btn btn-outline-secondary" onclick="Settings.refreshOllamaModels()" title="Refresh models"><i class="bi bi-arrow-clockwise"></i></button></div><div id="ollamaModelStatus" class="mt-1 small"></div></div>
+                        </div>
+                        <div id="vllmFields" style="display:none;">
+                            <div class="mb-3"><label class="form-label" for="vllmBaseUrl">vLLM base URL</label><input type="url" id="vllmBaseUrl" class="form-control" placeholder="http://host:8080"></div>
+                            <div class="mb-3"><label class="form-label" for="vllmModel">Model name</label><input type="text" id="vllmModel" class="form-control" placeholder="Model name"></div>
+                        </div>
+                        <div class="mb-3"><label class="form-label" for="anthropicKey">Anthropic API key</label><input type="password" id="anthropicKey" class="form-control" autocomplete="new-password" placeholder="Leave empty to keep the current key"></div>
+                        <button class="btn btn-accent btn-sm" type="button" onclick="Settings.saveLLM()"><i class="bi bi-check-lg me-1"></i>Save LLM settings</button>
+                    </div>
+                </div>
             </div>
-            <div class="card-body">
-                <div class="mb-3">
-                    <label class="form-label">Provider</label>
-                    <div class="provider-toggle" id="providerToggle">
-                        <button type="button" class="toggle-option active" data-value="ollama" onclick="Settings.setProvider('ollama')">
-                            <i class="bi bi-pc-display me-1"></i>Ollama
-                        </button>
-                        <button type="button" class="toggle-option" data-value="vllm" onclick="Settings.setProvider('vllm')">
-                            <i class="bi bi-hdd-network me-1"></i>vLLM
-                        </button>
+            <div class="col-lg-6">
+                <div class="card settings-section">
+                    <div class="card-header"><h6 class="mb-0"><i class="bi bi-robot me-2 text-accent"></i>Agent</h6><span class="save-indicator" id="agentSaveIndicator">Saved</span></div>
+                    <div class="card-body">
+                        <div class="mb-3"><label class="form-label" for="maxSteps">Max steps</label><div class="range-label"><input type="range" class="form-range" id="maxSteps" min="1" max="100" value="25" oninput="document.getElementById('maxStepsValue').textContent=this.value"><span class="range-value" id="maxStepsValue">25</span></div></div>
+                        <div class="mb-3"><label class="form-label" for="sandboxType">Default sandbox type</label><select id="sandboxType" class="form-select"><option value="docker">Docker</option><option value="subprocess">Subprocess</option><option value="none">None (disabled)</option></select></div>
+                        <div class="form-check form-switch mb-3"><input class="form-check-input" type="checkbox" id="requireApproval" checked><label class="form-check-label" for="requireApproval">Require human approval for high-risk actions</label></div>
+                        <div class="form-check form-switch mb-3"><input class="form-check-input" type="checkbox" id="enableSandbox" checked><label class="form-check-label" for="enableSandbox">Enable sandbox for file analysis</label></div>
+                        <button class="btn btn-accent btn-sm" type="button" onclick="Settings.saveAgent()"><i class="bi bi-check-lg me-1"></i>Save agent settings</button>
                     </div>
                 </div>
-
-                <div id="ollamaFields">
-                    <div class="mb-3">
-                        <label class="form-label">Ollama Endpoint URL</label>
-                        <input type="url" id="ollamaEndpoint" class="form-control" value="http://localhost:11434"
-                            placeholder="http://localhost:11434"
-                            style="background:var(--bg-tertiary);border-color:var(--border-color);color:var(--text-primary);">
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label d-flex justify-content-between align-items-center">
-                            <span>Model Name</span>
-                            <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" style="font-size:0.72rem;" onclick="Settings.refreshOllamaModels()" title="Refresh model list from Ollama">
-                                <i class="bi bi-arrow-clockwise me-1"></i>Refresh
-                            </button>
-                        </label>
-                        <select id="ollamaModel" class="form-select"
-                            style="background:var(--bg-tertiary);border-color:var(--border-color);color:var(--text-primary);">
-                            <option value="llama3.1:8b">llama3.1:8b (default)</option>
-                        </select>
-                        <div id="ollamaModelStatus" class="mt-1" style="font-size:0.72rem;"></div>
+                <div class="card settings-section">
+                    <div class="card-header"><h6 class="mb-0"><i class="bi bi-toggles me-2 text-accent"></i>Analysis</h6><span class="save-indicator" id="analysisSaveIndicator">Saved</span></div>
+                    <div class="card-body">
+                        <div class="form-check form-switch mb-3"><input class="form-check-input" type="checkbox" id="enableLLM" checked><label class="form-check-label" for="enableLLM">Enable LLM analysis</label></div>
+                        <div class="form-check form-switch mb-3"><input class="form-check-input" type="checkbox" id="enableRAG" checked><label class="form-check-label" for="enableRAG">Enable retrieval augmented generation</label></div>
+                        <button class="btn btn-accent btn-sm" type="button" onclick="Settings.saveAnalysis()"><i class="bi bi-check-lg me-1"></i>Save analysis settings</button>
                     </div>
                 </div>
-
-                <div id="vllmFields" style="display:none;">
-                    <div class="mb-3">
-                        <label class="form-label">vLLM Base URL</label>
-                        <input type="url" id="vllmBaseUrl" class="form-control"
-                            placeholder="http://host:8080"
-                            style="background:var(--bg-tertiary);border-color:var(--border-color);color:var(--text-primary);">
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Model Name</label>
-                        <input type="text" id="vllmModel" class="form-control"
-                            placeholder="e.g. vllm-spark-01/gemma4-26b-uncensored"
-                            style="background:var(--bg-tertiary);border-color:var(--border-color);color:var(--text-primary);">
-                    </div>
-                </div>
-
-                <button class="btn btn-accent btn-sm" onclick="Settings.saveLLM()">
-                    <i class="bi bi-check-lg me-1"></i>Save LLM Settings
-                </button>
             </div>
         </div>
     </div>
 
-    <!-- Agent Configuration -->
-    <div class="col-lg-6">
+    <div id="sources-panel" role="tabpanel" aria-labelledby="sources-tab" data-settings-panel="sources" hidden>
         <div class="card settings-section">
-            <div class="card-header">
-                <h6 class="mb-0"><i class="bi bi-robot me-2 text-accent"></i>Agent Configuration</h6>
-                <span class="save-indicator" id="agentSaveIndicator"><i class="bi bi-check-circle-fill me-1"></i>Saved</span>
-            </div>
+            <div class="card-header"><h6 class="mb-0"><i class="bi bi-key me-2 text-accent"></i>Intelligence source keys</h6><span id="sourcesSaveStatus" class="small text-muted" aria-live="polite"></span></div>
             <div class="card-body">
-                <div class="mb-3">
-                    <div class="range-label">
-                        <label class="form-label mb-0">Max Steps</label>
-                        <span class="range-value" id="maxStepsValue">25</span>
-                    </div>
-                    <input type="range" class="form-range" id="maxSteps" min="1" max="100" value="25"
-                        oninput="document.getElementById('maxStepsValue').textContent=this.value">
-                    <div class="d-flex justify-content-between">
-                        <small class="text-muted">1</small>
-                        <small class="text-muted">100</small>
-                    </div>
-                </div>
-
-                <div class="mb-3">
-                    <label class="form-label">Default Sandbox Type</label>
-                    <select id="sandboxType" class="form-select"
-                        style="background:var(--bg-tertiary);border-color:var(--border-color);color:var(--text-primary);">
-                        <option value="docker">Docker</option>
-                        <option value="subprocess">Subprocess</option>
-                        <option value="none">None (Disabled)</option>
-                    </select>
-                </div>
-
-                <div class="form-check form-switch mb-3">
-                    <input class="form-check-input" type="checkbox" id="requireApproval" checked>
-                    <label class="form-check-label" for="requireApproval">Require human approval for high-risk actions</label>
-                </div>
-
-                <div class="form-check form-switch mb-3">
-                    <input class="form-check-input" type="checkbox" id="enableSandbox" checked>
-                    <label class="form-check-label" for="enableSandbox">Enable sandbox for file analysis</label>
-                </div>
-
-                <button class="btn btn-accent btn-sm" onclick="Settings.saveAgent()">
-                    <i class="bi bi-check-lg me-1"></i>Save Agent Settings
-                </button>
+                <div id="sourcesError" class="alert alert-danger py-2" hidden></div>
+                <div class="table-responsive"><table class="table align-middle"><thead><tr><th>Source</th><th>Quota / plan</th><th>Status</th><th>API key</th><th></th></tr></thead>
+                    <tbody id="scoringSources"><tr><th colspan="5">Scoring</th></tr></tbody>
+                    <tbody id="reportSources"><tr><th colspan="5">Report-only</th></tr></tbody>
+                    <tbody id="sandboxSources"><tr><th colspan="5">Sandbox</th></tr></tbody>
+                </table></div>
+                <p class="small text-muted mb-0"><strong>No key needed:</strong> FeodoTracker, SSL Blacklist, Spamhaus, Tor Exit Nodes, C2 Trackers.</p>
             </div>
         </div>
     </div>
 
-    <!-- API Keys -->
-    <div class="col-12">
+    <div id="system-panel" role="tabpanel" aria-labelledby="system-tab" data-settings-panel="system" hidden>
         <div class="card settings-section">
-            <div class="card-header">
-                <h6 class="mb-0"><i class="bi bi-key me-2 text-accent"></i>API Keys</h6>
-                <span class="save-indicator" id="apiKeysSaveIndicator"><i class="bi bi-check-circle-fill me-1"></i>Saved</span>
-            </div>
+            <div class="card-header"><h6 class="mb-0"><i class="bi bi-info-circle me-2 text-accent"></i>System information</h6></div>
             <div class="card-body">
                 <div class="row g-3">
-                    <div class="col-md-6 col-lg-4">
-                        <label class="form-label">VirusTotal</label>
-                        <div class="api-key-field">
-                            <input type="password" id="keyVirusTotal" class="form-control pe-5" placeholder="API key"
-                                style="background:var(--bg-tertiary);border-color:var(--border-color);color:var(--text-primary);">
-                            <button type="button" class="toggle-visibility" onclick="Settings.toggleVisibility('keyVirusTotal', this)">
-                                <i class="bi bi-eye"></i>
-                            </button>
-                        </div>
-                    </div>
-                    <div class="col-md-6 col-lg-4">
-                        <label class="form-label">AbuseIPDB</label>
-                        <div class="api-key-field">
-                            <input type="password" id="keyAbuseIPDB" class="form-control pe-5" placeholder="API key"
-                                style="background:var(--bg-tertiary);border-color:var(--border-color);color:var(--text-primary);">
-                            <button type="button" class="toggle-visibility" onclick="Settings.toggleVisibility('keyAbuseIPDB', this)">
-                                <i class="bi bi-eye"></i>
-                            </button>
-                        </div>
-                    </div>
-                    <div class="col-md-6 col-lg-4">
-                        <label class="form-label">Shodan</label>
-                        <div class="api-key-field">
-                            <input type="password" id="keyShodan" class="form-control pe-5" placeholder="API key"
-                                style="background:var(--bg-tertiary);border-color:var(--border-color);color:var(--text-primary);">
-                            <button type="button" class="toggle-visibility" onclick="Settings.toggleVisibility('keyShodan', this)">
-                                <i class="bi bi-eye"></i>
-                            </button>
-                        </div>
-                    </div>
-                    <div class="col-md-6 col-lg-4">
-                        <label class="form-label">AlienVault OTX</label>
-                        <div class="api-key-field">
-                            <input type="password" id="keyAlienVault" class="form-control pe-5" placeholder="API key"
-                                style="background:var(--bg-tertiary);border-color:var(--border-color);color:var(--text-primary);">
-                            <button type="button" class="toggle-visibility" onclick="Settings.toggleVisibility('keyAlienVault', this)">
-                                <i class="bi bi-eye"></i>
-                            </button>
-                        </div>
-                    </div>
-                    <div class="col-md-6 col-lg-4">
-                        <label class="form-label">GreyNoise</label>
-                        <div class="api-key-field">
-                            <input type="password" id="keyGreyNoise" class="form-control pe-5" placeholder="API key"
-                                style="background:var(--bg-tertiary);border-color:var(--border-color);color:var(--text-primary);">
-                            <button type="button" class="toggle-visibility" onclick="Settings.toggleVisibility('keyGreyNoise', this)">
-                                <i class="bi bi-eye"></i>
-                            </button>
-                        </div>
-                    </div>
-                    <div class="col-md-6 col-lg-4">
-                        <label class="form-label">URLScan.io</label>
-                        <div class="api-key-field">
-                            <input type="password" id="keyURLScan" class="form-control pe-5" placeholder="API key"
-                                style="background:var(--bg-tertiary);border-color:var(--border-color);color:var(--text-primary);">
-                            <button type="button" class="toggle-visibility" onclick="Settings.toggleVisibility('keyURLScan', this)">
-                                <i class="bi bi-eye"></i>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-                <div class="mt-3 d-flex align-items-center gap-3">
-                    <button class="btn btn-accent btn-sm" onclick="Settings.saveApiKeys()">
-                        <i class="bi bi-check-lg me-1"></i>Save API Keys
-                    </button>
-                    <p class="text-muted small mb-0">
-                        <i class="bi bi-info-circle me-1"></i>API keys are stored in <code>config.yaml</code>. Update the file directly for persistent changes.
-                    </p>
+                    <div class="col-md-4"><small class="text-muted">Version</small><div id="systemVersion">Loading</div></div>
+                    <div class="col-md-4"><small class="text-muted">Configuration path</small><div><code id="systemConfigPath">Loading</code></div></div>
+                    <div class="col-md-4"><small class="text-muted">Data directory</small><div><code id="systemDataDir">Loading</code></div></div>
                 </div>
             </div>
         </div>
     </div>
-
-    <!-- System Info -->
-    <div class="col-12">
-        <div class="card">
-            <div class="card-header">
-                <h6 class="mb-0"><i class="bi bi-info-circle me-2 text-accent"></i>System Information</h6>
-            </div>
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-md-4">
-                        <small class="text-muted">Version</small>
-                        <div>Blue Team Assistant v2.0</div>
-                    </div>
-                    <div class="col-md-4">
-                        <small class="text-muted">Configuration</small>
-                        <div><code>config.yaml</code></div>
-                    </div>
-                    <div class="col-md-4">
-                        <small class="text-muted">Data Directory</small>
-                        <div><code>data/</code></div>
-                    </div>
-                </div>
-            </div>
-        </div>
+    <p class="text-muted small mt-3">Settings are written to config.yaml; restart to apply.</p>
+    </main>
     </div>
-</div>
 </section>
 {% endblock %}
 
@@ -316,250 +134,96 @@
 <script>
 var Settings = (function() {
     var currentProvider = 'ollama';
-
+    function byId(id) { return document.getElementById(id); }
     function init() {
-        loadConfig();
-    }
-
-    function loadConfig() {
-        fetch('/api/config/settings')
-            .then(function(r) { return r.json(); })
-            .then(function(cfg) {
-                // LLM settings
-                var llm = cfg.llm || {};
-                var provider = llm.provider || 'ollama';
-                setProvider(provider);
-
-                if (llm.ollama_endpoint || llm.base_url) {
-                    document.getElementById('ollamaEndpoint').value = llm.ollama_endpoint || llm.base_url || '';
-                }
-                var savedModel = llm.ollama_model || llm.model || 'llama3.1:8b';
-                // Load models from Ollama and pre-select saved model
-                refreshOllamaModels(savedModel);
-                if (llm.vllm_base_url) {
-                    document.getElementById('vllmBaseUrl').value = llm.vllm_base_url;
-                }
-                if (llm.vllm_model) {
-                    document.getElementById('vllmModel').value = llm.vllm_model;
-                }
-
-                // Agent settings
-                var agent = cfg.agent || {};
-                var maxSteps = agent.max_steps || 25;
-                document.getElementById('maxSteps').value = maxSteps;
-                document.getElementById('maxStepsValue').textContent = maxSteps;
-                if (agent.default_sandbox) {
-                    document.getElementById('sandboxType').value = agent.default_sandbox;
-                }
-                if (agent.require_approval_for !== undefined) {
-                    document.getElementById('requireApproval').checked = (agent.require_approval_for || []).length > 0;
-                }
-                if (cfg.analysis && cfg.analysis.enable_sandbox !== undefined) {
-                    document.getElementById('enableSandbox').checked = cfg.analysis.enable_sandbox;
-                }
-
-                // API keys - show masked values if configured
-                var keys = cfg.api_keys || {};
-                var keyFields = {
-                    'virustotal': 'keyVirusTotal',
-                    'abuseipdb': 'keyAbuseIPDB',
-                    'shodan': 'keyShodan',
-                    'alienvault': 'keyAlienVault',
-                    'greynoise': 'keyGreyNoise',
-                    'urlscan': 'keyURLScan'
-                };
-                Object.keys(keyFields).forEach(function(k) {
-                    var field = document.getElementById(keyFields[k]);
-                    if (keys[k] && keys[k].length > 0) {
-                        field.placeholder = 'Configured (' + keys[k] + ')';
-                    }
+        document.querySelectorAll('[data-settings-tab]').forEach(function(tab) {
+            tab.addEventListener('click', function() {
+                document.querySelectorAll('[data-settings-tab]').forEach(function(item) {
+                    var active = item === tab;
+                    item.classList.toggle('active', active);
+                    item.setAttribute('aria-selected', active ? 'true' : 'false');
                 });
-            })
-            .catch(function(err) {
-                console.warn('Failed to load settings:', err);
+                document.querySelectorAll('[data-settings-panel]').forEach(function(panel) { panel.hidden = panel.dataset.settingsPanel !== tab.dataset.settingsTab; });
             });
+        });
+        loadConfig();
+        loadSystemInfo();
     }
-
+    function loadConfig() {
+        fetch('/api/config/settings').then(function(response) { if (!response.ok) throw new Error('HTTP ' + response.status); return response.json(); }).then(function(cfg) {
+            var llm = cfg.llm || {};
+            setProvider(llm.provider || 'ollama');
+            byId('ollamaEndpoint').value = llm.ollama_endpoint || llm.base_url || 'http://localhost:11434';
+            var model = llm.ollama_model || llm.model || 'llama3.1:8b';
+            refreshOllamaModels(model);
+            byId('vllmBaseUrl').value = llm.vllm_base_url || '';
+            byId('vllmModel').value = llm.vllm_model || '';
+            var anthropic = (cfg.api_keys || {}).anthropic || '';
+            var anthropicPreview = anthropic ? (anthropic.indexOf('*') >= 0 ? anthropic : 'Configured (hidden)') : 'Leave empty to keep the current key';
+            byId('anthropicKey').placeholder = anthropicPreview;
+            var agent = cfg.agent || {};
+            var maxSteps = agent.max_steps || 25;
+            byId('maxSteps').value = maxSteps;
+            byId('maxStepsValue').textContent = maxSteps;
+            if (agent.default_sandbox) byId('sandboxType').value = agent.default_sandbox;
+            if (agent.require_approval_for !== undefined) byId('requireApproval').checked = (agent.require_approval_for || []).length > 0;
+            if (cfg.analysis && cfg.analysis.enable_sandbox !== undefined) byId('enableSandbox').checked = cfg.analysis.enable_sandbox;
+            byId('enableLLM').checked = (cfg.analysis || {}).enable_llm !== false;
+            byId('enableRAG').checked = (cfg.analysis || {}).enable_rag !== false;
+        }).catch(function(error) { console.warn('Failed to load settings:', error); });
+    }
     function setProvider(provider) {
         currentProvider = provider;
-        var buttons = document.querySelectorAll('#providerToggle .toggle-option');
-        buttons.forEach(function(btn) {
-            if (btn.getAttribute('data-value') === provider) {
-                btn.classList.add('active');
-            } else {
-                btn.classList.remove('active');
-            }
-        });
-        document.getElementById('ollamaFields').style.display = provider === 'ollama' ? '' : 'none';
-        document.getElementById('vllmFields').style.display = provider === 'vllm' ? '' : 'none';
+        document.querySelectorAll('#providerToggle .toggle-option').forEach(function(button) { button.classList.toggle('active', button.dataset.value === provider); });
+        byId('ollamaFields').style.display = provider === 'ollama' ? '' : 'none';
+        byId('vllmFields').style.display = provider === 'vllm' ? '' : 'none';
     }
-
-    function setStatusMsg(el, text, cls, icon) {
-        while (el.firstChild) el.removeChild(el.firstChild);
-        var span = document.createElement('span');
-        span.className = cls;
-        var i = document.createElement('i');
-        i.className = 'bi ' + icon + ' me-1';
-        span.appendChild(i);
-        span.appendChild(document.createTextNode(text));
-        el.appendChild(span);
+    function statusMsg(el, text, className, icon) {
+        el.textContent = '';
+        var span = document.createElement('span'); span.className = className;
+        var i = document.createElement('i'); i.className = 'bi ' + icon + ' me-1'; span.appendChild(i); span.appendChild(document.createTextNode(text)); el.appendChild(span);
     }
-
     function refreshOllamaModels(selectModel) {
-        var endpoint = (document.getElementById('ollamaEndpoint').value.trim() || 'http://localhost:11434').replace(/\/+$/, '');
-        var statusEl = document.getElementById('ollamaModelStatus');
-        setStatusMsg(statusEl, 'Loading models from Ollama...', 'text-muted', 'bi-hourglass-split');
-
-        fetch('/api/config/ollama-models?endpoint=' + encodeURIComponent(endpoint))
-            .then(function(r) {
-                if (!r.ok) throw new Error('HTTP ' + r.status);
-                return r.json();
-            })
-            .then(function(data) {
-                var models = data.models || [];
-                var sel = document.getElementById('ollamaModel');
-                var currentVal = selectModel || sel.value;
-
-                while (sel.options.length > 0) sel.remove(0);
-
-                if (models.length === 0) {
-                    var opt = document.createElement('option');
-                    opt.value = '';
-                    opt.textContent = 'No models found';
-                    sel.appendChild(opt);
-                    setStatusMsg(statusEl, 'No models found. Pull a model with: ollama pull llama3.1:8b', 'text-warning', 'bi-exclamation-triangle');
-                    return;
-                }
-
-                var found = false;
-                models.forEach(function(m) {
-                    var name = m.name || m.model || '';
-                    if (!name) return;
-                    var opt = document.createElement('option');
-                    opt.value = name;
-                    var sizeGB = m.size ? (m.size / (1024*1024*1024)).toFixed(1) + ' GB' : '';
-                    var family = m.details ? (m.details.family || '') : '';
-                    var params = m.details ? (m.details.parameter_size || '') : '';
-                    var label = name;
-                    var extras = [params, sizeGB, family].filter(function(x) { return x; });
-                    if (extras.length > 0) label += '  (' + extras.join(', ') + ')';
-                    opt.textContent = label;
-                    if (name === currentVal) { opt.selected = true; found = true; }
-                    sel.appendChild(opt);
-                });
-
-                if (!found && currentVal) {
-                    var fallback = document.createElement('option');
-                    fallback.value = currentVal;
-                    fallback.textContent = currentVal + ' (not found locally)';
-                    fallback.selected = true;
-                    sel.insertBefore(fallback, sel.firstChild);
-                }
-
-                setStatusMsg(statusEl, models.length + ' model' + (models.length > 1 ? 's' : '') + ' available', 'text-success', 'bi-check-circle');
-            })
-            .catch(function(err) {
-                setStatusMsg(statusEl, 'Cannot connect to Ollama: ' + err.message, 'text-danger', 'bi-x-circle');
-            });
+        var endpoint = (byId('ollamaEndpoint').value.trim() || 'http://localhost:11434').replace(/\/+$/, '');
+        var status = byId('ollamaModelStatus');
+        statusMsg(status, 'Loading models from Ollama...', 'text-muted', 'bi-hourglass-split');
+        fetch('/api/config/ollama-models?endpoint=' + encodeURIComponent(endpoint)).then(function(response) { if (!response.ok) throw new Error('HTTP ' + response.status); return response.json(); }).then(function(data) {
+            var select = byId('ollamaModel'); var models = data.models || []; var current = selectModel || select.value;
+            select.replaceChildren();
+            if (!models.length) { var empty = document.createElement('option'); empty.value = ''; empty.textContent = 'No models found'; select.appendChild(empty); statusMsg(status, 'No models found. Pull a model with: ollama pull llama3.1:8b', 'text-warning', 'bi-exclamation-triangle'); return; }
+            var found = false;
+            models.forEach(function(model) { var name = model.name || model.model || ''; if (!name) return; var option = document.createElement('option'); option.value = name; option.textContent = name; if (name === current) { option.selected = true; found = true; } select.appendChild(option); });
+            if (!found && current) { var fallback = document.createElement('option'); fallback.value = current; fallback.textContent = current + ' (not found locally)'; fallback.selected = true; select.insertBefore(fallback, select.firstChild); }
+            statusMsg(status, models.length + ' model' + (models.length === 1 ? '' : 's') + ' available', 'text-success', 'bi-check-circle');
+        }).catch(function(error) { statusMsg(status, 'Cannot connect to Ollama: ' + error.message, 'text-danger', 'bi-x-circle'); });
     }
-
+    function saveConfig(payload, indicatorId) {
+        fetch('/api/config/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }).then(function(response) { return response.json().then(function(data) { if (!response.ok) throw new Error(data.detail || data.error || ('HTTP ' + response.status)); return data; }); }).then(function(data) {
+            var indicator = byId(indicatorId); if (indicator) { indicator.classList.add('show'); setTimeout(function() { indicator.classList.remove('show'); }, 3000); }
+            if (data.message && window.BTADashboard && window.BTADashboard.showToast) window.BTADashboard.showToast(data.message, 'success');
+        }).catch(function(error) { if (window.BTADashboard && window.BTADashboard.showToast) window.BTADashboard.showToast('Save failed: ' + error.message, 'error'); else alert('Save failed: ' + error.message); });
+    }
     function saveLLM() {
         var llm = { provider: currentProvider };
-        if (currentProvider === 'ollama') {
-            llm.ollama_endpoint = document.getElementById('ollamaEndpoint').value.trim();
-            llm.ollama_model = document.getElementById('ollamaModel').value;
-        } else {
-            llm.vllm_base_url = document.getElementById('vllmBaseUrl').value.trim();
-            llm.vllm_model = document.getElementById('vllmModel').value.trim();
-        }
-        var payload = { llm: llm };
+        if (currentProvider === 'ollama') { llm.ollama_endpoint = byId('ollamaEndpoint').value.trim(); llm.ollama_model = byId('ollamaModel').value; }
+        else { llm.vllm_base_url = byId('vllmBaseUrl').value.trim(); llm.vllm_model = byId('vllmModel').value.trim(); }
+        var payload = { llm: llm }; var key = byId('anthropicKey').value.trim(); if (key) payload.anthropic_api_key = key;
         saveConfig(payload, 'llmSaveIndicator');
     }
-
     function saveAgent() {
-        var payload = {
-            agent: {
-                max_steps: parseInt(document.getElementById('maxSteps').value) || 25,
-                default_sandbox: document.getElementById('sandboxType').value,
-                require_approval: document.getElementById('requireApproval').checked,
-                enable_sandbox: document.getElementById('enableSandbox').checked
-            }
-        };
-        saveConfig(payload, 'agentSaveIndicator');
+        saveConfig({ agent: { max_steps: parseInt(byId('maxSteps').value, 10) || 25, default_sandbox: byId('sandboxType').value, require_approval: byId('requireApproval').checked, enable_sandbox: byId('enableSandbox').checked } }, 'agentSaveIndicator');
     }
-
-    function saveApiKeys() {
-        var keys = {};
-        var keyFields = {
-            'virustotal': 'keyVirusTotal',
-            'abuseipdb': 'keyAbuseIPDB',
-            'shodan': 'keyShodan',
-            'alienvault': 'keyAlienVault',
-            'greynoise': 'keyGreyNoise',
-            'urlscan': 'keyURLScan'
-        };
-        Object.keys(keyFields).forEach(function(k) {
-            var val = document.getElementById(keyFields[k]).value.trim();
-            if (val) keys[k] = val;
-        });
-        if (Object.keys(keys).length === 0) {
-            alert('No API keys entered.');
-            return;
-        }
-        saveConfig({ api_keys: keys }, 'apiKeysSaveIndicator');
+    function saveAnalysis() { saveConfig({ analysis: { enable_llm: byId('enableLLM').checked, enable_rag: byId('enableRAG').checked } }, 'analysisSaveIndicator'); }
+    function loadSystemInfo() {
+        fetch('/api/config/info').then(function(r) { if (!r.ok) throw new Error(); return r.json(); }).then(function(info) {
+            byId('systemVersion').textContent = (info.app || 'Blue Team Assistant') + ' v' + (info.version || '');
+            byId('systemConfigPath').textContent = info.config_path;
+            byId('systemDataDir').textContent = info.data_dir;
+        }).catch(function() { byId('systemVersion').textContent = 'System information unavailable'; byId('systemConfigPath').textContent = 'System information unavailable'; byId('systemDataDir').textContent = 'System information unavailable'; });
     }
-
-    function saveConfig(payload, indicatorId) {
-        fetch('/api/config/settings', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        })
-        .then(function(r) {
-            if (!r.ok) throw new Error('HTTP ' + r.status);
-            return r.json();
-        })
-        .then(function(data) {
-            var indicator = document.getElementById(indicatorId);
-            if (indicator) {
-                indicator.classList.add('show');
-                setTimeout(function() { indicator.classList.remove('show'); }, 3000);
-            }
-            if (data.message && window.BTADashboard && window.BTADashboard.showToast) {
-                window.BTADashboard.showToast(data.message, 'success');
-            }
-        })
-        .catch(function(err) {
-            if (window.BTADashboard && window.BTADashboard.showToast) {
-                window.BTADashboard.showToast('Save failed: ' + err.message, 'error');
-            } else {
-                alert('Save failed: ' + err.message);
-            }
-        });
-    }
-
-    function toggleVisibility(fieldId, btn) {
-        var input = document.getElementById(fieldId);
-        var icon = btn.querySelector('i');
-        if (input.type === 'password') {
-            input.type = 'text';
-            icon.className = 'bi bi-eye-slash';
-        } else {
-            input.type = 'password';
-            icon.className = 'bi bi-eye';
-        }
-    }
-
     document.addEventListener('DOMContentLoaded', init);
-
-    return {
-        setProvider: setProvider,
-        saveLLM: saveLLM,
-        saveAgent: saveAgent,
-        saveApiKeys: saveApiKeys,
-        toggleVisibility: toggleVisibility,
-        refreshOllamaModels: refreshOllamaModels
-    };
+    return { setProvider: setProvider, saveLLM: saveLLM, saveAgent: saveAgent, saveAnalysis: saveAnalysis, refreshOllamaModels: refreshOllamaModels };
 })();
 </script>
+<script src="/static/js/settings_sources.js?v=1"></script>
 {% endblock %}
