@@ -159,6 +159,14 @@ def test_builtin_playbook_detail_exposes_normalized_guided_run_fields():
     }
     assert isinstance(alert["overview"], list) and alert["overview"]
     assert all(isinstance(stage, str) and stage.strip() for stage in alert["overview"])
+    assert alert["overview"] == [
+        "Read the alert and extract its indicators",
+        "Check the indicators against threat intelligence sources",
+        "High-priority alerts start a separate Incident Response session",
+        "That session can pause for approval",
+        "Low-priority alerts end with a triage report in this session",
+    ]
+    assert len(alert["overview"]) <= 5
     assert isinstance(alert["output"], str) and alert["output"].strip()
 
     malware = serialize_playbook(

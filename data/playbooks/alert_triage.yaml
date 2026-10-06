@@ -5,6 +5,8 @@ description: >
   IOC extraction, threat intelligence enrichment, prioritization, and action determination.
   Automated multi-source threat intel check with MCP tools.
 overview:
+  - Read the alert and extract its indicators
+  - Check the indicators against threat intelligence sources
   - High-priority alerts start a separate Incident Response session
   - That session can pause for approval
   - Low-priority alerts end with a triage report in this session
