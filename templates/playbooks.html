@@ -353,6 +353,7 @@
                 <h5 class="modal-title" id="runPlaybookTitle">
                     <i class="bi bi-play-circle me-2 text-accent"></i>Run Playbook
                 </h5>
+                <label class="playbooks-guide-toggle"><input type="checkbox" data-guide-toggle><span>Guide</span></label>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
@@ -364,6 +365,10 @@
                         <button type="button" class="playbooks-run-mode-btn active" id="runFormModeBtn" aria-pressed="true">Form</button>
                         <button type="button" class="playbooks-run-mode-btn" id="runRawModeBtn" aria-pressed="false">Raw JSON</button>
                     </div>
+                    <section class="playbooks-run-next" id="runGuideNext" hidden>
+                        <h6>What happens next</h6>
+                        <p id="runGuideNextText"></p>
+                    </section>
                     <div class="playbooks-run-fields" id="runParamFieldsContainer"></div>
                     <div class="playbooks-run-raw" id="runParamsFallback" hidden>
                         <label class="form-label" for="playbookParams">Input Parameters JSON</label>
@@ -390,6 +395,7 @@
         <div class="modal-content" style="background-color: var(--bg-secondary); color: var(--text-primary); border-color: var(--border-color);">
             <div class="modal-header" style="border-bottom-color: var(--border-color);">
                 <h5 class="modal-title" id="viewPlaybookTitle"><i class="bi bi-journal-code me-2 text-accent"></i>Playbook Details</h5>
+                <label class="playbooks-guide-toggle"><input type="checkbox" data-guide-toggle><span>Guide</span></label>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body" id="viewPlaybookBody">
@@ -723,8 +729,45 @@ var Playbooks = (function () {
     });
 
     /* ── Open run modal with auto-populated params ── */
+    var GUIDE_STORAGE_KEY = 'cabta.playbooks.guide';
+    function readGuidePreference() {
+        try {
+            var saved = window.localStorage.getItem(GUIDE_STORAGE_KEY);
+            return saved === null ? true : saved !== 'false';
+        } catch (e) {
+            return true;
+        }
+    }
+    var guideEnabled = readGuidePreference();
+    var currentViewData = null;
+
+    function syncGuideToggles() {
+        document.querySelectorAll('[data-guide-toggle]').forEach(function(toggle) {
+            toggle.checked = guideEnabled;
+        });
+    }
+
+    function setGuideEnabled(enabled) {
+        guideEnabled = enabled;
+        try {
+            window.localStorage.setItem(GUIDE_STORAGE_KEY, enabled ? 'true' : 'false');
+        } catch (e) {
+            // Keep the current page state if storage is unavailable.
+        }
+        syncGuideToggles();
+        updateRunGuidePresentation();
+        if (currentViewData) renderViewDetails(currentViewData);
+    }
+
+    document.querySelectorAll('[data-guide-toggle]').forEach(function(toggle) {
+        toggle.addEventListener('change', function() { setGuideEnabled(toggle.checked); });
+    });
+    syncGuideToggles();
+
     var runInputMode = 'raw';
     var runExtraParams = {};
+    var currentRunOutput = '';
+    var currentRunParams = [];
 
     function setRunError(message) {
         var error = document.getElementById('runPlaybookError');
@@ -741,11 +784,25 @@ var Playbooks = (function () {
         getRunFields().forEach(function(field) {
             var key = field.getAttribute('data-param-key');
             var value = field.value.trim();
-            if (value || (includeEmpty && field.getAttribute('data-param-required') === 'true')) {
+            if (field.getAttribute('data-param-json') === 'true' && value) {
+                try { values[key] = JSON.parse(value); } catch (e) { values[key] = value; }
+            } else if (value || (includeEmpty && field.getAttribute('data-param-required') === 'true')) {
                 values[key] = value;
             }
         });
         return values;
+    }
+
+    function updateRunGuidePresentation() {
+        document.querySelectorAll('#runParamFieldsContainer .playbooks-run-guide-help').forEach(function(help) {
+            help.hidden = !guideEnabled;
+        });
+        getRunFields().forEach(function(field) {
+            field.placeholder = guideEnabled ? (field.getAttribute('data-param-example') || '') : '';
+        });
+        var next = document.getElementById('runGuideNext');
+        next.hidden = !guideEnabled || !currentRunOutput;
+        document.getElementById('runGuideNextText').textContent = currentRunOutput;
     }
 
     function setRunMode(mode) {
@@ -782,9 +839,8 @@ var Playbooks = (function () {
             var key = definition.name;
             var required = definition.required === true;
             var description = typeof definition.description === 'string' ? definition.description : '';
-            var type = typeof definition.type === 'string' ? definition.type.toLowerCase() : '';
-            var longTextName = /(^|_)(text|body|content|description|context|details|notes|report|log|result|analysis)(_|$)/i.test(key);
-            var useTextarea = type === 'text' || longTextName;
+            var isObjectExample = definition.example !== null && typeof definition.example === 'object';
+            var useTextarea = /text|description/i.test(key) || isObjectExample;
 
             var field = document.createElement('div');
             field.className = 'playbooks-run-field';
@@ -804,8 +860,12 @@ var Playbooks = (function () {
             input.setAttribute('data-param-key', key);
             input.setAttribute('data-param-required', required ? 'true' : 'false');
             input.setAttribute('aria-label', key);
-            if (Object.prototype.hasOwnProperty.call(definition, 'default') && definition.default !== null) {
-                input.value = String(definition.default);
+            if (isObjectExample) input.setAttribute('data-param-json', 'true');
+            var hasExample = Object.prototype.hasOwnProperty.call(definition, 'example') && definition.example !== null;
+            var exampleText = '';
+            if (hasExample) {
+                exampleText = typeof definition.example === 'string' ? definition.example : JSON.stringify(definition.example, null, 2);
+                input.setAttribute('data-param-example', exampleText);
             }
             field.appendChild(input);
 
@@ -820,17 +880,35 @@ var Playbooks = (function () {
                 setRunError('');
             });
 
+            var helpWrap = document.createElement('div');
+            helpWrap.className = 'playbooks-run-guide-help';
+            helpWrap.hidden = !guideEnabled;
             if (description) {
                 var help = document.createElement('div');
                 help.className = 'form-text';
                 help.textContent = description;
-                field.appendChild(help);
+                helpWrap.appendChild(help);
             }
+            if (hasExample) {
+                var fillButton = document.createElement('button');
+                fillButton.type = 'button';
+                fillButton.className = 'playbooks-run-example-btn';
+                fillButton.textContent = 'Fill with example';
+                fillButton.addEventListener('click', function() {
+                    input.value = exampleText;
+                    input.dispatchEvent(new Event('input', { bubbles: true }));
+                });
+                helpWrap.appendChild(fillButton);
+            }
+            if (helpWrap.childNodes.length) field.appendChild(helpWrap);
             container.appendChild(field);
         });
+        updateRunGuidePresentation();
     }
 
     function openRunModal(playbookId, playbookName) {
+        currentRunOutput = '';
+        currentRunParams = [];
         document.getElementById('runPlaybookId').value = playbookId;
         document.getElementById('runPlaybookTitle').textContent = 'Run: ' + playbookName;
         document.getElementById('runPlaybookDesc').textContent = '';
@@ -849,6 +927,8 @@ var Playbooks = (function () {
         .then(function(data) {
             if (!data) return;
             document.getElementById('runPlaybookDesc').textContent = data.description || '';
+            currentRunOutput = typeof data.output === 'string' ? data.output : '';
+            updateRunGuidePresentation();
             var steps = Array.isArray(data.steps) ? data.steps : [];
             var stepCount = Number.isFinite(Number(data.step_count)) ? Number(data.step_count) : steps.length;
             var trigger = formatPlaybookLabel(data.trigger_type || 'manual');
@@ -856,6 +936,7 @@ var Playbooks = (function () {
                 stepCount + ' steps \u00b7 ' + trigger + ' trigger \u00b7 Opens in Agent Chat when started';
 
             var params = Array.isArray(data.input_params) ? data.input_params : [];
+            currentRunParams = params;
             if (params.length) {
                 renderRunFields(params);
                 document.getElementById('runInputModeSwitch').hidden = false;
@@ -892,8 +973,9 @@ var Playbooks = (function () {
             getRunFields().forEach(function(field) {
                 var key = field.getAttribute('data-param-key');
                 fieldNames[key] = true;
-                if (Object.prototype.hasOwnProperty.call(parsed, key) && parsed[key] !== null && typeof parsed[key] !== 'object') {
-                    field.value = String(parsed[key]);
+                if (Object.prototype.hasOwnProperty.call(parsed, key) && parsed[key] !== null) {
+                    field.value = field.getAttribute('data-param-json') === 'true' && typeof parsed[key] === 'object'
+                        ? JSON.stringify(parsed[key], null, 2) : String(parsed[key]);
                 }
             });
             runExtraParams = {};
@@ -930,7 +1012,20 @@ var Playbooks = (function () {
                 fieldError.hidden = !empty;
                 if (empty) valid = false;
                 var key = field.getAttribute('data-param-key');
-                if (field.value.trim()) params[key] = field.value.trim();
+                if (field.value.trim()) {
+                    if (field.getAttribute('data-param-json') === 'true') {
+                        try {
+                            params[key] = JSON.parse(field.value);
+                        } catch (e) {
+                            valid = false;
+                            field.classList.add('is-invalid');
+                            fieldError.hidden = false;
+                            fieldError.textContent = 'Enter a valid JSON object.';
+                        }
+                    } else {
+                        params[key] = field.value.trim();
+                    }
+                }
             });
             if (!valid) {
                 setRunError('Complete the required fields before starting this playbook.');
@@ -950,6 +1045,15 @@ var Playbooks = (function () {
                     return;
                 }
             }
+            var missingRawRequired = currentRunParams.some(function(definition) {
+                if (!definition || definition.required !== true || !definition.name) return false;
+                var value = params[definition.name];
+                return value === undefined || value === null || (typeof value === 'string' && !value.trim());
+            });
+            if (missingRawRequired) {
+                setRunError('Complete the required fields before starting this playbook.');
+                return;
+            }
         }
 
         btn.disabled = true;
@@ -968,7 +1072,11 @@ var Playbooks = (function () {
         .then(function (r) {
             clearTimeout(runTimeout);
             return r.json().catch(function() { return {}; }).then(function(data) {
-                if (!r.ok) throw new Error(data.detail || data.message || ('HTTP ' + r.status));
+                if (!r.ok) {
+                    var serverMessage = data.detail || data.message || ('HTTP ' + r.status);
+                    if (typeof serverMessage !== 'string') serverMessage = JSON.stringify(serverMessage);
+                    throw new Error(serverMessage);
+                }
                 return data;
             });
         })
@@ -1101,186 +1209,182 @@ var Playbooks = (function () {
         return section;
     }
 
-    var currentViewPlaybookId = null;
+    function appendTextSection(parent, title, text) {
+        if (!text) return;
+        var section = document.createElement('section');
+        section.className = 'playbooks-view-guide-section';
+        var heading = document.createElement('h6');
+        heading.textContent = title;
+        section.appendChild(heading);
+        var content = document.createElement('p');
+        content.textContent = text;
+        section.appendChild(content);
+        parent.appendChild(section);
+    }
+
+    function renderViewDetails(data) {
+        var body = document.getElementById('viewPlaybookBody');
+        while (body.firstChild) body.removeChild(body.firstChild);
+        var pbName = data.name || 'Playbook';
+        var cat = resolveCategory(data);
+        var catInfo = getCategoryInfo(cat);
+        var steps = Array.isArray(data.steps) ? data.steps : [];
+        var params = Array.isArray(data.input_params) ? data.input_params.filter(function(p) { return p && typeof p.name === 'string'; }) : [];
+        var overview = Array.isArray(data.overview) ? data.overview.filter(function(line) { return typeof line === 'string' && line.trim(); }) : [];
+        var stepCount = Number.isFinite(Number(data.step_count)) ? Number(data.step_count) : steps.length;
+        var trigger = String(data.trigger_type || 'manual').toLowerCase();
+        var approvalSteps = Number(data.approval_steps) || 0;
+        var title = document.getElementById('viewPlaybookTitle');
+        while (title.firstChild) title.removeChild(title.firstChild);
+        var titleIcon = document.createElement('i');
+        titleIcon.className = 'bi ' + catInfo.icon + ' me-2 text-accent';
+        title.appendChild(titleIcon);
+        title.appendChild(document.createTextNode(pbName));
+
+        var description = document.createElement('p');
+        description.className = 'text-muted';
+        description.textContent = data.description || '';
+        if (description.textContent) body.appendChild(description);
+
+        var badges = document.createElement('div');
+        badges.className = 'playbooks-view-badges';
+        [[ 'Trigger: ' + trigger, 'trigger-badge trigger-' + trigger ],
+            [ catInfo.label, 'category-badge cat-' + cat ],
+            [ stepCount + ' steps', 'playbooks-view-meta-badge' ],
+            [ approvalSteps ? 'Approval needed: ' + approvalSteps + ' steps' : 'No approval needed', 'playbooks-view-meta-badge' ]
+        ].forEach(function(entry) {
+            var badge = document.createElement('span');
+            badge.className = entry[1];
+            badge.textContent = entry[0];
+            badges.appendChild(badge);
+        });
+        body.appendChild(badges);
+
+        if (guideEnabled) {
+            if (overview.length) {
+                var what = document.createElement('section');
+                what.className = 'playbooks-view-guide-section';
+                var whatTitle = document.createElement('h6');
+                whatTitle.textContent = 'What it does';
+                what.appendChild(whatTitle);
+                var list = document.createElement('ol');
+                overview.forEach(function(line) {
+                    var item = document.createElement('li');
+                    item.textContent = line;
+                    list.appendChild(item);
+                });
+                what.appendChild(list);
+                body.appendChild(what);
+            }
+            if (params.length) {
+                var provide = document.createElement('section');
+                provide.className = 'playbooks-view-input-params';
+                var provideTitle = document.createElement('h6');
+                provideTitle.className = 'playbooks-view-input-title';
+                provideTitle.textContent = 'You provide';
+                provide.appendChild(provideTitle);
+                params.forEach(function(param) {
+                    var item = document.createElement('div');
+                    item.className = 'playbooks-view-input-param';
+                    var name = document.createElement('span');
+                    name.className = 'playbooks-view-input-name';
+                    name.textContent = param.name;
+                    item.appendChild(name);
+                    var tag = document.createElement('span');
+                    tag.className = param.required ? 'playbooks-run-tag playbooks-run-tag-required' : 'playbooks-run-tag';
+                    tag.textContent = param.required ? 'REQUIRED' : 'OPTIONAL';
+                    item.appendChild(tag);
+                    if (typeof param.description === 'string' && param.description.trim()) {
+                        var help = document.createElement('span');
+                        help.className = 'playbooks-view-input-description';
+                        help.textContent = param.description;
+                        item.appendChild(help);
+                    }
+                    provide.appendChild(item);
+                });
+                body.appendChild(provide);
+            }
+            appendTextSection(body, 'You get', typeof data.output === 'string' ? data.output : '');
+            appendTextSection(body, 'Running this playbook', 'The run opens in Agent Chat.');
+        }
+
+        var coverage = buildToolCoverage(steps, data.tool_display || {});
+        if (steps.length || coverage) {
+            var details = document.createElement('details');
+            details.className = 'playbooks-view-all-details';
+            details.open = !guideEnabled;
+            var summary = document.createElement('summary');
+            summary.textContent = 'Show all ' + stepCount + ' steps and tool coverage';
+            details.appendChild(summary);
+            if (steps.length) {
+                var heading = document.createElement('h6');
+                heading.className = 'mb-3';
+                heading.textContent = 'Steps (' + steps.length + ')';
+                details.appendChild(heading);
+                var listSteps = document.createElement('div');
+                listSteps.className = 'playbook-steps';
+                steps.forEach(function(step, index) {
+                    var card = document.createElement('div');
+                    card.className = 'playbook-step';
+                    var number = document.createElement('div');
+                    number.className = 'step-num';
+                    number.textContent = 'Step ' + (index + 1);
+                    card.appendChild(number);
+                    var name = document.createElement('div');
+                    name.className = 'step-name';
+                    name.textContent = step.name || step.action || 'Step ' + (index + 1);
+                    card.appendChild(name);
+                    if (step.tool) {
+                        var tool = document.createElement('div');
+                        tool.className = 'step-tool';
+                        tool.textContent = displayPlaybookTool(step.tool, data.tool_display || {});
+                        card.appendChild(tool);
+                    }
+                    if (step.description) {
+                        var stepDescription = document.createElement('div');
+                        stepDescription.className = 'text-muted small mt-1';
+                        stepDescription.textContent = step.description;
+                        card.appendChild(stepDescription);
+                    }
+                    listSteps.appendChild(card);
+                });
+                details.appendChild(listSteps);
+            }
+            if (coverage) details.appendChild(coverage);
+            body.appendChild(details);
+        }
+    }
 
     function viewPlaybook(playbookId) {
-        currentViewPlaybookId = playbookId;
+        currentViewData = null;
         var modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('viewPlaybookModal'));
         var body = document.getElementById('viewPlaybookBody');
         body.textContent = 'Loading...';
         var runBtnFooter = document.getElementById('viewModalRunBtn');
         runBtnFooter.style.display = 'none';
         modal.show();
-
         var viewController = new AbortController();
         var viewTimeout = setTimeout(function () { viewController.abort(); }, 15000);
-
         fetch('/api/playbooks/' + encodeURIComponent(playbookId), { signal: viewController.signal })
-        .then(function (r) {
+        .then(function(r) {
             clearTimeout(viewTimeout);
             if (!r.ok) throw new Error('HTTP ' + r.status);
             return r.json();
         })
-        .then(function (data) {
-            while (body.firstChild) body.removeChild(body.firstChild);
-
-            var pbName = data.name || playbookId;
-            var pbDesc = data.description || 'No description.';
-            var cat = resolveCategory(data);
-            var catInfo = getCategoryInfo(cat);
-
-            // Update modal title
-            var titleEl = document.getElementById('viewPlaybookTitle');
-            while (titleEl.firstChild) titleEl.removeChild(titleEl.firstChild);
-            var titleIcon = document.createElement('i');
-            titleIcon.className = 'bi ' + catInfo.icon + ' me-2 text-accent';
-            titleEl.appendChild(titleIcon);
-            titleEl.appendChild(document.createTextNode(pbName));
-
-            // Category banner
-            var banner = document.createElement('div');
-            banner.className = 'view-modal-banner banner-' + cat;
-            var bannerIconWrap = document.createElement('div');
-            bannerIconWrap.className = 'banner-icon';
-            var bannerIcon = document.createElement('i');
-            bannerIcon.className = 'bi ' + catInfo.icon;
-            bannerIconWrap.appendChild(bannerIcon);
-            banner.appendChild(bannerIconWrap);
-            var bannerText = document.createElement('div');
-            var bannerTitle = document.createElement('div');
-            bannerTitle.style.cssText = 'font-weight:600;color:var(--text-primary);';
-            bannerTitle.textContent = pbName;
-            bannerText.appendChild(bannerTitle);
-            var bannerSub = document.createElement('div');
-            bannerSub.style.cssText = 'font-size:0.82rem;color:var(--text-secondary);';
-            bannerSub.textContent = catInfo.label + ' Playbook';
-            bannerText.appendChild(bannerSub);
-            banner.appendChild(bannerText);
-            body.appendChild(banner);
-
-            // Description
-            var desc = document.createElement('p');
-            desc.className = 'text-muted';
-            desc.textContent = pbDesc;
-            body.appendChild(desc);
-
-            // Trigger & category meta
-            var metaDiv = document.createElement('div');
-            metaDiv.className = 'd-flex gap-3 mb-3 flex-wrap align-items-center';
-            var tt = (data.trigger_type || 'manual').toLowerCase();
-            var trigBadge = document.createElement('span');
-            trigBadge.className = 'trigger-badge trigger-' + tt;
-            trigBadge.textContent = 'Trigger: ' + tt;
-            metaDiv.appendChild(trigBadge);
-            var catBadge = document.createElement('span');
-            catBadge.className = 'category-badge cat-' + cat;
-            catBadge.textContent = catInfo.label;
-            metaDiv.appendChild(catBadge);
-            body.appendChild(metaDiv);
-
-            // Safe input parameter metadata (never include submitted values).
-            var inputParams = Array.isArray(data.input_params) ? data.input_params : [];
-            if (inputParams.length) {
-                var paramSection = document.createElement('section');
-                paramSection.className = 'playbooks-view-input-params';
-                var paramTitle = document.createElement('h6');
-                paramTitle.className = 'playbooks-view-input-title';
-                paramTitle.textContent = 'Input Parameters';
-                paramSection.appendChild(paramTitle);
-                inputParams.forEach(function(paramDef) {
-                    if (!paramDef || typeof paramDef.name !== 'string') return;
-                    var item = document.createElement('div');
-                    item.className = 'playbooks-view-input-param';
-                    var nameSpan = document.createElement('span');
-                    nameSpan.className = 'playbooks-view-input-name';
-                    nameSpan.textContent = paramDef.name;
-                    item.appendChild(nameSpan);
-                    var tag = document.createElement('span');
-                    tag.className = paramDef.required ? 'playbooks-run-tag playbooks-run-tag-required' : 'playbooks-run-tag';
-                    tag.textContent = paramDef.required ? 'REQUIRED' : 'OPTIONAL';
-                    item.appendChild(tag);
-                    if (typeof paramDef.description === 'string' && paramDef.description) {
-                        var description = document.createElement('span');
-                        description.className = 'playbooks-view-input-description';
-                        description.textContent = paramDef.description;
-                        item.appendChild(description);
-                    }
-                    paramSection.appendChild(item);
-                });
-                body.appendChild(paramSection);
-            }
-
-            // Steps flowchart
-            var steps = data.steps || [];
-            if (steps.length > 0) {
-                var stepsHeading = document.createElement('h6');
-                stepsHeading.className = 'mb-3';
-                var stepsHeadingIcon = document.createElement('i');
-                stepsHeadingIcon.className = 'bi bi-diagram-3 me-1 text-accent';
-                stepsHeading.appendChild(stepsHeadingIcon);
-                stepsHeading.appendChild(document.createTextNode('Steps (' + steps.length + ')'));
-                body.appendChild(stepsHeading);
-
-                var stepsContainer = document.createElement('div');
-                stepsContainer.className = 'playbook-steps';
-
-                steps.forEach(function (s, i) {
-                    var stepDiv = document.createElement('div');
-                    stepDiv.className = 'playbook-step';
-
-                    var numDiv = document.createElement('div');
-                    numDiv.className = 'step-num';
-                    numDiv.textContent = 'Step ' + (i + 1);
-                    stepDiv.appendChild(numDiv);
-
-                    var nameDiv = document.createElement('div');
-                    nameDiv.className = 'step-name';
-                    nameDiv.textContent = s.name || s.action || 'Step ' + (i + 1);
-                    stepDiv.appendChild(nameDiv);
-
-                    if (s.tool) {
-                        var toolDiv = document.createElement('div');
-                        toolDiv.className = 'step-tool';
-                        var toolIcon = document.createElement('i');
-                        toolIcon.className = 'bi ' + getToolIcon(s.tool) + ' me-1';
-                        toolDiv.appendChild(toolIcon);
-                        toolDiv.appendChild(document.createTextNode(displayPlaybookTool(s.tool, data.tool_display || {})));
-                        stepDiv.appendChild(toolDiv);
-                    }
-
-                    if (s.description) {
-                        var descDiv = document.createElement('div');
-                        descDiv.className = 'text-muted small mt-1';
-                        descDiv.textContent = s.description;
-                        stepDiv.appendChild(descDiv);
-                    }
-                    stepsContainer.appendChild(stepDiv);
-                });
-
-                body.appendChild(stepsContainer);
-            } else {
-                var noSteps = document.createElement('p');
-                noSteps.className = 'text-muted';
-                noSteps.textContent = 'No steps defined.';
-                body.appendChild(noSteps);
-            }
-
-            // Grouped tool coverage uses only the safe detail metadata.
-            var toolCoverage = buildToolCoverage(steps, data.tool_display || {});
-            if (toolCoverage) body.appendChild(toolCoverage);
-
-            // Show "Run this Playbook" button in footer
+        .then(function(data) {
+            currentViewData = data;
+            renderViewDetails(data);
             runBtnFooter.style.display = '';
             runBtnFooter.setAttribute('data-playbook-id', playbookId);
-            runBtnFooter.setAttribute('data-playbook-name', pbName);
+            runBtnFooter.setAttribute('data-playbook-name', data.name || playbookId);
         })
-        .catch(function (err) {
+        .catch(function(err) {
             clearTimeout(viewTimeout);
             while (body.firstChild) body.removeChild(body.firstChild);
-            var errDiv = document.createElement('div');
-            errDiv.className = 'text-danger py-3';
-            errDiv.textContent = err.name === 'AbortError' ? 'Error: request timed out.' : 'Error: ' + err.message;
-            body.appendChild(errDiv);
+            var error = document.createElement('div');
+            error.className = 'text-danger py-3';
+            error.textContent = err.name === 'AbortError' ? 'Error: request timed out.' : 'Error: ' + err.message;
+            body.appendChild(error);
         });
     }
 

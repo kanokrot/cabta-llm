@@ -266,3 +266,35 @@ def test_playbooks_view_and_run_modals_use_safe_detail_hooks() -> None:
     assert ".innerHTML" not in run_js
     assert ".innerHTML" not in view_js
     assert "JSON.stringify({ params: params })" in run_js
+
+
+def test_guided_playbook_modals_share_storage_backed_toggle_and_safe_form_rendering() -> None:
+    rendered = _render_playbooks()
+    script_start = rendered.index("var Playbooks = (function ()")
+    script = rendered[script_start:rendered.index("</script>", script_start)]
+    run_form_js = script[
+        script.index("    function renderRunFields("):
+        script.index("    function openRunModal(")
+    ]
+    open_run_js = script[
+        script.index("    function openRunModal("):
+        script.index("    document.getElementById('runFormModeBtn')")
+    ]
+
+    assert rendered.count('<input type="checkbox" data-guide-toggle>') == 2
+    assert rendered.count('class="playbooks-guide-toggle"') == 2
+    assert "cabta.playbooks.guide" in script
+    assert "window.localStorage.getItem(GUIDE_STORAGE_KEY)" in script
+    assert "window.localStorage.setItem(GUIDE_STORAGE_KEY" in script
+    assert re.search(r"function readGuidePreference\(\)\s*\{\s*try\s*\{", script)
+    assert re.search(r"function setGuideEnabled\(enabled\)\s*\{\s*guideEnabled = enabled;\s*try\s*\{", script)
+    assert "required ? 'REQUIRED' : 'OPTIONAL'" in run_form_js
+    assert "definition.required === true" in run_form_js
+    assert "definition.example" in run_form_js
+    assert "input.placeholder" not in run_form_js
+    assert "Fill with example" in run_form_js
+    assert "var params = Array.isArray(data.input_params) ? data.input_params : [];" in open_run_js
+    assert re.search(r"if \(params\.length\)\s*\{.*?setRunMode\('form'\);\s*\} else \{.*?setRunMode\('raw'\);", open_run_js, re.DOTALL)
+    assert "definition.default" not in run_form_js
+    assert ".default" not in run_form_js
+    assert ".innerHTML" not in run_form_js

@@ -508,6 +508,21 @@ body:has(.playbooks-page) .sub-header {
     color: var(--text-primary);
 }
 
+.playbooks-guide-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    margin: 0 12px 0 auto;
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.playbooks-guide-toggle input {
+    accent-color: var(--color-info);
+}
+
 .playbooks-run-summary {
     margin: 0 0 18px;
     padding: 10px 12px;
@@ -598,6 +613,82 @@ body:has(.playbooks-page) .sub-header {
     color: var(--text-muted);
     font-size: 0.72rem;
 }
+
+.playbooks-run-guide-help[hidden] { display: none !important; }
+
+.playbooks-run-example-btn {
+    margin-top: 6px;
+    padding: 0;
+    border: 0;
+    color: var(--color-info);
+    background: transparent;
+    font-size: 0.72rem;
+    font-weight: 600;
+}
+
+.playbooks-run-next,
+.playbooks-view-guide-section {
+    margin: 0 0 14px;
+    padding: 12px 14px;
+    border-left: 2px solid var(--color-info);
+    color: var(--text-secondary);
+    background: color-mix(in srgb, var(--color-info) 7%, var(--bg-tertiary));
+}
+
+.playbooks-run-next[hidden] { display: none !important; }
+
+.playbooks-run-next h6,
+.playbooks-view-guide-section h6 {
+    margin: 0 0 7px;
+    color: var(--text-primary);
+    font-size: 0.82rem;
+}
+
+.playbooks-run-next p,
+.playbooks-view-guide-section p { margin: 0; }
+
+.playbooks-view-guide-section ol {
+    margin: 0;
+    padding-left: 21px;
+}
+
+.playbooks-view-guide-section li + li { margin-top: 5px; }
+
+.playbooks-view-badges {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 7px;
+    margin: 0 0 16px;
+}
+
+.playbooks-view-meta-badge {
+    padding: 4px 7px;
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    background: var(--bg-tertiary);
+    font-size: 0.68rem;
+}
+
+.playbooks-view-all-details {
+    margin-top: 16px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-tertiary);
+}
+
+.playbooks-view-all-details > summary {
+    padding: 11px 13px;
+    color: var(--color-info);
+    cursor: pointer;
+    font-size: 0.78rem;
+    font-weight: 600;
+    list-style-position: inside;
+}
+
+.playbooks-view-all-details[open] > summary { border-bottom: 1px solid var(--border-color); }
+.playbooks-view-all-details > :not(summary) { margin-left: 13px; margin-right: 13px; }
+.playbooks-view-all-details > h6 { margin-top: 14px; }
+.playbooks-view-all-details > .playbooks-view-tools { margin-bottom: 13px; }
 
 .playbooks-run-field-error,
 .playbooks-run-error {
