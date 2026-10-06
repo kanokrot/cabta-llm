@@ -3,17 +3,31 @@
 {% extends "base.html" %}
 
 {% block title %}Dashboard - CABTA{% endblock %}
-{% block page_title %}Dashboard{% endblock %}
-{% block page_subtitle %}<span class="page-subtitle">SOC overview &amp; recent activity</span>{% endblock %}
+{% block page_title %}{% endblock %}
+{% block page_subtitle %}{% endblock %}
 
-{% block header_actions %}
-<a href="/analysis/ioc" class="btn btn-sm btn-primary">
-    <i class="bi bi-search me-1"></i> New IOC Investigation
-</a>
+{% block extra_head %}
+<style>
+    .dashboard-page { padding-top: 56px; }
+    body:has(.dashboard-page) .sub-header {
+        height: 0;
+        min-height: 0;
+        margin-top: 0 !important;
+        overflow: hidden;
+        padding: 0;
+        border: 0;
+    }
+</style>
 {% endblock %}
 
 {% block content %}
+<section class="dashboard-page">
 <div class="container-fluid">
+    <div class="d-flex justify-content-end mb-3">
+        <a href="/analysis/ioc" class="btn btn-sm btn-primary">
+            <i class="bi bi-search me-1"></i> New IOC Investigation
+        </a>
+    </div>
 
     <!-- ═══ Stat Cards ═══════════════════════════════════════ -->
     <div class="row g-3 mb-4">
@@ -163,4 +177,5 @@
 
     </div>
 </div>
+</section>
 {% endblock %}

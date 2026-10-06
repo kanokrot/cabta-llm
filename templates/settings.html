@@ -3,11 +3,20 @@
 {% extends "base.html" %}
 
 {% block title %}Settings - Blue Team Assistant{% endblock %}
-{% block page_title %}Settings{% endblock %}
-{% block page_subtitle %}<span class="page-subtitle">Application Configuration</span>{% endblock %}
+{% block page_title %}{% endblock %}
+{% block page_subtitle %}{% endblock %}
 
 {% block extra_head %}
 <style>
+    .settings-page { padding-top: 56px; }
+    body:has(.settings-page) .sub-header {
+        height: 0;
+        min-height: 0;
+        margin-top: 0 !important;
+        overflow: hidden;
+        padding: 0;
+        border: 0;
+    }
     .settings-section {
         margin-bottom: 1.5rem;
     }
@@ -79,6 +88,7 @@
 {% endblock %}
 
 {% block content %}
+<section class="settings-page">
 <div class="row g-4">
     <!-- LLM Configuration -->
     <div class="col-lg-6">
@@ -335,6 +345,7 @@
         </div>
     </div>
 </div>
+</section>
 {% endblock %}
 
 {% block scripts %}

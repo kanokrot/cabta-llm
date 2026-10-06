@@ -1,16 +1,28 @@
 {% extends "base.html" %}
 
 {% block title %}SOC Operations - CABTA{% endblock %}
-{% block page_title %}CABTA SOC Operations Room{% endblock %}
-{% block page_subtitle %}<span class="page-subtitle">Pixel Office Demo</span>{% endblock %}
+{% block page_title %}{% endblock %}
+{% block page_subtitle %}{% endblock %}
 
 {% block extra_head %}
 <link rel="stylesheet" href="/static/css/soc_operations.css">
 <link rel="stylesheet" href="/static/css/soc_operations_advanced.css">
+<style>
+    .soc-operations-page { padding-top: 56px; }
+    body:has(.soc-operations-page) .sub-header {
+        height: 0;
+        min-height: 0;
+        margin-top: 0 !important;
+        overflow: hidden;
+        padding: 0;
+        border: 0;
+    }
+</style>
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid py-4">
+<div class="soc-operations-page">
+<div class="container-fluid pb-4">
     <section class="soc-office-panel" aria-labelledby="soc-office-title">
         <header class="soc-office-header">
             <div>
@@ -85,6 +97,7 @@
 
         <p class="soc-demo-note">Demo Mode only — no Case, IOC, database, or analysis data is modified.</p>
     </section>
+</div>
 </div>
 {% endblock %}
 
