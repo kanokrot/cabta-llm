@@ -1,67 +1,91 @@
 {% extends "base.html" %}
 
 {% block title %}Integrations - CABTA{% endblock %}
-{% block page_title %}Integrations{% endblock %}
-{% block page_subtitle %}<span class="page-subtitle">Connect external alert sources to CABTA</span>{% endblock %}
 
 {% block extra_head %}
-<link rel="stylesheet" href="/static/css/integrations.css?v=1">
+<link rel="stylesheet" href="/static/css/integrations.css?v=3">
 {% endblock %}
 
 {% block content %}
-<section class="integration-page container-fluid" aria-label="Integrations">
-    <div class="row justify-content-center">
-        <div class="col-12 col-xl-10">
-            <div class="card border-0 shadow-sm mb-4">
-                <div class="card-body p-4 p-lg-5">
-                    <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-4">
-                        <div>
-                            <div class="d-flex align-items-center gap-2 mb-2">
-                                <i class="bi bi-shield-check fs-3 text-info" aria-hidden="true"></i>
-                                <h2 class="h4 mb-0">Wazuh Alert Triage</h2>
-                                <span class="badge rounded-pill text-bg-secondary">Bundle</span>
-                            </div>
-                            <p class="text-muted mb-0">
-                                Download the custom integration files and configure them on your Wazuh manager.
-                                CABTA will not connect to Wazuh automatically.
-                            </p>
-                        </div>
-                        <a class="btn btn-primary btn-lg flex-shrink-0" href="/api/integrations/wazuh/download">
-                            <i class="bi bi-download me-2" aria-hidden="true"></i>Download bundle (.zip)
-                        </a>
-                    </div>
-                </div>
-            </div>
+<section class="integration-page" aria-label="Wazuh Alert Triage integration">
+    <div class="integration-crumb" aria-label="Breadcrumb">
+        More <span aria-hidden="true">›</span> Integrations
+        <span aria-hidden="true">›</span> Wazuh Alert Triage
+    </div>
 
-            <div class="row g-4">
-                <div class="col-12 col-lg-7">
-                    <div class="card h-100 border-0 shadow-sm">
-                        <div class="card-header bg-transparent">
-                            <h3 class="h6 mb-0"><i class="bi bi-box-seam me-2" aria-hidden="true"></i>Included in the bundle</h3>
-                        </div>
-                        <div class="card-body">
-                            <ul class="mb-0">
-                                <li><code>custom-cabta</code> Wazuh integration script</li>
-                                <li><code>ossec.conf</code> integration snippet</li>
-                                <li>Five sample Wazuh alerts for validating the setup</li>
-                                <li><code>README.md</code> installation, configuration, and key rotation steps</li>
-                            </ul>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-12 col-lg-5">
-                    <div class="card h-100 border-0 shadow-sm">
-                        <div class="card-header bg-transparent">
-                            <h3 class="h6 mb-0"><i class="bi bi-info-circle me-2" aria-hidden="true"></i>Before you connect</h3>
-                        </div>
-                        <div class="card-body">
-                            <p class="mb-2">The bundle contains no service credentials. An administrator must create a scoped API key for the Wazuh service account.</p>
-                            <p class="mb-0 text-muted">Install and configure the downloaded files on the Wazuh manager. Use a CABTA URL that the Wazuh host can reach.</p>
-                        </div>
-                    </div>
-                </div>
+    <header class="integration-hero">
+        <div class="integration-hero-copy">
+            <h1>Wazuh Alert Triage <span class="integration-tag">BUNDLE</span></h1>
+            <p>Forward Wazuh alerts to CABTA for automated triage. Download the integration files and install them on your Wazuh manager — CABTA never connects to Wazuh on its own.</p>
+            <div class="integration-meta" aria-label="Bundle details">
+                <span>Format <strong>ZIP</strong></span>
+                <span>Direction <strong>Wazuh <span aria-hidden="true">→</span> CABTA</strong></span>
             </div>
         </div>
+        <div class="integration-download">
+            <a class="integration-download-button" href="/api/integrations/wazuh/download">
+                <i class="bi bi-download" aria-hidden="true"></i>
+                Download bundle (.zip)
+            </a>
+            <small><i class="bi bi-shield-check" aria-hidden="true"></i> No credentials included</small>
+        </div>
+    </header>
+
+    <ol class="integration-steps" aria-label="Setup steps">
+        <li class="integration-step">
+            <span class="integration-step-number">1</span>
+            <div><strong>Create API key</strong><span>Admin creates a scoped key for the Wazuh service account.</span></div>
+        </li>
+        <li class="integration-step">
+            <span class="integration-step-number">2</span>
+            <div><strong>Install on Wazuh</strong><span>Copy the script, add the snippet to ossec.conf, then restart.</span></div>
+        </li>
+        <li class="integration-step">
+            <span class="integration-step-number">3</span>
+            <div><strong>Validate</strong><span>Replay the five sample alerts and check the results in CABTA.</span></div>
+        </li>
+    </ol>
+
+    <div class="integration-grid">
+        <section class="integration-card" aria-labelledby="integrationFilesTitle">
+            <h2 id="integrationFilesTitle">Included in the bundle</h2>
+            <div class="integration-file">
+                <span class="integration-file-icon">.py</span>
+                <div class="integration-file-copy"><strong>custom-cabta</strong><span>Wazuh integration script</span></div>
+                <em>script</em>
+            </div>
+            <div class="integration-file">
+                <span class="integration-file-icon">.conf</span>
+                <div class="integration-file-copy"><strong>ossec.conf</strong><span>Integration snippet</span></div>
+                <em>config</em>
+            </div>
+            <div class="integration-file integration-samples">
+                <span class="integration-file-icon">×5</span>
+                <div class="integration-file-copy">
+                    <strong>samples/</strong>
+                    <span>Five sample Wazuh alerts for validating the setup</span>
+                    <span class="integration-sample-names">benign_scan.json · brute_force.json · malware_hash.json · no_ioc.json · web_attack_cve.json</span>
+                </div>
+                <em>samples</em>
+            </div>
+            <div class="integration-file">
+                <span class="integration-file-icon">.md</span>
+                <div class="integration-file-copy"><strong>README.md</strong><span>Installation, configuration, and key rotation steps</span></div>
+                <em>docs</em>
+            </div>
+        </section>
+
+        <section class="integration-card" aria-labelledby="integrationChecklistTitle">
+            <h2 id="integrationChecklistTitle">Before you connect</h2>
+            <ul class="integration-checklist">
+                <li><i aria-hidden="true">✓</i><span>An administrator creates a <strong>scoped API key</strong> for the Wazuh service account.</span></li>
+                <li><i aria-hidden="true">✓</i><span>Use a <strong>CABTA URL the Wazuh host can reach</strong> (not 127.0.0.1).</span></li>
+                <li><i aria-hidden="true">✓</i><span>Install and configure the files on the Wazuh manager.</span></li>
+            </ul>
+            <aside class="integration-security-note">
+                <strong>Security:</strong> The bundle contains no service credentials. Store the service key only on the Wazuh manager and rotate it per the README.
+            </aside>
+        </section>
     </div>
 </section>
 {% endblock %}
