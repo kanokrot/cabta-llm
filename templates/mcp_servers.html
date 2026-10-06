@@ -6,14 +6,10 @@
 {% block page_title %}MCP Servers{% endblock %}
 {% block page_subtitle %}<span class="page-subtitle">Model Context Protocol Server Management</span>{% endblock %}
 
-{% block header_actions %}
-<button class="btn btn-sm btn-accent" data-bs-toggle="modal" data-bs-target="#addServerModal">
-    <i class="bi bi-plus-lg me-1"></i>Add Server
-</button>
-{% endblock %}
-
 {% block extra_head %}
 <style>
+    body:has(.mcp-servers-page) .sub-header { display: none; }
+    .mcp-servers-page { padding-top: 56px; }
     .status-dot-lg {
         display: inline-block;
         width: 0.55rem;
@@ -56,9 +52,16 @@
         color: var(--text-primary);
     }
     .summary-card .sc-icon { font-size: 1.4rem; color: var(--color-accent); }
-    .summary-card .sc-value { font-size: 1.35rem; font-weight: 700; line-height: 1.1; }
+    .summary-card:nth-child(1) .sc-icon { color: var(--color-accent); }
+    .summary-card:nth-child(2) .sc-icon { color: var(--color-success); }
+    .summary-card:nth-child(3) .sc-icon { color: var(--bs-purple); }
+    .summary-card:nth-child(4) .sc-icon { color: var(--color-warning); }
+    .summary-card .sc-value { font-size: 26px; font-weight: 600; line-height: 1.1; }
+    .summary-card .sc-value.attention-value { color: var(--color-warning); }
     .summary-card .sc-label { color: var(--text-secondary); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; }
 
+    .mcp-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
+    .mcp-toolbar-actions { display: flex; align-items: center; justify-content: flex-end; gap: 0.5rem; }
     .category-filters { display: flex; flex-wrap: wrap; gap: 0.45rem; margin-bottom: 1rem; }
     .category-pill {
         display: inline-flex;
@@ -73,30 +76,52 @@
         font-size: 0.8rem;
     }
     .category-pill:hover, .category-pill.active { border-color: var(--color-accent); background: color-mix(in srgb, var(--color-accent) 14%, var(--bg-secondary)); color: var(--color-accent); }
+    .category-pill.active[data-category="recon"] { border-color: var(--color-accent); background: color-mix(in srgb, var(--color-accent) 14%, var(--bg-secondary)); color: var(--color-accent); }
+    .category-pill.active[data-category="malware"] { border-color: var(--color-danger); background: color-mix(in srgb, var(--color-danger) 14%, var(--bg-secondary)); color: var(--color-danger); }
+    .category-pill.active[data-category="forensics"] { border-color: var(--color-info); background: color-mix(in srgb, var(--color-info) 14%, var(--bg-secondary)); color: var(--color-info); }
+    .category-pill.active[data-category="intel"] { border-color: var(--color-success); background: color-mix(in srgb, var(--color-success) 14%, var(--bg-secondary)); color: var(--color-success); }
+    .category-pill.active[data-category="vuln"] { border-color: var(--color-warning); background: color-mix(in srgb, var(--color-warning) 14%, var(--bg-secondary)); color: var(--color-warning); }
+    .category-pill.active[data-category="other"] { border-color: var(--text-secondary); background: color-mix(in srgb, var(--text-secondary) 14%, var(--bg-secondary)); color: var(--text-secondary); }
     .pill-count { min-width: 1.25rem; text-align: center; font-size: 0.72rem; font-weight: 700; }
 
-    .server-list { display: grid; gap: 0.65rem; }
+    .server-list { display: grid; gap: 8px; }
     .server-row {
         overflow: hidden;
         border: 1px solid var(--border-color);
+        border-left: 3px solid var(--server-category-color, var(--border-color));
         border-radius: 0.75rem;
         background: var(--bg-secondary);
         color: var(--text-primary);
+        transition: border-color 0.16s ease, box-shadow 0.16s ease;
     }
+    .server-row[data-category="recon"] { --server-category-color: var(--color-accent); }
+    .server-row[data-category="malware"] { --server-category-color: var(--color-danger); }
+    .server-row[data-category="forensics"] { --server-category-color: var(--color-info); }
+    .server-row[data-category="intel"] { --server-category-color: var(--color-success); }
+    .server-row[data-category="vuln"] { --server-category-color: var(--color-warning); }
+    .server-row[data-category="other"] { --server-category-color: var(--text-secondary); }
+    .server-row:hover {
+        border-top-color: color-mix(in srgb, var(--server-category-color) 38%, var(--border-color));
+        border-right-color: color-mix(in srgb, var(--server-category-color) 38%, var(--border-color));
+        border-bottom-color: color-mix(in srgb, var(--server-category-color) 38%, var(--border-color));
+    }
+    [data-theme="dark"] .server-row:hover { box-shadow: 0 0 14px color-mix(in srgb, var(--server-category-color) 14%, transparent); }
+    [data-theme="light"] .server-row:hover { box-shadow: 0 2px 8px color-mix(in srgb, var(--text-primary) 9%, transparent); }
     .server-row-header {
         display: grid;
-        grid-template-columns: auto minmax(10rem, 1fr) auto auto auto auto;
+        grid-template-columns: 40px minmax(10rem, 1fr) 132px 72px 132px 192px;
         align-items: center;
-        gap: 0.8rem;
+        gap: 0.75rem;
         min-height: 4.25rem;
         padding: 0.75rem 1rem;
         cursor: pointer;
     }
     .server-row-header:hover { background: var(--bg-tertiary); }
-    .server-icon { display: inline-flex; align-items: center; justify-content: center; width: 2.5rem; height: 2.5rem; border-radius: 0.65rem; background: color-mix(in srgb, currentColor 12%, transparent); font-size: 1.2rem; }
+    .server-icon { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 0.65rem; background: color-mix(in srgb, currentColor 15%, transparent); color: var(--server-category-color, var(--color-accent)); font-size: 1.2rem; }
     .server-name-block { display: grid; min-width: 0; gap: 0.1rem; }
-    .server-display-name { overflow: hidden; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
-    .server-technical-name { color: var(--text-secondary); font-family: var(--bs-font-monospace); font-size: 0.73rem; overflow-wrap: anywhere; }
+    .server-display-name { overflow: hidden; font-size: 15px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+    .server-technical-name { color: var(--text-secondary); font-family: var(--bs-font-monospace); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .server-technical-name[hidden] { display: none; }
     .server-category {
         display: inline-flex;
         align-items: center;
@@ -114,9 +139,15 @@
     .category-intel { color: var(--color-success); }
     .category-vuln { color: var(--color-warning); }
     .category-other { color: var(--text-secondary); }
-    .server-tool-count { color: var(--text-secondary); font-size: 0.78rem; white-space: nowrap; }
+    .server-tool-count { color: var(--text-secondary); font-size: 0.78rem; text-align: center; white-space: nowrap; }
     .server-row-actions { display: inline-flex; align-items: center; gap: 0.25rem; }
-    .server-row-actions .btn { display: inline-flex; align-items: center; justify-content: center; width: 2rem; height: 2rem; padding: 0; }
+    .server-row-actions .btn { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; }
+    .server-row-actions .server-action { border-color: transparent; background: color-mix(in srgb, var(--text-secondary) 8%, transparent); color: var(--text-secondary); box-shadow: none; }
+    .server-row-actions .server-check-btn:hover { border-color: transparent; background: color-mix(in srgb, var(--color-warning) 16%, transparent); color: var(--color-warning); }
+    .server-row-actions .server-tools-btn:hover { border-color: transparent; background: color-mix(in srgb, var(--color-info) 16%, transparent); color: var(--color-info); }
+    .server-row-actions .server-disconnect-btn:hover { border-color: transparent; background: color-mix(in srgb, var(--text-primary) 14%, transparent); color: var(--text-primary); }
+    .server-row-actions .server-delete-btn:hover { border-color: transparent; background: color-mix(in srgb, var(--color-danger) 16%, transparent); color: var(--color-danger); }
+    .server-row-actions .server-connect-btn:hover { border-color: transparent; background: color-mix(in srgb, var(--color-success) 16%, transparent); color: var(--color-success); }
     .server-row-actions [hidden] { display: none !important; }
     .server-expand-icon { color: var(--text-secondary); transition: transform 0.15s ease; }
     .server-row.is-expanded .server-expand-icon { transform: rotate(90deg); }
@@ -140,7 +171,9 @@
     }
     .tool-chip:hover, .tool-chip:focus { border-color: var(--color-accent); outline: none; }
     .tool-chip i, .mcp-tool-icon { color: var(--color-accent); }
-    .tool-chip-summary { display: block; color: var(--text-secondary); font-size: 0.75rem; }
+    .tool-friendly-name { font-size: 14px; font-weight: 600; }
+    .tool-chip .source-badge { display: none; }
+    .tool-chip-summary { display: block; color: var(--text-secondary); font-size: 12px; }
     .tool-logo { width: 20px; height: 20px; object-fit: contain; padding: 2px; border-radius: 4px; background: var(--bg-secondary); flex: 0 0 auto; }
     .tool-detail-logo { width: 48px; height: 48px; padding: 5px; }
     .tool-detail-header { display: flex; align-items: center; gap: 0.75rem; }
@@ -164,7 +197,9 @@
 
     @media (max-width: 767.98px) {
         .summary-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-        .server-row-header { grid-template-columns: auto minmax(0, 1fr) auto; gap: 0.55rem; }
+        .mcp-toolbar { align-items: flex-start; flex-direction: column; }
+        .mcp-toolbar-actions { width: 100%; justify-content: flex-end; }
+        .server-row-header { grid-template-columns: 40px minmax(0, 1fr) 112px; gap: 0.55rem; }
         .server-category { grid-column: 2; justify-self: start; }
         .server-tool-count { grid-column: 3; grid-row: 2; }
         .status-badge { grid-column: 2; grid-row: 3; justify-self: start; }
@@ -173,19 +208,31 @@
     @media (max-width: 575.98px) {
         .tools-grid { grid-template-columns: minmax(0, 1fr); }
         .summary-card { padding: 0.7rem; }
-        .server-row-header { padding: 0.7rem; }
+        .server-row-header { grid-template-columns: 40px minmax(0, 1fr); padding: 0.7rem; }
+        .server-tool-count { grid-column: 2; grid-row: 3; justify-self: start; }
+        .status-badge { grid-column: 2; grid-row: 4; }
     }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
+<div class="mcp-servers-page">
+<div class="mcp-toolbar">
     <p class="mb-0" style="color: var(--text-secondary);">
         Configure and manage MCP server connections.
     </p>
-    <button class="btn btn-sm btn-ghost" onclick="MCPServers.loadServers()">
-        <i class="bi bi-arrow-clockwise me-1" aria-hidden="true"></i>Refresh
-    </button>
+    <div class="mcp-toolbar-actions">
+        <button type="button" class="btn btn-sm btn-outline-info" id="checkAllBtn" onclick="MCPServers.checkAll()">
+            <i class="bi bi-patch-check me-1" aria-hidden="true"></i>Check all
+        </button>
+        <button class="btn btn-sm btn-ghost" onclick="MCPServers.loadServers()">
+            <i class="bi bi-arrow-clockwise me-1" aria-hidden="true"></i>Refresh
+        </button>
+        <button type="button" class="btn btn-sm btn-accent category-add-server"
+                data-bs-toggle="modal" data-bs-target="#addServerModal">
+            <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Add Server
+        </button>
+    </div>
 </div>
 
 {% set total_count = servers | length %}
@@ -204,7 +251,7 @@
     </div>
     <div class="summary-card">
         <i class="sc-icon bi bi-exclamation-circle" aria-hidden="true"></i>
-        <div><div class="sc-value" id="needAttentionCount">{{ attention_count }}</div><div class="sc-label">Need attention</div></div>
+        <div><div class="sc-value{% if attention_count > 0 %} attention-value{% endif %}" id="needAttentionCount">{{ attention_count }}</div><div class="sc-label">Need attention</div></div>
     </div>
 </div>
 
@@ -216,12 +263,14 @@
     {% if active_categories is defined %}
     {% for cat in active_categories %}
     {% set cat_count = servers | selectattr('category', 'equalto', cat.key) | list | length %}
+    {% if cat_count > 0 %}
     <button type="button" class="category-pill" data-category="{{ cat.key | e }}" aria-pressed="false"
             title="{{ cat.get('description', '') | e }}">
         <i class="{{ cat.get('icon', 'bi-server') | e }}" aria-hidden="true"></i>
         {{ cat.get('label', cat.key) | e }}
         <span class="pill-count">{{ cat_count }}</span>
     </button>
+    {% endif %}
     {% endfor %}
     {% endif %}
 </div>
@@ -259,7 +308,9 @@
             </span>
             <span class="server-name-block">
                 <span class="server-display-name">{{ srv.get('display_name', srv.name) | e }}</span>
+                {% if srv.get('display_name', srv.name) != srv.name %}
                 <span class="server-technical-name">{{ srv.name | e }}</span>
+                {% endif %}
             </span>
             <span class="server-category category-{{ cat | replace('_', '-') | e }}">{{ categories.get(cat, {}).get('label', cat | replace('_', ' ') | title) | e }}</span>
             <span class="server-tool-count" data-tool-count>{{ tool_count }} tools</span>
@@ -311,11 +362,6 @@
     {% endif %}
 </div>
 
-<div class="d-flex justify-content-end mt-3">
-    <button type="button" class="btn btn-sm btn-outline-info" id="checkAllBtn" onclick="MCPServers.checkAll()">
-        <i class="bi bi-patch-check me-1" aria-hidden="true"></i>Check all
-    </button>
-</div>
 <!-- Add Server Modal -->
 <div class="modal fade" id="addServerModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg">
@@ -427,6 +473,7 @@
             </div>
         </div>
     </div>
+</div>
 </div>
 {% endblock %}
 
