@@ -100,7 +100,21 @@ class PageAuthMiddleware(BaseHTTPMiddleware):
         request.state.user = user
 
         required_roles = PAGE_ROLE_REQUIREMENTS.get(path)
-        if required_roles is not None and user.get("role") not in required_roles:
+        if (
+            path == "/agent/chat"
+            and user.get("role") == "Incident Responder"
+            and not (request.query_params.get("session") or "").strip()
+        ):
+            return RedirectResponse(url="/agent/playbooks", status_code=303)
+        if (
+            required_roles is not None
+            and user.get("role") not in required_roles
+            and not (
+                path == "/agent/chat"
+                and user.get("role") == "Incident Responder"
+                and bool((request.query_params.get("session") or "").strip())
+            )
+        ):
             return JSONResponse(
                 {"detail": "Insufficient permissions"},
                 status_code=403,

@@ -297,7 +297,7 @@ def _session_cookie_for_role(monkeypatch, tmp_path: Path, role: str) -> str:
     return auth_core.create_access_token(user)
 
 
-@pytest.mark.parametrize("path", ["/", "/agent/chat"])
+@pytest.mark.parametrize("path", ["/"])
 @pytest.mark.parametrize(
     "role,allowed",
     [
@@ -321,3 +321,38 @@ def test_agent_chat_pages_limited_to_threat_hunter_and_admin(
     else:
         assert response.status_code == 403
         assert response.json() == {"detail": "Insufficient permissions"}
+
+
+@pytest.mark.parametrize(
+    "role,query,expected_status,expected_location",
+    [
+        ("Incident Responder", "", 303, "/agent/playbooks"),
+        ("Incident Responder", "?session=session-123", 200, None),
+        ("Incident Responder", "?session=", 303, "/agent/playbooks"),
+        ("Threat Hunter", "", 200, None),
+        ("admin", "", 200, None),
+        ("SOC Analyst Tier 1-2", "?session=session-123", 403, None),
+    ],
+)
+def test_agent_chat_playbook_session_page_access(
+    role, query, expected_status, expected_location, monkeypatch, tmp_path
+) -> None:
+    token = _session_cookie_for_role(monkeypatch, tmp_path, role)
+    with TestClient(_middleware_app()) as client:
+        client.cookies.set(SESSION_COOKIE_NAME, token)
+        response = client.get("/agent/chat" + query, follow_redirects=False)
+
+    assert response.status_code == expected_status
+    if expected_location:
+        assert response.headers["location"] == expected_location
+
+
+def test_incident_responder_still_cannot_open_agent_investigations(
+    monkeypatch, tmp_path
+) -> None:
+    token = _session_cookie_for_role(monkeypatch, tmp_path, "Incident Responder")
+    with TestClient(_middleware_app()) as client:
+        client.cookies.set(SESSION_COOKIE_NAME, token)
+        response = client.get("/agent/investigations", follow_redirects=False)
+
+    assert response.status_code == 403

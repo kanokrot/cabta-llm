@@ -944,6 +944,14 @@
         border-left-color: var(--color-accent) !important;
         background: rgba(88,166,255,0.08) !important;
     }
+    .playbook-session-mode #agentSessionsSidebar,
+    .playbook-session-mode .agent-chat-header-title > button,
+    .playbook-session-mode .agent-chat-composer-tools,
+    .playbook-session-mode #agentSidebarDrawer,
+    .playbook-session-mode #exportDropdownWrap,
+    .playbook-session-mode .agent-empty-state { display: none !important; }
+    .playbook-session-mode .chat-input-area textarea,
+    .playbook-session-mode .chat-input-area button { pointer-events: none; }
 
     /* ===== Right Sidebar Tabs ===== */
     .agent-sidebar-tabs {
@@ -1254,7 +1262,8 @@
         </div>
     </div>
 </template>
-<div class="agent-chat-layout">
+{% set playbook_session_mode = request.state.user.get('role') == 'Incident Responder' and (request.query_params.get('session') or '').strip() %}
+<div class="agent-chat-layout{% if playbook_session_mode %} playbook-session-mode{% endif %}">
     <aside class="agent-chat-sidebar offcanvas-lg offcanvas-start" id="agentSessionsSidebar" tabindex="-1" aria-labelledby="agentSessionsLabel">
         <div class="offcanvas-header d-lg-none">
             <h5 class="offcanvas-title" id="agentSessionsLabel">Chats</h5>
@@ -1340,10 +1349,10 @@
                         </div>
                     </div>
                     <div class="input-group">
-                        <textarea id="chatInput" class="form-control" rows="2"
+                        <textarea id="chatInput" class="form-control" rows="2"{% if playbook_session_mode %} disabled aria-label="Read-only playbook session"{% endif %}
                             placeholder="e.g. Investigate IP 45.33.32.156 for C2 activity..."
                             onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();AgentChat.send();}"></textarea>
-                        <button class="btn btn-accent" onclick="AgentChat.send()" id="sendBtn" title="Send (Enter)">
+                        <button class="btn btn-accent" onclick="AgentChat.send()" id="sendBtn" title="Send (Enter)"{% if playbook_session_mode %} disabled{% endif %}>
                             <i class="bi bi-send-fill"></i>
                         </button>
                     </div>
@@ -1524,6 +1533,8 @@
 
 {% block scripts %}
 <script>
+var playbookSessionMode = {{ 'true' if playbook_session_mode else 'false' }};
+var requestedPlaybookSessionId = {{ (request.query_params.get('session') or '') | tojson }};
 var AgentChat = (function() {
     var sessionId = null;
     var ws = null;
@@ -1545,6 +1556,7 @@ var AgentChat = (function() {
     var SESSION_FETCH_LIMIT = 50;
     var loadedSessions = [];
     var sessionsExpanded = false;
+    var playbookDetailLoaded = false;
     var selectedToolCategory = '';
     var toolSearchQuery = '';
     var agentStatus = {
@@ -2175,6 +2187,12 @@ var AgentChat = (function() {
     function init() {
         restoreEmptyState();
         renderAgentStatus();
+        if (playbookSessionMode) {
+            sessionId = requestedPlaybookSessionId;
+            document.getElementById('chatInput').placeholder = 'Read-only playbook session. Approve or reject pending actions below.';
+            if (sessionId) loadPlaybookSession(sessionId);
+            return;
+        }
         mirrorSidebarCounts();
         initExportModal();
         initToolFilters();
@@ -2190,6 +2208,7 @@ var AgentChat = (function() {
     }
 
     function checkOllamaHealth() {
+        if (playbookSessionMode) return;
         fetch('/api/config/ollama-health')
             .then(function(r) { return r.ok ? r.json() : null; })
             .then(function(data) {
@@ -2343,6 +2362,7 @@ var AgentChat = (function() {
     }
 
     function loadTools() {
+        if (playbookSessionMode) return;
         fetch('/api/agent/tools')
             .then(function(r) { return r.json(); })
             .then(function(data) {
@@ -2386,6 +2406,7 @@ var AgentChat = (function() {
     }
 
     function loadPlaybooks() {
+        if (playbookSessionMode) return;
         fetch('/api/playbooks')
             .then(function(r) { return r.json(); })
             .then(function(data) {
@@ -2590,6 +2611,7 @@ var AgentChat = (function() {
     }
 
     function loadSessions() {
+        if (playbookSessionMode) return;
         fetch('/api/agent/sessions?limit=' + SESSION_FETCH_LIMIT)
             .then(function(r) { return r.json(); })
             .then(function(data) {
@@ -2679,6 +2701,7 @@ var AgentChat = (function() {
     }
 
     function newSession() {
+        if (playbookSessionMode) return;
         if (ws) ws.close();
         setConnectionStatus('Disconnected', 'bg-secondary');
         sessionId = null;
@@ -2704,6 +2727,10 @@ var AgentChat = (function() {
     function switchSession(id) {
         if (!id) { newSession(); return; }
         sessionId = id;
+        if (playbookSessionMode) {
+            loadPlaybookSession(id);
+            return;
+        }
         document.querySelectorAll('.agent-session-item').forEach(function(el) {
             var isActive = String(el.getAttribute('data-session-id')) === String(id);
             el.classList.toggle('active', isActive);
@@ -2717,6 +2744,39 @@ var AgentChat = (function() {
         if (sessionsDrawer && window.bootstrap && window.innerWidth < 992) {
             bootstrap.Offcanvas.getOrCreateInstance(sessionsDrawer).hide();
         }
+    }
+
+    function renderPlaybookSession(data) {
+        var msgs = document.getElementById('chatMessages');
+        while (msgs.firstChild) msgs.removeChild(msgs.firstChild);
+        var steps = Array.isArray(data && data.steps) ? data.steps : [];
+        currentStep = steps.length;
+        updateProgress(currentStep, steps.length || 1);
+        if (data && data.goal) addBubble(data.goal, 'user');
+        if (data && data.summary) addBubble(data.summary, 'agent');
+        steps.forEach(function(step) {
+            step = step || {};
+            if (step.tool_name) addToolCall(step.tool_name, null);
+            if (step.summary) addBubble(step.summary, 'agent');
+        });
+        scrollToBottom();
+    }
+
+    function loadPlaybookSession(id) {
+        if (!playbookSessionMode || !id) return;
+        fetch('/api/playbooks/sessions/' + encodeURIComponent(id))
+            .then(function(r) {
+                if (!r.ok) throw new Error('Session unavailable');
+                return r.json();
+            })
+            .then(function(data) {
+                playbookDetailLoaded = true;
+                renderPlaybookSession(data || {});
+                connectWebSocket(id);
+            })
+            .catch(function() {
+                addBubble('This playbook session could not be loaded.', 'system');
+            });
     }
 
     function loadHistory(id) {
@@ -2814,7 +2874,7 @@ var AgentChat = (function() {
             case 'tool_call':
                 currentStep = msg.step || currentStep;
                 updateProgress(currentStep, maxSteps);
-                addToolCall(msg.tool, msg.args, msg.source);
+                addToolCall(msg.tool || 'tool', playbookSessionMode ? null : msg.args, msg.source);
                 setCurrentTool(msg.tool || '');
                 setCurrentPhase('act');
                 showLiveToolIndicator(msg.tool, 'act');
@@ -2824,17 +2884,25 @@ var AgentChat = (function() {
                 currentStep = msg.step || currentStep;
                 updateProgress(currentStep, maxSteps);
                 var trDuration = stopToolTimer();
-                addToolResult(msg.tool || 'tool', msg.result || msg.result_preview || msg.content || '', msg.source, trDuration || msg.duration);
+                addToolResult(msg.tool || 'tool', playbookSessionMode ? '' : (msg.result || msg.result_preview || msg.content || ''), msg.source, trDuration || msg.duration);
                 hideLiveToolIndicator();
                 setCurrentPhase('observe');
                 break;
             case 'step':
-                currentStep = msg.step || (currentStep + 1);
+                if (playbookSessionMode && msg.step && typeof msg.step === 'object') {
+                    currentStep = msg.step.step_number || currentStep;
+                } else {
+                    currentStep = msg.step || (currentStep + 1);
+                }
                 maxSteps = msg.max_steps || maxSteps;
                 updateProgress(currentStep, maxSteps);
                 break;
             case 'session_state':
                 if (msg.session) {
+                    if (playbookSessionMode) {
+                        if (!playbookDetailLoaded) renderPlaybookSession(msg.session);
+                        break;
+                    }
                     maxSteps = msg.session.max_steps || 50;
                     var steps = msg.session.steps || msg.steps || [];
                     currentStep = steps.length;
@@ -2867,11 +2935,11 @@ var AgentChat = (function() {
                 stopTimer();
                 hideLiveToolIndicator();
                 addBubble(msg.summary || 'Investigation completed.', 'agent', false, msg.verdict);
-                addInvestigationSummary(msg);
+                if (!playbookSessionMode) addInvestigationSummary(msg);
                 updateProgress(maxSteps, maxSteps);
-                document.getElementById('exportDropdownWrap').style.display = 'inline-flex';
+                if (!playbookSessionMode) document.getElementById('exportDropdownWrap').style.display = 'inline-flex';
                 loadSessions();
-                fetch('/api/agent/sessions/' + encodeURIComponent(sessionId))
+                if (!playbookSessionMode) fetch('/api/agent/sessions/' + encodeURIComponent(sessionId))
                     .then(function(r) { return r.json(); })
                     .then(function(data) {
                         setExportHtmlAvailability(data.has_report === true);
@@ -2898,6 +2966,7 @@ var AgentChat = (function() {
     }
 
     function send() {
+        if (playbookSessionMode) return;
         var input = document.getElementById('chatInput');
         var text = input.value.trim();
         if (!text) return;
@@ -3152,7 +3221,10 @@ var AgentChat = (function() {
     function showApproval(msg) {
         pendingApprovalId = msg.approval_id || msg.id;
         var detail = document.getElementById('approvalDetail');
-        detail.innerHTML = '<div class="tool-name" style="font-size:0.9rem;">' + toolIdentityHtml(msg.tool || msg.action || 'Action') + '</div><div class="mt-1 text-muted" style="font-size:0.82rem;">' + esc(msg.description || msg.content || msg.reason || '') + '</div>';
+        var paramsHtml = playbookSessionMode && msg.params !== undefined
+            ? '<pre class="mt-2 mb-0">' + esc(JSON.stringify(msg.params, null, 2) || '') + '</pre>'
+            : '';
+        detail.innerHTML = '<div class="tool-name" style="font-size:0.9rem;">' + toolIdentityHtml(msg.tool || msg.action || 'Action') + '</div><div class="mt-1 text-muted" style="font-size:0.82rem;">' + esc(msg.description || msg.content || msg.reason || '') + '</div>' + paramsHtml;
         document.getElementById('approvalOverlay').classList.add('show');
     }
 
@@ -3160,7 +3232,7 @@ var AgentChat = (function() {
         document.getElementById('approvalOverlay').classList.remove('show');
         var sid = sessionId || pendingApprovalId;
         if (sid) {
-            fetch('/api/agent/sessions/' + encodeURIComponent(sid) + '/approve', {
+            fetch((playbookSessionMode ? '/api/playbooks/sessions/' : '/api/agent/sessions/') + encodeURIComponent(sid) + '/approve', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ approved: approved, comment: '' })
@@ -3204,6 +3276,7 @@ var AgentChat = (function() {
     }
 
     function exportSession() {
+        if (playbookSessionMode) return;
         if (!sessionId) return;
         fetch('/api/agent/sessions/' + encodeURIComponent(sessionId))
             .then(function(r) { return r.json(); })
@@ -3245,6 +3318,7 @@ var AgentChat = (function() {
 
     // ===== MCP System Status =====
     function refreshMCPStatus() {
+        if (playbookSessionMode) return;
         fetch('/api/mcp/servers')
             .then(function(r) { return r.json(); })
             .then(function(data) {

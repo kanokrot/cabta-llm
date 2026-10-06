@@ -176,3 +176,47 @@ def test_agent_chat_layout_preserves_required_hooks_and_adds_redesign() -> None:
     next_block_start = template.index('<div id="investigationProgress"', card_header_start)
     card_header = template[card_header_start:next_block_start]
     assert card_header.count("<div") == card_header.count("</div>")
+
+
+def test_incident_responder_playbook_mode_is_guarded_and_uses_scoped_endpoints() -> None:
+    template = (Path(__file__).parents[1] / "templates" / "agent_chat.html").read_text(
+        encoding="utf-8"
+    )
+
+    assert "request.state.user.get('role') == 'Incident Responder'" in template
+    assert "request.query_params.get('session')" in template
+    assert "if (playbookSessionMode) {" in template
+    assert "if (playbookSessionMode) return;" in template
+    assert "loadPlaybookSession(sessionId);" in template
+    assert "fetch('/api/playbooks/sessions/' + encodeURIComponent(id))" in template
+    assert "'/api/playbooks/sessions/' : '/api/agent/sessions/'" in template
+    assert "JSON.stringify(msg.params, null, 2)" in template
+    assert "playbookSessionMode ? null : msg.args" in template
+    assert "playbookSessionMode ? '' : (msg.result" in template
+    send_start = template.index("function send()")
+    send_end = template.index("// ===== Bubble Rendering", send_start)
+    send_function = template[send_start:send_end]
+    assert "if (playbookSessionMode) return;" in send_function
+
+    init = re.search(r"function init\(\)\s*\{([\s\S]*?)\n    \}", template)
+    assert init
+    mode_exit = init.group(0).index("if (playbookSessionMode)")
+    for generic_loader in ("loadSessions();", "loadTools();", "loadPlaybooks();", "checkOllamaHealth();"):
+        assert init.group(0).index(generic_loader) > mode_exit
+    assert "playbook-session-mode #agentSessionsSidebar" in template
+    assert "playbook-session-mode #agentSidebarDrawer" in template
+    assert "disabled aria-label=\"Read-only playbook session\"" in template
+    assert "playbookSessionMode ? '/api/playbooks/sessions/'" in template
+
+    guarded_endpoints = {
+        "/api/agent/tools": r"function loadTools\(\)\s*\{\s*if \(playbookSessionMode\) return;[\s\S]*?fetch\('/api/agent/tools'\)",
+        "/api/agent/sessions?limit=": r"function loadSessions\(\)\s*\{\s*if \(playbookSessionMode\) return;[\s\S]*?fetch\('/api/agent/sessions\?limit=",
+        "/api/mcp/servers": r"function refreshMCPStatus\(\)\s*\{\s*if \(playbookSessionMode\) return;[\s\S]*?fetch\('/api/mcp/servers'\)",
+        "/api/config/ollama-health": r"function checkOllamaHealth\(\)\s*\{\s*if \(playbookSessionMode\) return;[\s\S]*?fetch\('/api/config/ollama-health'\)",
+    }
+    for endpoint, pattern in guarded_endpoints.items():
+        assert endpoint in template
+        assert re.search(pattern, template)
+    for endpoint in ("/api/agent/investigate", "/api/chat"):
+        assert endpoint in send_function
+        assert send_function.index("if (playbookSessionMode) return;") < send_function.index(endpoint)
