@@ -43,11 +43,100 @@ from src.agent.playbook_engine import (
 )
 from src.agent.sandbox_orchestrator import SandboxOrchestrator, SandboxType
 from src.agent.mcp_client import MCPClientManager, MCPServerConfig, MCPConnection
+from src.web.visibility import INCIDENT_RESPONDER, serialize_playbook
 
 
 # ====================================================================== #
 #  Fixtures
 # ====================================================================== #
+
+
+def test_playbook_detail_serializes_only_safe_input_and_tool_presentation_metadata():
+    definition = {
+        "id": "safe-detail",
+        "name": "Safe Detail",
+        "category": "Threat Intel",
+        "description": "Safe detail test",
+        "step_count": 1,
+        "trigger_type": "manual",
+        "input_params": [
+            {
+                "name": "indicator",
+                "description": "Indicator to inspect",
+                "required": True,
+                "type": "string",
+                "default": "example.test",
+                "value": "must-not-leak",
+            }
+        ],
+        "input": [{"name": "ignored_input", "value": "also-hidden"}],
+        "steps": [
+            {
+                "name": "check_blocklist",
+                "tool": "mcp:threat_intel_tools/blocklist_check",
+                "description": "Check blocklists",
+                "params": {"ip": "{{indicator}}"},
+                "condition": {"if": "secret condition"},
+                "for_each": "secret loop",
+                "on_failure": "secret failure",
+                "requires_approval": True,
+                "references": ["secret reference"],
+            }
+        ],
+    }
+
+    payload = serialize_playbook(definition, INCIDENT_RESPONDER, detail=True)
+
+    assert payload["input_params"] == [{
+        "name": "indicator",
+        "description": "Indicator to inspect",
+        "required": True,
+        "type": "string",
+        "default": "example.test",
+    }]
+    assert payload["steps"] == [{
+        "name": "check_blocklist",
+        "tool": "mcp:threat_intel_tools/blocklist_check",
+        "description": "Check blocklists",
+    }]
+    assert payload["tool_display"]["mcp:threat_intel_tools/blocklist_check"] == {
+        "display_name": "Blocklist Check",
+        "server_display_name": "Threat Intel",
+    }
+
+    forbidden = {
+        "params", "condition", "when", "for_each", "loop", "on_failure",
+        "requires_approval", "references", "value", "input",
+    }
+
+    def assert_no_forbidden_keys(value):
+        if isinstance(value, dict):
+            assert forbidden.isdisjoint(value)
+            for child in value.values():
+                assert_no_forbidden_keys(child)
+        elif isinstance(value, list):
+            for child in value:
+                assert_no_forbidden_keys(child)
+
+    assert_no_forbidden_keys(payload)
+    assert "must-not-leak" not in json.dumps(payload)
+    assert "secret condition" not in json.dumps(payload)
+
+
+def test_playbook_detail_normalizes_legacy_input_list():
+    payload = serialize_playbook(
+        {
+            "id": "legacy-input",
+            "input": [{"name": "file_path", "description": "File path", "required": True, "type": "string"}],
+            "steps": [],
+        },
+        INCIDENT_RESPONDER,
+        detail=True,
+    )
+
+    assert payload["input_params"] == [{
+        "name": "file_path", "description": "File path", "required": True, "type": "string"
+    }]
 
 @pytest.fixture
 def agent_state():

@@ -496,3 +496,248 @@ body:has(.playbooks-page) .sub-header {
     .playbooks-page .playbooks-filters .filter-btn { white-space: normal; }
     .playbooks-page .playbooks-grid { grid-template-columns: minmax(0, 1fr); gap: 12px; }
 }
+
+.playbooks-run-modal .modal-content,
+.playbooks-view-modal .modal-content {
+    border-radius: 0;
+    border-color: var(--border-color);
+}
+
+.playbooks-run-modal .modal-body,
+.playbooks-view-modal .modal-body {
+    color: var(--text-primary);
+}
+
+.playbooks-run-summary {
+    margin: 0 0 18px;
+    padding: 10px 12px;
+    border-left: 2px solid var(--color-info);
+    color: var(--text-secondary);
+    background: color-mix(in srgb, var(--color-info) 8%, var(--bg-tertiary));
+    font-size: 0.78rem;
+}
+
+.playbooks-run-mode {
+    display: flex;
+    gap: 0;
+    margin-bottom: 16px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.playbooks-run-mode-btn {
+    padding: 8px 12px;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    color: var(--text-muted);
+    background: transparent;
+    font-size: 0.76rem;
+    font-weight: 600;
+}
+
+.playbooks-run-mode-btn.active {
+    border-bottom-color: var(--color-info);
+    color: var(--color-info);
+}
+
+.playbooks-run-fields[hidden],
+.playbooks-run-raw[hidden],
+.playbooks-run-mode[hidden],
+.playbooks-run-error[hidden],
+.playbooks-run-field-error[hidden] {
+    display: none !important;
+}
+
+.playbooks-run-field {
+    margin: 0 0 16px;
+}
+
+.playbooks-run-field > .form-label {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    margin-bottom: 6px;
+    color: var(--text-primary);
+    font-size: 0.82rem;
+    font-weight: 600;
+}
+
+.playbooks-run-tag {
+    padding: 2px 5px;
+    border: 1px solid var(--border-color);
+    color: var(--text-muted);
+    font-size: 0.58rem;
+    letter-spacing: 0.08em;
+}
+
+.playbooks-run-tag-required {
+    border-color: color-mix(in srgb, var(--color-danger) 60%, var(--border-color));
+    color: var(--color-danger);
+}
+
+.playbooks-run-field .form-control,
+.playbooks-run-raw .form-control {
+    border-radius: 0;
+    border-color: var(--border-color);
+    color: var(--text-primary);
+    background: var(--bg-tertiary);
+}
+
+.playbooks-run-field .form-control:focus,
+.playbooks-run-raw .form-control:focus {
+    border-color: var(--color-info);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-info) 18%, transparent);
+}
+
+.playbooks-run-raw textarea {
+    font-family: ui-monospace, Consolas, monospace;
+    font-size: 0.82rem;
+}
+
+.playbooks-run-field .form-text {
+    margin-top: 5px;
+    color: var(--text-muted);
+    font-size: 0.72rem;
+}
+
+.playbooks-run-field-error,
+.playbooks-run-error {
+    margin-top: 5px;
+    color: var(--color-danger);
+    font-size: 0.76rem;
+}
+
+.playbooks-run-footer-note {
+    margin-right: auto;
+    color: var(--text-muted);
+    font-size: 0.68rem;
+}
+
+.playbooks-view-tools {
+    margin-top: 18px;
+    padding: 14px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-tertiary);
+}
+
+.playbooks-view-modal .view-modal-banner,
+.playbooks-view-modal .view-modal-banner .banner-icon,
+.playbooks-view-modal .playbook-step {
+    border-radius: 0;
+}
+
+.playbooks-view-input-params {
+    margin: 0 0 18px;
+    padding: 12px 14px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-tertiary);
+}
+
+.playbooks-view-input-title {
+    margin: 0 0 8px;
+    color: var(--text-primary);
+    font-size: 0.84rem;
+}
+
+.playbooks-view-input-param {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 7px;
+    padding: 7px 0;
+    border-top: 1px solid var(--border-color);
+}
+
+.playbooks-view-input-name {
+    color: var(--color-info);
+    font-family: ui-monospace, Consolas, monospace;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.playbooks-view-input-description {
+    color: var(--text-muted);
+    font-size: 0.74rem;
+}
+
+[data-theme="light"] .playbooks-run-modal .btn-close-white,
+[data-theme="light"] .playbooks-view-modal .btn-close-white {
+    filter: invert(1) grayscale(100%);
+}
+
+.playbooks-view-tools-title {
+    margin: 0 0 4px;
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    font-weight: 650;
+}
+
+.playbooks-view-tool-group {
+    display: grid;
+    grid-template-columns: minmax(135px, 0.7fr) minmax(0, 2fr);
+    gap: 14px;
+    padding: 12px 0;
+    border-top: 1px solid var(--border-color);
+}
+
+.playbooks-view-tool-group[hidden] { display: none !important; }
+
+.playbooks-view-tool-group-label {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.playbooks-view-tool-server {
+    color: var(--text-primary);
+    font-size: 0.8rem;
+    font-weight: 650;
+}
+
+.playbooks-view-tool-count {
+    color: var(--text-muted);
+    font-size: 0.68rem;
+}
+
+.playbooks-view-tool-chips {
+    display: flex;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    gap: 6px;
+}
+
+.playbooks-view-tool-chip {
+    display: inline-flex;
+    align-items: center;
+    min-height: 27px;
+    padding: 4px 8px;
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    background: var(--bg-secondary);
+    font-size: 0.7rem;
+}
+
+.playbooks-view-tool-chip-builtin {
+    border-color: var(--color-info);
+    color: var(--color-info);
+}
+
+.playbooks-view-more-groups {
+    padding: 7px 0 0;
+    border: 0;
+    color: var(--color-info);
+    background: transparent;
+    font-size: 0.72rem;
+    font-weight: 600;
+}
+
+@media (max-width: 560px) {
+    .playbooks-view-tool-group { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+    .playbooks-run-modal .modal-footer {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+    }
+    .playbooks-run-modal .modal-footer > * { margin: 0; }
+    .playbooks-run-footer-note { grid-column: 1 / -1; width: auto; margin: 0; }
+    .playbooks-run-modal .modal-footer > .btn { width: 100%; }
+}

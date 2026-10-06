@@ -346,7 +346,7 @@
 </section>
 
 <!-- Run Playbook Modal -->
-<div class="modal fade" id="runPlaybookModal" tabindex="-1" aria-hidden="true">
+<div class="modal fade playbooks-run-modal" id="runPlaybookModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content" style="background-color: var(--bg-secondary); color: var(--text-primary); border-color: var(--border-color);">
             <div class="modal-header" style="border-bottom-color: var(--border-color);">
@@ -357,21 +357,24 @@
             </div>
             <div class="modal-body">
                 <p class="text-muted small mb-3" id="runPlaybookDesc"></p>
+                <div class="playbooks-run-summary" id="runPlaybookSummary"></div>
                 <form id="runPlaybookForm">
                     <input type="hidden" id="runPlaybookId">
-                    <!-- Dynamic param fields injected here -->
-                    <div id="runParamFieldsContainer"></div>
-                    <!-- Fallback raw JSON input -->
-                    <div class="mb-3" id="runParamsFallback">
-                        <label class="form-label">Input Parameters</label>
-                        <textarea id="playbookParams" class="form-control" rows="5"
-                                  placeholder='{"alert_text": "Suspicious login from 10.0.0.1"}'
-                                  style="background:var(--bg-tertiary);border-color:var(--border-color);color:var(--text-primary);font-family:monospace;font-size:0.85rem;"></textarea>
-                        <div class="form-text">Enter JSON parameters required by this playbook, or leave empty for defaults.</div>
+                    <div class="playbooks-run-mode" id="runInputModeSwitch" role="group" aria-label="Input mode" hidden>
+                        <button type="button" class="playbooks-run-mode-btn active" id="runFormModeBtn" aria-pressed="true">Form</button>
+                        <button type="button" class="playbooks-run-mode-btn" id="runRawModeBtn" aria-pressed="false">Raw JSON</button>
                     </div>
+                    <div class="playbooks-run-fields" id="runParamFieldsContainer"></div>
+                    <div class="playbooks-run-raw" id="runParamsFallback" hidden>
+                        <label class="form-label" for="playbookParams">Input Parameters JSON</label>
+                        <textarea id="playbookParams" class="form-control" rows="6" spellcheck="false"></textarea>
+                        <div class="form-text">Enter a JSON object of input parameters.</div>
+                    </div>
+                    <div class="playbooks-run-error" id="runPlaybookError" role="alert" aria-live="polite" hidden></div>
                 </form>
             </div>
             <div class="modal-footer" style="border-top-color: var(--border-color);">
+                <small class="playbooks-run-footer-note">Required fields are checked before the run starts</small>
                 <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
                 <button type="button" class="btn btn-accent btn-sm" id="executePlaybookBtn">
                     <i class="bi bi-play-fill me-1"></i>Execute
@@ -382,7 +385,7 @@
 </div>
 
 <!-- View Playbook Detail Modal -->
-<div class="modal fade" id="viewPlaybookModal" tabindex="-1" aria-hidden="true">
+<div class="modal fade playbooks-view-modal" id="viewPlaybookModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-scrollable">
         <div class="modal-content" style="background-color: var(--bg-secondary); color: var(--text-primary); border-color: var(--border-color);">
             <div class="modal-header" style="border-bottom-color: var(--border-color);">
@@ -720,112 +723,230 @@ var Playbooks = (function () {
     });
 
     /* ── Open run modal with auto-populated params ── */
+    var runInputMode = 'raw';
+    var runExtraParams = {};
+
+    function setRunError(message) {
+        var error = document.getElementById('runPlaybookError');
+        error.textContent = message || '';
+        error.hidden = !message;
+    }
+
+    function getRunFields() {
+        return document.querySelectorAll('#runParamFieldsContainer [data-param-key]');
+    }
+
+    function collectRunFormParams(includeEmpty) {
+        var values = {};
+        getRunFields().forEach(function(field) {
+            var key = field.getAttribute('data-param-key');
+            var value = field.value.trim();
+            if (value || (includeEmpty && field.getAttribute('data-param-required') === 'true')) {
+                values[key] = value;
+            }
+        });
+        return values;
+    }
+
+    function setRunMode(mode) {
+        runInputMode = mode;
+        document.getElementById('runParamFieldsContainer').hidden = mode !== 'form';
+        document.getElementById('runParamsFallback').hidden = mode !== 'raw';
+        var formButton = document.getElementById('runFormModeBtn');
+        var rawButton = document.getElementById('runRawModeBtn');
+        formButton.classList.toggle('active', mode === 'form');
+        rawButton.classList.toggle('active', mode === 'raw');
+        formButton.setAttribute('aria-pressed', mode === 'form' ? 'true' : 'false');
+        rawButton.setAttribute('aria-pressed', mode === 'raw' ? 'true' : 'false');
+    }
+
+    function formatPlaybookLabel(value) {
+        var overrides = {
+            apk: 'APK', cve: 'CVE', dns: 'DNS', epss: 'EPSS', ioc: 'IOC', ip: 'IP',
+            mcp: 'MCP', osint: 'OSINT', pe: 'PE', remnux: 'REMnux', ssl: 'SSL',
+            url: 'URL', yara: 'YARA', whois: 'WHOIS'
+        };
+        return String(value || '').split(/[_-]+/).filter(Boolean).map(function(word) {
+            var lower = word.toLowerCase();
+            return overrides[lower] || lower.charAt(0).toUpperCase() + lower.slice(1);
+        }).join(' ');
+    }
+
+    function renderRunFields(inputParams) {
+        var container = document.getElementById('runParamFieldsContainer');
+        while (container.firstChild) container.removeChild(container.firstChild);
+        runExtraParams = {};
+
+        (Array.isArray(inputParams) ? inputParams : []).forEach(function(definition) {
+            if (!definition || typeof definition.name !== 'string' || !definition.name) return;
+            var key = definition.name;
+            var required = definition.required === true;
+            var description = typeof definition.description === 'string' ? definition.description : '';
+            var type = typeof definition.type === 'string' ? definition.type.toLowerCase() : '';
+            var longTextName = /(^|_)(text|body|content|description|context|details|notes|report|log|result|analysis)(_|$)/i.test(key);
+            var useTextarea = type === 'text' || longTextName;
+
+            var field = document.createElement('div');
+            field.className = 'playbooks-run-field';
+            var label = document.createElement('label');
+            label.className = 'form-label';
+            label.textContent = key;
+            var tag = document.createElement('span');
+            tag.className = required ? 'playbooks-run-tag playbooks-run-tag-required' : 'playbooks-run-tag';
+            tag.textContent = required ? 'REQUIRED' : 'OPTIONAL';
+            label.appendChild(tag);
+            field.appendChild(label);
+
+            var input = document.createElement(useTextarea ? 'textarea' : 'input');
+            if (useTextarea) input.rows = 4;
+            else input.type = 'text';
+            input.className = 'form-control';
+            input.setAttribute('data-param-key', key);
+            input.setAttribute('data-param-required', required ? 'true' : 'false');
+            input.setAttribute('aria-label', key);
+            if (Object.prototype.hasOwnProperty.call(definition, 'default') && definition.default !== null) {
+                input.value = String(definition.default);
+            }
+            field.appendChild(input);
+
+            var fieldError = document.createElement('div');
+            fieldError.className = 'playbooks-run-field-error';
+            fieldError.hidden = true;
+            fieldError.textContent = 'This field is required.';
+            field.appendChild(fieldError);
+            input.addEventListener('input', function() {
+                fieldError.hidden = true;
+                input.classList.remove('is-invalid');
+                setRunError('');
+            });
+
+            if (description) {
+                var help = document.createElement('div');
+                help.className = 'form-text';
+                help.textContent = description;
+                field.appendChild(help);
+            }
+            container.appendChild(field);
+        });
+    }
+
     function openRunModal(playbookId, playbookName) {
         document.getElementById('runPlaybookId').value = playbookId;
         document.getElementById('runPlaybookTitle').textContent = 'Run: ' + playbookName;
         document.getElementById('runPlaybookDesc').textContent = '';
         document.getElementById('playbookParams').value = '';
-        var container = document.getElementById('runParamFieldsContainer');
-        while (container.firstChild) container.removeChild(container.firstChild);
-        document.getElementById('runParamsFallback').style.display = '';
+        document.getElementById('runPlaybookSummary').textContent = '';
+        document.getElementById('runInputModeSwitch').hidden = true;
+        setRunError('');
+        renderRunFields([]);
+        setRunMode('raw');
 
         var modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('runPlaybookModal'));
         modal.show();
 
-        // Try to fetch playbook details to auto-populate param fields
         fetch('/api/playbooks/' + encodeURIComponent(playbookId))
         .then(function(r) { return r.ok ? r.json() : null; })
         .then(function(data) {
             if (!data) return;
-            if (data.description) {
-                document.getElementById('runPlaybookDesc').textContent = data.description;
-            }
-            var inputParams = data.input_params || data.inputs || data.parameters || null;
-            if (inputParams && typeof inputParams === 'object') {
-                var keys = Object.keys(inputParams);
-                if (keys.length > 0) {
-                    document.getElementById('runParamsFallback').style.display = 'none';
-                    while (container.firstChild) container.removeChild(container.firstChild);
+            document.getElementById('runPlaybookDesc').textContent = data.description || '';
+            var steps = Array.isArray(data.steps) ? data.steps : [];
+            var stepCount = Number.isFinite(Number(data.step_count)) ? Number(data.step_count) : steps.length;
+            var trigger = formatPlaybookLabel(data.trigger_type || 'manual');
+            document.getElementById('runPlaybookSummary').textContent =
+                stepCount + ' steps \u00b7 ' + trigger + ' trigger \u00b7 Opens in Agent Chat when started';
 
-                    keys.forEach(function(key) {
-                        var paramDef = inputParams[key];
-                        var isObj = paramDef && typeof paramDef === 'object';
-                        var desc = isObj ? (paramDef.description || '') : String(paramDef || '');
-                        var required = isObj ? (paramDef.required || false) : false;
-                        var defaultVal = isObj ? (paramDef.default || '') : '';
-
-                        var fieldDiv = document.createElement('div');
-                        fieldDiv.className = 'run-param-field';
-
-                        var label = document.createElement('label');
-                        label.className = 'form-label';
-                        label.textContent = key;
-                        if (required) {
-                            var reqSpan = document.createElement('span');
-                            reqSpan.className = 'text-danger ms-1';
-                            reqSpan.textContent = '*';
-                            label.appendChild(reqSpan);
-                        }
-                        fieldDiv.appendChild(label);
-
-                        var input = document.createElement('input');
-                        input.type = 'text';
-                        input.className = 'form-control form-control-sm';
-                        input.setAttribute('data-param-key', key);
-                        input.setAttribute('data-param-required', required ? 'true' : 'false');
-                        input.placeholder = defaultVal || key;
-                        if (defaultVal) input.value = defaultVal;
-                        fieldDiv.appendChild(input);
-
-                        if (desc) {
-                            var helpText = document.createElement('div');
-                            helpText.className = 'form-text';
-                            helpText.textContent = desc;
-                            fieldDiv.appendChild(helpText);
-                        }
-
-                        container.appendChild(fieldDiv);
-                    });
-                }
+            var params = Array.isArray(data.input_params) ? data.input_params : [];
+            if (params.length) {
+                renderRunFields(params);
+                document.getElementById('runInputModeSwitch').hidden = false;
+                setRunMode('form');
+            } else {
+                renderRunFields([]);
+                document.getElementById('runInputModeSwitch').hidden = true;
+                setRunMode('raw');
             }
         })
-        .catch(function() { /* fallback to raw JSON */ });
+        .catch(function() {
+            document.getElementById('runInputModeSwitch').hidden = true;
+            setRunMode('raw');
+        });
     }
 
-    /* ── Execute playbook ── */
+    document.getElementById('runFormModeBtn').addEventListener('click', function() {
+        if (runInputMode === 'raw') {
+            var rawText = document.getElementById('playbookParams').value.trim();
+            var parsed = {};
+            if (rawText) {
+                try {
+                    parsed = JSON.parse(rawText);
+                } catch (e) {
+                    setRunError('Invalid JSON. Fix it before switching to Form.');
+                    return;
+                }
+                if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+                    setRunError('Parameters must be a JSON object before switching to Form.');
+                    return;
+                }
+            }
+            var fieldNames = {};
+            getRunFields().forEach(function(field) {
+                var key = field.getAttribute('data-param-key');
+                fieldNames[key] = true;
+                if (Object.prototype.hasOwnProperty.call(parsed, key) && parsed[key] !== null && typeof parsed[key] !== 'object') {
+                    field.value = String(parsed[key]);
+                }
+            });
+            runExtraParams = {};
+            Object.keys(parsed).forEach(function(key) {
+                if (!fieldNames[key]) runExtraParams[key] = parsed[key];
+            });
+        }
+        setRunError('');
+        setRunMode('form');
+    });
+
+    document.getElementById('runRawModeBtn').addEventListener('click', function() {
+        if (runInputMode === 'form') {
+            var merged = Object.assign({}, runExtraParams, collectRunFormParams(true));
+            document.getElementById('playbookParams').value = JSON.stringify(merged, null, 2);
+        }
+        setRunError('');
+        setRunMode('raw');
+    });
+
     document.getElementById('executePlaybookBtn').addEventListener('click', function () {
         var playbookId = document.getElementById('runPlaybookId').value;
         var btn = document.getElementById('executePlaybookBtn');
         var params = {};
+        setRunError('');
 
-        // Collect from dynamic fields if present
-        var dynamicFields = document.querySelectorAll('#runParamFieldsContainer input[data-param-key]');
-        if (dynamicFields.length > 0) {
+        if (runInputMode === 'form' && getRunFields().length) {
             var valid = true;
-            dynamicFields.forEach(function(input) {
-                var key = input.getAttribute('data-param-key');
-                var required = input.getAttribute('data-param-required') === 'true';
-                var val = input.value.trim();
-                if (required && !val) {
-                    input.classList.add('is-invalid');
-                    valid = false;
-                } else {
-                    input.classList.remove('is-invalid');
-                }
-                if (val) params[key] = val;
+            getRunFields().forEach(function(field) {
+                var required = field.getAttribute('data-param-required') === 'true';
+                var empty = required && !field.value.trim();
+                var fieldError = field.parentNode.querySelector('.playbooks-run-field-error');
+                field.classList.toggle('is-invalid', empty);
+                fieldError.hidden = !empty;
+                if (empty) valid = false;
+                var key = field.getAttribute('data-param-key');
+                if (field.value.trim()) params[key] = field.value.trim();
             });
             if (!valid) {
-                showNotification('Please fill in all required parameters.', 'error');
+                setRunError('Complete the required fields before starting this playbook.');
                 return;
             }
         } else {
-            // Fallback to raw JSON
             var paramsText = document.getElementById('playbookParams').value.trim();
             if (paramsText) {
                 try {
                     params = JSON.parse(paramsText);
                 } catch (e) {
-                    showNotification('Invalid JSON parameters', 'error');
+                    setRunError('Invalid JSON parameters.');
+                    return;
+                }
+                if (!params || typeof params !== 'object' || Array.isArray(params)) {
+                    setRunError('Parameters must be a JSON object.');
                     return;
                 }
             }
@@ -833,7 +954,6 @@ var Playbooks = (function () {
 
         btn.disabled = true;
         btn.textContent = 'Starting...';
-
         setLastRun(playbookId);
 
         var runController = new AbortController();
@@ -842,21 +962,21 @@ var Playbooks = (function () {
         fetch('/api/playbooks/' + encodeURIComponent(playbookId) + '/run', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(params),
+            body: JSON.stringify({ params: params }),
             signal: runController.signal
         })
         .then(function (r) {
             clearTimeout(runTimeout);
-            if (!r.ok) throw new Error('HTTP ' + r.status);
-            return r.json();
+            return r.json().catch(function() { return {}; }).then(function(data) {
+                if (!r.ok) throw new Error(data.detail || data.message || ('HTTP ' + r.status));
+                return data;
+            });
         })
         .then(function (data) {
             btn.disabled = false;
             btn.textContent = 'Execute';
-            var modalEl = document.getElementById('runPlaybookModal');
-            var modal = bootstrap.Modal.getInstance(modalEl);
+            var modal = bootstrap.Modal.getInstance(document.getElementById('runPlaybookModal'));
             if (modal) modal.hide();
-
             if (data.session_id) {
                 window.location.href = '/agent/chat?session=' + encodeURIComponent(data.session_id);
             } else {
@@ -867,12 +987,120 @@ var Playbooks = (function () {
             clearTimeout(runTimeout);
             btn.disabled = false;
             btn.textContent = 'Execute';
-            var msg = err.name === 'AbortError' ? 'Request timed out.' : err.message;
-            showNotification('Failed: ' + msg, 'error');
+            setRunError(err.name === 'AbortError' ? 'Request timed out.' : err.message);
         });
     });
 
-    /* ── View playbook detail with enhanced flowchart ── */
+    function displayPlaybookTool(toolId, toolDisplay) {
+        var known = toolDisplay && toolDisplay[toolId];
+        if (known && typeof known.display_name === 'string') return known.display_name;
+        var rawName = String(toolId || '').replace(/^mcp:/i, '');
+        if (rawName.indexOf('/') !== -1) rawName = rawName.substring(rawName.indexOf('/') + 1);
+        return formatPlaybookLabel(rawName);
+    }
+
+    function buildToolCoverage(steps, toolDisplay) {
+        var tools = collectTools(steps).sort(function(a, b) { return a.localeCompare(b); });
+        if (!tools.length) return null;
+        var grouped = {};
+        tools.forEach(function(toolId) {
+            var isMcp = toolId.indexOf('mcp:') === 0;
+            var serverId = '';
+            var rawName = toolId;
+            if (isMcp) {
+                var path = toolId.substring(4);
+                var slash = path.indexOf('/');
+                if (slash >= 0) {
+                    serverId = path.substring(0, slash);
+                    rawName = path.substring(slash + 1);
+                } else {
+                    isMcp = false;
+                }
+            }
+            var mapped = toolDisplay && toolDisplay[toolId];
+            var groupId = isMcp ? serverId : 'builtin';
+            if (!grouped[groupId]) {
+                var serverName = mapped && mapped.server_display_name;
+                grouped[groupId] = {
+                    id: groupId,
+                    name: isMcp ? (serverName || formatPlaybookLabel(serverId.replace(/_tools$/i, ''))) : 'Built-in',
+                    tools: []
+                };
+            }
+            grouped[groupId].tools.push({
+                id: toolId,
+                name: displayPlaybookTool(toolId, toolDisplay),
+                builtin: !isMcp,
+                rawName: rawName
+            });
+        });
+
+        var groups = Object.keys(grouped).map(function(key) { return grouped[key]; });
+        groups.forEach(function(group) {
+            group.tools.sort(function(a, b) { return a.name.localeCompare(b.name); });
+        });
+        groups.sort(function(a, b) { return a.name.localeCompare(b.name); });
+
+        var section = document.createElement('section');
+        section.className = 'playbooks-view-tools';
+        var heading = document.createElement('h6');
+        heading.className = 'playbooks-view-tools-title';
+        heading.textContent = 'Tool Coverage (' + tools.length + ' unique)';
+        section.appendChild(heading);
+
+        var rows = document.createElement('div');
+        rows.className = 'playbooks-view-tool-groups';
+        var hiddenRows = [];
+        groups.forEach(function(group, index) {
+            var row = document.createElement('div');
+            row.className = 'playbooks-view-tool-group';
+            var label = document.createElement('div');
+            label.className = 'playbooks-view-tool-group-label';
+            var name = document.createElement('span');
+            name.className = 'playbooks-view-tool-server';
+            name.textContent = group.name;
+            label.appendChild(name);
+            var count = document.createElement('span');
+            count.className = 'playbooks-view-tool-count';
+            count.textContent = group.tools.length + (group.tools.length === 1 ? ' tool' : ' tools');
+            label.appendChild(count);
+            row.appendChild(label);
+
+            var chips = document.createElement('div');
+            chips.className = 'playbooks-view-tool-chips';
+            group.tools.forEach(function(tool) {
+                var chip = document.createElement('span');
+                chip.className = tool.builtin ? 'playbooks-view-tool-chip playbooks-view-tool-chip-builtin' : 'playbooks-view-tool-chip';
+                chip.textContent = tool.name;
+                chip.setAttribute('title', tool.id);
+                chips.appendChild(chip);
+            });
+            row.appendChild(chips);
+            if (index >= 5) {
+                row.hidden = true;
+                hiddenRows.push(row);
+            }
+            rows.appendChild(row);
+        });
+        section.appendChild(rows);
+
+        if (hiddenRows.length) {
+            var more = document.createElement('button');
+            more.type = 'button';
+            more.className = 'playbooks-view-more-groups';
+            more.textContent = '+ ' + hiddenRows.length + ' more groups';
+            more.setAttribute('aria-expanded', 'false');
+            more.addEventListener('click', function() {
+                var expanded = more.getAttribute('aria-expanded') === 'true';
+                hiddenRows.forEach(function(row) { row.hidden = expanded; });
+                more.setAttribute('aria-expanded', expanded ? 'false' : 'true');
+                more.textContent = expanded ? '+ ' + hiddenRows.length + ' more groups' : 'Show fewer groups';
+            });
+            section.appendChild(more);
+        }
+        return section;
+    }
+
     var currentViewPlaybookId = null;
 
     function viewPlaybook(playbookId) {
@@ -950,42 +1178,32 @@ var Playbooks = (function () {
             metaDiv.appendChild(catBadge);
             body.appendChild(metaDiv);
 
-            // Input parameters section
-            var inputParams = data.input_params || data.inputs || data.parameters || null;
-            if (inputParams && typeof inputParams === 'object' && Object.keys(inputParams).length > 0) {
-                var paramSection = document.createElement('div');
-                paramSection.className = 'input-params-section';
+            // Safe input parameter metadata (never include submitted values).
+            var inputParams = Array.isArray(data.input_params) ? data.input_params : [];
+            if (inputParams.length) {
+                var paramSection = document.createElement('section');
+                paramSection.className = 'playbooks-view-input-params';
                 var paramTitle = document.createElement('h6');
-                paramTitle.className = 'mb-2';
-                var paramTitleIcon = document.createElement('i');
-                paramTitleIcon.className = 'bi bi-sliders me-1 text-accent';
-                paramTitle.appendChild(paramTitleIcon);
-                paramTitle.appendChild(document.createTextNode('Input Parameters'));
+                paramTitle.className = 'playbooks-view-input-title';
+                paramTitle.textContent = 'Input Parameters';
                 paramSection.appendChild(paramTitle);
-
-                Object.keys(inputParams).forEach(function(key) {
-                    var paramDef = inputParams[key];
-                    var isObj = paramDef && typeof paramDef === 'object';
-                    var paramDescText = isObj ? (paramDef.description || '') : String(paramDef || '');
-                    var required = isObj ? paramDef.required : false;
-
+                inputParams.forEach(function(paramDef) {
+                    if (!paramDef || typeof paramDef.name !== 'string') return;
                     var item = document.createElement('div');
-                    item.className = 'param-item';
+                    item.className = 'playbooks-view-input-param';
                     var nameSpan = document.createElement('span');
-                    nameSpan.className = 'param-name';
-                    nameSpan.textContent = key;
+                    nameSpan.className = 'playbooks-view-input-name';
+                    nameSpan.textContent = paramDef.name;
                     item.appendChild(nameSpan);
-                    if (required) {
-                        var reqBadge = document.createElement('span');
-                        reqBadge.className = 'param-required';
-                        reqBadge.textContent = 'required';
-                        item.appendChild(reqBadge);
-                    }
-                    if (paramDescText) {
-                        var descSpan = document.createElement('span');
-                        descSpan.className = 'param-desc';
-                        descSpan.textContent = paramDescText;
-                        item.appendChild(descSpan);
+                    var tag = document.createElement('span');
+                    tag.className = paramDef.required ? 'playbooks-run-tag playbooks-run-tag-required' : 'playbooks-run-tag';
+                    tag.textContent = paramDef.required ? 'REQUIRED' : 'OPTIONAL';
+                    item.appendChild(tag);
+                    if (typeof paramDef.description === 'string' && paramDef.description) {
+                        var description = document.createElement('span');
+                        description.className = 'playbooks-view-input-description';
+                        description.textContent = paramDef.description;
+                        item.appendChild(description);
                     }
                     paramSection.appendChild(item);
                 });
@@ -1007,96 +1225,35 @@ var Playbooks = (function () {
                 stepsContainer.className = 'playbook-steps';
 
                 steps.forEach(function (s, i) {
-                    var hasCondition = s.condition || s.when;
-                    var hasLoop = s.for_each || s.loop;
-
                     var stepDiv = document.createElement('div');
                     stepDiv.className = 'playbook-step';
-                    if (hasCondition) stepDiv.classList.add('step-condition');
-                    if (hasLoop) stepDiv.classList.add('step-loop');
 
-                    // Step number
                     var numDiv = document.createElement('div');
                     numDiv.className = 'step-num';
-                    numDiv.appendChild(document.createTextNode('Step ' + (i + 1)));
-                    if (hasCondition) {
-                        var condBadge = document.createElement('span');
-                        condBadge.className = 'step-indicator-badge step-indicator-condition';
-                        var condIcon = document.createElement('i');
-                        condIcon.className = 'bi bi-signpost-split me-1';
-                        condBadge.appendChild(condIcon);
-                        condBadge.appendChild(document.createTextNode('Condition'));
-                        numDiv.appendChild(condBadge);
-                    }
-                    if (hasLoop) {
-                        var loopBadge = document.createElement('span');
-                        loopBadge.className = 'step-indicator-badge step-indicator-loop';
-                        var loopIcon = document.createElement('i');
-                        loopIcon.className = 'bi bi-arrow-repeat me-1';
-                        loopBadge.appendChild(loopIcon);
-                        loopBadge.appendChild(document.createTextNode('Loop'));
-                        numDiv.appendChild(loopBadge);
-                    }
+                    numDiv.textContent = 'Step ' + (i + 1);
                     stepDiv.appendChild(numDiv);
 
-                    // Step name
                     var nameDiv = document.createElement('div');
                     nameDiv.className = 'step-name';
                     nameDiv.textContent = s.name || s.action || 'Step ' + (i + 1);
                     stepDiv.appendChild(nameDiv);
 
-                    // Tool
-                    if (s.tool || s.type) {
+                    if (s.tool) {
                         var toolDiv = document.createElement('div');
                         toolDiv.className = 'step-tool';
                         var toolIcon = document.createElement('i');
-                        toolIcon.className = 'bi ' + getToolIcon(s.tool || s.type) + ' me-1';
+                        toolIcon.className = 'bi ' + getToolIcon(s.tool) + ' me-1';
                         toolDiv.appendChild(toolIcon);
-                        toolDiv.appendChild(document.createTextNode(s.tool || s.type));
+                        toolDiv.appendChild(document.createTextNode(displayPlaybookTool(s.tool, data.tool_display || {})));
                         stepDiv.appendChild(toolDiv);
                     }
 
-                    // Description
                     if (s.description) {
                         var descDiv = document.createElement('div');
                         descDiv.className = 'text-muted small mt-1';
                         descDiv.textContent = s.description;
                         stepDiv.appendChild(descDiv);
                     }
-
-                    // Condition detail
-                    if (s.condition || s.when) {
-                        var condEl = document.createElement('small');
-                        condEl.className = 'd-block mt-1';
-                        condEl.style.cssText = 'color:#fbbf24;font-size:0.75rem;';
-                        var condElIcon = document.createElement('i');
-                        condElIcon.className = 'bi bi-signpost-split me-1';
-                        condEl.appendChild(condElIcon);
-                        condEl.appendChild(document.createTextNode('Condition: ' + String(s.condition || s.when)));
-                        stepDiv.appendChild(condEl);
-                    }
-
-                    // for_each detail
-                    if (s.for_each) {
-                        var feEl = document.createElement('small');
-                        feEl.className = 'd-block mt-1';
-                        feEl.style.cssText = 'color:#a78bfa;font-size:0.75rem;';
-                        var feIcon = document.createElement('i');
-                        feIcon.className = 'bi bi-arrow-repeat me-1';
-                        feEl.appendChild(feIcon);
-                        feEl.appendChild(document.createTextNode('for_each: ' + String(s.for_each)));
-                        stepDiv.appendChild(feEl);
-                    }
-
-                    // Params
-                    if (s.params) {
-                        var pEl = document.createElement('small');
-                        pEl.className = 'text-muted d-block mt-1';
-                        pEl.style.cssText = 'font-size:0.72rem;font-family:monospace;';
-                        pEl.textContent = 'params: ' + JSON.stringify(s.params);
-                        stepDiv.appendChild(pEl);
-                    }
-
                     stepsContainer.appendChild(stepDiv);
                 });
 
@@ -1108,32 +1265,9 @@ var Playbooks = (function () {
                 body.appendChild(noSteps);
             }
 
-            // Tool coverage summary
-            var tools = collectTools(steps);
-            if (tools.length > 0) {
-                var toolSection = document.createElement('div');
-                toolSection.className = 'tool-coverage-section';
-                var toolTitle = document.createElement('h6');
-                toolTitle.className = 'mb-2';
-                var toolTitleIcon = document.createElement('i');
-                toolTitleIcon.className = 'bi bi-wrench-adjustable me-1 text-accent';
-                toolTitle.appendChild(toolTitleIcon);
-                toolTitle.appendChild(document.createTextNode('Tool Coverage (' + tools.length + ' unique)'));
-                toolSection.appendChild(toolTitle);
-
-                var chipWrap = document.createElement('div');
-                tools.forEach(function(t) {
-                    var chip = document.createElement('span');
-                    chip.className = 'tool-chip';
-                    var chipIcon = document.createElement('i');
-                    chipIcon.className = 'bi ' + getToolIcon(t);
-                    chip.appendChild(chipIcon);
-                    chip.appendChild(document.createTextNode(t));
-                    chipWrap.appendChild(chip);
-                });
-                toolSection.appendChild(chipWrap);
-                body.appendChild(toolSection);
-            }
+            // Grouped tool coverage uses only the safe detail metadata.
+            var toolCoverage = buildToolCoverage(steps, data.tool_display || {});
+            if (toolCoverage) body.appendChild(toolCoverage);
 
             // Show "Run this Playbook" button in footer
             runBtnFooter.style.display = '';

@@ -3152,7 +3152,7 @@ var AgentChat = (function() {
     function showApproval(msg) {
         pendingApprovalId = msg.approval_id || msg.id;
         var detail = document.getElementById('approvalDetail');
-        detail.innerHTML = '<div class="tool-name" style="font-size:0.9rem;">' + toolIdentityHtml(msg.tool || msg.action || 'Action') + '</div><div class="mt-1 text-muted" style="font-size:0.82rem;">' + esc(msg.description || msg.content || '') + '</div>';
+        detail.innerHTML = '<div class="tool-name" style="font-size:0.9rem;">' + toolIdentityHtml(msg.tool || msg.action || 'Action') + '</div><div class="mt-1 text-muted" style="font-size:0.82rem;">' + esc(msg.description || msg.content || msg.reason || '') + '</div>';
         document.getElementById('approvalOverlay').classList.add('show');
     }
 

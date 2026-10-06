@@ -86,6 +86,14 @@ def test_playbooks_page_renders_list_header_tiles_meter_and_toolbar() -> None:
     assert 'data-pb-category="incident-response"' in rendered
 
 
+def test_run_summary_uses_escaped_middot_separators() -> None:
+    rendered = _render_playbooks()
+
+    assert r"steps \u00b7 " in rendered
+    assert r"trigger \u00b7 Opens in Agent Chat when started" in rendered
+    assert "steps ? Manual trigger" not in rendered
+
+
 def test_playbooks_css_is_scoped_and_uses_square_corners_and_history_title_glow() -> None:
     css = (ROOT / "static" / "css" / "playbooks.css").read_text(encoding="utf-8-sig")
 
@@ -165,6 +173,19 @@ def test_playbooks_stat_tiles_have_scoped_hover_glow() -> None:
     assert "transition: none;" in reduced_motion_css
 
 
+def test_run_modal_footer_uses_two_columns_on_narrow_screens() -> None:
+    css = (ROOT / "static" / "css" / "playbooks.css").read_text(encoding="utf-8-sig")
+    mobile_match = re.search(r"@media \(max-width: 560px\)\s*\{(.*?)\n\}", css, re.DOTALL)
+    assert mobile_match is not None
+    mobile_css = mobile_match.group(1)
+
+    assert ".playbooks-run-modal .modal-footer" in mobile_css
+    assert "grid-template-columns: repeat(2, minmax(0, 1fr));" in mobile_css
+    assert ".playbooks-run-footer-note { grid-column: 1 / -1;" in mobile_css
+    assert ".playbooks-run-modal .modal-footer > * { margin: 0; }" in mobile_css
+    assert ".playbooks-run-modal .modal-footer > .btn { width: 100%; }" in mobile_css
+
+
 def test_playbooks_page_keeps_existing_inline_javascript_hooks_and_modals() -> None:
     rendered = _render_playbooks()
     required_ids = (
@@ -192,3 +213,56 @@ def test_playbooks_page_keeps_existing_inline_javascript_hooks_and_modals() -> N
     assert 'class="trigger-badge trigger-manual">manual</span>' in rendered
     assert "21 steps" in rendered
     assert "Array.isArray(pb.tools)" in rendered
+
+
+def test_playbooks_view_and_run_modals_use_safe_detail_hooks() -> None:
+    rendered = _render_playbooks()
+    css = (ROOT / "static" / "css" / "playbooks.css").read_text(encoding="utf-8-sig")
+    script_start = rendered.index("var Playbooks = (function ()")
+    script = rendered[script_start:rendered.index("</script>", script_start)]
+
+    for element_id in (
+        "runPlaybookModal",
+        "runPlaybookForm",
+        "runPlaybookId",
+        "runParamFieldsContainer",
+        "runParamsFallback",
+        "playbookParams",
+        "runInputModeSwitch",
+        "runFormModeBtn",
+        "runRawModeBtn",
+        "runPlaybookSummary",
+        "runPlaybookError",
+        "executePlaybookBtn",
+        "viewPlaybookModal",
+        "viewPlaybookBody",
+        "viewModalRunBtn",
+    ):
+        assert f'id="{element_id}"' in rendered
+
+    assert "Required fields are checked before the run starts" in rendered
+    assert "Suspicious login from 10.0.0.1" not in rendered
+    assert "data.tool_display" in script
+    assert "buildToolCoverage" in script
+    assert "chip.setAttribute('title', tool.id)" in script
+    for selector in (
+        ".playbooks-run-field",
+        ".playbooks-run-tag",
+        ".playbooks-run-error",
+        ".playbooks-view-tool-group",
+        ".playbooks-view-tool-chip",
+        ".playbooks-view-more-groups",
+    ):
+        assert selector in css
+
+    run_js = script[
+        script.index("    function openRunModal("):
+        script.index("    function displayPlaybookTool(")
+    ]
+    view_js = script[
+        script.index("    function displayPlaybookTool("):
+        script.index("    /*", script.index("    function viewPlaybook("))
+    ]
+    assert ".innerHTML" not in run_js
+    assert ".innerHTML" not in view_js
+    assert "JSON.stringify({ params: params })" in run_js

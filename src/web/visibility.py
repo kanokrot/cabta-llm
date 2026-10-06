@@ -880,15 +880,72 @@ def serialize_playbook(playbook: Mapping[str, Any], role: str, *, detail: bool =
             and tool.strip()
         })
     if detail and role in {INCIDENT_RESPONDER, ADMIN}:
+        from src.agent.mcp_tool_presentation import MCP_TOOL_PRESENTATION
+
         output["steps"] = []
+        playbook_tools: set[str] = set()
         if isinstance(playbook.get("steps"), list):
             for step in playbook["steps"][:100]:
                 if isinstance(step, dict):
-                    output["steps"].append({
+                    safe_step = {
                         key: _text(step.get(key), 1000)
-                        for key in ("name", "tool", "description", "action", "condition")
+                        for key in ("name", "tool", "description", "action")
                         if _text(step.get(key), 1000) is not None
-                    })
+                    }
+                    output["steps"].append(safe_step)
+                    tool_name = step.get("tool")
+                    if isinstance(tool_name, str) and tool_name.strip():
+                        playbook_tools.add(tool_name.strip())
+
+        input_params = playbook.get("input_params")
+        if not isinstance(input_params, list):
+            input_params = playbook.get("input")
+        safe_params = []
+        if isinstance(input_params, list):
+            for param in input_params[:100]:
+                if not isinstance(param, Mapping) or not isinstance(param.get("name"), str):
+                    continue
+                safe_param: dict[str, Any] = {
+                    "name": _text(param.get("name"), 200) or "",
+                    "description": _text(param.get("description"), 1000) or "",
+                    "required": bool(param.get("required", False)),
+                }
+                param_type = param.get("type")
+                if isinstance(param_type, str):
+                    safe_param["type"] = _text(param_type, 100) or ""
+                if "default" in param and isinstance(
+                    param["default"], (str, int, float, bool)
+                ):
+                    default = param["default"]
+                    safe_param["default"] = _text(default, 1000) if isinstance(default, str) else default
+                safe_params.append(safe_param)
+        output["input_params"] = safe_params
+
+        def display_label(value: str) -> str:
+            acronyms = {
+                "ioc": "IOC", "osint": "OSINT", "url": "URL", "pe": "PE",
+                "remnux": "REMnux", "whois": "WHOIS", "dns": "DNS", "ip": "IP",
+                "ssl": "SSL", "cve": "CVE", "epss": "EPSS", "apk": "APK",
+                "yara": "YARA", "mcp": "MCP",
+            }
+            return " ".join(
+                acronyms.get(part.lower(), part[:1].upper() + part[1:].lower())
+                for part in re.split(r"[_-]+", value.strip()) if part
+            )
+
+        tool_display = {}
+        for tool_id in sorted(playbook_tools):
+            if not tool_id.startswith("mcp:") or "/" not in tool_id[4:]:
+                continue
+            server_id, raw_name = tool_id[4:].split("/", 1)
+            presentation = MCP_TOOL_PRESENTATION.get((server_id, raw_name))
+            tool_display[tool_id] = {
+                "display_name": presentation.display_name if presentation else display_label(raw_name),
+                "server_display_name": display_label(
+                    server_id[:-6] if server_id.endswith("_tools") else server_id
+                ),
+            }
+        output["tool_display"] = tool_display
     return output
 
 
