@@ -43,7 +43,11 @@ from src.agent.playbook_engine import (
 )
 from src.agent.sandbox_orchestrator import SandboxOrchestrator, SandboxType
 from src.agent.mcp_client import MCPClientManager, MCPServerConfig, MCPConnection
-from src.web.visibility import INCIDENT_RESPONDER, serialize_playbook
+from src.web.visibility import (
+    INCIDENT_RESPONDER,
+    can_access_playbook_session,
+    serialize_playbook,
+)
 
 
 # ====================================================================== #
@@ -1270,6 +1274,87 @@ class TestPlaybookEngine:
         # Verify the session was completed
         session = agent_store.get_session(session_id)
         assert session["status"] == "completed"
+
+    @pytest.mark.asyncio
+    async def test_triggered_child_inherits_owner_kind_and_role(
+        self, playbook_engine, agent_store,
+    ):
+        playbook_engine.agent_loop.run_tool = AsyncMock(return_value={"result": "ok"})
+        child_playbook_id = playbook_engine.register_playbook(
+            "Owned Child PB",
+            "Child tool call",
+            [{"name": "child_step", "tool": "child_tool", "params": {"value": "ok"}}],
+        )
+        parent_playbook_id = playbook_engine.register_playbook(
+            "Owned Parent PB",
+            "Triggers the child",
+            [{
+                "name": "trigger_child",
+                "action": "trigger_playbook",
+                "params": {"playbook": child_playbook_id},
+            }],
+        )
+
+        parent_session_id = await playbook_engine.execute(
+            parent_playbook_id,
+            {},
+            user_id=101,
+            role=INCIDENT_RESPONDER,
+        )
+        child = next(
+            session for session in agent_store.list_sessions()
+            if session["playbook_id"] == child_playbook_id
+        )
+
+        assert agent_store.get_session(parent_session_id)["user_id"] == 101
+        assert child["user_id"] == 101
+        assert child["metadata"] == {"kind": "playbook"}
+        owner = {"id": 101, "role": INCIDENT_RESPONDER}
+        another_user = {"id": 202, "role": INCIDENT_RESPONDER}
+        assert can_access_playbook_session(owner, child)
+        assert not can_access_playbook_session(another_user, child)
+
+        tool_call = playbook_engine.agent_loop.run_tool.await_args
+        assert tool_call.args == ("child_tool", {"value": "ok"})
+        assert tool_call.kwargs["role"] == INCIDENT_RESPONDER
+        assert tool_call.kwargs["context"]["role"] == INCIDENT_RESPONDER
+
+    @pytest.mark.asyncio
+    async def test_triggered_child_without_parent_owner_keeps_legacy_behavior(
+        self, playbook_engine, agent_store,
+    ):
+        playbook_engine.agent_loop.run_tool = AsyncMock(return_value={"result": "ok"})
+        child_playbook_id = playbook_engine.register_playbook(
+            "Ownerless Child PB",
+            "Child tool call",
+            [{"name": "child_step", "tool": "child_tool", "params": {"value": "ok"}}],
+        )
+        parent_playbook_id = playbook_engine.register_playbook(
+            "Ownerless Parent PB",
+            "Triggers the child",
+            [{
+                "name": "trigger_child",
+                "action": "trigger_playbook",
+                "params": {"playbook": child_playbook_id},
+            }],
+        )
+
+        await playbook_engine.execute(
+            parent_playbook_id,
+            {},
+            user_id=None,
+            role=INCIDENT_RESPONDER,
+        )
+        child = next(
+            session for session in agent_store.list_sessions()
+            if session["playbook_id"] == child_playbook_id
+        )
+
+        assert child["user_id"] is None
+        assert child["metadata"] == {}
+        playbook_engine.agent_loop.run_tool.assert_awaited_once_with(
+            "child_tool", {"value": "ok"},
+        )
 
     @pytest.mark.asyncio
     async def test_rejected_step_dependencies_are_skipped(self, playbook_engine, agent_store):

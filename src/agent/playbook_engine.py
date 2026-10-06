@@ -1112,6 +1112,7 @@ class PlaybookEngine:
             case_id=case_id,
             playbook_id=playbook_id,
             user_id=user_id,
+            kind="playbook" if user_id is not None else None,
         )
 
         return await self._execute_session(
@@ -1632,8 +1633,18 @@ class PlaybookEngine:
                         })
 
                         try:
+                            parent_session = self.store.get_session(session_id)
+                            parent_user_id = (
+                                parent_session.get("user_id")
+                                if isinstance(parent_session, dict)
+                                else None
+                            )
                             sub_session = await self.execute(
-                                target_pb, trigger_input, case_id=case_id,
+                                target_pb,
+                                trigger_input,
+                                case_id=case_id,
+                                user_id=parent_user_id,
+                                role=role if parent_user_id is not None else None,
                             )
                             context[current_step.name] = {
                                 "action": "trigger_playbook",
