@@ -158,7 +158,7 @@ async def list_chat_sessions(
     current_user: dict = Depends(get_current_user),
 ):
     """List recent chat sessions."""
-    authorize_role(current_user, ["Incident Responder", "Threat Hunter", "admin"])
+    authorize_role(current_user, ["Threat Hunter", "admin"])
     store = request.app.state.agent_store
     if store is None:
         return {"sessions": []}
@@ -178,7 +178,7 @@ async def get_chat_session(
     current_user: dict = Depends(get_current_user),
 ):
     """Get a chat session with steps."""
-    authorize_role(current_user, ["Incident Responder", "Threat Hunter", "admin"])
+    authorize_role(current_user, ["Threat Hunter", "admin"])
     store = request.app.state.agent_store
     if store is None:
         raise HTTPException(503, "Agent store not initialized")

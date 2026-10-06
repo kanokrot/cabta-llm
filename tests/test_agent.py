@@ -1236,6 +1236,20 @@ class TestPlaybookEngine:
         assert playbook_engine.list_available() == playbook_engine.list_playbooks()
 
     @pytest.mark.asyncio
+    async def test_start_marks_created_session_as_playbook(self, playbook_engine, agent_store):
+        playbook_id = playbook_engine.register_playbook(
+            "Start Marker PB", "Marker test", [{"name": "step", "tool": "test_tool"}]
+        )
+        with patch.object(playbook_engine, "_execute_session", new_callable=AsyncMock):
+            session_id = await playbook_engine.start(
+                playbook_id, {}, user_id=101, role=INCIDENT_RESPONDER
+            )
+
+        session = agent_store.get_session(session_id)
+        assert session["user_id"] == 101
+        assert session["metadata"] == {"kind": "playbook"}
+
+    @pytest.mark.asyncio
     async def test_execute_playbook(self, playbook_engine, agent_store):
         pid = playbook_engine.register_playbook(
             name="Simple PB",
@@ -2057,9 +2071,12 @@ class TestAgentLoop:
         loop = _make_agent_loop(tmp_path)
         # Patch _run_loop so the background thread does nothing
         with patch.object(loop, "_run_loop", new_callable=AsyncMock):
-            session_id = await loop.investigate("Test goal")
+            session_id = await loop.investigate("Test goal", playbook_id="optional-context")
         assert isinstance(session_id, str) and len(session_id) > 0
         assert session_id in loop._active_sessions
+        session = loop.store.get_session(session_id)
+        assert session["playbook_id"] == "optional-context"
+        assert session["metadata"] == {}
 
     # ---- get_state returns None for unknown session ------------------ #
     def test_get_state_returns_none_for_unknown(self, tmp_path):

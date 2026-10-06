@@ -13,7 +13,9 @@ from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from .auth import TEAM_LEAD, authorize_role, get_current_user, get_user_ids_by_role
 from .security import SESSION_COOKIE_NAME
 from .visibility import (
+    INCIDENT_RESPONDER,
     VisibilityError,
+    can_access_playbook_session,
     serialize_websocket_frame,
 )
 
@@ -31,6 +33,7 @@ async def _send_visible(websocket: WebSocket, payload: dict, *, role: str, flow:
     serializer_flow = {
         "analysis": "websocket_analysis",
         "agent": "websocket_agent",
+        "playbook": "websocket_playbook",
     }.get(flow, flow)
     visible = serialize_websocket_frame(payload, role=role, flow=serializer_flow)
     await websocket.send_json(visible)
@@ -84,6 +87,46 @@ async def _authenticate_websocket(
         await websocket.close(code=1008)
         return None
     return user
+
+
+def _pending_playbook_approval(store, session_id: str) -> dict | None:
+    """Read the persisted approval checkpoint; its live event omits params."""
+    steps = store.get_steps(session_id)
+    pending = next(
+        (step for step in reversed(steps) if step.get("step_type") == "approval_required"),
+        None,
+    )
+    if not isinstance(pending, dict):
+        return None
+    params = pending.get("tool_params")
+    if isinstance(params, str):
+        try:
+            params = json.loads(params)
+        except (TypeError, json.JSONDecodeError):
+            params = None
+    description = pending.get("content")
+    if isinstance(description, str) and description.startswith("Waiting for approval: "):
+        description = description[len("Waiting for approval: "):]
+    return {
+        "type": "approval_required",
+        "step": pending.get("step_number"),
+        "tool": pending.get("tool_name"),
+        "description": description,
+        "params": params if isinstance(params, (dict, list)) else {},
+    }
+
+
+def _enrich_playbook_frame(store, session_id: str, frame: dict) -> dict:
+    if frame.get("type") != "approval_required":
+        return frame
+    pending = _pending_playbook_approval(store, session_id)
+    if pending is None:
+        return frame
+    enriched = dict(frame)
+    for key in ("step", "tool", "description", "params"):
+        if key not in enriched or (key == "params" and not enriched[key]):
+            enriched[key] = pending[key]
+    return enriched
 
 
 @router.websocket('/ws/analysis/{analysis_id}')
@@ -175,7 +218,7 @@ async def agent_ws(websocket: WebSocket, session_id: str):
     instead of polling.
     """
     authenticated_user = await _authenticate_websocket(
-        websocket, ["Threat Hunter", "admin"]
+        websocket, ["Threat Hunter", INCIDENT_RESPONDER, "admin"]
     )
     if authenticated_user is None:
         return
@@ -183,6 +226,9 @@ async def agent_ws(websocket: WebSocket, session_id: str):
     store = websocket.app.state.agent_store
     agent_loop = websocket.app.state.agent_loop
     if not store:
+        if authenticated_user.get("role") == INCIDENT_RESPONDER:
+            await websocket.close(code=1008)
+            return
         await _send_visible(websocket, {'type': 'failed', 'error': 'Agent store not available'}, role=authenticated_user['role'], flow='agent')
         await websocket.close()
         return
@@ -190,29 +236,39 @@ async def agent_ws(websocket: WebSocket, session_id: str):
     # Send current session state immediately
     session = store.get_session(session_id)
     if not session:
+        if authenticated_user.get("role") == INCIDENT_RESPONDER:
+            await websocket.close(code=1008)
+            return
         await _send_visible(websocket, {'type': 'failed', 'error': 'Session not found'}, role=authenticated_user['role'], flow='agent')
         await websocket.close()
         return
 
-    if authenticated_user.get('role') != 'admin':
-        owner_id = session.get('user_id')
-        if owner_id is None or str(owner_id) != str(authenticated_user.get('id')):
-            await websocket.close(code=1008)
-            return
+    if not can_access_playbook_session(authenticated_user, session):
+        await websocket.close(code=1008)
+        return
+
+    flow = "playbook" if authenticated_user.get("role") == INCIDENT_RESPONDER else "agent"
 
     steps = store.get_steps(session_id)
     await _send_visible(websocket, {
         'type': 'session_state',
         'session': session,
         'steps': steps,
-    }, role=authenticated_user['role'], flow='agent')
+    }, role=authenticated_user['role'], flow=flow)
+
+    if flow == "playbook" and session.get("status") == "waiting_approval":
+        pending_approval = _pending_playbook_approval(store, session_id)
+        if pending_approval is not None:
+            await _send_visible(
+                websocket, pending_approval, role=authenticated_user["role"], flow=flow
+            )
 
     # If already done, close
     if session.get('status') in ('completed', 'failed', 'cancelled'):
         await _send_visible(websocket, {
             'type': session['status'],
             'summary': session.get('summary', ''),
-        }, role=authenticated_user['role'], flow='agent')
+        }, role=authenticated_user['role'], flow=flow)
         await websocket.close()
         return
 
@@ -223,13 +279,19 @@ async def agent_ws(websocket: WebSocket, session_id: str):
             while True:
                 try:
                     msg = await asyncio.wait_for(queue.get(), timeout=15.0)
-                    await _send_visible(websocket, msg, role=authenticated_user['role'], flow='agent')
+                    if flow == "playbook" and isinstance(msg, dict):
+                        msg = _enrich_playbook_frame(store, session_id, msg)
+                    await _send_visible(websocket, msg, role=authenticated_user['role'], flow=flow)
                     if msg.get('type') in ('completed', 'failed', 'cancelled'):
                         break
                 except asyncio.TimeoutError:
-                    await _send_visible(websocket, {'type': 'heartbeat'}, role=authenticated_user['role'], flow='agent')
+                    await _send_visible(websocket, {'type': 'heartbeat'}, role=authenticated_user['role'], flow=flow)
         except WebSocketDisconnect:
             logger.debug(f"[WS] Agent client disconnected: {session_id}")
+        except VisibilityError as exc:
+            logger.debug(f"[WS] Visibility policy rejected agent frame: {exc}")
+            if flow == "playbook":
+                await websocket.close(code=1008)
         except Exception as exc:
             logger.debug(f"[WS] Agent WS error: {exc}")
         finally:
@@ -248,24 +310,45 @@ async def agent_ws(websocket: WebSocket, session_id: str):
                         else authenticated_user.get('id')
                     ),
                 )
-                if not session:
+                if not session or not can_access_playbook_session(authenticated_user, session):
+                    if flow == "playbook":
+                        await websocket.close(code=1008)
                     break
 
                 current_steps = store.get_steps(session_id)
                 if len(current_steps) > last_step_count:
                     for step in current_steps[last_step_count:]:
-                        await _send_visible(websocket, {'type': 'step', 'step': step}, role=authenticated_user['role'], flow='agent')
+                        if flow == "playbook" and step.get("step_type") == "approval_required":
+                            pending_approval = _pending_playbook_approval(store, session_id)
+                            if pending_approval is not None:
+                                await _send_visible(
+                                    websocket,
+                                    pending_approval,
+                                    role=authenticated_user["role"],
+                                    flow=flow,
+                                )
+                        else:
+                            await _send_visible(
+                                websocket,
+                                {"type": "step", "step": step},
+                                role=authenticated_user["role"],
+                                flow=flow,
+                            )
                     last_step_count = len(current_steps)
 
                 if session.get('status') in ('completed', 'failed', 'cancelled'):
                     await _send_visible(websocket, {
                         'type': session['status'],
                         'summary': session.get('summary', ''),
-                    }, role=authenticated_user['role'], flow='agent')
+                    }, role=authenticated_user['role'], flow=flow)
                     break
 
-                await _send_visible(websocket, {'type': 'heartbeat'}, role=authenticated_user['role'], flow='agent')
+                await _send_visible(websocket, {'type': 'heartbeat'}, role=authenticated_user['role'], flow=flow)
         except WebSocketDisconnect:
             logger.debug(f"[WS] Agent client disconnected: {session_id}")
+        except VisibilityError as exc:
+            logger.debug(f"[WS] Visibility policy rejected agent frame: {exc}")
+            if flow == "playbook":
+                await websocket.close(code=1008)
         except Exception as exc:
             logger.debug(f"[WS] Agent WS error: {exc}")

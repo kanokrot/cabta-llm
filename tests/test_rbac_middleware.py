@@ -12,6 +12,7 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
+from src.agent.agent_store import AgentStore
 from src.web.auth import get_current_user, require_role
 from src.web.routes import agent as agent_routes
 from src.web.routes import chat as chat_routes
@@ -138,15 +139,18 @@ def _playbooks_app(role: str, monkeypatch) -> FastAPI:
     app.state.agent_store = SimpleNamespace(
         get_session=lambda _session_id, user_id=None: (
             {
+                "id": "session-1",
                 "user_id": owner_id,
                 "metadata": {
+                    "kind": "playbook",
                     "ioc_investigation_result": {"verdict": "CLEAN"},
                     "ioc": "example.test",
                 },
             }
             if user_id is None or user_id == owner_id
             else None
-        )
+        ),
+        get_steps=lambda _session_id: [],
     )
     app.include_router(playbooks_routes.router, prefix="/api/playbooks")
     return app
@@ -156,6 +160,7 @@ PLAYBOOK_CASES = (
     ("get", "/api/playbooks", None),
     ("get", "/api/playbooks/playbook-1", None),
     ("post", "/api/playbooks/playbook-1/run", {"params": {}}),
+    ("get", "/api/playbooks/sessions/session-1", None),
     ("post", "/api/playbooks/sessions/session-1/approve", {"approved": True}),
     ("get", "/api/playbooks/sessions/session-1/report", None),
 )
@@ -172,6 +177,106 @@ def test_playbook_routes_require_incident_responder_or_admin(
 
     expected_status = 200 if role in {INCIDENT_RESPONDER, ADMIN} else 403
     assert response.status_code == expected_status
+
+
+def _scoped_playbook_app(role: str, tmp_path, *, kind: str | None, owner: str):
+    app = _with_user(FastAPI(), role)
+    user_id = _user(role)["id"]
+    owner_id = user_id if owner == "own" else (2020 if owner == "other" else None)
+    store = AgentStore(db_path=str(tmp_path / f"{role.replace(' ', '-')}-{kind}-{owner}.db"))
+    session_id = store.create_session(
+        "Playbook: test", playbook_id="playbook-1", user_id=owner_id, kind=kind
+    )
+    app.state.agent_store = store
+    app.state.playbook_engine = SimpleNamespace(
+        execute_from_step=AsyncMock(return_value=session_id),
+    )
+    app.include_router(playbooks_routes.router, prefix="/api/playbooks")
+    return app, store, session_id
+
+
+@pytest.mark.parametrize("endpoint", ("detail", "approve"))
+def test_incident_responder_can_read_and_approve_only_owned_playbook_sessions(
+    endpoint, tmp_path
+):
+    app, _store, session_id = _scoped_playbook_app(
+        INCIDENT_RESPONDER, tmp_path, kind="playbook", owner="own"
+    )
+    with TestClient(app) as client:
+        if endpoint == "detail":
+            response = client.get(f"/api/playbooks/sessions/{session_id}")
+            assert response.json()["kind"] == "playbook"
+        else:
+            response = client.post(
+                f"/api/playbooks/sessions/{session_id}/approve",
+                json={"approved": True},
+            )
+    assert response.status_code == 200
+
+
+@pytest.mark.parametrize("endpoint", ("detail", "approve"))
+@pytest.mark.parametrize(
+    "kind,owner",
+    (("playbook", "other"), (None, "own"), ("playbook", "legacy")),
+)
+def test_incident_responder_cannot_read_or_approve_other_or_nonplaybook_sessions(
+    endpoint, kind, owner, tmp_path
+):
+    app, _store, session_id = _scoped_playbook_app(
+        INCIDENT_RESPONDER, tmp_path, kind=kind, owner=owner
+    )
+    with TestClient(app) as client:
+        if endpoint == "detail":
+            response = client.get(f"/api/playbooks/sessions/{session_id}")
+        else:
+            response = client.post(
+                f"/api/playbooks/sessions/{session_id}/approve",
+                json={"approved": True},
+            )
+    assert response.status_code in {403, 404}
+
+
+def test_admin_can_read_and_approve_any_session(tmp_path):
+    app, _store, session_id = _scoped_playbook_app(
+        ADMIN, tmp_path, kind=None, owner="legacy"
+    )
+    with TestClient(app) as client:
+        detail = client.get(f"/api/playbooks/sessions/{session_id}")
+        approval = client.post(
+            f"/api/playbooks/sessions/{session_id}/approve",
+            json={"approved": True},
+        )
+    assert detail.status_code == 200
+    assert approval.status_code == 200
+
+
+def test_playbook_approval_ignores_forged_identity_and_audits_user_and_timestamp(tmp_path):
+    app, store, session_id = _scoped_playbook_app(
+        INCIDENT_RESPONDER, tmp_path, kind="playbook", owner="own"
+    )
+
+    async def record_approval(_session_id, approved, approved_by, role=None):
+        store.add_audit_entry(
+            session_id=_session_id,
+            action="contain_host",
+            action_type="approval_granted" if approved else "approval_rejected",
+            actor="human",
+            approved_by=approved_by,
+            status="success" if approved else "rejected",
+        )
+        return _session_id
+
+    app.state.playbook_engine.execute_from_step = AsyncMock(side_effect=record_approval)
+    with TestClient(app) as client:
+        response = client.post(
+            f"/api/playbooks/sessions/{session_id}/approve",
+            json={"approved": True, "approved_by": "forged@example.test"},
+        )
+
+    audit = store.get_audit_log(session_id=session_id)
+    assert response.status_code == 200
+    assert audit[0]["approved_by"] == _user(INCIDENT_RESPONDER)["username"]
+    assert audit[0]["timestamp"]
 
 
 def _chat_app(role: str) -> FastAPI:
@@ -209,6 +314,10 @@ def _chat_app(role: str) -> FastAPI:
             {INCIDENT_RESPONDER, ADMIN},
         ),
         ({"message": "investigate domain"}, {THREAT_HUNTER, ADMIN}),
+        (
+            {"message": "follow up", "session_id": "session-1"},
+            {THREAT_HUNTER, ADMIN},
+        ),
     ),
 )
 def test_chat_post_is_branch_aware(role, payload, allowed_roles):
@@ -221,11 +330,11 @@ def test_chat_post_is_branch_aware(role, payload, allowed_roles):
 
 @pytest.mark.parametrize("role", ALL_ROLES)
 @pytest.mark.parametrize("path", ("/api/chat/sessions", "/api/chat/sessions/session-1"))
-def test_chat_session_reads_are_admin_only_until_phase_25(role, path):
+def test_chat_session_reads_are_threat_hunter_or_admin_only(role, path):
     with TestClient(_chat_app(role)) as client:
         response = client.get(path)
 
-    expected_status = 403 if role == SOC_ANALYST else 200
+    expected_status = 200 if role in {THREAT_HUNTER, ADMIN} else 403
     assert response.status_code == expected_status
 
 
@@ -263,7 +372,13 @@ def test_require_role_rejects_empty_or_unknown_roles(roles):
         require_role(roles)
 
 
-def _websocket_app(agent_user_id=_user(THREAT_HUNTER)["id"]) -> FastAPI:
+def _websocket_app(
+    agent_user_id=_user(THREAT_HUNTER)["id"],
+    *,
+    session_kind: str | None = None,
+    session_status: str = "completed",
+    steps: list[dict] | None = None,
+) -> FastAPI:
     app = FastAPI()
     app.state.analysis_manager = SimpleNamespace(
         subscribe=lambda _analysis_id: asyncio.Queue(),
@@ -273,10 +388,11 @@ def _websocket_app(agent_user_id=_user(THREAT_HUNTER)["id"]) -> FastAPI:
     app.state.agent_store = SimpleNamespace(
         get_session=lambda session_id, user_id=None: {
             "id": session_id,
-            "status": "completed",
+            "status": session_status,
             "user_id": agent_user_id,
+            "metadata": {"kind": session_kind} if session_kind is not None else {},
         },
-        get_steps=lambda _session_id: [],
+        get_steps=lambda _session_id: steps or [],
     )
     app.state.agent_loop = None
     app.include_router(websocket_routes.router)
@@ -385,6 +501,51 @@ def test_agent_websocket_allows_legacy_null_owner_for_admin(monkeypatch):
         with client.websocket_connect("/ws/agent/session-1") as websocket:
             websocket.send_json({"type": "auth", "token": "valid-token"})
             assert websocket.receive_json()["type"] == "session_state"
+
+
+def test_incident_responder_websocket_allows_owned_playbook_and_streams_pending_params(monkeypatch):
+    owner_id = _user(INCIDENT_RESPONDER)["id"]
+    _patch_websocket_user(monkeypatch, INCIDENT_RESPONDER)
+    app = _websocket_app(
+        agent_user_id=owner_id,
+        session_kind="playbook",
+        session_status="waiting_approval",
+        steps=[{
+            "step_number": 2,
+            "step_type": "approval_required",
+            "tool_name": "contain_host",
+            "content": "Waiting for approval: Isolate the target host",
+            "tool_params": '{"host":"host-7"}',
+        }],
+    )
+    with TestClient(app) as client:
+        with client.websocket_connect("/ws/agent/session-1") as websocket:
+            websocket.send_json({"type": "auth", "token": "valid-token"})
+            assert websocket.receive_json()["type"] == "session_state"
+            approval = websocket.receive_json()
+            assert approval["type"] == "approval_required"
+            assert approval["step"] == 2
+            assert approval["params"] == {"host": "host-7"}
+
+
+@pytest.mark.parametrize(
+    "owner_id,session_kind",
+    (
+        (_user(THREAT_HUNTER)["id"], "playbook"),
+        (_user(INCIDENT_RESPONDER)["id"], "agent"),
+        (None, "playbook"),
+    ),
+)
+def test_incident_responder_websocket_rejects_other_owner_nonplaybook_and_legacy(
+    owner_id, session_kind, monkeypatch
+):
+    _patch_websocket_user(monkeypatch, INCIDENT_RESPONDER)
+    with TestClient(_websocket_app(agent_user_id=owner_id, session_kind=session_kind)) as client:
+        assert _assert_websocket_closed(
+            client,
+            "/ws/agent/session-1",
+            {"type": "auth", "token": "valid-token"},
+        ) == 1008
 
 
 def _dashboard_app(role: str, calls: list) -> FastAPI:

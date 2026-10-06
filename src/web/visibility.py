@@ -16,7 +16,7 @@ ADMIN = "admin"
 VALID_ROLES = frozenset({SOC, INCIDENT_RESPONDER, THREAT_HUNTER, TEAM_LEAD, ADMIN})
 VALID_FLOWS = frozenset({
     "analysis", "dashboard", "report", "chat", "agent", "playbook", "case",
-    "websocket_analysis", "websocket_agent", "gmail", "gmail_admin",
+    "websocket_analysis", "websocket_agent", "websocket_playbook", "gmail", "gmail_admin",
 })
 
 
@@ -31,6 +31,8 @@ def _policy_roles(flow: str) -> frozenset[str]:
         return frozenset({INCIDENT_RESPONDER, THREAT_HUNTER, ADMIN})
     if flow in {"agent", "websocket_agent"}:
         return frozenset({THREAT_HUNTER, ADMIN})
+    if flow == "websocket_playbook":
+        return frozenset({INCIDENT_RESPONDER, ADMIN})
     if flow == "gmail":
         return frozenset(VALID_ROLES)
     if flow == "gmail_admin":
@@ -60,6 +62,26 @@ def _as_dict(value: Any) -> Dict[str, Any]:
             return {}
         return parsed if isinstance(parsed, dict) else {}
     return {}
+
+
+def can_access_playbook_session(user: Mapping[str, Any], session: Mapping[str, Any]) -> bool:
+    """Central session access rule for agent and playbook session workflows."""
+    if not isinstance(user, Mapping) or not isinstance(session, Mapping):
+        return False
+    role = user.get("role")
+    if role == ADMIN:
+        return True
+
+    user_id = user.get("id")
+    owner_id = session.get("user_id")
+    if user_id is None or owner_id is None or str(user_id) != str(owner_id):
+        return False
+
+    if role == INCIDENT_RESPONDER:
+        return _as_dict(session.get("metadata")).get("kind") == "playbook"
+    if role == THREAT_HUNTER:
+        return True
+    return False
 
 
 _FILE_RESULT_SENSITIVE_KEYS = {
@@ -751,7 +773,55 @@ def serialize_agent_session(session: Mapping[str, Any], steps: Optional[Iterable
 def serialize_chat_session(session: Mapping[str, Any], steps: Optional[Iterable[Mapping[str, Any]]] = None,
                            role: str = THREAT_HUNTER) -> dict[str, Any]:
     authorize_flow(role, "chat")
-    return serialize_agent_session(session, steps=steps, role=THREAT_HUNTER if role == THREAT_HUNTER else ADMIN)
+    if role == INCIDENT_RESPONDER:
+        raise VisibilityError("Incident Responders must use playbook session detail")
+    return serialize_agent_session(session, steps=steps, role=role)
+
+
+def serialize_playbook_session_detail(
+    session: Mapping[str, Any],
+    steps: Optional[Iterable[Mapping[str, Any]]] = None,
+    *,
+    role: str,
+) -> dict[str, Any]:
+    """Return a bounded playbook session view without raw execution data."""
+    authorize_flow(role, "playbook")
+    metadata = _as_dict(session.get("metadata"))
+    kind = metadata.get("kind")
+    if role == INCIDENT_RESPONDER and kind != "playbook":
+        raise VisibilityError("Session is not a playbook session")
+
+    output = {
+        key: session.get(key)
+        for key in (
+            "id", "status", "goal", "summary", "created_at", "updated_at", "playbook_id",
+        )
+        if isinstance(session.get(key), (str, int, float, bool))
+    }
+    output["kind"] = kind if isinstance(kind, str) and kind in {"playbook", "agent"} else "unknown"
+    output["has_report"] = bool(metadata.get("ioc_investigation_result"))
+    if steps is not None:
+        output["steps"] = [
+            _serialize_playbook_step(step)
+            for step in list(steps)[:500]
+            if isinstance(step, Mapping)
+        ]
+    return output
+
+
+def _serialize_playbook_step(step: Mapping[str, Any]) -> dict[str, Any]:
+    output = {
+        key: step[key]
+        for key in (
+            "id", "step_number", "step_type", "tool_name", "status",
+            "duration_ms", "timestamp",
+        )
+        if key in step and isinstance(step[key], (str, int, float, bool))
+    }
+    summary = _text(step.get("content"), 2000)
+    if summary is not None:
+        output["summary"] = summary
+    return output
 
 
 def serialize_tool_definition(tool: Any, role: str = THREAT_HUNTER) -> Optional[dict[str, Any]]:
@@ -999,6 +1069,54 @@ def serialize_websocket_frame(frame: Mapping[str, Any], *, role: str, flow: str)
     if not isinstance(frame, Mapping) or not isinstance(frame.get("type"), str):
         raise VisibilityError("Unknown WebSocket frame")
     frame_type = frame["type"]
+    if flow == "websocket_playbook":
+        if frame_type == "heartbeat":
+            return {"type": "heartbeat"}
+        if frame_type in {"completed", "failed", "cancelled"}:
+            output = {"type": frame_type}
+            if frame_type == "completed":
+                output["summary"] = _text(frame.get("summary"), 4000) or ""
+            elif frame_type == "failed":
+                output["error"] = "Playbook execution failed"
+            return output
+        if frame_type == "session_state":
+            session = frame.get("session")
+            if not isinstance(session, Mapping):
+                raise VisibilityError("Invalid playbook session state")
+            return {
+                "type": "session_state",
+                "session": serialize_playbook_session_detail(
+                    session,
+                    steps=frame.get("steps") if isinstance(frame.get("steps"), list) else None,
+                    role=role,
+                ),
+            }
+        if frame_type == "approval_required":
+            output = {"type": frame_type}
+            step = frame.get("step")
+            if isinstance(step, (str, int, float, bool)):
+                output["step"] = step
+            for key in ("tool", "action"):
+                if isinstance(frame.get(key), str):
+                    output[key] = frame[key][:200]
+            output["description"] = _text(
+                frame.get("description", frame.get("reason")), 1000
+            ) or "Approval required"
+            if "params" in frame:
+                output["params"] = _safe_approval_params(frame["params"])
+            return output
+        if frame_type in {"phase", "tool_call", "tool_result", "step"}:
+            output = {"type": frame_type}
+            for key in ("step", "duration", "duration_ms", "max_steps"):
+                if key in frame and isinstance(frame[key], (str, int, float, bool)):
+                    output[key] = frame[key]
+            for key in ("phase", "tool"):
+                if isinstance(frame.get(key), str):
+                    output[key] = frame[key][:200]
+            if frame_type == "step" and isinstance(frame.get("step"), Mapping):
+                output["step"] = _serialize_playbook_step(frame["step"])
+            return output
+        raise VisibilityError("Unknown playbook WebSocket frame")
     if flow == "websocket_analysis":
         if frame_type == "heartbeat":
             return {"type": "heartbeat"}
@@ -1133,6 +1251,25 @@ def serialize_audit_entries(entries: Iterable[Mapping[str, Any]], role: str) -> 
         if row:
             output.append(row)
     return output
+
+
+def _safe_approval_params(value: Any, *, depth: int = 0) -> Any:
+    """Bound approval parameters before they are shown to a human approver."""
+    if depth > 5:
+        return "[maximum nesting depth reached]"
+    if isinstance(value, Mapping):
+        output = {}
+        for key, item in list(value.items())[:100]:
+            if isinstance(key, str):
+                output[key[:500]] = _safe_approval_params(item, depth=depth + 1)
+        return output
+    if isinstance(value, (list, tuple)):
+        return [_safe_approval_params(item, depth=depth + 1) for item in list(value)[:100]]
+    if isinstance(value, str):
+        return value[:500]
+    if value is None or isinstance(value, (bool, int, float)):
+        return value
+    return None
 
 
 def serialize_correlation(result: Any, role: str) -> dict[str, Any]:

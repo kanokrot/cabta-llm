@@ -1051,6 +1051,7 @@ class PlaybookEngine:
             case_id=case_id,
             playbook_id=playbook_id,
             user_id=user_id,
+            kind="playbook",
         )
 
         def _run():

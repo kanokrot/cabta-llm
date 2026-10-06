@@ -104,10 +104,12 @@ class AgentStore:
         case_id: Optional[str] = None,
         playbook_id: Optional[str] = None,
         user_id: Optional[int] = None,
+        kind: Optional[str] = None,
     ) -> str:
         """Create a new agent session. Returns session ID."""
         session_id = uuid.uuid4().hex[:12]
         now = datetime.now(timezone.utc).isoformat()
+        metadata_json = json.dumps({"kind": kind}) if kind is not None else "{}"
 
         with self._lock:
             conn = self._connect()
@@ -115,8 +117,8 @@ class AgentStore:
                 """INSERT INTO agent_sessions
                    (id, case_id, goal, status, playbook_id, created_at,
                     findings, metadata, user_id)
-                   VALUES (?, ?, ?, 'active', ?, ?, '[]', '{}', ?)""",
-                (session_id, case_id, goal, playbook_id, now, user_id),
+                   VALUES (?, ?, ?, 'active', ?, ?, '[]', ?, ?)""",
+                (session_id, case_id, goal, playbook_id, now, metadata_json, user_id),
             )
             conn.commit()
             conn.close()
@@ -224,9 +226,21 @@ class AgentStore:
         """Persist arbitrary session metadata as JSON (e.g. a paused
         playbook's context + pending step, so execute_from_step can
         reconstruct exactly where execution left off)."""
-        metadata_json = json.dumps(metadata, default=str)
         with self._lock:
             conn = self._connect()
+            row = conn.execute(
+                "SELECT metadata FROM agent_sessions WHERE id = ?",
+                (session_id,),
+            ).fetchone()
+            updated_metadata = dict(metadata) if isinstance(metadata, dict) else {}
+            if row and isinstance(row[0], str):
+                try:
+                    existing_metadata = json.loads(row[0])
+                except (TypeError, json.JSONDecodeError):
+                    existing_metadata = None
+                if isinstance(existing_metadata, dict) and "kind" in existing_metadata:
+                    updated_metadata["kind"] = existing_metadata["kind"]
+            metadata_json = json.dumps(updated_metadata, default=str)
             conn.execute(
                 "UPDATE agent_sessions SET metadata = ? WHERE id = ?",
                 (metadata_json, session_id),

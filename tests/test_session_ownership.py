@@ -145,9 +145,17 @@ def test_migration_restores_first_database_when_second_database_fails(tmp_path, 
 
 def test_agent_store_filters_sessions_by_user_and_keeps_admin_unscoped(tmp_path):
     store = AgentStore(db_path=str(tmp_path / "agent.db"))
-    own = store.create_session("own", user_id=101)
+    own = store.create_session("own", user_id=101, kind="playbook")
     other = store.create_session("other", user_id=202)
     legacy = store.create_session("legacy")
+
+    assert store.get_session(own)["metadata"] == {"kind": "playbook"}
+    store.update_session_metadata(own, {"pending_step_name": "checkpoint"})
+    assert store.get_session(own)["metadata"] == {
+        "kind": "playbook",
+        "pending_step_name": "checkpoint",
+    }
+    assert store.get_session(other)["metadata"] == {}
 
     assert store.get_session(own, user_id=101)["id"] == own
     assert store.get_session(other, user_id=101) is None

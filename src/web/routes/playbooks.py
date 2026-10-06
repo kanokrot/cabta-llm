@@ -15,16 +15,17 @@ from pydantic import BaseModel
 from ...agent.playbook_engine import PlaybookValidationError
 from ...reporting.html_report_generator import HTMLReportGenerator
 from ..auth import get_current_user, require_role
-from ..visibility import serialize_playbook, serialize_playbook_result
+from ..visibility import (
+    can_access_playbook_session,
+    serialize_playbook,
+    serialize_playbook_result,
+    serialize_playbook_session_detail,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(
     dependencies=[Depends(require_role(["Incident Responder", "admin"]))]
 )
-
-
-def _owner_scope(current_user: dict) -> Optional[int]:
-    return None if current_user.get("role") == "admin" else current_user["id"]
 
 
 class PlaybookRunRequest(BaseModel):
@@ -93,6 +94,23 @@ class PlaybookApprovalRequest(BaseModel):
     approved_by: str = "unknown"
 
 
+@router.get('/sessions/{session_id}')
+async def get_playbook_session(
+    request: Request,
+    session_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """Get the safe playbook-session detail used by the Incident Responder chat view."""
+    store = request.app.state.agent_store
+    if store is None:
+        raise HTTPException(status_code=503, detail="Agent store not initialized")
+    session = store.get_session(session_id)
+    if session is None or not can_access_playbook_session(current_user, session):
+        raise HTTPException(status_code=404, detail="Session not found")
+    steps = store.get_steps(session_id)
+    return serialize_playbook_session_detail(session, steps=steps, role=current_user["role"])
+
+
 @router.post('/sessions/{session_id}/approve')
 async def approve_playbook_step(
     request: Request,
@@ -107,11 +125,8 @@ async def approve_playbook_step(
             status_code=503,
             detail="Agent store not initialized",
         )
-    session = store.get_session(
-        session_id,
-        user_id=_owner_scope(current_user),
-    )
-    if session is None:
+    session = store.get_session(session_id)
+    if session is None or not can_access_playbook_session(current_user, session):
         raise HTTPException(
             status_code=404,
             detail="Session not found",
@@ -120,9 +135,10 @@ async def approve_playbook_step(
     engine = request.app.state.playbook_engine
     if engine is None:
         raise HTTPException(503, "Playbook engine not initialized")
+    approved_by = current_user.get("username") or current_user.get("email")
     try:
         result_session_id = await engine.execute_from_step(
-            session_id, body.approved, body.approved_by, role=current_user["role"]
+            session_id, body.approved, approved_by, role=current_user["role"]
         )
         return {"success": True, "session_id": result_session_id}
     except ValueError as e:
@@ -141,11 +157,8 @@ async def get_playbook_report(
     store = request.app.state.agent_store
     if store is None:
         raise HTTPException(503, "Agent store not initialized")
-    session = store.get_session(
-        session_id,
-        user_id=_owner_scope(current_user),
-    )
-    if session is None:
+    session = store.get_session(session_id)
+    if session is None or not can_access_playbook_session(current_user, session):
         raise HTTPException(
             status_code=404,
             detail="Session not found",

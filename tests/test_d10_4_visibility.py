@@ -17,7 +17,14 @@ from src.web import websocket as websocket_routes
 from src.web.auth import get_current_user
 from src.web.routes import cases as cases_routes
 from src.web.routes import playbooks as playbooks_routes
-from src.web.visibility import VisibilityError, serialize_agent_session, serialize_chat_session
+from src.web.visibility import (
+    VisibilityError,
+    can_access_playbook_session,
+    serialize_agent_session,
+    serialize_chat_session,
+    serialize_playbook_session_detail,
+    serialize_websocket_frame,
+)
 
 
 SOC = "SOC Analyst Tier 1-2"
@@ -163,6 +170,106 @@ def test_chat_session_serializer_includes_history() -> None:
     )
 
     assert serialized["history"][-1] == {"role": "agent", "content": "Done"}
+
+
+def test_playbook_session_access_requires_exact_kind_and_matching_non_null_owner() -> None:
+    responder = _user(INCIDENT_RESPONDER, user_id=7)
+    own_playbook = {"user_id": 7, "metadata": {"kind": "playbook"}}
+
+    assert can_access_playbook_session(responder, own_playbook)
+    assert not can_access_playbook_session(
+        responder, {"user_id": "8", "metadata": {"kind": "playbook"}}
+    )
+    assert not can_access_playbook_session(
+        responder, {"user_id": 7, "metadata": {"kind": "agent"}}
+    )
+    assert not can_access_playbook_session(
+        responder, {"user_id": 7, "metadata": '{"kind":"Playbook"}'}
+    )
+    assert not can_access_playbook_session(
+        responder, {"user_id": 7, "metadata": "not-json"}
+    )
+    assert not can_access_playbook_session(
+        responder, {"user_id": 7, "metadata": {"kind": ["playbook"]}}
+    )
+    assert not can_access_playbook_session(
+        responder, {"user_id": None, "metadata": {"kind": "playbook"}}
+    )
+    assert can_access_playbook_session(
+        _user(ADMIN), {"user_id": None, "metadata": {}}
+    )
+    assert can_access_playbook_session(
+        _user(THREAT_HUNTER, user_id=7), {"user_id": 7, "metadata": {}}
+    )
+    assert not can_access_playbook_session(
+        _user(THREAT_HUNTER, user_id=7), {"user_id": None, "metadata": {}}
+    )
+
+
+def test_playbook_session_serializer_omits_internal_fields_and_incident_chat_admin_path() -> None:
+    session = {
+        "id": "pb-session",
+        "user_id": 7,
+        "status": "waiting_approval",
+        "goal": "Playbook: triage",
+        "playbook_id": "triage",
+        "metadata": {"kind": "playbook", "private_context": "secret"},
+        "findings": [{"secret": "finding"}],
+    }
+    steps = [{
+        "id": "step-1",
+        "step_number": 1,
+        "step_type": "approval_required",
+        "tool_name": "contain_host",
+        "status": "pending",
+        "content": "Review target host",
+        "tool_params": '{"host":"server-1"}',
+        "tool_result": "private-result",
+    }]
+
+    serialized = serialize_playbook_session_detail(
+        session, steps=steps, role=INCIDENT_RESPONDER
+    )
+    assert serialized["kind"] == "playbook"
+    assert serialized["steps"][0]["summary"] == "Review target host"
+    assert not {"user_id", "metadata", "findings", "history", "tool_params", "tool_result"} & serialized.keys()
+    assert not {"tool_params", "tool_result"} & serialized["steps"][0].keys()
+    with pytest.raises(VisibilityError):
+        serialize_playbook_session_detail(
+            {**session, "metadata": {"kind": "agent"}}, role=INCIDENT_RESPONDER
+        )
+    with pytest.raises(VisibilityError):
+        serialize_chat_session(session, role=INCIDENT_RESPONDER)
+
+
+def test_playbook_approval_frame_sanitizes_params_and_rejects_unknown_frames() -> None:
+    deep_params = {
+        "target": "t" * 700,
+        "nested": {"step": {"value": ["x" * 700]}},
+        "depth": {"a": {"b": {"c": {"d": {"e": {"f": "hidden"}}}}}},
+    }
+    serialized = serialize_websocket_frame(
+        {
+            "type": "approval_required",
+            "tool": "contain_host",
+            "description": "Review target",
+            "params": deep_params,
+            "args": {"secret": "must not pass"},
+        },
+        role=INCIDENT_RESPONDER,
+        flow="websocket_playbook",
+    )
+
+    assert len(serialized["params"]["target"]) == 500
+    assert len(serialized["params"]["nested"]["step"]["value"][0]) == 500
+    assert serialized["params"]["depth"]["a"]["b"]["c"]["d"]["e"] == "[maximum nesting depth reached]"
+    assert "args" not in serialized
+    with pytest.raises(VisibilityError):
+        serialize_websocket_frame(
+            {"type": "unrecognized"},
+            role=INCIDENT_RESPONDER,
+            flow="websocket_playbook",
+        )
 
 
 # ---------------------------------------------------------------------------
