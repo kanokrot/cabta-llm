@@ -360,6 +360,45 @@ def _safe_sources(value: Any, *, detailed: bool = False) -> dict[str, dict[str, 
     return output
 
 
+def _safe_extra_evidence(value: Any) -> list[dict[str, Any]]:
+    """Allow only compact summaries from post-score user-key cross-checks."""
+    if not isinstance(value, list):
+        return []
+    allowed_fields = {
+        "virustotal": {"malicious", "suspicious", "total_engines"},
+        "abuseipdb": {"confidence", "reports", "country"},
+        "otx": {"pulses", "reputation"},
+    }
+    allowed_statuses = {"available", "not_found", "not_applicable", "unavailable"}
+    output = []
+    for item in value[:3]:
+        if not isinstance(item, Mapping):
+            continue
+        source = item.get("source")
+        status = item.get("status")
+        if (
+            not isinstance(source, str)
+            or not isinstance(status, str)
+            or source not in allowed_fields
+            or status not in allowed_statuses
+        ):
+            continue
+        row: dict[str, Any] = {"source": source, "status": status}
+        summary = item.get("summary")
+        if isinstance(summary, Mapping):
+            safe_summary = {}
+            for key in allowed_fields[source]:
+                value_item = summary.get(key)
+                if isinstance(value_item, str):
+                    safe_summary[key] = value_item[:80]
+                elif isinstance(value_item, (int, float)) and not isinstance(value_item, bool):
+                    safe_summary[key] = value_item
+            if safe_summary:
+                row["summary"] = safe_summary
+        output.append(row)
+    return output
+
+
 def _safe_findings(value: Any) -> list[dict[str, Any]]:
     if not isinstance(value, list):
         return []
@@ -400,6 +439,8 @@ def _safe_result(
             output[key] = result[key]
     if isinstance(result.get("sources"), dict):
         output["sources"] = _safe_sources(result["sources"], detailed=detailed)
+    if "extra_evidence" in result:
+        output["extra_evidence"] = _safe_extra_evidence(result.get("extra_evidence"))
     llm_analysis = result.get("llm_analysis")
     if isinstance(llm_analysis, dict) and any(
         isinstance(llm_analysis.get(key), str) for key in ("verdict", "analysis")
@@ -512,6 +553,11 @@ def serialize_analysis_job(job: Dict[str, Any], role: str = SOC, flow: str = "an
                 safe_value = _safe_file_result_value(result[key])
                 if safe_value is not _FILE_RESULT_OMIT:
                     output[key] = safe_value
+    elif job.get("analysis_type") == "ioc":
+        if "extra_evidence" in result:
+            output["extra_evidence"] = _safe_extra_evidence(
+                result.get("extra_evidence")
+            )
     elif job.get("analysis_type") == "email":
         detailed = role in {INCIDENT_RESPONDER, THREAT_HUNTER, ADMIN}
         if detailed:
