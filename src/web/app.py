@@ -36,6 +36,7 @@ from .routes import playbooks as playbook_routes
 from .routes import mcp_management as mcp_routes
 from .routes import access_requests as access_request_routes
 from .routes import gmail_settings as gmail_routes
+from .routes import account_api_keys as account_api_keys_routes
 from . import websocket
 from .auth import TEAM_LEAD, get_current_user, get_user_ids_by_role, require_role
 from .analysis_manager import AnalysisManager
@@ -389,6 +390,7 @@ def create_app() -> FastAPI:
         tags=['Admin access requests'],
     )
     app.include_router(gmail_routes.router, prefix='/api/settings/gmail', tags=['Gmail OAuth'])
+    app.include_router(account_api_keys_routes.router, prefix='/api/account', tags=['Account API keys'])
     app.include_router(gmail_routes.admin_router, prefix='/api/admin', tags=['Admin Gmail OAuth'])
     app.include_router(websocket.router)
 
