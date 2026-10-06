@@ -3,11 +3,21 @@
 {% extends "base.html" %}
 
 {% block title %}IOC Analysis - Blue Team Assistant{% endblock %}
-{% block page_title %}IOC Investigation{% endblock %}
-{% block page_subtitle %}<span class="page-subtitle">Analyze indicators of compromise across multiple threat intelligence sources</span>{% endblock %}
+{% block page_title %}{% endblock %}
+{% block page_subtitle %}{% endblock %}
 
 {% block extra_head %}
 <style>
+    .ioc-analysis-page { padding-top: 56px; }
+    body:has(.ioc-analysis-page) .sub-header {
+        height: 0;
+        min-height: 0;
+        margin-top: 0 !important;
+        overflow: hidden;
+        padding: 0;
+        border: 0;
+    }
+
     /* ── IOC Results Hero ── */
     .ioc-results-hero {
         display: grid;
@@ -1382,6 +1392,7 @@
 {% endblock %}
 
 {% block content %}
+<section class="ioc-analysis-page">
 <div class="row g-4">
     <!-- IOC Submit Form -->
     <div class="col-lg-7">
@@ -1594,6 +1605,7 @@
 
 <!-- Toast for copy feedback -->
 <div class="ioc-toast" id="iocCopyToast"><i class="bi bi-check-circle me-1"></i>Copied to clipboard</div>
+</section>
 {% endblock %}
 
 {% block scripts %}
