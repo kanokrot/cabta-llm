@@ -56,6 +56,7 @@ def _auth_db(path: Path) -> None:
         "002_add_username_and_admin_role.py",
         "004_add_team_lead_role.py",
         "010_add_access_requests.py",
+        "013_create_api_keys.py",
     ):
         _load_migration(filename).migrate(str(path))
     with sqlite3.connect(path) as connection:

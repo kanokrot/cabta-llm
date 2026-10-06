@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 
 from src.web import auth as auth_core
 from src.web.routes import auth as auth_routes
-from src.web.security import LoginRateLimiter
+from src.web.security import LoginRateLimiter, api_key_rate_limiter, login_rate_limiter
 
 
 def _auth_app() -> FastAPI:
@@ -35,6 +35,16 @@ def test_login_rate_limiter_expires_attempts() -> None:
     assert limiter.is_limited("alice", "192.0.2.10")
     now[0] = 161.0
     assert not limiter.is_limited("alice", "192.0.2.10")
+
+
+def test_api_key_limiter_is_separate_from_login_limiter() -> None:
+    api_key_rate_limiter.clear("keyprefix", "192.0.2.10")
+    login_rate_limiter.clear("keyprefix", "192.0.2.10")
+    api_key_rate_limiter.record_failure("keyprefix", "192.0.2.10")
+
+    assert api_key_rate_limiter.is_limited("keyprefix", "192.0.2.10") is False
+    assert login_rate_limiter.is_limited("keyprefix", "192.0.2.10") is False
+    api_key_rate_limiter.clear("keyprefix", "192.0.2.10")
 
 
 def test_failed_login_is_rate_limited_and_success_sets_strict_cookies(monkeypatch) -> None:

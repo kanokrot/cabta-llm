@@ -351,6 +351,25 @@ def test_require_role_remains_backward_compatible_with_admin_string():
     assert response.status_code == 200
 
 
+def test_api_key_identity_keeps_owner_role_for_rbac_checks():
+    app = FastAPI()
+    owner = _user(SOC_ANALYST)
+
+    def api_key_identity():
+        return owner
+
+    app.dependency_overrides[get_current_user] = api_key_identity
+
+    @app.get("/incident-response")
+    def incident_response(_user: dict = Depends(require_role(INCIDENT_RESPONDER))):
+        return {"ok": True}
+
+    with TestClient(app) as client:
+        response = client.get("/incident-response")
+
+    assert response.status_code == 403
+
+
 def test_require_role_accepts_allowed_role_list():
     app = _with_user(FastAPI(), THREAT_HUNTER)
 
