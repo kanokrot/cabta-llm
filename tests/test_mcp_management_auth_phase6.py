@@ -228,6 +228,56 @@ def test_server_listing_redacts_non_admin_and_admin_secrets(monkeypatch, tmp_pat
             assert set(response.json()["servers"][0]) <= {"name", "category", "status", "tool_count"}
 
 
+@pytest.mark.asyncio
+async def test_mcp_status_defaults_are_consistent_between_api_and_page(monkeypatch, tmp_path):
+    from src.web.app import _register_page_routes
+
+    app = _app(monkeypatch, tmp_path, "admin")
+    app.state.agent_store = SimpleNamespace(list_mcp_connections=lambda: [])
+    app.state.config = {
+        "mcp_servers": [
+            {"name": "no_status_server"},
+            {"name": "planned_server", "status": "planned"},
+            {"name": "install_server", "status": "requires_install"},
+        ]
+    }
+    _register_page_routes(app)
+
+    with TestClient(app) as client:
+        api_response = client.get("/api/mcp/servers")
+    assert api_response.status_code == 200
+    api_statuses = {
+        server["name"]: server["status"]
+        for server in api_response.json()["servers"]
+    }
+
+    page_route = next(route for route in app.routes if getattr(route, "path", None) == "/mcp/servers")
+    request = Request({
+        "type": "http",
+        "http_version": "1.1",
+        "method": "GET",
+        "scheme": "http",
+        "path": "/mcp/servers",
+        "raw_path": b"/mcp/servers",
+        "query_string": b"",
+        "headers": [],
+        "client": ("testclient", 50000),
+        "server": ("testserver", 80),
+        "app": app,
+    })
+    page_response = await page_route.endpoint(request, _user("admin"))
+    page_statuses = {
+        server["name"]: server["status"]
+        for server in page_response.context["servers"]
+    }
+    expected = {
+        "no_status_server": "disconnected",
+        "planned_server": "planned",
+        "install_server": "requires_install",
+    }
+    assert api_statuses == page_statuses == expected
+
+
 def test_tools_endpoint_reuses_visibility_policy_and_fails_closed(monkeypatch, tmp_path):
     app = _app(monkeypatch, tmp_path, "Threat Hunter")
     with TestClient(app) as client:

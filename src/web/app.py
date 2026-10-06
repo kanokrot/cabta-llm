@@ -770,7 +770,7 @@ def _register_page_routes(app: FastAPI) -> None:
                 db_entry = db_lookup[name]
                 entry.update({k: v for k, v in db_entry.items() if v is not None})
             entry.setdefault('source', 'config')
-            entry.setdefault('status', 'planned')
+            entry.setdefault('status', 'disconnected')
             merged.append(entry)
             seen_names.add(name)
         for s in db_servers:

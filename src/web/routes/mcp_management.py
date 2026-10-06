@@ -231,7 +231,7 @@ def _server_category(entry: dict) -> str:
 
 def _sanitize_server(entry: dict, role: str) -> dict:
     name = str(entry.get("name", ""))
-    status = entry.get("status") or "planned"
+    status = entry.get("status") or "disconnected"
     if role != "admin":
         live_status = entry.get("live_status")
         if not isinstance(live_status, dict):
@@ -335,7 +335,7 @@ async def list_servers(
             db_entry = db_lookup[name]
             entry.update({k: v for k, v in db_entry.items() if v is not None})
         entry.setdefault('source', 'config')
-        entry.setdefault('status', 'planned')
+        entry.setdefault('status', 'disconnected')
         merged.append(entry)
         seen_names.add(name)
 
