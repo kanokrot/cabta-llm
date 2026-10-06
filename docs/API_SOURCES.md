@@ -87,7 +87,8 @@ They are not members of the six-source IOC scoring admission set.
 ### Not currently implemented as active integrations
 
 SecurityTrails, PassiveTotal, BinaryEdge, OpenPhish, and URLScan are not
-currently dispatched by the inspected source-integration code.
+currently dispatched by the inspected source-integration code. URLScan is not
+used by the application and is omitted from the settings UI.
 
 ## Historical Source Categories
 
