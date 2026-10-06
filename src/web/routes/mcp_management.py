@@ -30,6 +30,31 @@ router = APIRouter()
 
 # ── Category metadata ──────────────────────────────────────────────────────
 CATEGORY_META: Dict[str, Dict[str, str]] = {
+    'recon': {
+        'label': 'Recon',
+        'icon': 'bi-binoculars',
+        'description': 'Reconnaissance and external asset discovery',
+    },
+    'malware': {
+        'label': 'Malware',
+        'icon': 'bi-bug',
+        'description': 'Malware analysis and triage tools',
+    },
+    'intel': {
+        'label': 'Intel',
+        'icon': 'bi-globe2',
+        'description': 'Threat intelligence lookup and enrichment',
+    },
+    'vuln': {
+        'label': 'Vuln',
+        'icon': 'bi-shield-exclamation',
+        'description': 'Vulnerability research and assessment',
+    },
+    'other': {
+        'label': 'Other',
+        'icon': 'bi-server',
+        'description': 'MCP servers without a mapped category',
+    },
     'analysis': {
         'label': 'Analysis',
         'icon': 'bi-search',
@@ -201,7 +226,7 @@ def _decode_config(entry: dict) -> dict:
 
 
 def _server_category(entry: dict) -> str:
-    return str(entry.get("category") or SERVER_CATEGORIES.get(entry.get("name", ""), "utility"))
+    return str(entry.get("category") or SERVER_CATEGORIES.get(entry.get("name", ""), "other"))
 
 
 def _sanitize_server(entry: dict, role: str) -> dict:

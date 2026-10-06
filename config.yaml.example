@@ -108,6 +108,7 @@ ticketing:
 # MCP servers. Keep only the servers available in the local environment.
 mcp_servers:
   - name: "osint_tools"
+    category: recon
     command: "python"
     args: ["-m", "src.mcp_servers.osint_tools"]
     transport: "stdio"
@@ -115,6 +116,7 @@ mcp_servers:
     env: null
     url: null
   - name: "free_osint_tools"
+    category: recon
     command: "python"
     args: ["-m", "src.mcp_servers.free_osint_tools"]
     transport: "stdio"
@@ -122,6 +124,7 @@ mcp_servers:
     env: null
     url: null
   - name: "network_tools"
+    category: recon
     command: "python"
     args: ["-m", "src.mcp_servers.network_tools"]
     transport: "stdio"
@@ -129,6 +132,7 @@ mcp_servers:
     env: null
     url: null
   - name: "malwoverview_tools"
+    category: malware
     command: "python"
     args: ["-m", "src.mcp_servers.malwoverview_tools"]
     transport: "stdio"
@@ -136,6 +140,7 @@ mcp_servers:
     env: null
     url: null
   - name: "forensics_tools"
+    category: forensics
     command: "python"
     args: ["-m", "src.mcp_servers.forensics_tools"]
     transport: "stdio"
@@ -143,6 +148,7 @@ mcp_servers:
     env: null
     url: null
   - name: "remnux_tools"
+    category: malware
     command: "python"
     args: ["-m", "src.mcp_servers.remnux_tools"]
     transport: "stdio"
@@ -150,6 +156,7 @@ mcp_servers:
     env: null
     url: null
   - name: "threat_intel_tools"
+    category: intel
     command: "python"
     args: ["-m", "src.mcp_servers.threat_intel_tools"]
     transport: "stdio"
@@ -157,6 +164,7 @@ mcp_servers:
     env: null
     url: null
   - name: "remote_tools"
+    category: recon
     command: "python"
     args: ["-m", "src.mcp_servers.remote_tools"]
     transport: "stdio"
@@ -167,6 +175,7 @@ mcp_servers:
     - -m
     - src.mcp_servers.vulnerability_tools
     command: python
+    category: vuln
     description: ''
     env: null
     name: vulnerability-tools

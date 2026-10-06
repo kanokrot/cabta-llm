@@ -86,15 +86,15 @@ _add("vulnerability-tools", "osint", (
 
 
 SERVER_CATEGORIES = {
-    "osint_tools": "osint",
-    "free_osint_tools": "osint",
-    "network_tools": "network",
-    "malwoverview_tools": "threat_intel",
+    "osint_tools": "recon",
+    "free_osint_tools": "recon",
+    "network_tools": "recon",
+    "malwoverview_tools": "malware",
     "forensics_tools": "forensics",
-    "remnux_tools": "analysis",
-    "threat_intel_tools": "threat_intel",
-    "remote_tools": "forensics",
-    "vulnerability-tools": "osint",
+    "remnux_tools": "malware",
+    "threat_intel_tools": "intel",
+    "remote_tools": "recon",
+    "vulnerability-tools": "vuln",
 }
 
 

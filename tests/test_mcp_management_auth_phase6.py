@@ -12,6 +12,7 @@ from unittest.mock import AsyncMock
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from starlette.requests import Request
 
 from src.agent.agent_loop import AgentLoop
 from src.agent.mcp_client import MCPClientManager, MCPConnection, MCPServerConfig

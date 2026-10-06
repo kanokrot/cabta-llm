@@ -789,14 +789,15 @@ def _register_page_routes(app: FastAPI) -> None:
                 pass
 
         # Category metadata for grouping/filtering
-        from src.web.routes.mcp_management import CATEGORY_META
+        from src.web.routes.mcp_management import CATEGORY_META, _server_category
         categories = CATEGORY_META
 
         # Collect unique categories present in the server list
         active_categories = []
         seen_cats = set()
         for s in merged:
-            cat = s.get('category', 'other')
+            cat = _server_category(s)
+            s['category'] = cat
             if cat not in seen_cats:
                 seen_cats.add(cat)
                 meta = categories.get(cat, {'label': cat.replace('_', ' ').title(), 'icon': 'bi-server'})
