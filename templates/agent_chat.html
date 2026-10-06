@@ -3221,10 +3221,26 @@ var AgentChat = (function() {
     function showApproval(msg) {
         pendingApprovalId = msg.approval_id || msg.id;
         var detail = document.getElementById('approvalDetail');
-        var paramsHtml = playbookSessionMode && msg.params !== undefined
-            ? '<pre class="mt-2 mb-0">' + esc(JSON.stringify(msg.params, null, 2) || '') + '</pre>'
-            : '';
-        detail.innerHTML = '<div class="tool-name" style="font-size:0.9rem;">' + toolIdentityHtml(msg.tool || msg.action || 'Action') + '</div><div class="mt-1 text-muted" style="font-size:0.82rem;">' + esc(msg.description || msg.content || msg.reason || '') + '</div>' + paramsHtml;
+        while (detail.firstChild) detail.removeChild(detail.firstChild);
+        var toolName = document.createElement('div');
+        toolName.className = 'tool-name';
+        toolName.style.fontSize = '0.9rem';
+        toolName.innerHTML = toolIdentityHtml(msg.tool || msg.action || 'Action');
+        detail.appendChild(toolName);
+        var approvalDescription = typeof msg.description === 'string' && msg.description.trim()
+            ? msg.description
+            : (typeof msg.reason === 'string' && msg.reason.trim() ? msg.reason : 'Approval required');
+        var description = document.createElement('div');
+        description.className = 'mt-1 text-muted';
+        description.style.fontSize = '0.82rem';
+        description.textContent = approvalDescription;
+        detail.appendChild(description);
+        if (playbookSessionMode && msg.params !== undefined) {
+            var params = document.createElement('pre');
+            params.className = 'mt-2 mb-0';
+            params.textContent = JSON.stringify(msg.params, null, 2) || '';
+            detail.appendChild(params);
+        }
         document.getElementById('approvalOverlay').classList.add('show');
     }
 

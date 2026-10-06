@@ -263,6 +263,8 @@ def test_playbook_approval_frame_sanitizes_params_and_rejects_unknown_frames() -
     assert len(serialized["params"]["target"]) == 500
     assert len(serialized["params"]["nested"]["step"]["value"][0]) == 500
     assert serialized["params"]["depth"]["a"]["b"]["c"]["d"]["e"] == "[maximum nesting depth reached]"
+    assert serialized["description"] == "Review target"
+    assert "reason" not in serialized
     assert "args" not in serialized
     with pytest.raises(VisibilityError):
         serialize_websocket_frame(
@@ -270,6 +272,46 @@ def test_playbook_approval_frame_sanitizes_params_and_rejects_unknown_frames() -
             role=INCIDENT_RESPONDER,
             flow="websocket_playbook",
         )
+
+
+def test_agent_approval_frame_includes_bounded_description_and_reason_fallbacks() -> None:
+    long_description = "description " * 40
+    serialized = serialize_websocket_frame(
+        {
+            "type": "approval_required",
+            "description": long_description,
+            "reason": "fallback reason",
+        },
+        role=THREAT_HUNTER,
+        flow="websocket_agent",
+    )
+
+    assert serialized["description"] == long_description[:300]
+    assert len(serialized["description"]) == 300
+    assert serialized["reason"] == "fallback reason"
+
+    missing_description = serialize_websocket_frame(
+        {"type": "approval_required", "reason": "fallback reason"},
+        role=THREAT_HUNTER,
+        flow="websocket_agent",
+    )
+    assert "description" not in missing_description
+    assert missing_description["reason"] == "fallback reason"
+
+    missing_description_and_reason = serialize_websocket_frame(
+        {"type": "approval_required"},
+        role=THREAT_HUNTER,
+        flow="websocket_agent",
+    )
+    assert "description" not in missing_description_and_reason
+    assert missing_description_and_reason["reason"] == "Approval required"
+
+    non_string_description = serialize_websocket_frame(
+        {"type": "approval_required", "description": {"text": "hidden"}},
+        role=THREAT_HUNTER,
+        flow="websocket_agent",
+    )
+    assert "description" not in non_string_description
 
 
 # ---------------------------------------------------------------------------

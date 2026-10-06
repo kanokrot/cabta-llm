@@ -220,3 +220,22 @@ def test_incident_responder_playbook_mode_is_guarded_and_uses_scoped_endpoints()
     for endpoint in ("/api/agent/investigate", "/api/chat"):
         assert endpoint in send_function
         assert send_function.index("if (playbookSessionMode) return;") < send_function.index(endpoint)
+
+
+def test_approval_description_uses_text_content_with_reason_and_generic_fallbacks() -> None:
+    template = (Path(__file__).parents[1] / "templates" / "agent_chat.html").read_text(
+        encoding="utf-8"
+    )
+    approval = re.search(r"function showApproval\(msg\)\s*\{([\s\S]*?)\n    \}", template)
+
+    assert approval
+    source = approval.group(1)
+    assert "typeof msg.description === 'string' && msg.description.trim()" in source
+    assert "typeof msg.reason === 'string' && msg.reason.trim() ? msg.reason : 'Approval required'" in source
+    assert "toolName.innerHTML = toolIdentityHtml(msg.tool || msg.action || 'Action');" in source
+    assert "description.textContent = approvalDescription;" in source
+    assert "params.textContent = JSON.stringify(msg.params, null, 2) || '';" in source
+    assert source.count("innerHTML") == 1
+    assert "msg.content" not in source
+    assert "description.innerHTML" not in source
+    assert "detail.innerHTML" not in source

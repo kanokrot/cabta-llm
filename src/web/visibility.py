@@ -1145,6 +1145,9 @@ def serialize_websocket_frame(frame: Mapping[str, Any], *, role: str, flow: str)
             if frame_type == "step" and isinstance(frame.get("step"), Mapping):
                 output["step"] = serialize_agent_step(frame["step"], role=role)
             if frame_type == "approval_required":
+                description = frame.get("description")
+                if isinstance(description, str):
+                    output["description"] = description[:300]
                 output["reason"] = _text(frame.get("reason"), 1000) or "Approval required"
             return output
         if frame_type == "session_state":
