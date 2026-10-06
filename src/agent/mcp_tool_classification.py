@@ -80,6 +80,9 @@ _add("remote_tools", "forensics", (
     "system_info_collect", "process_list_collect", "netstat_collect",
     "event_log_collect", "autoruns_check",
 ), dangerous=True, approval=True)
+_add("vulnerability-tools", "osint", (
+    "cve_lookup", "cve_search", "kev_check", "epss_score",
+))
 
 
 SERVER_CATEGORIES = {
@@ -91,6 +94,7 @@ SERVER_CATEGORIES = {
     "remnux_tools": "analysis",
     "threat_intel_tools": "threat_intel",
     "remote_tools": "forensics",
+    "vulnerability-tools": "osint",
 }
 
 

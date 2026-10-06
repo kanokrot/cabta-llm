@@ -22,7 +22,7 @@ from src.web.visibility import serialize_tool_definition
 
 
 def test_all_registered_mcp_tools_have_unique_explicit_presentation():
-    assert len(MCP_TOOL_CLASSIFICATIONS) == 63
+    assert len(MCP_TOOL_CLASSIFICATIONS) == 67
     assert set(MCP_TOOL_PRESENTATION) == set(MCP_TOOL_CLASSIFICATIONS)
 
     for server in {server for server, _ in MCP_TOOL_PRESENTATION}:
@@ -47,6 +47,7 @@ def test_all_registered_mcp_tools_have_unique_explicit_presentation():
             if not local_path.is_file():
                 missing.append(f"{server}.{name}:{item.logo}")
     print("DECLARED_LOGOS_MISSING=" + repr(missing))
+    assert not missing, "Declared MCP tool logos must exist: " + ", ".join(missing)
 
 
 def test_mcp_servers_details_are_scoped_to_the_mcp_page():

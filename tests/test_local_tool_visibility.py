@@ -33,7 +33,7 @@ def test_all_registerable_local_tools_keep_descriptions_as_summaries():
         assert item["summary"] != UNAVAILABLE_SUMMARY
 
 
-def test_mcp_presentation_inventory_remains_complete_and_unchanged():
-    assert len(MCP_TOOL_CLASSIFICATIONS) == 63
+def test_mcp_presentation_inventory_remains_complete():
+    assert len(MCP_TOOL_CLASSIFICATIONS) == 67
     assert set(MCP_TOOL_PRESENTATION) == set(MCP_TOOL_CLASSIFICATIONS)
     assert all(item.summary != UNAVAILABLE_SUMMARY for item in MCP_TOOL_PRESENTATION.values())

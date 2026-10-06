@@ -516,9 +516,9 @@ def test_incident_responder_tool_allowlist_matches_threat_hunter() -> None:
         "name": "osint_tools.whois_lookup",
         **classify_mcp_tool("osint_tools", "whois_lookup"),
     }
-    unclassified = {
-        "name": "vulnerability-tools.cve_lookup",
-        **classify_mcp_tool("vulnerability-tools", "cve_lookup"),
+    unclassified_ssl = {
+        "name": "vulnerability-tools.ssl_vulnerability_check",
+        **classify_mcp_tool("vulnerability-tools", "ssl_vulnerability_check"),
     }
     sandbox = {"name": "sandbox", "category": "sandbox", "is_dangerous": False}
     edr = {"name": "edr", "category": "edr", "is_dangerous": False}
@@ -533,7 +533,7 @@ def test_incident_responder_tool_allowlist_matches_threat_hunter() -> None:
     assert is_tool_allowed(INCIDENT_RESPONDER, safe_mcp)
     assert is_tool_allowed(INCIDENT_RESPONDER, local_extractor)
     assert not is_tool_allowed(INCIDENT_RESPONDER, dangerous)
-    assert not is_tool_allowed(INCIDENT_RESPONDER, unclassified)
+    assert not is_tool_allowed(INCIDENT_RESPONDER, unclassified_ssl)
     assert not is_tool_allowed(INCIDENT_RESPONDER, sandbox)
     assert not is_tool_allowed(INCIDENT_RESPONDER, edr)
 
@@ -544,16 +544,16 @@ def test_tool_allowlist_other_role_results_remain_unchanged() -> None:
 
     safe = {"name": "lookup", "category": "threat_intel", "is_dangerous": False}
     dangerous = {"name": "contain", "category": "edr", "is_dangerous": True}
-    unclassified = {
-        "name": "vulnerability-tools.cve_lookup",
-        **classify_mcp_tool("vulnerability-tools", "cve_lookup"),
+    unclassified_ssl = {
+        "name": "vulnerability-tools.ssl_vulnerability_check",
+        **classify_mcp_tool("vulnerability-tools", "ssl_vulnerability_check"),
     }
 
     assert is_tool_allowed(THREAT_HUNTER, safe)
     assert not is_tool_allowed(THREAT_HUNTER, dangerous)
-    assert not is_tool_allowed(THREAT_HUNTER, unclassified)
+    assert not is_tool_allowed(THREAT_HUNTER, unclassified_ssl)
     assert is_tool_allowed(ADMIN, dangerous)
-    assert is_tool_allowed(ADMIN, unclassified)
+    assert is_tool_allowed(ADMIN, unclassified_ssl)
     assert not is_tool_allowed(None, safe)
     assert not is_tool_allowed("SOC Analyst Tier 1-2", safe)
-    assert not is_tool_allowed(INCIDENT_RESPONDER, unclassified)
+    assert not is_tool_allowed(INCIDENT_RESPONDER, unclassified_ssl)

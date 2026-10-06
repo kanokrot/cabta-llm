@@ -54,7 +54,7 @@ def _item(
     )
 
 
-# Every registered tool in the eight configured MCP servers has an explicit
+# Every registered tool in the nine configured MCP servers has an explicit
 # entry.  Keep this keyed by the raw MCP name, not the registry's server.name
 # identifier, so presentation metadata cannot affect dispatch or persistence.
 MCP_TOOL_PRESENTATION: dict[tuple[str, str], MCPToolPresentation] = {
@@ -70,7 +70,7 @@ MCP_TOOL_PRESENTATION: dict[tuple[str, str], MCPToolPresentation] = {
     ("free_osint_tools", "openphish_lookup"): _item("OpenPhish Check", "OSINT", "Check whether a URL appears in the OpenPhish phishing feed.", ("Check a suspicious URL", "Review matching phishing URLs"), "/static/img/logos/openphish.svg"),
     ("free_osint_tools", "crtsh_subdomain_search"): _item("crt.sh Subdomains", "OSINT", "Discover subdomains through Certificate Transparency data from crt.sh.", ("Search certificates for a domain", "List certificate names and subdomains"), "/static/img/logos/crtsh.svg"),
     ("free_osint_tools", "shodan_internetdb_lookup"): _item("Shodan InternetDB", "OSINT", "Query Shodan InternetDB for exposed services and host information without an API key.", ("Review exposed ports for an IP", "Inspect hostnames, CPEs, and vulnerabilities"), "/static/img/logos/shodan.svg"),
-    ("free_osint_tools", "ransomwatch_check"): _item("RansomWatch Check", "Threat Intel", "Check ransomware-group activity and recent victims from Ransomwatch.", ("Search for a ransomware group", "Review matching victim information"), "/static/img/logos/ransomwatch.svg"),
+    ("free_osint_tools", "ransomwatch_check"): _item("RansomWatch Check", "Threat Intel", "Check ransomware-group activity and recent victims from Ransomwatch.", ("Search for a ransomware group", "Review matching victim information")),
     ("free_osint_tools", "malpedia_malware_search"): _item("Malpedia Search", "Malware", "Search Malpedia for information about a malware family.", ("Search a malware family name", "Review matching family metadata"), "/static/img/logos/malpedia.svg"),
     ("free_osint_tools", "circl_misp_feed_check"): _item("CIRCL MISP Feed", "Threat Intel", "Check an IOC against CIRCL public threat feeds and lookup services.", ("Check an IP or hash", "Review known-file or feed context"), "/static/img/logos/circl.svg"),
     ("free_osint_tools", "darksearch_query"): _item("Ahmia Search", "OSINT", "Search public Ahmia.fi indexes for dark-web pages matching a query.", ("Search for a domain or keyword", "Review indexed result links"), "/static/img/logos/ahmia.svg"),
@@ -128,6 +128,11 @@ MCP_TOOL_PRESENTATION: dict[tuple[str, str], MCPToolPresentation] = {
     ("remote_tools", "netstat_collect"): _item("Network Connections", "Network", "Collect network connections from an allowlisted, pinned target.", ("Review remote listening ports", "Inspect active connections")),
     ("remote_tools", "event_log_collect"): _item("Remote Event Log", "Forensics", "Collect journal events from an allowlisted, host-key-pinned target.", ("Collect remote events", "Limit events to a time range")),
     ("remote_tools", "autoruns_check"): _item("Autoruns Check", "Forensics", "Collect persistence mechanisms from an allowlisted, pinned target.", ("Review remote autoruns", "Investigate persistence entries")),
+
+    ("vulnerability-tools", "cve_lookup"): _item("CVE Lookup", "OSINT", "Look up a CVE identifier in the NIST National Vulnerability Database.", ("Review CVE description and CVSS details", "Inspect CWE and reference links")),
+    ("vulnerability-tools", "cve_search"): _item("CVE Search", "OSINT", "Search NIST NVD for vulnerabilities by product, vendor, or keyword.", ("Search vulnerabilities for a product", "Review matching CVE severity")),
+    ("vulnerability-tools", "kev_check"): _item("CISA KEV Check", "OSINT", "Check whether a CVE is listed in CISA's Known Exploited Vulnerabilities catalog.", ("Check a CVE for known exploitation", "Search KEV entries by product")),
+    ("vulnerability-tools", "epss_score"): _item("EPSS Score", "OSINT", "Retrieve FIRST EPSS exploitation probability for a CVE.", ("Check a CVE's 30-day exploitation probability", "Review EPSS percentile and risk level")),
 }
 
 
