@@ -251,7 +251,7 @@ async def get_mitre_layer(request: Request, analysis_id: str, current_user: dict
 @router.get('/{analysis_id}/pdf')
 async def get_report_pdf(request: Request, analysis_id: str, download: bool = False,
                          current_user: dict = Depends(get_current_user)):
-    """Generate a PDF report for an IOC analysis.
+    """Generate a role-scoped PDF report for an analysis.
 
     By default the PDF is served inline (Content-Disposition: inline) so
     that clicking "Print > PDF" opens the file in the browser's native PDF
@@ -268,11 +268,30 @@ async def get_report_pdf(request: Request, analysis_id: str, download: bool = Fa
     if not isinstance(result, dict):
         raise HTTPException(500, 'Invalid analysis result')
 
+    # Use the web application's displayed version source; src.__version__ is
+    # currently stale and does not match the version shown by health checks.
+    from ..health_probes import HEALTH_VERSION
+
+    generated_at = datetime.now(timezone.utc).isoformat()
+    analysis_type = job.get('analysis_type')
+    if analysis_type not in {'ioc', 'file', 'email'}:
+        analysis_type = 'analysis'
+    report_metadata = {
+        'analysis_id': analysis_id,
+        'analysis_type': analysis_type,
+        'created_at': job.get('created_at'),
+        'completed_at': job.get('completed_at'),
+        'generated_at': generated_at,
+        'version': HEALTH_VERSION,
+    }
+
     with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as temp_file:
         temp_path = temp_file.name
 
     report_path = generate_ioc_pdf(
-        serialize_report_payload(job, current_user['role']), temp_path
+        serialize_report_payload(job, current_user['role']),
+        temp_path,
+        metadata=report_metadata,
     )
     if report_path is None:
         try:
@@ -286,7 +305,7 @@ async def get_report_pdf(request: Request, analysis_id: str, download: bool = Fa
     return FileResponse(
         path=report_path,
         media_type='application/pdf',
-        filename=f'ioc-report-{analysis_id}.pdf',
+        filename=f'{report_metadata["analysis_type"]}-report-{analysis_id}.pdf',
         background=BackgroundTask(os.unlink, report_path),
         content_disposition_type=disposition_type,
     )

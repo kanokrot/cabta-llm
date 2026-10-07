@@ -12,6 +12,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from ..scoring.intelligent_scoring import SOURCE_SCORING_MULTIPLIERS
+from .source_classification import classify_source
 
 
 SOURCE_LABELS = {
@@ -355,17 +356,21 @@ def _merge_nrd_rows(
 
 
 def build_source_display_rows(
-    sources: Mapping[str, Any], source_classes: Mapping[str, str]
+    sources: Mapping[str, Any], source_classes: Mapping[str, str] | None = None
 ) -> list[dict[str, Any]]:
-    """Build sorted display rows from source data and precomputed classes."""
-    if not isinstance(sources, Mapping) or not isinstance(source_classes, Mapping):
+    """Build sorted display rows using supplied or shared report classes."""
+    if not isinstance(sources, Mapping):
         return []
+    if not isinstance(source_classes, Mapping):
+        source_classes = {}
 
     rows_by_name: dict[str, dict[str, Any]] = {}
     for source_name, source_data in sources.items():
         if not isinstance(source_data, Mapping):
             continue
-        source_class = source_classes.get(source_name, "na")
+        source_class = source_classes.get(source_name)
+        if source_class is None:
+            source_class = classify_source(source_data)
         rows_by_name[str(source_name)] = _make_row(str(source_name), source_data, source_class)
 
     smet = rows_by_name.get("smet_nrd")
