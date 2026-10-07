@@ -1219,12 +1219,40 @@ def serialize_dashboard_stats(stats: Mapping[str, Any], role: str) -> dict[str, 
         "total_analyses", "completed_analyses", "failed_analyses", "running_analyses",
         "queued_analyses", "malicious_count", "suspicious_count", "clean_count",
         "average_score", "avg_score", "total_cases", "open_cases",
+        "phishing_count", "spam_count", "unknown_count",
+        "daily_counts", "score_buckets",
     }
-    return {
+    output = {
         key: stats[key]
         for key in allowed
         if key in stats and isinstance(stats[key], (str, int, float, bool))
     }
+    daily_counts = stats.get("daily_counts")
+    if isinstance(daily_counts, list):
+        output["daily_counts"] = [
+            {
+                "date": item["date"],
+                "malicious": item["malicious"],
+                "suspicious": item["suspicious"],
+                "clean": item["clean"],
+            }
+            for item in daily_counts
+            if isinstance(item, Mapping)
+            and isinstance(item.get("date"), str)
+            and all(isinstance(item.get(group), int) for group in (
+                "malicious", "suspicious", "clean",
+            ))
+        ]
+    score_buckets = stats.get("score_buckets")
+    if isinstance(score_buckets, list):
+        output["score_buckets"] = [
+            {"label": item["label"], "count": item["count"]}
+            for item in score_buckets
+            if isinstance(item, Mapping)
+            and isinstance(item.get("label"), str)
+            and isinstance(item.get("count"), int)
+        ]
+    return output
 
 
 def serialize_dashboard_sources(sources: Iterable[Mapping[str, Any]], role: str) -> list[dict[str, Any]]:

@@ -639,7 +639,7 @@ class AnalysisManager:
     # ------------------------------------------------------------------ #
 
     def get_stats(self) -> Dict:
-        """Return analysis statistics."""
+        """Return global completed-job statistics and dashboard distributions."""
         conn = self._connect()
         cur = conn.execute(
             """SELECT
@@ -647,22 +647,88 @@ class AnalysisManager:
                  SUM(CASE WHEN verdict='MALICIOUS' THEN 1 ELSE 0 END) as malicious,
                  SUM(CASE WHEN verdict='SUSPICIOUS' THEN 1 ELSE 0 END) as suspicious,
                  SUM(CASE WHEN verdict='CLEAN' THEN 1 ELSE 0 END) as clean,
+                 SUM(CASE WHEN verdict='PHISHING' THEN 1 ELSE 0 END) as phishing,
+                 SUM(CASE WHEN verdict='SPAM' THEN 1 ELSE 0 END) as spam,
+                 SUM(CASE WHEN verdict='UNKNOWN' THEN 1 ELSE 0 END) as unknown,
                  AVG(CASE WHEN score IS NOT NULL THEN score END) as avg_score,
                  SUM(CASE WHEN date(created_at) = date('now') THEN 1 ELSE 0 END) as today
                FROM analysis_jobs WHERE status = 'completed'"""
         )
         row = cur.fetchone()
+        jobs = conn.execute(
+            "SELECT verdict, score, created_at FROM analysis_jobs "
+            "WHERE status = 'completed'"
+        ).fetchall()
         conn.close()
 
         if row is None:
             return {}
+
+        today_utc = datetime.now(timezone.utc).date()
+        first_day = today_utc - timedelta(days=13)
+        daily_by_date = {
+            (first_day + timedelta(days=index)).isoformat(): {
+                'malicious': 0, 'suspicious': 0, 'clean': 0,
+            }
+            for index in range(14)
+        }
+        score_labels = ('0-20', '21-40', '41-60', '61-80', '81-100')
+        score_counts = [0] * len(score_labels)
+
+        for verdict, score, created_at in jobs:
+            group = (
+                'malicious' if verdict in ('MALICIOUS', 'PHISHING') else
+                'suspicious' if verdict in ('SUSPICIOUS', 'SPAM') else
+                'clean' if verdict == 'CLEAN' else None
+            )
+            if group and created_at:
+                try:
+                    timestamp = datetime.fromisoformat(
+                        str(created_at).strip().replace('Z', '+00:00')
+                    )
+                    if timestamp.tzinfo is None:
+                        timestamp = timestamp.replace(tzinfo=timezone.utc)
+                    utc_day = timestamp.astimezone(timezone.utc).date().isoformat()
+                    if utc_day in daily_by_date:
+                        daily_by_date[utc_day][group] += 1
+                except (TypeError, ValueError, OverflowError):
+                    # Missing or malformed timestamps do not belong to a UTC day.
+                    pass
+
+            if score is not None:
+                try:
+                    numeric_score = float(score)
+                except (TypeError, ValueError, OverflowError):
+                    continue
+                if 0 <= numeric_score <= 100:
+                    if numeric_score <= 20:
+                        score_counts[0] += 1
+                    elif numeric_score <= 40:
+                        score_counts[1] += 1
+                    elif numeric_score <= 60:
+                        score_counts[2] += 1
+                    elif numeric_score <= 80:
+                        score_counts[3] += 1
+                    else:
+                        score_counts[4] += 1
+
         return {
             'total_analyses': row[0] or 0,
             'malicious_count': row[1] or 0,
             'suspicious_count': row[2] or 0,
             'clean_count': row[3] or 0,
-            'average_score': round(row[4] or 0, 1),
-            'analyses_today': row[5] or 0,
+            'phishing_count': row[4] or 0,
+            'spam_count': row[5] or 0,
+            'unknown_count': row[6] or 0,
+            'average_score': round(row[7] or 0, 1),
+            'analyses_today': row[8] or 0,
+            'daily_counts': [
+                {'date': day, **counts} for day, counts in daily_by_date.items()
+            ],
+            'score_buckets': [
+                {'label': label, 'count': count}
+                for label, count in zip(score_labels, score_counts)
+            ],
         }
 
     # ------------------------------------------------------------------ #
