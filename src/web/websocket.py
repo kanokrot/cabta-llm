@@ -58,6 +58,25 @@ def _stored_agent_verdict(steps: Sequence[dict]) -> str | None:
     return None
 
 
+def _stored_agent_evidence(steps: Sequence[dict]) -> dict | None:
+    """Read the evidence card from the persisted final-answer decision."""
+    for step in reversed(steps):
+        if step.get("step_type") != "final_answer":
+            continue
+        content = step.get("content")
+        if not isinstance(content, str):
+            return None
+        try:
+            decision = json.loads(content)
+        except (TypeError, json.JSONDecodeError):
+            return None
+        if not isinstance(decision, dict):
+            return None
+        evidence = decision.get("evidence")
+        return evidence if isinstance(evidence, dict) else None
+    return None
+
+
 async def _authenticate_websocket(
     websocket: WebSocket, roles: Sequence[str]
 ) -> dict | None:
@@ -290,6 +309,9 @@ async def agent_ws(websocket: WebSocket, session_id: str):
         }
         if flow == "agent" and session.get('status') == 'completed':
             completed_frame['verdict'] = _stored_agent_verdict(steps)
+            evidence = _stored_agent_evidence(steps)
+            if evidence is not None:
+                completed_frame['evidence'] = evidence
         await _send_visible(
             websocket, completed_frame, role=authenticated_user['role'], flow=flow
         )
@@ -367,6 +389,9 @@ async def agent_ws(websocket: WebSocket, session_id: str):
                     }
                     if flow == "agent" and session.get('status') == 'completed':
                         completed_frame['verdict'] = _stored_agent_verdict(current_steps)
+                        evidence = _stored_agent_evidence(current_steps)
+                        if evidence is not None:
+                            completed_frame['evidence'] = evidence
                     await _send_visible(
                         websocket, completed_frame,
                         role=authenticated_user['role'], flow=flow,

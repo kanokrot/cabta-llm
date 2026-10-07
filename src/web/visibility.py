@@ -431,6 +431,116 @@ def _safe_findings(value: Any) -> list[dict[str, Any]]:
     return output
 
 
+def _safe_evidence(value: Any) -> Optional[dict[str, Any]]:
+    """Validate and copy only the compact Agent IOC evidence-card fields."""
+    if not isinstance(value, Mapping):
+        return None
+    import math
+
+    def bounded_text(item: Any, limit: int) -> Optional[str]:
+        return item[:limit] if isinstance(item, str) else None
+
+    lang = value.get("lang")
+    ioc = bounded_text(value.get("ioc"), 256)
+    ioc_type = bounded_text(value.get("ioc_type"), 32)
+    verdict = bounded_text(value.get("verdict"), 32)
+    threat_score = value.get("threat_score")
+    not_applicable_count = value.get("not_applicable_count")
+    if (
+        not isinstance(lang, str)
+        or lang not in {"th", "en"}
+        or ioc is None
+        or ioc_type is None
+        or verdict is None
+        or isinstance(threat_score, bool)
+        or not isinstance(threat_score, int)
+        or isinstance(not_applicable_count, bool)
+        or not isinstance(not_applicable_count, int)
+    ):
+        return None
+
+    raw_coverage = value.get("coverage")
+    if not isinstance(raw_coverage, Mapping):
+        return None
+    coverage = {}
+    for key in ("flagged", "clean", "unavailable", "attempted"):
+        item = raw_coverage.get(key)
+        if isinstance(item, bool) or not isinstance(item, int):
+            return None
+        coverage[key] = item
+
+    raw_scoring = value.get("scoring_sources")
+    if not isinstance(raw_scoring, list) or len(raw_scoring) != 6:
+        return None
+    scoring_sources = []
+    for item in raw_scoring:
+        if not isinstance(item, Mapping):
+            return None
+        name = bounded_text(item.get("name"), 64)
+        tier = item.get("tier")
+        state = item.get("state")
+        weight = item.get("weight")
+        score = item.get("score")
+        try:
+            weight_number = float(weight)
+        except (OverflowError, TypeError, ValueError):
+            return None
+        if (
+            name is None
+            or not isinstance(tier, str)
+            or tier not in {"high", "medium", "low"}
+            or not isinstance(state, str)
+            or state not in {"flagged", "clean", "unavailable", "missing"}
+            or isinstance(weight, bool)
+            or not isinstance(weight, (int, float))
+            or not math.isfinite(weight_number)
+            or isinstance(score, bool)
+            or not isinstance(score, int)
+        ):
+            return None
+        scoring_sources.append({
+            "name": name,
+            "tier": tier,
+            "weight": round(weight_number, 2),
+            "state": state,
+            "score": score,
+        })
+
+    raw_extra = value.get("extra_sources")
+    if not isinstance(raw_extra, list):
+        return None
+    extra_sources = []
+    for item in raw_extra[:30]:
+        if not isinstance(item, Mapping):
+            return None
+        name = bounded_text(item.get("name"), 64)
+        state = item.get("state")
+        if (
+            name is None
+            or not isinstance(state, str)
+            or state not in {"flagged", "clean", "unavailable"}
+        ):
+            return None
+        extra_sources.append({"name": name, "state": state})
+
+    safe = {
+        "lang": lang,
+        "ioc": ioc,
+        "ioc_type": ioc_type,
+        "threat_score": threat_score,
+        "verdict": verdict,
+        "scoring_sources": scoring_sources,
+        "extra_sources": extra_sources,
+        "not_applicable_count": not_applicable_count,
+        "coverage": coverage,
+    }
+    try:
+        encoded = json.dumps(safe, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    except (TypeError, ValueError, UnicodeEncodeError):
+        return None
+    return safe if len(encoded) <= 4096 else None
+
+
 def _safe_ai_status(value: Any) -> Optional[str]:
     if isinstance(value, str) and value in {"disabled", "complete", "failed"}:
         return value
@@ -806,6 +916,21 @@ def _agent_history_verdict(step: Mapping[str, Any]) -> Optional[str]:
     return None
 
 
+def _agent_history_evidence(step: Mapping[str, Any]) -> Optional[dict[str, Any]]:
+    if step.get("step_type") != "final_answer":
+        return None
+    raw_content = step.get("content")
+    if not isinstance(raw_content, str) or len(raw_content) > 100000:
+        return None
+    try:
+        decision = json.loads(raw_content)
+    except (TypeError, json.JSONDecodeError):
+        return None
+    if not isinstance(decision, Mapping):
+        return None
+    return _safe_evidence(decision.get("evidence"))
+
+
 def serialize_agent_session(session: Mapping[str, Any], steps: Optional[Iterable[Mapping[str, Any]]] = None,
                             live_state: Optional[Mapping[str, Any]] = None, role: str = THREAT_HUNTER) -> dict[str, Any]:
     authorize_flow(role, "agent")
@@ -837,6 +962,9 @@ def serialize_agent_session(session: Mapping[str, Any], steps: Optional[Iterable
                 verdict = _agent_history_verdict(step)
                 if verdict is not None:
                     history_item["verdict"] = verdict
+                evidence = _agent_history_evidence(step)
+                if evidence is not None:
+                    history_item["evidence"] = evidence
                 history.append(history_item)
     output["history"] = history
     if isinstance(live_state, Mapping):
@@ -1210,6 +1338,9 @@ def serialize_websocket_frame(frame: Mapping[str, Any], *, role: str, flow: str)
                 output["summary"] = _text(frame.get("summary"), 4000) or ""
                 verdict = frame.get("verdict")
                 output["verdict"] = _text(verdict, 32) if isinstance(verdict, str) else None
+                evidence = _safe_evidence(frame.get("evidence"))
+                if evidence is not None:
+                    output["evidence"] = evidence
             elif frame_type == "failed":
                 output["error"] = "Agent investigation failed"
             return output

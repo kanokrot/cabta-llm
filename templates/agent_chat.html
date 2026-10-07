@@ -116,6 +116,68 @@
     .agent-session-status-failed {
         color: var(--color-danger);
     }
+    .evidence-card {
+        max-width: 92%;
+        margin: 0.35rem 0 0.75rem 0.75rem;
+        padding: 0.75rem;
+        border: 1px solid var(--border-color);
+        border-radius: 10px;
+        background: var(--bg-secondary);
+        color: var(--text-primary);
+        font-size: 0.78rem;
+    }
+    .evidence-card-title,
+    .evidence-section-title {
+        color: var(--text-secondary);
+        font-size: 0.7rem;
+        font-weight: 700;
+        margin-bottom: 0.35rem;
+    }
+    .evidence-summary {
+        margin-bottom: 0.65rem;
+        font-size: 0.9rem;
+        font-weight: 700;
+    }
+    .evidence-sources {
+        display: grid;
+        gap: 0.25rem;
+    }
+    .evidence-source-row {
+        display: grid;
+        grid-template-columns: minmax(7rem, 1.5fr) repeat(3, minmax(3.5rem, 1fr));
+        gap: 0.35rem;
+        padding: 0.3rem 0;
+        border-top: 1px solid var(--border-color);
+    }
+    .evidence-source-name {
+        overflow-wrap: anywhere;
+        font-weight: 600;
+    }
+    .evidence-source-meta {
+        color: var(--text-secondary);
+        text-align: right;
+    }
+    .evidence-warning {
+        margin-top: 0.6rem;
+        color: var(--color-warning);
+    }
+    .evidence-supporting {
+        margin-top: 0.65rem;
+        padding-top: 0.45rem;
+        border-top: 1px solid var(--border-color);
+        color: var(--text-secondary);
+    }
+    .evidence-supporting summary {
+        cursor: pointer;
+        color: var(--text-primary);
+    }
+    .evidence-supporting ul {
+        margin: 0.4rem 0 0;
+        padding-left: 1.2rem;
+    }
+    .evidence-extra-row {
+        overflow-wrap: anywhere;
+    }
     #sessionViewAllButton {
         flex: 0 0 auto;
         width: 100%;
@@ -2870,6 +2932,7 @@ var AgentChat = (function() {
                 history.forEach(function(m) {
                     if (m.role === 'user') addBubble(m.content, 'user');
                     else addBubble(m.content, 'agent', false, m.verdict);
+                    if (m.role === 'agent') renderEvidenceCard(m.evidence);
                 });
                 if (data.steps) {
                     updateProgress(data.current_step || (data.steps.length || 0), data.max_steps || 50);
@@ -2999,6 +3062,7 @@ var AgentChat = (function() {
                     if (restoredAgentHistory.length) {
                         restoredAgentHistory.forEach(function(m) {
                             addBubble(m.content, 'agent', false, m.verdict);
+                            renderEvidenceCard(m.evidence);
                         });
                     } else {
                         steps.forEach(function(s) {
@@ -3017,6 +3081,7 @@ var AgentChat = (function() {
                 stopTimer();
                 hideLiveToolIndicator();
                 addBubble(msg.summary || 'Investigation completed.', 'agent', false, msg.verdict);
+                renderEvidenceCard(msg.evidence);
                 if (!playbookSessionMode) addInvestigationSummary(msg);
                 updateProgress(maxSteps, maxSteps);
                 if (!playbookSessionMode) document.getElementById('exportDropdownWrap').style.display = 'inline-flex';
@@ -3146,6 +3211,122 @@ var AgentChat = (function() {
     function removeEmptyState() {
         var emptyState = document.getElementById('agentEmptyState');
         if (emptyState) emptyState.remove();
+    }
+
+    function renderEvidenceCard(evidence) {
+        if (!evidence || typeof evidence !== 'object') return;
+        var messages = document.getElementById('chatMessages');
+        if (!messages) return;
+        var isThai = evidence.lang === 'th';
+        var labels = isThai
+            ? { flagged: 'พบ', clean: 'ไม่พบ', unavailable: 'ไม่ตอบ', missing: 'ไม่มีข้อมูล' }
+            : { flagged: 'Flagged', clean: 'Not found', unavailable: 'Unavailable', missing: 'No data' };
+        var card = document.createElement('section');
+        card.className = 'evidence-card';
+
+        var title = document.createElement('div');
+        title.className = 'evidence-card-title';
+        title.textContent = isThai ? 'หลักฐานจาก scoring engine' : 'Scoring engine evidence';
+        card.appendChild(title);
+
+        var summary = document.createElement('div');
+        summary.className = 'evidence-summary';
+        summary.textContent = String(evidence.verdict || '') + ' · ' +
+            String(evidence.threat_score) + '/100';
+        card.appendChild(summary);
+
+        var sectionTitle = document.createElement('div');
+        sectionTitle.className = 'evidence-section-title';
+        sectionTitle.textContent = isThai ? 'ใช้ตัดสิน' : 'Used for the verdict';
+        card.appendChild(sectionTitle);
+
+        var scoringSources = Array.isArray(evidence.scoring_sources) ? evidence.scoring_sources : [];
+        var sourceRows = document.createElement('div');
+        sourceRows.className = 'evidence-sources';
+        scoringSources.forEach(function(source) {
+            if (!source || typeof source !== 'object') return;
+            var row = document.createElement('div');
+            row.className = 'evidence-source-row';
+            var name = document.createElement('span');
+            name.className = 'evidence-source-name';
+            name.textContent = String(source.name || '');
+            row.appendChild(name);
+
+            var tier = document.createElement('span');
+            tier.className = 'evidence-source-meta';
+            var tierLabel = String(source.tier || '');
+            if (isThai) {
+                tierLabel = { high: 'สูง', medium: 'กลาง', low: 'ต่ำ' }[tierLabel] || tierLabel;
+            }
+            tier.textContent = tierLabel;
+            row.appendChild(tier);
+
+            var weight = document.createElement('span');
+            weight.className = 'evidence-source-meta';
+            weight.textContent = typeof source.weight === 'number' ? source.weight.toFixed(2) : '';
+            row.appendChild(weight);
+
+            var state = document.createElement('span');
+            state.className = 'evidence-source-meta';
+            state.textContent = labels[source.state] || '';
+            row.appendChild(state);
+            sourceRows.appendChild(row);
+        });
+        card.appendChild(sourceRows);
+
+        var unavailableCount = scoringSources.filter(function(source) {
+            return source && source.state === 'unavailable';
+        }).length;
+        if (unavailableCount > 0) {
+            var warning = document.createElement('div');
+            warning.className = 'evidence-warning';
+            warning.textContent = isThai
+                ? 'แหล่งตัดสิน ' + unavailableCount + ' จาก 6 แหล่งไม่ตอบ ผล ' +
+                    String(evidence.verdict || '') + ' นี้มี coverage ลดลง'
+                : unavailableCount + ' of 6 scoring sources did not respond; this ' +
+                    String(evidence.verdict || '').toUpperCase() + ' result has reduced coverage.';
+            card.appendChild(warning);
+        }
+
+        var missingCount = scoringSources.filter(function(source) {
+            return source && source.state === 'missing';
+        }).length;
+        if (missingCount > 0) {
+            var coverageNotice = document.createElement('div');
+            coverageNotice.className = 'evidence-warning';
+            coverageNotice.textContent = isThai
+                ? missingCount + ' จาก 6 แหล่งตัดสินไม่ครอบคลุม IOC ประเภทนี้'
+                : missingCount + ' of 6 scoring sources do not cover this IOC type.';
+            card.appendChild(coverageNotice);
+        }
+
+        var details = document.createElement('details');
+        details.className = 'evidence-supporting';
+        var detailsSummary = document.createElement('summary');
+        detailsSummary.textContent = isThai
+            ? 'ข้อมูลประกอบ (ไม่มีผลต่อคะแนน)'
+            : 'Supporting evidence (does not affect the score)';
+        details.appendChild(detailsSummary);
+        var extraList = document.createElement('ul');
+        var extraSources = Array.isArray(evidence.extra_sources) ? evidence.extra_sources : [];
+        extraSources.forEach(function(source) {
+            if (!source || typeof source !== 'object') return;
+            var item = document.createElement('li');
+            item.className = 'evidence-extra-row';
+            item.textContent = String(source.name || '') + ' · ' +
+                (labels[source.state] || '');
+            extraList.appendChild(item);
+        });
+        details.appendChild(extraList);
+        card.appendChild(details);
+
+        var lastBubble = messages.lastElementChild;
+        if (lastBubble && lastBubble.classList.contains('chat-bubble-agent')) {
+            lastBubble.insertAdjacentElement('afterend', card);
+        } else {
+            messages.appendChild(card);
+        }
+        scrollToBottom();
     }
 
     function addBubble(text, type, trustedHtml = false, verdictOverride = null) {

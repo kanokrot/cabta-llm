@@ -639,10 +639,16 @@ class AgentLoop:
                 if decision.get('action') == 'final_answer':
                     summary = decision.get('answer', '')
                     verdict = extract_deterministic_verdict(state.findings)
+                    from .agent_response_parsing import build_evidence_card
+                    evidence = build_evidence_card(state.findings, state.goal)
                     if verdict is None:
                         summary = sanitize_unscored_answer(summary, state.goal)
                     decision['answer'] = summary
                     decision['verdict'] = verdict
+                    if evidence is not None:
+                        decision['evidence'] = evidence
+                    else:
+                        decision.pop('evidence', None)
                     state.add_finding({
                         "type": "final_answer",
                         "answer": summary,
@@ -978,13 +984,18 @@ class AgentLoop:
             self.store.update_session_status(session_id, final_status, summary)
             self.store.update_session_findings(session_id, state.findings)
 
-            self._notify(session_id, {
+            completed_frame = {
                 "type": "completed",
                 "status": final_status,
                 "summary": summary,
                 "steps": state.step_count,
                 "verdict": extract_deterministic_verdict(state.findings),
-            })
+            }
+            from .agent_response_parsing import build_evidence_card
+            evidence = build_evidence_card(state.findings, state.goal)
+            if evidence is not None:
+                completed_frame["evidence"] = evidence
+            self._notify(session_id, completed_frame)
 
         except Exception as exc:
             logger.error(f"[AGENT] Loop error for {session_id}: {exc}", exc_info=True)

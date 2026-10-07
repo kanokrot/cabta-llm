@@ -214,19 +214,177 @@ def truncate(s: str, max_len: int) -> str:
     return s if len(s) <= max_len else s[:max_len] + "..."
 
 
+def select_scoring_finding(findings: list) -> Optional[dict]:
+    """Return the latest finding with an authoritative scoring-tool verdict."""
+    scoring_tools = {"investigate_ioc", "analyze_malware", "analyze_email"}
+    if not isinstance(findings, (list, tuple)):
+        return None
+    for finding in reversed(findings):
+        if not isinstance(finding, dict) or finding.get("tool") not in scoring_tools:
+            continue
+        result = finding.get("result")
+        if isinstance(result, dict):
+            verdict = result.get("verdict")
+            if isinstance(verdict, str) and verdict.strip():
+                return finding
+    return None
+
+
 def extract_deterministic_verdict(findings: list) -> Optional[str]:
     """สแกน findings ย้อนหลังหา verdict ที่เป็น deterministic จาก tool result (ถ้ามี)
     เพื่อใช้แทน verdict ที่ LLM เดาเองจาก text"""
-    scoring_tools = {"investigate_ioc", "analyze_malware", "analyze_email"}
-    for f in reversed(findings):
-        if not isinstance(f, dict) or f.get("tool") not in scoring_tools:
+    finding = select_scoring_finding(findings)
+    if finding is None:
+        return None
+    result = finding.get("result")
+    verdict = result.get("verdict") if isinstance(result, dict) else None
+    return verdict.strip().upper() if isinstance(verdict, str) and verdict.strip() else None
+
+
+def build_evidence_card(findings: list, goal: str) -> Optional[dict]:
+    try:
+        return _build_evidence_card(findings, goal)
+    except Exception as exc:
+        logging.getLogger(__name__).warning("Could not build evidence card: %s", exc)
+        return None
+
+
+def _build_evidence_card(findings: list, goal: str) -> Optional[dict]:
+    """Build a compact, allowlisted card from the selected IOC scoring result."""
+    finding = select_scoring_finding(findings)
+    if finding is None or finding.get("tool") != "investigate_ioc":
+        return None
+    result = finding.get("result")
+    if not isinstance(result, dict):
+        return None
+
+    from ..scoring.intelligent_scoring import (
+        IntelligentScoring,
+        SOURCE_SCORING_MULTIPLIERS,
+    )
+
+    source_tiers = {
+        "feodotracker": "high",
+        "c2_trackers": "medium",
+        "spamhaus": "medium",
+        "tor_exit_nodes": "medium",
+        "sslblacklist": "medium",
+        "threatfox": "low",
+    }
+    if set(source_tiers) != set(SOURCE_SCORING_MULTIPLIERS):
+        return None
+
+    ioc = result.get("ioc")
+    ioc_type = result.get("ioc_type")
+    threat_score = result.get("threat_score")
+    verdict = result.get("verdict")
+    if (
+        not isinstance(ioc, str)
+        or not isinstance(ioc_type, str)
+        or isinstance(threat_score, bool)
+        or not isinstance(threat_score, int)
+        or not isinstance(verdict, str)
+        or not verdict.strip()
+    ):
+        return None
+
+    sources = result.get("sources")
+    if not isinstance(sources, dict):
+        sources = {}
+
+    def is_not_applicable(source_data: dict) -> bool:
+        status = str(source_data.get("status", "")).strip()
+        reason = str(
+            source_data.get("error") or source_data.get("message") or ""
+        ).strip().lower()
+        return (
+            source_data.get("not_applicable") is True
+            or status == "\u2796"
+            or reason == "not applicable"
+        )
+
+    def source_state(source_data: dict) -> str:
+        if source_data.get("status") == "\u26a0" and source_data.get("cached") is not True:
+            return "unavailable"
+        score = IntelligentScoring._get_source_score(source_data)
+        return "flagged" if score > 0 else "clean"
+
+    tier_order = {"high": 0, "medium": 1, "low": 2}
+    scoring_rows = []
+    for name in source_tiers:
+        source_data = sources.get(name)
+        if not isinstance(source_data, dict):
+            state = "missing"
+            score = 0
+        elif is_not_applicable(source_data):
+            state = "missing"
+            score = IntelligentScoring._get_source_score(source_data)
+        else:
+            state = source_state(source_data)
+            score = IntelligentScoring._get_source_score(source_data)
+        scoring_rows.append({
+            "name": name,
+            "tier": source_tiers[name],
+            "weight": round(float(SOURCE_SCORING_MULTIPLIERS[name]), 2),
+            "state": state,
+            "score": int(score),
+        })
+    scoring_rows.sort(key=lambda row: (tier_order[row["tier"]], row["name"]))
+
+    coverage_result = result.get("coverage")
+    if not isinstance(coverage_result, dict):
+        coverage_result = {}
+
+    def coverage_count(key: str) -> int:
+        value = coverage_result.get(key)
+        return value if isinstance(value, int) and not isinstance(value, bool) else 0
+
+    card = {
+        "lang": (
+            "th"
+            if isinstance(goal, str)
+            and any("\u0e00" <= char <= "\u0e7f" for char in goal)
+            else "en"
+        ),
+        "ioc": ioc[:256],
+        "ioc_type": ioc_type[:32],
+        "threat_score": threat_score,
+        "verdict": verdict.strip()[:32],
+        "scoring_sources": scoring_rows,
+        "extra_sources": [],
+        "not_applicable_count": 0,
+        "coverage": {
+            "flagged": coverage_count("sources_flagged"),
+            "clean": coverage_count("sources_clean"),
+            "unavailable": coverage_count("sources_unavailable"),
+            "attempted": coverage_count("total_sources_attempted"),
+        },
+    }
+
+    extra_rows = []
+    for name, source_data in sources.items():
+        if not isinstance(name, str) or not isinstance(source_data, dict):
             continue
-        result = f.get("result")
-        if isinstance(result, dict):
-            v = result.get("verdict")
-            if isinstance(v, str) and v.strip():
-                return v.strip().upper()
-    return None
+        if name.lower() in source_tiers:
+            if is_not_applicable(source_data):
+                card["not_applicable_count"] += 1
+            continue
+        if is_not_applicable(source_data):
+            card["not_applicable_count"] += 1
+            continue
+        extra_rows.append({"name": name[:64], "state": source_state(source_data)})
+    card["extra_sources"] = extra_rows[:30]
+
+    def card_size(value: dict) -> int:
+        return len(
+            json.dumps(value, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        )
+
+    while card["extra_sources"] and card_size(card) > 4096:
+        card["extra_sources"].pop()
+    if card_size(card) > 4096:
+        return None
+    return card
 
 
 def sanitize_unscored_answer(text: str, goal: str) -> str:
