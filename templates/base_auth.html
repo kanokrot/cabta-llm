@@ -50,7 +50,7 @@
     </style>
     {% block extra_head %}{% endblock %}
 </head>
-<body class="auth-page">
+<body class="auth-page{% block body_class %}{% endblock %}">
     <div class="auth-shell">
         <div class="auth-panel">
             <div class="d-flex justify-content-between align-items-center mb-4">
@@ -58,7 +58,7 @@
                     <img src="/static/img/logo.svg" alt="CABTA">
                     <span>CABTA<small class="d-block text-muted fw-normal">Cyan Agent Blue Team Assistant</small></span>
                 </a>
-                <button type="button" class="btn btn-sm auth-theme-toggle theme-toggle" onclick="MCPTheme.toggle()" title="Toggle theme" aria-label="Toggle theme">◐</button>
+                <button type="button" id="auth-theme-toggle" class="btn btn-sm auth-theme-toggle theme-toggle" onclick="MCPTheme.toggle()" title="Toggle theme" aria-label="Toggle theme">◐</button>
             </div>
             {% block content %}{% endblock %}
         </div>
