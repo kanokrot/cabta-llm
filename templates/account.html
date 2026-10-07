@@ -4,8 +4,35 @@
 {% block page_title %}Account{% endblock %}
 {% block page_subtitle %}{% endblock %}
 
+{% block extra_head %}
+<style>
+    .account-page { padding-top: 56px; }
+    body:has(.account-page) .sub-header { height: 0; min-height: 0; margin-top: 0 !important; overflow: hidden; padding: 0; border: 0; }
+    .settings-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1.25rem; }
+    .settings-nav-list { display: flex; flex-wrap: wrap; gap: .35rem; }
+    .settings-nav-link { display: block; color: var(--text-secondary); font-size: .9rem; font-weight: 500; padding: .55rem .75rem; border: 1px solid transparent; border-radius: 6px; background: transparent; text-align: left; text-decoration: none; }
+    .settings-nav-link:hover, .settings-nav-link:focus { color: var(--text-primary); background: var(--bg-hover, rgba(255,255,255,.06)); }
+    .settings-nav-link.active { color: var(--accent, #3b82f6); background: rgba(59, 130, 246, .1); }
+    .settings-nav-note { margin: .75rem 0 0; font-size: .85rem; }
+    .settings-main { min-width: 0; }
+    @media (min-width: 992px) {
+        .settings-layout { grid-template-columns: 220px minmax(0, 1fr); align-items: start; gap: 1.5rem; }
+        .settings-side-nav { position: sticky; top: 76px; }
+        .settings-nav-list { flex-direction: column; }
+        .settings-nav-link { width: 100%; }
+    }
+</style>
+{% endblock %}
+
 {% block content %}
-<section class="container-fluid">
+<section class="container-xl account-page">
+    {% set account_admin = request.state.user.get('role') == 'admin' if request.state.user is defined else false %}
+    {% if account_admin %}
+    {% include "partials/settings_nav.html" %}
+    <main class="settings-main">
+    {% else %}
+    <h1 class="h3 mb-4">Account</h1>
+    {% endif %}
     <div class="row g-4">
         {% if request.state.user is defined %}
         {% set account_user = request.state.user %}
@@ -61,7 +88,7 @@
                 </div>
                 <div class="card-body">
                     <div id="userApiKeysError" class="alert alert-danger py-2" style="display:none;"></div>
-                    <div id="userApiKeysDisabled" class="alert alert-secondary py-2" style="display:none;">Personal API keys are not enabled on this server.</div>
+                    <div id="userApiKeysDisabled" class="alert alert-info py-2" style="display:none;">Personal API keys are not enabled on this server.</div>
                     <div id="userApiKeysRows" class="vstack gap-3">
                         <div class="text-muted small">Loading key status...</div>
                     </div>
@@ -70,6 +97,10 @@
             </div>
         </div>
     </div>
+    {% if account_admin %}
+    </main>
+    </div>
+    {% endif %}
 </section>
 {% endblock %}
 

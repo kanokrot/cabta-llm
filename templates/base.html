@@ -210,6 +210,12 @@
             color: var(--text-secondary);
             font-size: 0.72rem;
             white-space: nowrap;
+            text-decoration: none;
+        }
+
+        .navbar-user-badge.active {
+            border-color: var(--accent, #3b82f6);
+            background: rgba(59, 130, 246, 0.12);
         }
 
         .navbar-user-badge i {
@@ -524,14 +530,11 @@
                 {% if request.state.user is defined %}
                 {% set nav_user = request.state.user %}
                 {% set nav_identity = nav_user.get('username') or nav_user.get('email') %}
-                <a href="/account" class="btn-nav-icon navbar-user-account {% if request.url.path == '/account' %}active{% endif %}" title="Account" aria-label="Account">
-                    <i class="bi bi-person-gear"></i>
-                </a>
-                <span class="navbar-user-badge" title="{{ nav_user.get('role', '') | e }}">
+                <a href="/account" class="navbar-user-badge {% if request.url.path == '/account' %}active{% endif %}" title="Account" aria-label="Account">
                     <i class="bi bi-person-circle"></i>
                     <span class="navbar-user-name d-none d-md-inline">{{ nav_identity | e }}</span>
                     <span class="navbar-user-role">{{ nav_user.get('role', '') | e }}</span>
-                </span>
+                </a>
                 {% endif %}
                 <!-- Logout -->
                 <button id="logout-button" type="button" class="btn-nav-icon" title="Logout" aria-label="Logout">

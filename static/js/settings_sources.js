@@ -32,15 +32,22 @@
 
     function buildRow(source) {
         var row = el('tr');
-        var label = el('th', '', source.label);
+        var label = el('th');
         label.scope = 'row';
+        label.appendChild(el('span', 'source-name', source.label));
+        if (source.note) label.appendChild(el('span', 'source-note', source.note));
         row.appendChild(label);
-        row.appendChild(el('td', 'small text-muted', source.note || ''));
-        row.appendChild(el('td', source.configured ? 'text-success' : 'text-muted', statusText(source)));
+        var status = el('td', source.configured ? 'text-success' : 'text-muted');
+        status.appendChild(source.configured
+            ? el('i', 'bi bi-check-circle-fill source-status-icon configured')
+            : el('span', 'source-status-icon not-set'));
+        status.appendChild(document.createTextNode(statusText(source)));
+        row.appendChild(status);
 
         var inputCell = el('td');
         var input = el('input', 'form-control form-control-sm source-key-input');
         input.type = 'password';
+        input.classList.add('font-monospace');
         input.autocomplete = 'new-password';
         input.maxLength = 4096;
         input.dataset.keyInput = source.id;

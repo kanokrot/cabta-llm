@@ -67,6 +67,7 @@ def test_sources_endpoint_masks_keys_and_accepts_alias_as_configured(monkeypatch
     assert secret not in encoded
     source = next(item for item in payload["sources"] if item["id"] == "threatfox")
     assert source["configured"] is True
+    assert source["placeholder_key_names"] == []
     assert source["masked_preview"].startswith(secret[:4])
     assert secret[4:] not in encoded
     assert {item["tier"] for item in payload["sources"]} == {"scoring", "report", "sandbox"}
@@ -85,6 +86,7 @@ def test_source_status_uses_validator_and_never_previews_placeholder(monkeypatch
 
     assert sources["virustotal"]["configured"] is False
     assert sources["virustotal"]["masked_preview"] == ""
+    assert sources["virustotal"]["placeholder_key_names"] == ["virustotal"]
     assert sources["shodan"]["configured"] is False
     assert sources["shodan"]["masked_preview"] == ""
     assert placeholder not in response.text
@@ -101,6 +103,27 @@ def test_registry_uses_first_valid_alias_for_status_and_preview():
 
     assert entry["configured"] is True
     assert entry["masked_preview"].startswith("alia")
+
+
+@pytest.mark.parametrize("value", ["YOUR_API_KEY_HERE", "API xxxxx", "<API_KEY>", "CHANGE_ME", "xxx-secret-token", "prefix_your_key", "token_here", "   "])
+def test_custom_placeholders_are_not_configured_or_previewed(value, monkeypatch, tmp_path):
+    client, _ = _client(_admin(), monkeypatch, tmp_path, {"api_keys": {"virustotal": value}})
+    response = client.get("/api/config/settings/sources")
+    assert response.status_code == 200
+    source = next(item for item in response.json()["sources"] if item["id"] == "virustotal")
+    assert source["configured"] is False
+    assert source["masked_preview"] == ""
+    assert source["placeholder_key_names"] == ["virustotal"]
+    assert value not in response.text
+
+
+def test_real_looking_keys_are_configured_and_previewed(monkeypatch, tmp_path):
+    key = "livekey-abcdef0123456789"
+    client, _ = _client(_admin(), monkeypatch, tmp_path, {"api_keys": {"virustotal": key}})
+    source = next(item for item in client.get("/api/config/settings/sources").json()["sources"] if item["id"] == "virustotal")
+    assert source["configured"] is True
+    assert source["masked_preview"].startswith(key[:4])
+    assert source["placeholder_key_names"] == []
 
 
 @pytest.mark.parametrize("role", ["SOC Analyst Tier 1-2", "Incident Responder", "Threat Hunter", "Team Lead"])
@@ -151,7 +174,9 @@ def test_clear_removes_all_aliases_but_empty_and_masked_values_do_not_clear(monk
 
 
 def test_settings_template_has_three_tabs_registry_js_and_restart_text():
-    template = (Path(__file__).parents[1] / "templates" / "settings.html").read_text(encoding="utf-8").lower()
+    root = Path(__file__).parents[1]
+    template = (root / "templates" / "settings.html").read_text(encoding="utf-8").lower()
+    template += (root / "templates" / "partials" / "settings_nav.html").read_text(encoding="utf-8").lower()
     assert "general" in template
     assert "intelligence sources" in template
     assert "system" in template
@@ -164,12 +189,17 @@ def test_settings_template_has_three_tabs_registry_js_and_restart_text():
     assert "@media (min-width: 992px)" in template
     assert "connecting wazuh? more" in template
     assert "info.config_path" in template and "info.data_dir" in template
-    assert "settings</h1>" in template
+    assert "{% if nav_admin %}settings{% else %}account{% endif %}</h1>" in template
     assert "admin only" in template
+    assert 'href="/settings#general"' in template
+    assert 'href="/settings#sources"' in template
+    assert 'href="/settings#system"' in template
     assert "counts toward threat score" in template
     assert "shown in reports, never scored" in template
     assert "file analysis, outside ioc scoring" in template
     assert "no key needed:</strong> feodotracker, ssl blacklist, spamhaus, tor exit nodes, c2 trackers" in template
+    assert "quota / plan" not in template
+    assert "settings-sources-table thead th" in template
     source_labels = {entry["label"] for entry in settings_sources() if entry["tier"] == "sandbox"}
     assert source_labels == {"Triage", "Hybrid Analysis", "ANY.RUN", "Joe Sandbox"}
 
@@ -177,6 +207,8 @@ def test_settings_template_has_three_tabs_registry_js_and_restart_text():
 def test_source_status_labels_invalid_keys_as_not_set():
     source_js = (Path(__file__).parents[1] / "static" / "js" / "settings_sources.js").read_text(encoding="utf-8")
     assert "source.configured ? 'Configured' : 'Not set'" in source_js
+    assert "source-status-icon not-set" in source_js
+    assert "bi-check-circle-fill source-status-icon configured" in source_js
 
 
 def test_system_info_api_returns_real_nonempty_paths(monkeypatch, tmp_path):
@@ -207,7 +239,7 @@ def test_full_app_registers_both_admin_and_account_endpoints(monkeypatch, tmp_pa
     config_path.write_text("{}\n", encoding="utf-8")
     monkeypatch.setenv("BTA_CONFIG", str(config_path))
     monkeypatch.setenv("AUTH_DB_PATH", str(tmp_path / "auth.db"))
-    monkeypatch.delenv("USER_API_KEY_ENCRYPTION_KEY", raising=False)
+    monkeypatch.setenv("USER_API_KEY_ENCRYPTION_KEY", "")
 
     from src.web.app import create_app
 

@@ -13,7 +13,7 @@
     .settings-section .card-header { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
     .settings-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1.25rem; }
     .settings-nav-list { display: flex; flex-wrap: wrap; gap: .35rem; }
-    .settings-nav-link { color: var(--text-secondary); font-size: .9rem; font-weight: 500; padding: .55rem .75rem; border: 1px solid transparent; border-radius: 6px; background: transparent; text-align: left; transition: color .15s, background .15s; }
+    .settings-nav-link { display: block; color: var(--text-secondary); font-size: .9rem; font-weight: 500; padding: .55rem .75rem; border: 1px solid transparent; border-radius: 6px; background: transparent; text-align: left; text-decoration: none; transition: color .15s, background .15s; }
     .settings-nav-link:hover, .settings-nav-link:focus { color: var(--text-primary); background: var(--bg-hover, rgba(255,255,255,.06)); }
     .settings-nav-link.active { color: var(--accent, #3b82f6); background: rgba(59, 130, 246, .1); }
     .settings-nav-note { margin: .75rem 0 0; font-size: .85rem; }
@@ -32,24 +32,19 @@
     .save-indicator { font-size: .8rem; color: var(--color-success); display: none; }
     .save-indicator.show { display: inline; }
     .source-key-input { min-width: 13rem; }
+    .source-name { font-weight: 700; text-transform: none; }
+    .source-note { display: block; margin-top: .2rem; font-size: .8rem; font-weight: 400; color: var(--text-secondary); }
+    .source-group-row th { background: color-mix(in srgb, var(--accent, #3b82f6) 5%, var(--bg-secondary, transparent)); }
+    .source-status-icon { margin-right: .35rem; }
+    .source-status-icon.not-set { display: inline-block; width: .72rem; height: .72rem; border: 1.5px dashed currentColor; border-radius: 50%; vertical-align: -.05rem; }
+    .source-status-icon.configured { color: var(--color-success, #22c55e); }
+    .settings-sources-table thead th { font-size: .72rem; letter-spacing: .06em; text-transform: uppercase; }
 </style>
 {% endblock %}
 
 {% block content %}
 <section class="settings-page">
-    <div class="d-flex align-items-center gap-2 mb-3">
-        <h1 class="h3 mb-0">Settings</h1>
-        <span class="badge badge-neutral">Admin only</span>
-    </div>
-    <div class="settings-layout">
-    <aside class="settings-side-nav" aria-label="Settings navigation">
-        <nav class="settings-nav-list" role="tablist" aria-label="Settings sections">
-            <button class="settings-nav-link active" id="general-tab" type="button" role="tab" aria-selected="true" aria-controls="general-panel" data-settings-tab="general">General</button>
-            <button class="settings-nav-link" id="sources-tab" type="button" role="tab" aria-selected="false" aria-controls="sources-panel" data-settings-tab="sources">Intelligence sources</button>
-            <button class="settings-nav-link" id="system-tab" type="button" role="tab" aria-selected="false" aria-controls="system-panel" data-settings-tab="system">System</button>
-        </nav>
-        <p class="settings-nav-note">Connecting Wazuh? More &rarr; <a href="/integrations">Integrations</a>.</p>
-    </aside>
+    {% include "partials/settings_nav.html" %}
     <main class="settings-main">
 
     <div id="general-panel" role="tabpanel" aria-labelledby="general-tab" data-settings-panel="general">
@@ -106,10 +101,10 @@
             <div class="card-header"><h6 class="mb-0"><i class="bi bi-key me-2 text-accent"></i>Intelligence source keys</h6><span id="sourcesSaveStatus" class="small text-muted" aria-live="polite"></span></div>
             <div class="card-body">
                 <div id="sourcesError" class="alert alert-danger py-2" hidden></div>
-                <div class="table-responsive"><table class="table align-middle"><thead><tr><th>Source</th><th>Quota / plan</th><th>Status</th><th>API key</th><th></th></tr></thead>
-                    <tbody id="scoringSources"><tr><th colspan="5"><span class="status-badge me-2" style="color:var(--accent,#3b82f6);background:rgba(59,130,246,.12);border-color:rgba(59,130,246,.25)">Scoring</span>counts toward threat score</th></tr></tbody>
-                    <tbody id="reportSources"><tr><th colspan="5"><span class="status-badge me-2" style="color:var(--text-secondary);background:var(--bg-tertiary);border-color:var(--border-color)">Report-only</span>shown in reports, never scored</th></tr></tbody>
-                    <tbody id="sandboxSources"><tr><th colspan="5"><span class="status-badge me-2" style="color:#c084fc;background:rgba(168,85,247,.12);border-color:rgba(168,85,247,.25)">Sandbox</span>file analysis, outside IOC scoring</th></tr></tbody>
+                <div class="table-responsive"><table class="table align-middle settings-sources-table"><thead><tr><th>Source</th><th>Status</th><th>API key</th><th></th></tr></thead>
+                    <tbody id="scoringSources"><tr class="source-group-row"><th colspan="4"><span class="status-badge me-2" style="color:var(--accent,#3b82f6);background:rgba(59,130,246,.12);border-color:rgba(59,130,246,.25)">Scoring</span>counts toward threat score</th></tr></tbody>
+                    <tbody id="reportSources"><tr class="source-group-row"><th colspan="4"><span class="status-badge me-2" style="color:var(--text-secondary);background:var(--bg-tertiary);border-color:var(--border-color)">Report-only</span>shown in reports, never scored</th></tr></tbody>
+                    <tbody id="sandboxSources"><tr class="source-group-row"><th colspan="4"><span class="status-badge me-2" style="color:#c084fc;background:rgba(168,85,247,.12);border-color:rgba(168,85,247,.25)">Sandbox</span>file analysis, outside IOC scoring</th></tr></tbody>
                 </table></div>
                 <p class="small text-muted mb-0"><strong>No key needed:</strong> FeodoTracker, SSL Blacklist, Spamhaus, Tor Exit Nodes, C2 Trackers.</p>
             </div>
@@ -141,17 +136,26 @@ var Settings = (function() {
     function byId(id) { return document.getElementById(id); }
     function init() {
         document.querySelectorAll('[data-settings-tab]').forEach(function(tab) {
-            tab.addEventListener('click', function() {
-                document.querySelectorAll('[data-settings-tab]').forEach(function(item) {
-                    var active = item === tab;
-                    item.classList.toggle('active', active);
-                    item.setAttribute('aria-selected', active ? 'true' : 'false');
-                });
-                document.querySelectorAll('[data-settings-panel]').forEach(function(panel) { panel.hidden = panel.dataset.settingsPanel !== tab.dataset.settingsTab; });
+            tab.addEventListener('click', function(event) {
+                event.preventDefault();
+                activateTab(tab.dataset.settingsTab, true);
             });
         });
+        window.addEventListener('hashchange', function() { activateTab(window.location.hash.slice(1), false); });
+        activateTab(window.location.hash.slice(1) || 'general', false);
         loadConfig();
         loadSystemInfo();
+    }
+    function activateTab(name, updateHash) {
+        if (['general', 'sources', 'system'].indexOf(name) < 0) name = 'general';
+        document.querySelectorAll('[data-settings-tab]').forEach(function(item) {
+            var active = item.dataset.settingsTab === name;
+            item.classList.toggle('active', active);
+            item.setAttribute('aria-selected', active ? 'true' : 'false');
+            if (active) item.setAttribute('aria-current', 'page'); else item.removeAttribute('aria-current');
+        });
+        document.querySelectorAll('[data-settings-panel]').forEach(function(panel) { panel.hidden = panel.dataset.settingsPanel !== name; });
+        if (updateHash && window.location.hash !== '#' + name) history.replaceState(null, '', '#' + name);
     }
     function loadConfig() {
         fetch('/api/config/settings').then(function(response) { if (!response.ok) throw new Error('HTTP ' + response.status); return response.json(); }).then(function(cfg) {

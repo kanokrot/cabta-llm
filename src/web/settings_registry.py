@@ -42,10 +42,14 @@ _ENTRIES = (
 def settings_sources(api_keys: dict | None = None) -> list[dict]:
     """Return registry entries and status derived from valid configured keys."""
     api_keys = api_keys if isinstance(api_keys, dict) else {}
-    validation_keys = {
-        name: value if isinstance(value, str) else None
-        for name, value in api_keys.items()
-    }
+    validation_keys = {}
+    placeholder_names = set()
+    for name, value in api_keys.items():
+        if _is_placeholder(value):
+            placeholder_names.add(name)
+            validation_keys[name] = None
+        else:
+            validation_keys[name] = value if isinstance(value, str) else None
     result = []
     for entry in _ENTRIES:
         item = dict(entry)
@@ -55,12 +59,36 @@ def settings_sources(api_keys: dict | None = None) -> list[dict]:
         valid_keys = [get_valid_key(validation_keys, name) for name in item["config_keys"]]
         valid_key = next((key for key in valid_keys if key), None)
         item["configured"] = valid_key is not None
+        item["placeholder_key_names"] = [
+            name for name in item["config_keys"] if name in placeholder_names
+        ]
         item["masked_preview"] = (
             valid_key[:4] + ("•" * max(0, len(valid_key) - 4))
             if valid_key else ""
         )
         result.append(item)
     return result
+
+
+def _is_placeholder(value: object) -> bool:
+    """Reject obvious setup placeholders before applying shared key validation."""
+    if not isinstance(value, str):
+        return False
+    if not value.strip():
+        return True
+    normalized = value.strip().casefold()
+    return (
+        normalized.startswith(("your", "api ", "<", "change", "xxx"))
+        or "your_" in normalized
+        or "_here" in normalized
+        or any(
+            marker in normalized
+            for marker in (
+                "buraya_api_key", "api_key_here", "insert_key", "replace_me",
+                "change_this", "yyy", "zzz", "test", "example",
+            )
+        )
+    )
 
 
 def registered_config_keys() -> set[str]:

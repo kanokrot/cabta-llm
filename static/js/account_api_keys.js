@@ -50,7 +50,7 @@
         }
         row.appendChild(status);
 
-        var controls = make('div', 'col-md-6 d-flex flex-wrap gap-2 align-items-center');
+        var controls = make('div', 'col-md-6 d-flex flex-column flex-md-row gap-2 align-items-stretch align-items-md-center');
         if (metadata.configured) {
             var remove = make('button', 'btn btn-outline-danger btn-sm', 'Remove');
             remove.type = 'button';
