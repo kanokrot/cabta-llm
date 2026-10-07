@@ -39,6 +39,25 @@ async def _send_visible(websocket: WebSocket, payload: dict, *, role: str, flow:
     await websocket.send_json(visible)
 
 
+def _stored_agent_verdict(steps: Sequence[dict]) -> str | None:
+    """Read the verdict from the persisted final-answer decision, if present."""
+    for step in reversed(steps):
+        if step.get("step_type") != "final_answer":
+            continue
+        content = step.get("content")
+        if not isinstance(content, str):
+            return None
+        try:
+            decision = json.loads(content)
+        except (TypeError, json.JSONDecodeError):
+            return None
+        if not isinstance(decision, dict):
+            return None
+        verdict = decision.get("verdict")
+        return verdict if isinstance(verdict, str) and verdict else None
+    return None
+
+
 async def _authenticate_websocket(
     websocket: WebSocket, roles: Sequence[str]
 ) -> dict | None:
@@ -265,10 +284,15 @@ async def agent_ws(websocket: WebSocket, session_id: str):
 
     # If already done, close
     if session.get('status') in ('completed', 'failed', 'cancelled'):
-        await _send_visible(websocket, {
+        completed_frame = {
             'type': session['status'],
             'summary': session.get('summary', ''),
-        }, role=authenticated_user['role'], flow=flow)
+        }
+        if flow == "agent" and session.get('status') == 'completed':
+            completed_frame['verdict'] = _stored_agent_verdict(steps)
+        await _send_visible(
+            websocket, completed_frame, role=authenticated_user['role'], flow=flow
+        )
         await websocket.close()
         return
 
@@ -337,10 +361,16 @@ async def agent_ws(websocket: WebSocket, session_id: str):
                     last_step_count = len(current_steps)
 
                 if session.get('status') in ('completed', 'failed', 'cancelled'):
-                    await _send_visible(websocket, {
+                    completed_frame = {
                         'type': session['status'],
                         'summary': session.get('summary', ''),
-                    }, role=authenticated_user['role'], flow=flow)
+                    }
+                    if flow == "agent" and session.get('status') == 'completed':
+                        completed_frame['verdict'] = _stored_agent_verdict(current_steps)
+                    await _send_visible(
+                        websocket, completed_frame,
+                        role=authenticated_user['role'], flow=flow,
+                    )
                     break
 
                 await _send_visible(websocket, {'type': 'heartbeat'}, role=authenticated_user['role'], flow=flow)

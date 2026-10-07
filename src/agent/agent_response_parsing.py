@@ -217,10 +217,31 @@ def truncate(s: str, max_len: int) -> str:
 def extract_deterministic_verdict(findings: list) -> Optional[str]:
     """สแกน findings ย้อนหลังหา verdict ที่เป็น deterministic จาก tool result (ถ้ามี)
     เพื่อใช้แทน verdict ที่ LLM เดาเองจาก text"""
+    scoring_tools = {"investigate_ioc", "analyze_malware", "analyze_email"}
     for f in reversed(findings):
+        if not isinstance(f, dict) or f.get("tool") not in scoring_tools:
+            continue
         result = f.get("result")
         if isinstance(result, dict):
             v = result.get("verdict")
             if isinstance(v, str) and v.strip():
-                return v.strip()
+                return v.strip().upper()
     return None
+
+
+def sanitize_unscored_answer(text: str, goal: str) -> str:
+    """Remove an LLM-authored verdict label and append a language-matched notice."""
+    answer = text if isinstance(text, str) else str(text or "")
+    answer = re.sub(
+        r"\bVerdict\s*:\s*(?:MALICIOUS|SUSPICIOUS|CLEAN|UNKNOWN)\b",
+        "",
+        answer,
+        flags=re.IGNORECASE,
+    )
+    answer = re.sub(r"\n[ \t]*\n(?:[ \t]*\n)+", "\n\n", answer).strip()
+    goal_text = goal if isinstance(goal, str) else str(goal or "")
+    if any("\u0e00" <= char <= "\u0e7f" for char in goal_text):
+        notice = "\u0e44\u0e21\u0e48\u0e21\u0e35\u0e1c\u0e25\u0e1b\u0e23\u0e30\u0e40\u0e21\u0e34\u0e19\u0e08\u0e32\u0e01 scoring engine \u2014 \u0e02\u0e49\u0e2d\u0e04\u0e27\u0e32\u0e21\u0e19\u0e35\u0e49\u0e40\u0e1b\u0e47\u0e19\u0e2a\u0e23\u0e38\u0e1b\u0e02\u0e2d\u0e07 LLM \u0e44\u0e21\u0e48\u0e43\u0e0a\u0e48 verdict"
+    else:
+        notice = "No scoring-engine result \u2014 this is an LLM summary, not a verdict."
+    return f"{answer}\n\n{notice}" if answer else notice

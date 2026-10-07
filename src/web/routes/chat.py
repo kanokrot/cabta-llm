@@ -67,8 +67,11 @@ async def send_message(
     else:
         authorize_role(current_user, ["Threat Hunter", "admin"])
 
-    if not body.playbook_id and not body.session_id:
-        intent = classify_intent(body.message)
+    if not body.playbook_id:
+        intent = classify_intent(
+            body.message,
+            allow_need_ioc=not bool(body.session_id),
+        )
         if intent:
             return build_instant_reply(intent, body.message)
 

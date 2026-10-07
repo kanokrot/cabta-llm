@@ -68,7 +68,7 @@ async def start_investigation(
 ):
     """Start a new agent investigation."""
     if body.playbook_id is None and body.case_id is None:
-        intent = classify_intent(body.goal)
+        intent = classify_intent(body.goal, allow_need_ioc=True)
         if intent:
             return build_instant_reply(intent, body.goal)
 

@@ -3049,6 +3049,8 @@ var AgentChat = (function() {
 
     function send() {
         if (playbookSessionMode) return;
+        var btn = document.getElementById('sendBtn');
+        if (btn.disabled) return;
         var input = document.getElementById('chatInput');
         var text = input.value.trim();
         if (!text) return;
@@ -3056,7 +3058,6 @@ var AgentChat = (function() {
         addBubble(text, 'user');
         scrollToBottom();
 
-        var btn = document.getElementById('sendBtn');
         btn.disabled = true;
 
         if (!sessionId) {
@@ -3124,7 +3125,13 @@ var AgentChat = (function() {
             .then(function(r) { return r.json(); })
             .then(function(data) {
                 btn.disabled = false;
+                if (renderInstantReply(data, btn)) return;
                 if (data.response) addBubble(data.response, 'agent', false, data.verdict);
+                if (data.status === 'processing' && data.session_id) {
+                    sessionId = data.session_id;
+                    connectWebSocket(sessionId);
+                    loadSessions();
+                }
                 scrollToBottom();
             })
             .catch(function(err) {
@@ -3150,9 +3157,7 @@ var AgentChat = (function() {
             div.innerHTML = '<div class="bubble-label">You</div>' + esc(text);
         } else if (type === 'agent') {
             div.className = 'chat-bubble chat-bubble-agent';
-            var verdict = verdictOverride === null || verdictOverride === undefined
-                ? detectVerdict(text)
-                : normalizeVerdict(verdictOverride);
+            var verdict = normalizeVerdict(verdictOverride);
             var verdictHtml = '';
             if (verdict) {
                 var vIcon = verdict === 'malicious' ? 'bi-exclamation-triangle-fill' : verdict === 'suspicious' ? 'bi-exclamation-circle-fill' : verdict === 'unknown' ? 'bi-question-circle-fill' : 'bi-check-circle-fill';

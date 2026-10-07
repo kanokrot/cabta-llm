@@ -22,8 +22,8 @@ from .agent_state import AgentPhase, AgentState
 from .agent_store import AgentStore
 from .tool_registry import ToolRegistry
 from .agent_response_parsing import (
-    extract_verdict,
     extract_deterministic_verdict,
+    sanitize_unscored_answer,
     normalise_decision,
     parse_tool_call_response,
     extract_json,
@@ -638,7 +638,11 @@ class AgentLoop:
                 # ---- Check for final answer ----
                 if decision.get('action') == 'final_answer':
                     summary = decision.get('answer', '')
-                    verdict = decision.get('verdict', 'UNKNOWN')
+                    verdict = extract_deterministic_verdict(state.findings)
+                    if verdict is None:
+                        summary = sanitize_unscored_answer(summary, state.goal)
+                    decision['answer'] = summary
+                    decision['verdict'] = verdict
                     state.add_finding({
                         "type": "final_answer",
                         "answer": summary,
@@ -979,6 +983,7 @@ class AgentLoop:
                 "status": final_status,
                 "summary": summary,
                 "steps": state.step_count,
+                "verdict": extract_deterministic_verdict(state.findings),
             })
 
         except Exception as exc:
@@ -1070,7 +1075,7 @@ class AgentLoop:
                     return {
                         "action": "final_answer",
                         "answer": raw.strip(),
-                        "verdict": deterministic_verdict if deterministic_verdict else extract_verdict(raw),
+                        "verdict": deterministic_verdict,
                         "reasoning": "LLM provided text response after tool use",
                     }
                 # No findings yet → auto-dispatch
@@ -1211,7 +1216,9 @@ class AgentLoop:
                 answer = f.get("answer", "")
                 verdict = f.get("verdict", "")
                 if answer:
-                    return _append_rag_sources(f"[{verdict}] {answer}", rag_sources)
+                    if verdict:
+                        answer = f"[{verdict}] {answer}"
+                    return _append_rag_sources(answer, rag_sources)
 
         # Otherwise ask LLM to summarise
         sanitized_findings = _strip_rag_references(state.findings[-15:])
@@ -1226,7 +1233,10 @@ class AgentLoop:
         try:
             raw = await self._call_llm_text(prompt)
             if raw:
-                return _append_rag_sources(raw[:2000], rag_sources)
+                summary = raw[:2000]
+                if extract_deterministic_verdict(state.findings) is None:
+                    summary = sanitize_unscored_answer(summary, state.goal)
+                return _append_rag_sources(summary, rag_sources)
         except Exception as exc:
             logger.warning(f"[AGENT] Summary generation failed: {exc}")
 
@@ -1236,6 +1246,8 @@ class AgentLoop:
             f"{len(state.findings)} findings collected. "
             f"Errors: {len(state.errors)}."
         )
+        if extract_deterministic_verdict(state.findings) is None:
+            fallback = sanitize_unscored_answer(fallback, state.goal)
         return _append_rag_sources(fallback, rag_sources)
 
     # ================================================================== #

@@ -36,6 +36,7 @@ def _client(tmp_path, role="Threat Hunter"):
     ("path", "body", "intent"),
     [
         ("/api/agent/investigate", {"goal": "hello"}, "greeting"),
+        ("/api/agent/investigate", {"goal": "hello there"}, "greeting"),
         ("/api/agent/investigate", {"goal": "help"}, "help"),
         ("/api/agent/investigate", {"goal": "สวัสดี"}, "greeting"),
         ("/api/chat", {"message": "hello"}, "greeting"),
@@ -140,6 +141,57 @@ def test_chat_route_keeps_role_authorization_for_greetings(tmp_path):
 
     assert response.status_code == 403
     loop.investigate.assert_not_awaited()
+
+
+def test_non_ioc_new_message_returns_need_ioc_without_investigation(tmp_path):
+    app, store, loop, _ = _client(tmp_path)
+
+    with TestClient(app) as client:
+        response = client.post("/api/agent/investigate", json={"goal": "asdfghjkl"})
+
+    assert response.status_code == 200
+    assert response.json()["type"] == "instant"
+    assert response.json()["intent"] == "need_ioc"
+    assert response.json()["session_id"] is None
+    loop.investigate.assert_not_awaited()
+    assert store.list_sessions() == []
+
+
+@pytest.mark.parametrize(
+    ("message", "intent", "investigate_calls"),
+    [
+        ("asdfghjkl", None, 1),
+        ("hello there", "greeting", 0),
+    ],
+)
+def test_session_followup_classifies_only_greeting_help(
+    tmp_path, message, intent, investigate_calls
+):
+    app, _, loop, _ = _client(tmp_path)
+    app.state.agent_store = SimpleNamespace(
+        get_session=lambda session_id, user_id=None: {
+            "id": session_id,
+            "goal": "analyze 8.8.8.8",
+            "status": "completed",
+            "case_id": None,
+        }
+    )
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/chat",
+            json={"message": message, "session_id": "previous-session"},
+        )
+
+    assert response.status_code == 200
+    if intent:
+        assert response.json()["type"] == "instant"
+        assert response.json()["intent"] == intent
+        assert response.json()["session_id"] is None
+    else:
+        assert response.json()["status"] == "processing"
+        assert response.json()["session_id"] == "spy-session"
+    assert loop.investigate.await_count == investigate_calls
 
 
 def test_agent_chat_template_handles_instant_replies():

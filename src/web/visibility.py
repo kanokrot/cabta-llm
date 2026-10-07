@@ -1208,6 +1208,8 @@ def serialize_websocket_frame(frame: Mapping[str, Any], *, role: str, flow: str)
             output = {"type": frame_type}
             if frame_type == "completed":
                 output["summary"] = _text(frame.get("summary"), 4000) or ""
+                verdict = frame.get("verdict")
+                output["verdict"] = _text(verdict, 32) if isinstance(verdict, str) else None
             elif frame_type == "failed":
                 output["error"] = "Agent investigation failed"
             return output
