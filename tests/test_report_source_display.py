@@ -14,7 +14,7 @@ from src.web.report_source_display import (
 from src.scoring.intelligent_scoring import SOURCE_SCORING_MULTIPLIERS
 
 
-def _render_report(sources, *, print_mode=False, domain_enrichment=None):
+def _render_report(sources, *, print_mode=False, domain_enrichment=None, detection_rules=None):
     templates_dir = Path(__file__).resolve().parents[1] / "templates"
     environment = Environment(
         loader=FileSystemLoader(str(templates_dir)),
@@ -42,6 +42,8 @@ def _render_report(sources, *, print_mode=False, domain_enrichment=None):
             "domain_enrichment": domain_enrichment or {},
         },
     }
+    if detection_rules is not None:
+        job["result"]["detection_rules"] = detection_rules
     return environment.get_template("report_view.html").render(
         request=request,
         job=job,
@@ -421,7 +423,7 @@ def test_domain_intelligence_uses_console_title_and_confidence_badge():
     ).group(0)
 
     assert '<h2 class="rv-console-title">Domain intelligence</h2>' in domain_card
-    assert '.rv-card-head h2.rv-console-title::before { content: "// ";' in html
+    assert '.rv-card-head .rv-console-title::before { content: "// ";' in html
     assert '<span class="rv-pill rv-pill--flag">80%</span>' in domain_card
     assert "1 FLAGGED" in html and "7 RESPONDED" in html
     assert "2 ERRORS" in html and "19 N/A" in html and "1 / 7" in html
@@ -473,6 +475,157 @@ def test_domain_intelligence_keeps_console_markup_in_print_mode():
     assert 'id="domainIntelligenceCollapse"' in html
     assert '<h2 class="rv-console-title">Domain intelligence</h2>' in html
     assert '<span class="rv-pill rv-pill--flag">80%</span>' in html
+    assert ".report-v2 .card.card-print-flow { break-inside: auto; page-break-inside: auto; }" in html
+    assert "1 FLAGGED" in html and "7 RESPONDED" in html
+    assert "2 ERRORS" in html and "19 N/A" in html and "1 / 7" in html
+
+
+def _render_report_with_rules(*, print_mode=False):
+    return _render_report(
+        _count_fixture_sources(),
+        print_mode=print_mode,
+        detection_rules={
+            "kql": "DeviceNetworkEvents\n| where RemoteUrl has \"example.com\"",
+            "sigma": "title: Example detection\nlogsource:\n  product: windows",
+        },
+    )
+
+
+def test_detection_rules_uses_console_header_and_brackets():
+    html = _render_report_with_rules()
+    header = re.search(
+        r'<div class="rv-card-head rv-rule-card-head">(.*?)</div>\s*<div class="collapse show" id="rulesCollapse">',
+        html,
+        re.DOTALL,
+    ).group(1)
+
+    assert 'class="rv-console-title" role="heading" aria-level="2">Detection Rules</span>' in header
+    assert 'data-rule-approved-count data-analysis-id="display-test">approved 0 of 2' in header
+    assert 'data-bs-toggle="collapse" data-bs-target="#rulesCollapse" aria-expanded="true"' in header
+    assert "collapse-chevron" in header
+    assert 'data-rule-action="zip"' in header
+    assert "Export selected as ZIP" in header
+    assert '.rv-card-head .rv-console-title::before { content: "// ";' in html
+    assert ".rv-rule-card:has(> #rulesCollapse)::before" in html
+    assert ".rv-rule-card:has(> #rulesCollapse)::after" in html
+
+
+def test_detection_rule_tabs_keep_bootstrap_hooks_and_console_active_state():
+    html = _render_report_with_rules()
+
+    assert 'class="nav nav-tabs mb-0 rv-rule-tabs" id="ruleTabs" role="tablist"' in html
+    assert 'class="nav-link active"' in html
+    assert 'id="tab-1" data-bs-toggle="tab"' in html
+    assert 'data-bs-target="#tabpane-1" type="button" role="tab"' in html
+    assert 'aria-controls="tabpane-1" aria-selected="true"' in html
+    assert 'id="tabpane-1" role="tabpanel" aria-labelledby="tab-1"' in html
+    assert ".rv-rule-tabs.nav-tabs .nav-link.active" in html
+    assert "border-bottom-color: var(--rv-cyan)" in html
+
+
+def test_detection_rule_toolbar_order_status_and_action_hooks_are_preserved():
+    html = _render_report_with_rules()
+    toolbar = re.search(
+        r'<div class="rule-copy-actions rule-export-actions no-print rv-rule-toolbar">(.*?)</div>',
+        html,
+        re.DOTALL,
+    ).group(1)
+    ordered_labels = (
+        "Pending review", "Copy", "Copy format", "Approve export", "Download",
+        "Mark as Deployed", "Edit",
+    )
+
+    assert [toolbar.index(label) for label in ordered_labels] == sorted(
+        toolbar.index(label) for label in ordered_labels
+    )
+    assert toolbar.index("data-rule-status") < toolbar.index("data-rule-action=\"approve\"")
+    for action in ("approve", "download", "deploy", "edit", "save", "cancel"):
+        assert f'data-rule-action="{action}"' in html
+    assert 'data-rule-id="rulecode-1"' in toolbar
+    assert 'data-copy-format="kql"' in toolbar
+    assert 'data-analysis-id="display-test"' in toolbar
+    assert 'data-rule-type="kql"' in toolbar
+    assert "<i class=\"bi " not in toolbar
+
+
+def test_download_and_deploy_enabled_states_match_original_rule_status_logic():
+    html = _render_report_with_rules()
+    script = Path(__file__).resolve().parents[1].joinpath(
+        "static/js/analysis.js"
+    ).read_text(encoding="utf-8")
+
+    for action in ("download", "deploy"):
+        button = re.search(
+            rf'<button\b[^>]*data-rule-action="{action}"[^>]*>', html
+        ).group(0)
+        assert re.search(r"\sdisabled(?:\s|>)", button)
+
+    # The template starts both controls disabled. Runtime state enables each
+    # only after approval or manual deployment, matching the original behavior.
+    assert re.search(
+        r"if\s*\(action\s*===\s*'download'\s*\|\|\s*action\s*===\s*'deploy'\)\s*"
+        r"\{\s*element\.disabled\s*=\s*state\.status\s*!==\s*'approved'\s*"
+        r"&&\s*state\.status\s*!==\s*'deployed';\s*\}",
+        script,
+    )
+    assert {
+        status: status not in {"approved", "deployed"}
+        for status in ("pending_review", "approved", "deployed", "rejected")
+    } == {
+        "pending_review": True,
+        "approved": False,
+        "deployed": False,
+        "rejected": True,
+    }
+
+
+def test_enabled_download_and_deploy_styles_remain_clickable():
+    html = _render_report_with_rules()
+    css_rules = re.findall(r"([^{}]+)\{([^{}]*)\}", html)
+
+    enabled_selector = (
+        '.rv-rule-action[data-rule-action="download"]:not(:disabled)',
+        '.rv-rule-action[data-rule-action="deploy"]:not(:disabled)',
+    )
+    for selector in enabled_selector:
+        matching_rules = [declarations for rule, declarations in css_rules if selector in rule]
+        assert matching_rules
+        assert any("cursor: pointer" in declarations for declarations in matching_rules)
+
+    assert not any(
+        "pointer-events: none" in declarations
+        and ("rv-rule-action" in rule or "data-rule-action" in rule)
+        for rule, declarations in css_rules
+    )
+
+
+def test_detection_rule_export_selection_and_summary_hooks_remain_in_place():
+    html = _render_report_with_rules()
+
+    assert 'class="form-check-input" type="checkbox" checked' in html
+    assert 'data-rule-select' in html
+    assert 'data-analysis-id="display-test"' in html
+    assert 'data-rule-type="kql"' in html
+    assert 'data-rule-export-status' in html
+    assert 'data-analysis-id="display-test" aria-live="polite"' in html
+    assert "Select at least one rule to export." in html
+    assert "Approved ' + approvedCount + ' of ' + selected.length +" in Path(
+        __file__
+    ).parents[1].joinpath("static/js/analysis.js").read_text(encoding="utf-8")
+    assert 'id="ruleTabContent"' in html
+    assert 'id="rulecode-1" data-rule-display' in html
+    assert 'data-rule-editor' in html
+    assert 'data-rule-validation-errors' in html
+
+
+def test_detection_rule_code_block_and_print_rules_remain_console_safe():
+    html = _render_report_with_rules(print_mode=True)
+
+    assert 'class="rv-rule-card card-print-flow mb-4"' in html
+    assert ".rv-rule-card .rule-tab-content pre, .report-v2 .rv-rule-card .rule-wrapper > pre" in html
+    assert "background: #02060e" in html
+    assert "border-radius: 0" in html
+    assert ".report-v2 .no-print { display: none !important; }" in html
     assert ".report-v2 .card.card-print-flow { break-inside: auto; page-break-inside: auto; }" in html
     assert "1 FLAGGED" in html and "7 RESPONDED" in html
     assert "2 ERRORS" in html and "19 N/A" in html and "1 / 7" in html

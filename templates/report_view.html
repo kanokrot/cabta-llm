@@ -104,10 +104,16 @@
     [data-theme="light"] .report-v2 { --rv-bg: var(--bg-card, #fff); --rv-panel: var(--bg-secondary, #f3f7fb); --rv-line: var(--border-color, #cfdae8); --rv-text: var(--text-primary, #17263b); --rv-muted: var(--text-secondary, #596b80); }
     .report-v2 .rv-card { background: var(--rv-bg); border: 1px solid var(--rv-line); border-radius: 10px; margin-bottom: 1rem; overflow: hidden; }
     .report-v2 .rv-card-head { display: flex; align-items: center; flex-wrap: wrap; gap: .55rem; padding: .9rem 1rem; border-bottom: 1px solid var(--rv-line); }
+    .report-v2 .rv-rule-card-head { align-items: center; }
+    .report-v2 .rv-rule-collapse-toggle { display: flex; align-items: center; flex: 1 1 auto; min-width: 14rem; gap: .7rem; border: 0; padding: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; }
+    .report-v2 .rv-rule-collapse-toggle:hover { background: transparent; }
+    .report-v2 .rv-rule-approved-count { color: var(--rv-muted); font: 500 .68rem ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: .02em; text-transform: lowercase; white-space: nowrap; }
+    .report-v2 .rv-rule-collapse-chevron { color: var(--rv-cyan); font-size: .75rem; }
+    .report-v2 .rv-rule-card:has(> #rulesCollapse) { position: relative; overflow: visible; }
     .report-v2 .rv-card-head h2, .report-v2 .rv-card-head h3 { margin: 0; font-size: 1rem; font-weight: 650; }
     .report-v2 .rv-card-head h2, .report-v2 .rv-card-head h3 { text-transform: uppercase; }
-    .report-v2 .rv-card-head h2.rv-console-title { font: 600 .78rem ui-monospace, monospace; letter-spacing: .1em; }
-    .report-v2 .rv-card-head h2.rv-console-title::before { content: "// "; color: var(--rv-cyan); }
+    .report-v2 .rv-card-head .rv-console-title { font: 600 .78rem ui-monospace, monospace; letter-spacing: .1em; text-transform: uppercase; }
+    .report-v2 .rv-card-head .rv-console-title::before { content: "// "; color: var(--rv-cyan); }
     .report-v2 .rv-spacer { flex: 1 1 auto; }
     .report-v2 .rv-muted { color: var(--rv-muted); }
     .report-v2 .rv-mono { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
@@ -117,9 +123,10 @@
     .report-v2 .rv-hero { position: relative; display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 26px; align-items: center; padding: 24px; border: 1px solid color-mix(in srgb, var(--rv-red) 38%, var(--rv-line)); overflow: visible; }
     .report-v2 .rv-hero::before, .report-v2 .rv-hero::after,
     .report-v2 .rv-card:has(> #sourcesCollapse)::before, .report-v2 .rv-card:has(> #sourcesCollapse)::after,
-    .report-v2 .rv-card:has(> #domainIntelligenceCollapse)::before, .report-v2 .rv-card:has(> #domainIntelligenceCollapse)::after { content: ""; position: absolute; width: 12px; height: 12px; border: 2px solid var(--rv-cyan); opacity: .85; pointer-events: none; z-index: 2; }
-    .report-v2 .rv-hero::before, .report-v2 .rv-card:has(> #sourcesCollapse)::before, .report-v2 .rv-card:has(> #domainIntelligenceCollapse)::before { top: -1px; left: -1px; border-right: 0; border-bottom: 0; }
-    .report-v2 .rv-hero::after, .report-v2 .rv-card:has(> #sourcesCollapse)::after, .report-v2 .rv-card:has(> #domainIntelligenceCollapse)::after { right: -1px; bottom: -1px; border-left: 0; border-top: 0; }
+    .report-v2 .rv-card:has(> #domainIntelligenceCollapse)::before, .report-v2 .rv-card:has(> #domainIntelligenceCollapse)::after,
+    .report-v2 .rv-rule-card:has(> #rulesCollapse)::before, .report-v2 .rv-rule-card:has(> #rulesCollapse)::after { content: ""; position: absolute; width: 12px; height: 12px; border: 2px solid var(--rv-cyan); opacity: .85; pointer-events: none; z-index: 2; }
+    .report-v2 .rv-hero::before, .report-v2 .rv-card:has(> #sourcesCollapse)::before, .report-v2 .rv-card:has(> #domainIntelligenceCollapse)::before, .report-v2 .rv-rule-card:has(> #rulesCollapse)::before { top: -1px; left: -1px; border-right: 0; border-bottom: 0; }
+    .report-v2 .rv-hero::after, .report-v2 .rv-card:has(> #sourcesCollapse)::after, .report-v2 .rv-card:has(> #domainIntelligenceCollapse)::after, .report-v2 .rv-rule-card:has(> #rulesCollapse)::after { right: -1px; bottom: -1px; border-left: 0; border-top: 0; }
     .report-v2 .rv-card:has(> #sourcesCollapse), .report-v2 .rv-card:has(> #domainIntelligenceCollapse) { position: relative; overflow: visible; }
     .report-v2 .score-gauge { position: relative; box-sizing: border-box; width: 200px; height: 200px; max-width: 100%; flex: 0 0 200px; }
     .report-v2 .score-gauge canvas { position: absolute; inset: 0; display: block; width: 100% !important; height: 100% !important; max-width: 100%; max-height: 100%; }
@@ -203,6 +210,34 @@
     .report-v2 .rule-copy-actions { position: absolute; top: .5rem; right: .5rem; display: flex; gap: .35rem; z-index: 2; }
     .report-v2 .rule-export-actions { position: static; justify-content: flex-end; flex-wrap: wrap; margin-bottom: .5rem; }
     .report-v2 .rule-export-actions + pre { padding-top: 1rem; }
+    .report-v2 .rv-rule-selection { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem .7rem; margin: 0 0 .7rem !important; padding: .65rem .75rem; border: 1px solid var(--rv-line); background: var(--rv-panel); color: var(--rv-muted); font: .66rem ui-monospace, SFMono-Regular, Consolas, monospace; }
+    .report-v2 .rv-rule-selection > .small { color: var(--rv-muted) !important; font: inherit; }
+    .report-v2 .rv-rule-selection .form-check { display: inline-flex; align-items: center; gap: .3rem; margin: 0; }
+    .report-v2 .rv-rule-selection .form-check-input { margin: 0; accent-color: var(--rv-cyan); }
+    .report-v2 .rv-rule-selection .form-check-label { color: var(--rv-text); font: inherit; }
+    .report-v2 .rv-rule-selection [data-rule-export-status] { flex-basis: 100%; color: var(--rv-muted) !important; font: .66rem/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; }
+    .report-v2 .rv-rule-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; }
+    .report-v2 .rv-rule-toolbar-spacer { flex: 1 1 auto; }
+    .report-v2 .rv-rule-toolbar [data-rule-status] { display: inline-flex; align-items: center; border: 1px solid; border-radius: 999px; padding: .17rem .55rem; background: transparent !important; font: 700 .63rem ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: .05em; text-transform: uppercase; }
+    .report-v2 .rv-rule-toolbar [data-rule-status].text-bg-warning { color: var(--rv-amber) !important; border-color: var(--rv-amber) !important; }
+    .report-v2 .rv-rule-toolbar [data-rule-status].text-bg-success { color: var(--rv-green) !important; border-color: var(--rv-green) !important; }
+    .report-v2 .rv-rule-toolbar [data-rule-status].text-bg-info { color: var(--rv-cyan) !important; border-color: var(--rv-cyan) !important; }
+    .report-v2 .rv-rule-action { border-radius: 4px; padding: .3rem .58rem; background: transparent !important; font: .66rem ui-monospace, SFMono-Regular, Consolas, monospace; white-space: nowrap; }
+    .report-v2 .rv-rule-action--muted { color: var(--rv-muted) !important; border-color: var(--rv-line) !important; }
+    .report-v2 .rv-rule-action--approve { color: var(--rv-green) !important; border-color: color-mix(in srgb, var(--rv-green) 60%, var(--rv-line)) !important; }
+    .report-v2 .rv-rule-action--edit { color: var(--rv-amber) !important; border-color: color-mix(in srgb, var(--rv-amber) 60%, var(--rv-line)) !important; }
+    .report-v2 .rv-rule-action:hover:not(:disabled) { background: color-mix(in srgb, currentColor 10%, transparent) !important; }
+    .report-v2 .rv-rule-action:disabled { opacity: .5; }
+    .report-v2 .rv-rule-action[data-rule-action="download"]:not(:disabled),
+    .report-v2 .rv-rule-action[data-rule-action="deploy"]:not(:disabled) { color: var(--rv-cyan) !important; border-color: color-mix(in srgb, var(--rv-cyan) 65%, var(--rv-line)) !important; opacity: 1; cursor: pointer; }
+    .report-v2 .rv-rule-tabs.nav-tabs { display: flex; flex-wrap: wrap; gap: 2px; margin: 0; padding: .7rem 1rem 0; border-bottom: 1px solid var(--rv-line); }
+    .report-v2 .rv-rule-tabs.nav-tabs .nav-link { border: 0; border-bottom: 2px solid transparent; border-radius: 0; padding: .5rem .65rem; background: transparent; color: var(--rv-muted); font: 650 .66rem ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: .08em; text-transform: uppercase; }
+    .report-v2 .rv-rule-tabs.nav-tabs .nav-link:hover { color: var(--rv-cyan); border-color: transparent; }
+    .report-v2 .rv-rule-tabs.nav-tabs .nav-link.active, .report-v2 .rv-rule-tabs.nav-tabs .nav-item.show .nav-link { border-color: transparent; border-bottom-color: var(--rv-cyan); background: transparent; color: var(--rv-cyan); text-shadow: 0 0 8px color-mix(in srgb, var(--rv-cyan) 55%, transparent); }
+    .report-v2 .rv-rule-card .rule-tab-content .tab-pane { padding-top: 0; }
+    .report-v2 .rv-rule-card .rule-tab-content pre, .report-v2 .rv-rule-card .rule-wrapper > pre { width: 100%; max-height: none; margin: 0; padding: 1rem; overflow-x: auto; border: 0; border-radius: 0; background: #02060e; color: #bfe0ff; font: .76rem/1.65 ui-monospace, SFMono-Regular, Consolas, monospace; }
+    .report-v2 .rv-rule-card .rule-tab-content pre code { color: inherit; font: inherit; }
+    .report-v2 .rv-rule-card .rv-rule-toolbar + pre { padding-top: 1rem; }
     .report-v2 .rv-raw-tools input { flex: 1 1 12rem; min-width: 10rem; padding: .45rem .6rem; border: 1px solid var(--rv-line); border-radius: 5px; background: var(--rv-panel); color: var(--rv-text); }
     .report-v2 #rawJsonTree { padding: .8rem 1rem; background: var(--rv-panel); color: var(--rv-text); font: .8rem/1.65 ui-monospace, monospace; max-height: 420px; overflow: auto; }
     .report-v2 #rawJsonTree details { margin-left: 1rem; }
@@ -1541,18 +1576,36 @@
 
 <!-- ══ DETECTION RULES — FIX: detection_rules is a DICT {"kql":"...","spl":"...",...} ══ -->
 {% if detection_rules and detection_rules | length > 0 %}
-<div class="card mb-4">
-    <div class="card-header card-header-collapsible d-flex justify-content-between align-items-center"
-         data-bs-toggle="collapse" data-bs-target="#rulesCollapse" aria-expanded="true">
-        <h5 class="mb-0"><i class="bi bi-code-square me-2"></i>Detection Rules</h5>
-        <i class="bi bi-chevron-up collapse-chevron"></i>
+{% set detection_rule_count = namespace(total=0) %}
+{% if detection_rules is mapping %}
+    {% for rule_type, rule_content in detection_rules.items() %}{% if rule_content %}{% set detection_rule_count.total = detection_rule_count.total + 1 %}{% endif %}{% endfor %}
+{% else %}{% set detection_rule_count.total = detection_rules | length %}{% endif %}
+<div class="rv-card rv-rule-card card-print-flow mb-4">
+    <div class="rv-card-head rv-rule-card-head">
+        <button class="rv-rule-collapse-toggle card-header-collapsible" type="button"
+                data-bs-toggle="collapse" data-bs-target="#rulesCollapse" aria-expanded="true">
+            <span class="rv-console-title" role="heading" aria-level="2">Detection Rules</span>
+            <small class="rv-rule-approved-count" data-rule-approved-count
+                   data-analysis-id="{{ job.id | e }}">approved 0 of {{ detection_rule_count.total }}</small>
+            <span class="rv-spacer"></span>
+            <i class="bi bi-chevron-up collapse-chevron rv-rule-collapse-chevron" aria-hidden="true"></i>
+        </button>
+        {% if detection_rules is mapping %}
+        <button class="btn btn-sm btn-outline-primary rv-rule-action no-print"
+                data-rule-action="zip"
+                data-analysis-id="{{ job.id | e }}"
+                disabled aria-disabled="true"
+                title="Approve all selected rules before exporting">
+            Export selected as ZIP
+        </button>
+        {% endif %}
     </div>
     <div class="collapse show" id="rulesCollapse">
         <div class="card-body">
             {% if detection_rules is mapping %}
                 {# Build tabs dynamically from dict keys — FIX: iterate items() not list #}
                 {% set rule_items = detection_rules.items() | list %}
-                <div class="d-flex flex-wrap align-items-center gap-2 mb-3 no-print">
+                <div class="d-flex flex-wrap align-items-center gap-2 mb-3 no-print rv-rule-selection">
                     <span class="small text-muted me-1">Export selection:</span>
                     {% for rule_type, rule_content in rule_items %}
                     {% if rule_content %}
@@ -1565,25 +1618,19 @@
                     </label>
                     {% endif %}
                     {% endfor %}
-                    <button class="btn btn-sm btn-outline-primary ms-auto"
-                            data-rule-action="zip"
-                            data-analysis-id="{{ job.id | e }}"
-                            disabled aria-disabled="true"
-                            title="Approve all selected rules before exporting">
-                        <i class="bi bi-file-earmark-zip me-1"></i>Export selected as ZIP
-                    </button>
-                    <div class="w-100 small text-muted" data-rule-export-status
+                    <div class="w-100 small text-muted rv-rule-export-status" data-rule-export-status
                          data-analysis-id="{{ job.id | e }}" aria-live="polite">
                         Select at least one rule to export.
                     </div>
                 </div>
-                <ul class="nav nav-tabs mb-0" id="ruleTabs" role="tablist">
+                <ul class="nav nav-tabs mb-0 rv-rule-tabs" id="ruleTabs" role="tablist">
                     {% for rule_type, rule_content in rule_items %}
                     {% if rule_content %}
                     <li class="nav-item" role="presentation">
                         <button class="nav-link {% if loop.first %}active{% endif %}"
                                 id="tab-{{ loop.index }}" data-bs-toggle="tab"
-                                data-bs-target="#tabpane-{{ loop.index }}" type="button" role="tab">
+                                data-bs-target="#tabpane-{{ loop.index }}" type="button" role="tab"
+                                aria-controls="tabpane-{{ loop.index }}" aria-selected="{{ 'true' if loop.first else 'false' }}">
                             {{ rule_type | upper | e }}
                         </button>
                     </li>
@@ -1594,66 +1641,67 @@
                     {% for rule_type, rule_content in rule_items %}
                     {% if rule_content %}
                     <div class="tab-pane fade {% if loop.first %}show active{% endif %}"
-                        id="tabpane-{{ loop.index }}" role="tabpanel">
+                        id="tabpane-{{ loop.index }}" role="tabpanel" aria-labelledby="tab-{{ loop.index }}">
                         <div class="rule-wrapper"
                              data-analysis-id="{{ job.id | e }}"
                              data-rule-type="{{ rule_type | lower | e }}">
-                            <div class="rule-copy-actions rule-export-actions no-print">
-                                <button class="btn btn-sm btn-outline-secondary copy-btn"
-                                        data-rule-id="rulecode-{{ loop.index }}"
-                                        title="Copy {{ rule_type | upper | e }} rule">
-                                    <i class="bi bi-clipboard me-1"></i>Copy
-                                </button>
-                                <button class="btn btn-sm btn-outline-secondary copy-btn"
-                                        data-rule-id="rulecode-{{ loop.index }}"
-                                        data-copy-format="{{ rule_type | e }}"
-                                        title="Copy as a Markdown code block">
-                                    <i class="bi bi-markdown me-1"></i>Copy format
-                                </button>
+                            <div class="rule-copy-actions rule-export-actions no-print rv-rule-toolbar">
                                 <span class="badge text-bg-warning align-self-center"
                                       data-rule-status
                                       data-analysis-id="{{ job.id | e }}"
                                       data-rule-type="{{ rule_type | lower | e }}">Pending review</span>
-                                <button class="btn btn-sm btn-outline-success"
+                                <span class="rv-rule-toolbar-spacer"></span>
+                                <button class="btn btn-sm btn-outline-secondary copy-btn rv-rule-action rv-rule-action--muted"
+                                        data-rule-id="rulecode-{{ loop.index }}"
+                                        title="Copy {{ rule_type | upper | e }} rule">
+                                    Copy
+                                </button>
+                                <button class="btn btn-sm btn-outline-secondary copy-btn rv-rule-action rv-rule-action--muted"
+                                        data-rule-id="rulecode-{{ loop.index }}"
+                                        data-copy-format="{{ rule_type | e }}"
+                                        title="Copy as a Markdown code block">
+                                    Copy format
+                                </button>
+                                <button class="btn btn-sm btn-outline-success rv-rule-action rv-rule-action--approve"
                                         data-rule-action="approve"
                                         data-analysis-id="{{ job.id | e }}"
                                         data-rule-type="{{ rule_type | lower | e }}">
-                                    <i class="bi bi-check-circle me-1"></i>Approve export
+                                    Approve export
                                 </button>
-                                <button class="btn btn-sm btn-outline-primary" disabled
+                                <button class="btn btn-sm btn-outline-primary rv-rule-action rv-rule-action--muted" disabled
                                         data-rule-action="download"
                                         data-analysis-id="{{ job.id | e }}"
                                         data-rule-type="{{ rule_type | lower | e }}">
-                                    <i class="bi bi-download me-1"></i>Download
+                                    Download
                                 </button>
-                                <button class="btn btn-sm btn-outline-info" disabled
+                                <button class="btn btn-sm btn-outline-info rv-rule-action rv-rule-action--muted" disabled
                                         data-rule-action="deploy"
                                         data-analysis-id="{{ job.id | e }}"
                                         data-rule-type="{{ rule_type | lower | e }}"
                                         title="Record a manual deployment; this does not contact an external system">
-                                    <i class="bi bi-person-check me-1"></i>Mark as Deployed
+                                    Mark as Deployed
                                 </button>
                                 {% if can_edit_detection_rules %}
-                                <button class="btn btn-sm btn-outline-warning"
+                                <button class="btn btn-sm btn-outline-warning rv-rule-action rv-rule-action--edit"
                                         data-rule-action="edit"
                                         data-analysis-id="{{ job.id | e }}"
                                         data-rule-type="{{ rule_type | lower | e }}"
                                         type="button">
-                                    <i class="bi bi-pencil me-1"></i>Edit
+                                    Edit
                                 </button>
-                                <button class="btn btn-sm btn-outline-success"
+                                <button class="btn btn-sm btn-outline-success rv-rule-action rv-rule-action--approve"
                                         data-rule-action="save"
                                         data-analysis-id="{{ job.id | e }}"
                                         data-rule-type="{{ rule_type | lower | e }}"
                                         type="button" hidden>
-                                    <i class="bi bi-save me-1"></i>Save
+                                    Save
                                 </button>
-                                <button class="btn btn-sm btn-outline-secondary"
+                                <button class="btn btn-sm btn-outline-secondary rv-rule-action rv-rule-action--muted"
                                         data-rule-action="cancel"
                                         data-analysis-id="{{ job.id | e }}"
                                         data-rule-type="{{ rule_type | lower | e }}"
                                         type="button" hidden>
-                                    <i class="bi bi-x-circle me-1"></i>Cancel
+                                    Cancel
                                 </button>
                                 {% endif %}
                             </div>
@@ -1683,35 +1731,35 @@
                         <div class="rule-wrapper"
                              data-analysis-id="{{ job.id | e }}"
                              data-rule-type="{{ fallback_rule_type | e }}">
-                            <div class="rule-copy-actions no-print">
-                                <button class="btn btn-sm btn-outline-secondary copy-btn" data-rule-id="rulecode-list-{{ loop.index }}">
-                                    <i class="bi bi-clipboard me-1"></i>Copy
+                            <div class="rule-copy-actions rule-export-actions no-print rv-rule-toolbar">
+                                <button class="btn btn-sm btn-outline-secondary copy-btn rv-rule-action rv-rule-action--muted" data-rule-id="rulecode-list-{{ loop.index }}">
+                                    Copy
                                 </button>
-                                <button class="btn btn-sm btn-outline-secondary copy-btn" data-rule-id="rulecode-list-{{ loop.index }}"
+                                <button class="btn btn-sm btn-outline-secondary copy-btn rv-rule-action rv-rule-action--muted" data-rule-id="rulecode-list-{{ loop.index }}"
                                         data-copy-format="{{ rule.type | default('rule') | e }}" title="Copy as a Markdown code block">
-                                    <i class="bi bi-markdown me-1"></i>Copy format
+                                    Copy format
                                 </button>
                                 {% if can_edit_detection_rules and fallback_rule_type %}
-                                <button class="btn btn-sm btn-outline-warning"
+                                <button class="btn btn-sm btn-outline-warning rv-rule-action rv-rule-action--edit"
                                         data-rule-action="edit"
                                         data-analysis-id="{{ job.id | e }}"
                                         data-rule-type="{{ fallback_rule_type | e }}"
                                         type="button">
-                                    <i class="bi bi-pencil me-1"></i>Edit
+                                    Edit
                                 </button>
-                                <button class="btn btn-sm btn-outline-success"
+                                <button class="btn btn-sm btn-outline-success rv-rule-action rv-rule-action--approve"
                                         data-rule-action="save"
                                         data-analysis-id="{{ job.id | e }}"
                                         data-rule-type="{{ fallback_rule_type | e }}"
                                         type="button" hidden>
-                                    <i class="bi bi-save me-1"></i>Save
+                                    Save
                                 </button>
-                                <button class="btn btn-sm btn-outline-secondary"
+                                <button class="btn btn-sm btn-outline-secondary rv-rule-action rv-rule-action--muted"
                                         data-rule-action="cancel"
                                         data-analysis-id="{{ job.id | e }}"
                                         data-rule-type="{{ fallback_rule_type | e }}"
                                         type="button" hidden>
-                                    <i class="bi bi-x-circle me-1"></i>Cancel
+                                    Cancel
                                 </button>
                                 {% endif %}
                             </div>
@@ -1729,13 +1777,13 @@
                         </div>
                     {% else %}
                         <div class="rule-wrapper">
-                            <div class="rule-copy-actions no-print">
-                                <button class="btn btn-sm btn-outline-secondary copy-btn" data-rule-id="rulecode-list-{{ loop.index }}">
-                                    <i class="bi bi-clipboard me-1"></i>Copy
+                            <div class="rule-copy-actions rule-export-actions no-print rv-rule-toolbar">
+                                <button class="btn btn-sm btn-outline-secondary copy-btn rv-rule-action rv-rule-action--muted" data-rule-id="rulecode-list-{{ loop.index }}">
+                                    Copy
                                 </button>
-                                <button class="btn btn-sm btn-outline-secondary copy-btn" data-rule-id="rulecode-list-{{ loop.index }}"
+                                <button class="btn btn-sm btn-outline-secondary copy-btn rv-rule-action rv-rule-action--muted" data-rule-id="rulecode-list-{{ loop.index }}"
                                         data-copy-format="text" title="Copy as a Markdown code block">
-                                    <i class="bi bi-markdown me-1"></i>Copy format
+                                    Copy format
                                 </button>
                             </div>
                             <pre id="rulecode-list-{{ loop.index }}"><code>{{ rule | e }}</code></pre>

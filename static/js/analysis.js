@@ -2062,16 +2062,28 @@
 
     function refreshRuleExportSummary(analysisId) {
         var selected = [];
+        var allRuleCount = 0;
+        var approvedRuleCount = 0;
         document.querySelectorAll('[data-rule-select]').forEach(function (checkbox) {
-            if (checkbox.getAttribute('data-analysis-id') !== analysisId || !checkbox.checked) return;
+            if (checkbox.getAttribute('data-analysis-id') !== analysisId) return;
             var ruleType = checkbox.getAttribute('data-rule-type');
             var label = checkbox.nextElementSibling ?
                 checkbox.nextElementSibling.textContent.trim() : ruleType.toUpperCase();
+            var approved = isRuleApproved(ruleApprovalStates[ruleApprovalStateKey(analysisId, ruleType)]);
+            allRuleCount += 1;
+            if (approved) approvedRuleCount += 1;
+            if (!checkbox.checked) return;
             selected.push({
                 type: ruleType,
                 label: label,
-                approved: isRuleApproved(ruleApprovalStates[ruleApprovalStateKey(analysisId, ruleType)])
+                approved: approved
             });
+        });
+
+        document.querySelectorAll('[data-rule-approved-count]').forEach(function (element) {
+            if (element.getAttribute('data-analysis-id') === analysisId && allRuleCount) {
+                element.textContent = 'approved ' + approvedRuleCount + ' of ' + allRuleCount;
+            }
         });
 
         var approvedCount = selected.filter(function (rule) { return rule.approved; }).length;
