@@ -290,10 +290,18 @@ def _source_detail_text(
     detail = "No additional detail"
 
     if cls == "error":
-        error_text = str(data.get("error") or "")
-        http_match = re.search(r"\bHTTP\s+(\d{3})\b", error_text, re.IGNORECASE)
-        if http_match:
-            code = http_match.group(1)
+        http_status = data.get("http_status")
+        if (
+            isinstance(http_status, int)
+            and not isinstance(http_status, bool)
+            and 100 <= http_status <= 599
+        ):
+            code = f"{http_status:03d}"
+        else:
+            error_text = str(data.get("error") or "")
+            http_match = re.search(r"\bHTTP\s+(\d{3})\b", error_text, re.IGNORECASE)
+            code = http_match.group(1) if http_match else None
+        if code:
             if code in {"401", "403"}:
                 return f"Authentication failed (HTTP {code}). Source not evaluated."
             return f"Request failed (HTTP {code}). Source not evaluated."

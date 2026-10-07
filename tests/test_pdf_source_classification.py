@@ -94,6 +94,12 @@ def test_pdf_source_detail_error_cases_are_safe(source_data, expected):
     assert "C:\\secret\\key" not in detail
 
 
+def test_pdf_source_detail_uses_safe_http_status_without_error_text():
+    assert _source_detail_text(
+        "circl", {"http_status": 401}, "error", "domain"
+    ) == "Authentication failed (HTTP 401). Source not evaluated."
+
+
 def test_pdf_source_detail_reported_non_scoring_source_adds_context():
     detail = _source_detail_text(
         "example_report_only",
