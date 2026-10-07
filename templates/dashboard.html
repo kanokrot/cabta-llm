@@ -6,7 +6,11 @@
 
 {% block extra_head %}
 <style>
-    .dash-page { padding-top: 0; }
+    .dash-page {
+        --dash-verdict-phishing: color-mix(in srgb, var(--color-info) 60%, var(--text-primary));
+        --dash-verdict-spam: color-mix(in srgb, var(--color-warning) 35%, var(--text-primary));
+        padding-top: 56px;
+    }
     body:has(.dash-page) .sub-header {
         height: 0;
         min-height: 0;
@@ -18,7 +22,7 @@
     .dash-shell {
         max-width: 1280px;
         margin: 0 auto;
-        padding: 32px 24px 48px;
+        padding: 32px 20px 48px;
     }
     .dash-layout {
         display: grid;
@@ -64,9 +68,14 @@
     .dash-total--malicious { color: var(--color-danger); }
     .dash-total--suspicious { color: var(--color-warning); }
     .dash-total--clean { color: var(--color-success); }
+    .dash-page #stat-total-analyses { color: var(--text-primary); }
+    [data-theme="dark"] .dash-page .dash-total--malicious { color: var(--color-danger); }
+    [data-theme="dark"] .dash-page .dash-total--suspicious { color: var(--color-warning); }
+    [data-theme="dark"] .dash-page .dash-total--clean { color: var(--color-success); }
     .dash-status { min-height: 1.25em; margin: 0; color: var(--text-secondary); font-size: 12px; }
     .dash-verdict-bar {
         display: flex;
+        gap: 2px;
         width: 100%;
         height: 14px;
         overflow: hidden;
@@ -76,9 +85,11 @@
     }
     .dash-verdict-segment { min-width: 0; height: 100%; }
     .dash-segment--malicious { background: var(--color-danger); }
+    .dash-segment--phishing { background: var(--dash-verdict-phishing); }
     .dash-segment--suspicious { background: var(--color-warning); }
+    .dash-segment--spam { background: var(--dash-verdict-spam); }
     .dash-segment--clean { background: var(--color-success); }
-    .dash-segment--other { background: var(--text-muted); }
+    .dash-segment--unknown { background: var(--text-muted); }
     .dash-legend { display: grid; }
     .dash-legend-row {
         display: flex;
@@ -97,6 +108,62 @@
     .dash-legend-count { color: var(--text-primary); font-weight: 600; }
     .dash-chart-wrap { width: 100%; min-width: 0; }
     .dash-chart { display: block; width: 100%; height: auto; overflow: visible; }
+    .dash-map-wrap { width: 100%; min-width: 0; margin: 16px 0; overflow: hidden; border: 1px solid var(--border-color); border-radius: 12px; }
+    .dash-page .dash-country-card > .card-body { padding: 18px; }
+    .dash-map { display: block; width: 100%; height: auto; aspect-ratio: 1050 / 414; overflow: visible; background: color-mix(in srgb, var(--bg-card) 88%, var(--text-muted)); }
+    [data-theme="dark"] .dash-map { background: color-mix(in srgb, var(--bg-card) 94%, var(--bg-primary)); }
+    .dash-map-graticule { fill: none; stroke: color-mix(in srgb, var(--text-muted) 22%, transparent); stroke-width: 1; }
+    .dash-map-land { --dash-map-land-fill: color-mix(in srgb, var(--text-muted) 28%, var(--bg-card)); fill: var(--dash-map-land-fill); }
+    .dash-map-borders { stroke: color-mix(in srgb, var(--text-muted) 45%, transparent); stroke-width: .6px; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+    .dash-map-country { stroke: color-mix(in srgb, var(--text-muted) 45%, transparent); stroke-width: .6px; vector-effect: non-scaling-stroke; stroke-linejoin: round; transition: fill 140ms ease, stroke 140ms ease; }
+    .dash-map-country--malicious { --dash-map-verdict: var(--color-danger); }
+    .dash-map-country--phishing { --dash-map-verdict: var(--dash-verdict-phishing); }
+    .dash-map-country--suspicious { --dash-map-verdict: var(--color-warning); }
+    .dash-map-country--spam { --dash-map-verdict: var(--dash-verdict-spam); }
+    .dash-map-country--clean { --dash-map-verdict: var(--color-success); }
+    .dash-map-country--other { --dash-map-verdict: var(--text-muted); }
+    .dash-map-country[class*="dash-map-country--"] { fill: color-mix(in srgb, var(--dash-map-verdict) 38%, var(--dash-map-land-fill)); stroke: color-mix(in srgb, var(--dash-map-verdict) 68%, var(--text-muted)); }
+    .dash-map-country[class*="dash-map-country--"]:hover,
+    .dash-map-country[class*="dash-map-country--"]:focus-visible { fill: color-mix(in srgb, var(--dash-map-verdict) 58%, var(--dash-map-land-fill)); stroke: color-mix(in srgb, var(--dash-map-verdict) 82%, var(--text-muted)); }
+    .dash-map-marker { stroke: var(--bg-card); stroke-width: 3; }
+    .dash-map-label { fill: var(--text-primary); font: 600 12px ui-sans-serif, system-ui, sans-serif; paint-order: stroke; stroke: var(--bg-card); stroke-width: 4px; stroke-linejoin: round; }
+    .dash-map-legend { display: flex; flex-wrap: wrap; gap: 8px 20px; margin: 12px 0 4px; }
+    .dash-map-legend-item { display: inline-flex; align-items: center; gap: 7px; min-height: 24px; color: var(--text-secondary); font-size: 12px; }
+    .dash-map-legend-dot { width: 9px; height: 9px; border-radius: 50%; }
+    .dash-map-legend-dot--danger { background: var(--color-danger); }
+    .dash-map-legend-dot--phishing { background: var(--dash-verdict-phishing); }
+    .dash-map-legend-dot--warning { background: var(--color-warning); }
+    .dash-map-legend-dot--spam { background: var(--dash-verdict-spam); }
+    .dash-map-legend-dot--success { background: var(--color-success); }
+    .dash-map-legend-dot--neutral { background: var(--text-muted); }
+    .dash-map-marker-halo--danger { fill: color-mix(in srgb, var(--color-danger) 22%, transparent); }
+    .dash-map-marker-halo--phishing { fill: color-mix(in srgb, var(--dash-verdict-phishing) 22%, transparent); }
+    .dash-map-marker-halo--warning { fill: color-mix(in srgb, var(--color-warning) 22%, transparent); }
+    .dash-map-marker-halo--spam { fill: color-mix(in srgb, var(--dash-verdict-spam) 22%, transparent); }
+    .dash-map-marker-halo--success { fill: color-mix(in srgb, var(--color-success) 22%, transparent); }
+    .dash-map-marker-halo--neutral { fill: color-mix(in srgb, var(--text-muted) 22%, transparent); }
+    .dash-map-marker--danger { fill: var(--color-danger); }
+    .dash-map-marker--phishing { fill: var(--dash-verdict-phishing); }
+    .dash-map-marker--warning { fill: var(--color-warning); }
+    .dash-map-marker--spam { fill: var(--dash-verdict-spam); }
+    .dash-map-marker--success { fill: var(--color-success); }
+    .dash-map-marker--neutral { fill: var(--text-muted); }
+    .dash-country-heading { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 16px; margin: 8px 0 6px; }
+    .dash-country-heading h3 { margin: 0; color: var(--text-primary); font-size: 13px; font-weight: 600; }
+    .dash-country-not-mapped { margin: 0; color: var(--text-muted); font-size: 12px; }
+    .dash-country-list { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none; }
+    .dash-country-item { min-width: 0; padding: 10px; background: color-mix(in srgb, var(--bg-card) 80%, var(--border-color)); border: 1px solid var(--border-color); border-radius: 10px; }
+    .dash-country-name { display: block; overflow: hidden; color: var(--text-primary); font-size: 12px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+    .dash-country-count { display: block; margin-top: 3px; color: var(--text-secondary); font-size: 12px; }
+    .dash-country-verdict { display: block; margin-top: 5px; font-size: 11px; font-weight: 600; }
+    .dash-country-verdict--danger { color: var(--color-danger); }
+    .dash-country-verdict--phishing { color: var(--dash-verdict-phishing); }
+    .dash-country-verdict--warning { color: var(--color-warning); }
+    .dash-country-verdict--spam { color: var(--dash-verdict-spam); }
+    .dash-country-verdict--success { color: var(--color-success); }
+    .dash-country-verdict--neutral { color: var(--text-muted); }
+    .dash-country-empty { margin: 8px 0 0; color: var(--text-secondary); font-size: 13px; }
+    .dash-country-coverage { margin: 14px 0 0; padding-top: 10px; color: var(--text-secondary); border-top: 1px solid var(--border-color); font-size: 12px; }
     .dash-chart-grid { stroke: var(--border-color); stroke-width: 1; }
     .dash-chart-label { fill: var(--text-muted); font-size: 10px; }
     .dash-chart-line { fill: none; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
@@ -174,7 +241,9 @@
         white-space: nowrap;
     }
     .dash-pill--danger { color: var(--color-danger); background: color-mix(in srgb, var(--color-danger) 12%, var(--bg-card)); border-color: color-mix(in srgb, var(--color-danger) 35%, var(--border-color)); }
+    .dash-pill--phishing { color: var(--dash-verdict-phishing); background: color-mix(in srgb, var(--dash-verdict-phishing) 12%, var(--bg-card)); border-color: color-mix(in srgb, var(--dash-verdict-phishing) 35%, var(--border-color)); }
     .dash-pill--warning { color: var(--color-warning); background: color-mix(in srgb, var(--color-warning) 12%, var(--bg-card)); border-color: color-mix(in srgb, var(--color-warning) 35%, var(--border-color)); }
+    .dash-pill--spam { color: var(--dash-verdict-spam); background: color-mix(in srgb, var(--dash-verdict-spam) 12%, var(--bg-card)); border-color: color-mix(in srgb, var(--dash-verdict-spam) 35%, var(--border-color)); }
     .dash-pill--success { color: var(--color-success); background: color-mix(in srgb, var(--color-success) 12%, var(--bg-card)); border-color: color-mix(in srgb, var(--color-success) 35%, var(--border-color)); }
     .dash-pill--neutral { color: var(--text-secondary); background: color-mix(in srgb, var(--text-muted) 10%, var(--bg-card)); }
     .dash-feed-list { display: grid; gap: 10px; }
@@ -215,7 +284,10 @@
     @media (max-width: 900px) {
         .dash-layout { grid-template-columns: minmax(0, 1fr); }
         .dash-analytics-row { grid-template-columns: minmax(0, 1fr); }
-        .dash-shell { padding: 24px 18px 36px; }
+        .dash-shell { padding: 24px 20px 36px; }
+        .dash-map { min-height: 220px; }
+        .dash-map-label { display: none; }
+        .dash-page .dash-country-card > .card-body { padding: 18px; }
     }
     @media (max-width: 560px) {
         .dash-hero { align-items: flex-start; padding: 18px; }
@@ -226,6 +298,7 @@
         .dash-card > .card-body { padding: 15px; }
         .dash-score-bars { gap: 6px; }
         .dash-score-label { font-size: 10px; }
+        .dash-country-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
     @media (prefers-reduced-motion: reduce) {
         .dash-page *, .dash-page *::before, .dash-page *::after {
@@ -255,6 +328,34 @@
                         <div><div class="dash-total-value dash-total--clean" id="stat-clean">—</div><div class="dash-total-label">CLEAN</div></div>
                     </div>
                     <p class="dash-status" id="dash-data-status" role="status" aria-live="polite"></p>
+                </section>
+
+                <section class="dash-card dash-country-card" aria-labelledby="dash-country-title">
+                    <header class="card-header"><div><h2 class="dash-card-title" id="dash-country-title">Indicator locations</h2><p class="dash-subtitle">Hosting country of IP indicators, unique IPs. Only IP indicators have a country.</p></div></header>
+                    <div class="card-body">
+                        <div class="dash-map-wrap">
+                            <svg class="dash-map" id="dash-country-map" viewBox="0 0 1050 414" role="img" aria-label="Indicator locations by country">
+                                <path class="dash-map-graticule" d="M60 0V414 M150 0V414 M240 0V414 M330 0V414 M420 0V414 M510 0V414 M600 0V414 M690 0V414 M780 0V414 M870 0V414 M960 0V414 M1050 0V414 M0 60H1050 M0 150H1050 M0 240H1050 M0 330H1050" />
+                                {% include "partials/world_map_paths.html" %}
+                                <g id="dash-country-markers"></g>
+                            </svg>
+                        </div>
+                        <div class="dash-map-legend" aria-label="Map verdict legend">
+                            <span class="dash-map-legend-item"><i class="dash-map-legend-dot dash-map-legend-dot--danger" aria-hidden="true"></i>Malicious</span>
+                            <span class="dash-map-legend-item"><i class="dash-map-legend-dot dash-map-legend-dot--phishing" aria-hidden="true"></i>Phishing</span>
+                            <span class="dash-map-legend-item"><i class="dash-map-legend-dot dash-map-legend-dot--warning" aria-hidden="true"></i>Suspicious</span>
+                            <span class="dash-map-legend-item"><i class="dash-map-legend-dot dash-map-legend-dot--spam" aria-hidden="true"></i>Spam</span>
+                            <span class="dash-map-legend-item"><i class="dash-map-legend-dot dash-map-legend-dot--success" aria-hidden="true"></i>Clean</span>
+                            <span class="dash-map-legend-item"><i class="dash-map-legend-dot dash-map-legend-dot--neutral" aria-hidden="true"></i>Other</span>
+                        </div>
+                        <div class="dash-country-heading">
+                            <h3>Top countries</h3>
+                            <p class="dash-country-not-mapped" id="dash-country-not-mapped">Not on map: —</p>
+                        </div>
+                        <ul class="dash-country-list" id="dash-country-list" aria-live="polite"></ul>
+                        <p class="dash-country-empty" id="dash-country-empty">Country data is loading.</p>
+                        <p class="dash-country-coverage" id="dash-country-coverage">— of — analyses have a country (IP indicators only)</p>
+                    </div>
                 </section>
 
                 <section class="dash-card" aria-labelledby="dash-verdict-title">
@@ -313,8 +414,10 @@
                                         <td>{{ params.get('ioc_type') or job.analysis_type or '—' }}</td>
                                         <td>
                                             {% set verdict = job.verdict or 'UNKNOWN' %}
-                                            {% if verdict in ['MALICIOUS', 'PHISHING'] %}{% set verdict_class = 'dash-pill--danger' %}
-                                            {% elif verdict in ['SUSPICIOUS', 'SPAM'] %}{% set verdict_class = 'dash-pill--warning' %}
+                                            {% if verdict == 'MALICIOUS' %}{% set verdict_class = 'dash-pill--danger' %}
+                                            {% elif verdict == 'PHISHING' %}{% set verdict_class = 'dash-pill--phishing' %}
+                                            {% elif verdict == 'SUSPICIOUS' %}{% set verdict_class = 'dash-pill--warning' %}
+                                            {% elif verdict == 'SPAM' %}{% set verdict_class = 'dash-pill--spam' %}
                                             {% elif verdict == 'CLEAN' %}{% set verdict_class = 'dash-pill--success' %}
                                             {% else %}{% set verdict_class = 'dash-pill--neutral' %}{% endif %}
                                             <span class="dash-pill {{ verdict_class }}">{{ verdict }}</span>

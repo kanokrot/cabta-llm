@@ -1220,7 +1220,7 @@ def serialize_dashboard_stats(stats: Mapping[str, Any], role: str) -> dict[str, 
         "queued_analyses", "malicious_count", "suspicious_count", "clean_count",
         "average_score", "avg_score", "total_cases", "open_cases",
         "phishing_count", "spam_count", "unknown_count",
-        "daily_counts", "score_buckets",
+        "daily_counts", "score_buckets", "country_covered",
     }
     output = {
         key: stats[key]
@@ -1252,6 +1252,40 @@ def serialize_dashboard_stats(stats: Mapping[str, Any], role: str) -> dict[str, 
             and isinstance(item.get("label"), str)
             and isinstance(item.get("count"), int)
         ]
+    country_stats = stats.get("country_stats")
+    if isinstance(country_stats, list):
+        serialized_countries = []
+        valid_verdicts = {"MALICIOUS", "SUSPICIOUS", "CLEAN", "PHISHING", "SPAM", "UNKNOWN"}
+        for item in country_stats:
+            if not isinstance(item, Mapping):
+                continue
+            code = item.get("code")
+            worst_verdict = item.get("worst_verdict")
+            ips = item.get("ips")
+            analyses = item.get("analyses")
+            if (
+                not isinstance(code, str)
+                or len(code) != 2
+                or not code.isascii()
+                or not code.isalpha()
+                or not isinstance(ips, int)
+                or isinstance(ips, bool)
+                or not isinstance(analyses, int)
+                or isinstance(analyses, bool)
+                or not isinstance(worst_verdict, str)
+                or worst_verdict.upper() not in valid_verdicts
+            ):
+                continue
+            serialized_countries.append({
+                "code": code.upper(),
+                "ips": ips,
+                "analyses": analyses,
+                "worst_verdict": worst_verdict.upper(),
+            })
+        serialized_countries.sort(
+            key=lambda item: (-item["ips"], -item["analyses"], item["code"])
+        )
+        output["country_stats"] = serialized_countries[:50]
     return output
 
 

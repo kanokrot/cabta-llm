@@ -6,6 +6,7 @@ SQLite-backed analysis job queue with asyncio support.
 """
 
 import asyncio
+import ipaddress
 import json
 import logging
 import sqlite3
@@ -659,6 +660,9 @@ class AnalysisManager:
             "SELECT verdict, score, created_at FROM analysis_jobs "
             "WHERE status = 'completed'"
         ).fetchall()
+        country_jobs = conn.execute(
+            "SELECT verdict, result FROM analysis_jobs WHERE status = 'completed'"
+        ).fetchall()
         conn.close()
 
         if row is None:
@@ -674,6 +678,8 @@ class AnalysisManager:
         }
         score_labels = ('0-20', '21-40', '41-60', '61-80', '81-100')
         score_counts = [0] * len(score_labels)
+        country_covered = 0
+        countries = {}
 
         for verdict, score, created_at in jobs:
             group = (
@@ -712,6 +718,63 @@ class AnalysisManager:
                     else:
                         score_counts[4] += 1
 
+        verdict_severity = {'MALICIOUS': 3, 'SUSPICIOUS': 2, 'CLEAN': 1}
+        for verdict, result_json in country_jobs:
+            try:
+                result = json.loads(result_json or '{}')
+            except (TypeError, ValueError):
+                continue
+            if not isinstance(result, dict):
+                continue
+
+            raw_code = result.get('country_code')
+            if (
+                not isinstance(raw_code, str)
+                or len(raw_code.strip()) != 2
+                or not raw_code.strip().isascii()
+                or not raw_code.strip().isalpha()
+            ):
+                continue
+            code = raw_code.strip().upper()
+            country_covered += 1
+
+            indicator = result.get('ioc')
+            if not isinstance(indicator, str) or not indicator.strip():
+                continue
+            try:
+                indicator = str(ipaddress.ip_address(indicator.strip()))
+            except ValueError:
+                continue
+
+            country = countries.setdefault(code, {
+                'indicators': set(), 'analyses': 0, 'worst_verdict': None,
+            })
+            country['indicators'].add(indicator)
+            country['analyses'] += 1
+            normalized_verdict = str(verdict or 'UNKNOWN').strip().upper() or 'UNKNOWN'
+            if normalized_verdict not in {
+                'MALICIOUS', 'SUSPICIOUS', 'CLEAN', 'PHISHING', 'SPAM', 'UNKNOWN',
+            }:
+                normalized_verdict = 'UNKNOWN'
+            current = country['worst_verdict']
+            if (
+                current is None
+                or verdict_severity.get(normalized_verdict, 0)
+                > verdict_severity.get(current, 0)
+            ):
+                country['worst_verdict'] = normalized_verdict
+
+        country_stats = [
+            {
+                'code': code,
+                'ips': len(country['indicators']),
+                'analyses': country['analyses'],
+                'worst_verdict': country['worst_verdict'] or 'UNKNOWN',
+            }
+            for code, country in countries.items()
+        ]
+        country_stats.sort(key=lambda item: (-item['ips'], -item['analyses'], item['code']))
+
         return {
             'total_analyses': row[0] or 0,
             'malicious_count': row[1] or 0,
@@ -729,6 +792,8 @@ class AnalysisManager:
                 {'label': label, 'count': count}
                 for label, count in zip(score_labels, score_counts)
             ],
+            'country_covered': country_covered,
+            'country_stats': country_stats[:50],
         }
 
     # ------------------------------------------------------------------ #

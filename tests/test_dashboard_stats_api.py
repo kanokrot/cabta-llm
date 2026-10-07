@@ -11,13 +11,21 @@ from src.web.auth import get_current_user
 from src.web.routes import dashboard as dashboard_routes
 
 
-def _seed_job(manager: AnalysisManager, verdict: str, score, created_at: str) -> None:
+def _seed_job(
+    manager: AnalysisManager,
+    verdict: str,
+    score,
+    created_at: str,
+    *,
+    indicator: str | None = None,
+    result: dict | None = None,
+) -> str:
     job_id = manager.create_job(
         "ioc",
-        {"value": f"indicator-{verdict}-{score}", "ioc_type": "ip"},
+        {"value": indicator or f"indicator-{verdict}-{score}", "ioc_type": "ip"},
         user_id=909,
     )
-    manager.complete_job(job_id, {}, verdict=verdict, score=score)
+    manager.complete_job(job_id, result or {}, verdict=verdict, score=score)
     conn = manager._connect()
     try:
         conn.execute(
@@ -27,6 +35,7 @@ def _seed_job(manager: AnalysisManager, verdict: str, score, created_at: str) ->
         conn.commit()
     finally:
         conn.close()
+    return job_id
 
 
 def _stats_client(manager: AnalysisManager, role: str) -> TestClient:
@@ -108,6 +117,8 @@ def test_dashboard_stats_additive_verdict_daily_and_score_aggregations(seeded_ma
         {"label": "61-80", "count": 0},
         {"label": "81-100", "count": 2},
     ]
+    assert payload["country_covered"] == 0
+    assert payload["country_stats"] == []
     assert "user_id" not in response.text
 
 
@@ -125,6 +136,8 @@ def test_dashboard_stats_new_keys_keep_existing_role_access(seeded_manager, role
     assert payload["total_analyses"] == 9
     assert "daily_counts" in payload
     assert "score_buckets" in payload
+    assert "country_stats" in payload
+    assert "country_covered" in payload
     assert "user_id" not in payload
 
 
@@ -133,3 +146,70 @@ def test_dashboard_stats_still_denies_unlisted_roles(seeded_manager) -> None:
     with _stats_client(manager, "Viewer") as client:
         response = client.get("/api/dashboard/stats")
     assert response.status_code == 403
+
+
+def test_dashboard_country_stats_count_unique_ips_and_worst_verdict(seeded_manager) -> None:
+    manager, _today = seeded_manager
+    timestamp = "2026-10-01T00:00:00+00:00"
+    common = {"ioc_type": "ipv4"}
+    _seed_job(
+        manager, "MALICIOUS", 90, timestamp, indicator="8.8.8.8",
+        result={**common, "ioc": "8.8.8.8", "country_code": "us"},
+    )
+    _seed_job(
+        manager, "SUSPICIOUS", 55, timestamp, indicator="8.8.8.8",
+        result={**common, "ioc": "8.8.8.8", "country_code": "US"},
+    )
+    _seed_job(
+        manager, "CLEAN", 5, timestamp, indicator="1.1.1.1",
+        result={**common, "ioc": "1.1.1.1", "country_code": "US"},
+    )
+    _seed_job(
+        manager, "PHISHING", 85, timestamp, indicator="9.9.9.9",
+        result={**common, "ioc": "9.9.9.9", "country_code": "US"},
+    )
+    for verdict, score in (("CLEAN", 10), ("PHISHING", 80), ("SPAM", 60), ("UNKNOWN", 0)):
+        _seed_job(
+            manager, verdict, score, timestamp, indicator="8.8.8.8",
+            result={**common, "ioc": "8.8.8.8", "country_code": "CA"},
+        )
+    for verdict, score in (("CLEAN", 10), ("SUSPICIOUS", 55)):
+        _seed_job(
+            manager, verdict, score, timestamp, indicator="2.2.2.2",
+            result={**common, "ioc": "2.2.2.2", "country_code": "DE"},
+        )
+    _seed_job(
+        manager, "MALICIOUS", 99, timestamp, indicator="4.4.4.4",
+        result={**common, "ioc": "4.4.4.4"},
+    )
+    bad_json_id = _seed_job(
+        manager, "MALICIOUS", 99, timestamp, indicator="5.5.5.5",
+        result={**common, "ioc": "5.5.5.5", "country_code": "AU"},
+    )
+    _seed_job(
+        manager, "MALICIOUS", 99, timestamp, indicator="6.6.6.6",
+        result={**common, "ioc": "6.6.6.6", "country_code": "AUS"},
+    )
+    conn = manager._connect()
+    try:
+        conn.execute("UPDATE analysis_jobs SET result = ? WHERE id = ?", ("not-json", bad_json_id))
+        conn.commit()
+    finally:
+        conn.close()
+
+    with _stats_client(manager, "SOC Analyst Tier 1-2") as client:
+        response = client.get("/api/dashboard/stats")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["country_covered"] == 10
+    assert payload["country_stats"] == [
+        {"code": "US", "ips": 3, "analyses": 4, "worst_verdict": "MALICIOUS"},
+        {"code": "CA", "ips": 1, "analyses": 4, "worst_verdict": "CLEAN"},
+        {"code": "DE", "ips": 1, "analyses": 2, "worst_verdict": "SUSPICIOUS"},
+    ]
+    assert all(ip not in response.text for ip in (
+        "8.8.8.8", "1.1.1.1", "9.9.9.9", "4.4.4.4", "5.5.5.5", "6.6.6.6", "2.2.2.2",
+    ))
+    assert "909" not in response.text
+    assert "AUS" not in {item["code"] for item in payload["country_stats"]}
