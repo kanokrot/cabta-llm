@@ -171,6 +171,18 @@
             background: var(--bg-hover, rgba(255,255,255,0.06));
         }
 
+        .navbar-controls .navbar-account-link {
+            width: auto;
+            flex: 0 0 auto;
+            gap: 0.35rem;
+            padding: 0 0.55rem;
+        }
+
+        .navbar-controls .navbar-account-link.active {
+            color: var(--accent, #3b82f6);
+            background: rgba(59, 130, 246, 0.12);
+        }
+
         /* System status dot */
         .system-status-dot {
             width: 8px;
@@ -202,8 +214,10 @@
         .navbar-user-badge {
             display: inline-flex;
             align-items: center;
+            flex: 0 1 auto;
             gap: 0.35rem;
             max-width: 220px;
+            min-width: 0;
             padding: 0.25rem 0.55rem;
             border: 1px solid var(--border-color);
             border-radius: 20px;
@@ -230,6 +244,9 @@
 
         .navbar-user-role {
             color: var(--text-primary);
+            max-width: 105px;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
         /* ── Sub-header / Status Bar ───────────────────────────── */
@@ -530,11 +547,17 @@
                 {% if request.state.user is defined %}
                 {% set nav_user = request.state.user %}
                 {% set nav_identity = nav_user.get('username') or nav_user.get('email') %}
-                <a href="/account" class="navbar-user-badge {% if request.url.path == '/account' %}active{% endif %}" title="Account" aria-label="Account">
+                <span class="navbar-user-badge" title="{{ nav_user.get('role', '') | e }}">
                     <i class="bi bi-person-circle"></i>
                     <span class="navbar-user-name d-none d-md-inline">{{ nav_identity | e }}</span>
                     <span class="navbar-user-role">{{ nav_user.get('role', '') | e }}</span>
+                </span>
+                {% if nav_user.get('role') != 'admin' %}
+                <a href="/account" class="btn-nav-icon navbar-account-link {% if request.url.path == '/account' %}active{% endif %}" title="My settings" aria-label="My settings">
+                    <i class="bi bi-person-gear"></i>
+                    <span class="d-none d-lg-inline">My settings</span>
                 </a>
+                {% endif %}
                 {% endif %}
                 <!-- Logout -->
                 <button id="logout-button" type="button" class="btn-nav-icon" title="Logout" aria-label="Logout">

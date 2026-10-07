@@ -189,7 +189,8 @@ def test_settings_template_has_three_tabs_registry_js_and_restart_text():
     assert "@media (min-width: 992px)" in template
     assert "connecting wazuh? more" in template
     assert "info.config_path" in template and "info.data_dir" in template
-    assert "{% if nav_admin %}settings{% else %}account{% endif %}</h1>" in template
+    assert "{% if nav_admin and not on_account %}settings{% else %}my settings{% endif %}</h1>" in template
+    assert "my settings" in template
     assert "admin only" in template
     assert 'href="/settings#general"' in template
     assert 'href="/settings#sources"' in template

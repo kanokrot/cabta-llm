@@ -101,7 +101,7 @@ def test_every_authenticated_role_can_manage_own_keys(tmp_path, monkeypatch, rol
 def test_account_api_key_card_shows_disabled_message_and_three_sources():
     template = (ROOT / "templates" / "account.html").read_text(encoding="utf-8")
     script = (ROOT / "static" / "js" / "account_api_keys.js").read_text(encoding="utf-8")
-    assert "Personal API keys are not enabled on this server." in template
+    assert "Personal API keys are not enabled yet. Ask an administrator to enable them." in template
     assert "VirusTotal" in script and "AbuseIPDB" in script and "AlienVault OTX" in script
     assert "masked_suffix" in script
 

@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
-{% block title %}Account - Blue Team Assistant{% endblock %}
-{% block page_title %}Account{% endblock %}
+{% block title %}My settings - Blue Team Assistant{% endblock %}
+{% block page_title %}My settings{% endblock %}
 {% block page_subtitle %}{% endblock %}
 
 {% block extra_head %}
@@ -31,7 +31,7 @@
     {% include "partials/settings_nav.html" %}
     <main class="settings-main">
     {% else %}
-    <h1 class="h3 mb-4">Account</h1>
+    <h1 class="h3 mb-4">My settings</h1>
     {% endif %}
     <div class="row g-4">
         {% if request.state.user is defined %}
@@ -88,7 +88,7 @@
                 </div>
                 <div class="card-body">
                     <div id="userApiKeysError" class="alert alert-danger py-2" style="display:none;"></div>
-                    <div id="userApiKeysDisabled" class="alert alert-info py-2" style="display:none;">Personal API keys are not enabled on this server.</div>
+                    <div id="userApiKeysDisabled" class="alert alert-info py-2" style="display:none;">Personal API keys are not enabled yet. Ask an administrator to enable them.</div>
                     <div id="userApiKeysRows" class="vstack gap-3">
                         <div class="text-muted small">Loading key status...</div>
                     </div>
