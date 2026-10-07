@@ -436,6 +436,8 @@ def test_preserved_dom_contracts():
     )
 
     for element_id in (
+        "reportToolbar",
+        "btnCopyReportLink",
         "reportExportDropdown",
         "btnExportReportJson",
         "reportPrintDropdown",

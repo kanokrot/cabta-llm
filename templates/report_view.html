@@ -120,6 +120,30 @@
     .report-v2 { --rv-cyan: #00cfe8; --rv-red: #dc3545; --rv-amber: #d99a00; --rv-green: #198754; --rv-hero-grid: color-mix(in srgb, var(--rv-line) 38%, transparent); }
     [data-theme="dark"] .report-v2 { --rv-cyan: #00e5ff; --rv-red: #ff3b6b; --rv-amber: #ffc233; --rv-green: #2cff9a; --rv-hero-grid: #16335a55; }
     [data-theme="light"] .report-v2 { --rv-cyan: #0088aa; --rv-red: #c6283d; --rv-amber: #9b6500; --rv-green: #167344; --rv-hero-grid: #c9d8ee66; }
+    .report-v2 { --rv-toolbar-cyan: #5fd0ee; --rv-toolbar-border: #1f6f8f; --rv-toolbar-fill: #0f3a52; --rv-toolbar-hover: #164b66; --rv-toolbar-muted: var(--rv-muted); }
+    [data-theme="light"] .report-v2 { --rv-toolbar-cyan: #075a73; --rv-toolbar-border: #2785a2; --rv-toolbar-fill: #e3f5fa; --rv-toolbar-hover: #d3eef5; --rv-toolbar-muted: #52677a; }
+    .report-v2 .rv-report-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .75rem; margin-bottom: 1.25rem; }
+    .report-v2 .rv-toolbar-left, .report-v2 .rv-toolbar-actions { display: flex; align-items: center; gap: .5rem; min-width: 0; }
+    .report-v2 .rv-toolbar-control { box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; gap: .4rem; height: 36px; min-height: 36px; padding: 0 .7rem; border: 1px solid var(--rv-line); border-radius: 8px; background: transparent; color: var(--rv-toolbar-muted); font: inherit; font-size: .78rem; font-weight: 600; line-height: 1; text-decoration: none; white-space: nowrap; }
+    .report-v2 .rv-toolbar-control:hover, .report-v2 .rv-toolbar-control:focus-visible { border-color: var(--rv-toolbar-border); background: var(--rv-toolbar-hover); color: var(--rv-toolbar-cyan); }
+    .report-v2 .rv-toolbar-control:focus-visible { outline: 2px solid var(--rv-toolbar-border); outline-offset: 2px; }
+    .report-v2 .rv-toolbar-back { border-color: transparent; }
+    .report-v2 .rv-toolbar-icon { width: 36px; padding: 0; font-size: .95rem; }
+    .report-v2 .rv-toolbar-breadcrumb { display: inline-flex; align-items: center; gap: .45rem; min-width: 0; color: var(--rv-toolbar-muted); font: 600 .78rem/1 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: nowrap; }
+    .report-v2 .rv-toolbar-breadcrumb .rv-toolbar-report-id { color: var(--rv-text); }
+    .report-v2 .rv-toolbar-export { display: inline-flex; height: 36px; }
+    .report-v2 .rv-toolbar-export .rv-toolbar-control { border-radius: 0; }
+    .report-v2 .rv-toolbar-export .rv-toolbar-export-main { border-color: var(--rv-toolbar-border); border-radius: 8px 0 0 8px; background: var(--rv-toolbar-fill); color: var(--rv-toolbar-cyan); }
+    .report-v2 .rv-toolbar-export .rv-toolbar-export-main:hover, .report-v2 .rv-toolbar-export .rv-toolbar-export-main:focus-visible { background: var(--rv-toolbar-hover); }
+    .report-v2 .rv-toolbar-export .rv-toolbar-export-toggle { width: 30px; padding: 0; border-color: var(--rv-toolbar-border); border-left-color: color-mix(in srgb, var(--rv-toolbar-cyan) 30%, var(--rv-toolbar-border)); border-radius: 0 8px 8px 0; background: var(--rv-toolbar-fill); color: var(--rv-toolbar-cyan); }
+    .report-v2 .rv-toolbar-export .rv-toolbar-export-toggle:hover, .report-v2 .rv-toolbar-export .rv-toolbar-export-toggle:focus-visible { background: var(--rv-toolbar-hover); }
+    .report-v2 .rv-report-toolbar .dropdown-menu { min-width: 10rem; border: 1px solid var(--rv-line); border-radius: 8px; background: var(--rv-bg); box-shadow: none; }
+    .report-v2 .rv-report-toolbar .dropdown-item { color: var(--rv-text); font-size: .8rem; }
+    .report-v2 .rv-report-toolbar .dropdown-item:hover, .report-v2 .rv-report-toolbar .dropdown-item:focus { background: var(--rv-toolbar-hover); color: var(--rv-toolbar-cyan); }
+    @media (max-width: 575.98px) {
+        .report-v2 .rv-report-toolbar { justify-content: flex-start; }
+        .report-v2 .rv-toolbar-actions { flex: 1 0 100%; justify-content: flex-end; }
+    }
     .report-v2 .rv-hero { position: relative; display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 26px; align-items: center; padding: 24px; border: 1px solid color-mix(in srgb, var(--rv-red) 38%, var(--rv-line)); overflow: visible; }
     .report-v2 .rv-hero::before, .report-v2 .rv-hero::after,
     .report-v2 .rv-card:has(> #sourcesCollapse)::before, .report-v2 .rv-card:has(> #sourcesCollapse)::after,
@@ -522,17 +546,32 @@
 <div class="report-v2">
 {% if not print_mode %}
 <!-- Back / Actions bar -->
-<div class="d-flex justify-content-between align-items-center mb-4 no-print">
-    <a href="/history" class="btn btn-outline-secondary">
-        <i class="bi bi-arrow-left me-1"></i>Back to History
-    </a>
-    <div class="d-flex gap-1">
-        <div class="dropdown">
-            <button class="btn btn-outline-primary dropdown-toggle" type="button"
-                    id="reportExportDropdown" data-bs-toggle="dropdown" aria-expanded="false">
-                <i class="bi bi-download me-1"></i>Export
+{% set report_toolbar_id = job.id | default('') | string %}
+{% set report_toolbar_short_id = report_toolbar_id[:8] if report_toolbar_id | length > 8 else report_toolbar_id %}
+<div id="reportToolbar" class="rv-report-toolbar no-print">
+    <div class="rv-toolbar-left">
+        <a href="/history" class="rv-toolbar-control rv-toolbar-back" onclick="try { var referrerUrl = new URL(document.referrer); if (referrerUrl.origin === window.location.origin && referrerUrl.pathname.startsWith('/history')) { event.preventDefault(); window.history.back(); } } catch (error) {}">
+            <i class="bi bi-arrow-left" aria-hidden="true"></i><span>History</span>
+        </a>
+        <nav class="rv-toolbar-breadcrumb" aria-label="Breadcrumb">
+            <span>Report</span><span aria-hidden="true">&gt;</span><span class="rv-toolbar-report-id" title="{{ report_toolbar_id | e }}">#{{ report_toolbar_short_id | e }}</span>
+        </nav>
+    </div>
+    <div class="rv-toolbar-actions">
+        <button class="rv-toolbar-control rv-toolbar-icon" type="button" id="btnCopyReportLink"
+                aria-label="Copy link (viewer needs to be signed in)" title="Copy link (viewer needs to be signed in)">
+            <i class="bi bi-link-45deg" aria-hidden="true"></i>
+        </button>
+        <div class="btn-group rv-toolbar-export" role="group" aria-label="Export report">
+            <button class="rv-toolbar-control rv-toolbar-export-main" type="button" id="reportExportDropdown"
+                    aria-haspopup="true" aria-expanded="false"
+                    onclick="document.getElementById('reportExportDropdownToggle').click()">
+                <i class="bi bi-download" aria-hidden="true"></i>Export
             </button>
-            <ul class="dropdown-menu" aria-labelledby="reportExportDropdown">
+            <button class="rv-toolbar-control rv-toolbar-export-toggle dropdown-toggle dropdown-toggle-split" type="button"
+                    id="reportExportDropdownToggle" data-bs-toggle="dropdown" aria-expanded="false"
+                    aria-label="Open Export menu"></button>
+            <ul class="dropdown-menu rv-export-menu" aria-labelledby="reportExportDropdown">
                 <li>
                     <button class="dropdown-item" type="button" id="btnExportReportJson">
                         <i class="bi bi-filetype-json me-2"></i>JSON
@@ -551,22 +590,23 @@
             </ul>
         </div>
         <div class="dropdown">
-            <button class="btn btn-outline-primary dropdown-toggle" type="button"
-                    id="reportPrintDropdown" data-bs-toggle="dropdown" aria-expanded="false">
-                <i class="bi bi-printer me-1"></i>Print
+            <button class="rv-toolbar-control rv-toolbar-icon" type="button" id="reportPrintDropdown"
+                    data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true"
+                    aria-label="Print" title="Print">
+                <i class="bi bi-printer" aria-hidden="true"></i>
             </button>
-            <ul class="dropdown-menu" aria-labelledby="reportPrintDropdown">
+            <ul class="dropdown-menu rv-print-menu" aria-labelledby="reportPrintDropdown">
                 <li>
                     <a class="dropdown-item" id="btnPrintReportPdf"
                        href="/api/reports/{{ job.id | urlencode }}/pdf" target="_blank" rel="noopener">
-                        <i class="bi bi-filetype-pdf me-2"></i>PDF
+                        <i class="bi bi-filetype-pdf me-2"></i>Print as PDF
                     </a>
                 </li>
                 <li>
                     <a class="dropdown-item" id="btnPrintReportHtml"
                        href="/api/reports/{{ job.id | urlencode }}/html?print=1" target="_blank"
                        rel="noopener">
-                        <i class="bi bi-filetype-html me-2"></i>HTML
+                        <i class="bi bi-filetype-html me-2"></i>Print as HTML
                     </a>
                 </li>
             </ul>
@@ -2312,6 +2352,57 @@
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
+        });
+    }
+
+    var exportToolbarGroup = document.querySelector('.rv-toolbar-export');
+    var exportToolbarMain = document.getElementById('reportExportDropdown');
+    if (exportToolbarGroup && exportToolbarMain) {
+        exportToolbarGroup.addEventListener('show.bs.dropdown', function () {
+            exportToolbarMain.setAttribute('aria-expanded', 'true');
+        });
+        exportToolbarGroup.addEventListener('hide.bs.dropdown', function () {
+            exportToolbarMain.setAttribute('aria-expanded', 'false');
+        });
+    }
+
+    var copyReportLinkButton = document.getElementById('btnCopyReportLink');
+    if (copyReportLinkButton) {
+        var copyReportLinkTimer = null;
+        function copyReportLinkFallback(link) {
+            var textarea = document.createElement('textarea');
+            textarea.value = link;
+            textarea.setAttribute('readonly', '');
+            textarea.style.position = 'fixed';
+            textarea.style.top = '0';
+            textarea.style.left = '-9999px';
+            document.body.appendChild(textarea);
+            textarea.select();
+            var copied = false;
+            try { copied = document.execCommand('copy'); } catch (error) { copied = false; }
+            document.body.removeChild(textarea);
+            return copied ? Promise.resolve() : Promise.reject(new Error('Clipboard copy failed'));
+        }
+        copyReportLinkButton.addEventListener('click', function () {
+            var reportLink = window.location.origin + '/api/reports/' + encodeURIComponent({{ job.id | default('') | string | tojson }}) + '/html';
+            var copyPromise;
+            try {
+                copyPromise = navigator.clipboard && navigator.clipboard.writeText
+                    ? navigator.clipboard.writeText(reportLink).catch(function () { return copyReportLinkFallback(reportLink); })
+                    : copyReportLinkFallback(reportLink);
+            } catch (error) {
+                copyPromise = copyReportLinkFallback(reportLink);
+            }
+            Promise.resolve(copyPromise).then(function () {
+                var icon = copyReportLinkButton.querySelector('i');
+                if (!icon) return;
+                if (copyReportLinkTimer !== null) window.clearTimeout(copyReportLinkTimer);
+                icon.className = 'bi bi-check2';
+                copyReportLinkTimer = window.setTimeout(function () {
+                    icon.className = 'bi bi-link-45deg';
+                    copyReportLinkTimer = null;
+                }, 1500);
+            }).catch(function () {});
         });
     }
 

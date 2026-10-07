@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -44,23 +45,45 @@ def _render_report(tmp_path, query_string=""):
 def test_report_actions_render_export_and_print_dropdowns(tmp_path):
     job_id, html = _render_report(tmp_path)
 
+    assert 'id="reportToolbar"' in html
+    assert 'id="btnCopyReportLink"' in html
+    assert 'aria-label="Breadcrumb"' in html
+    assert f'title="{job_id}"' in html
+    assert f'#{job_id[:8]}' in html
+
     assert 'id="reportExportDropdown"' in html
     assert 'id="btnExportReportJson"' in html
     assert f'href="/api/reports/{job_id}/html/download"' in html
-    assert f'href="/api/reports/{job_id}/pdf"' in html
+    assert f'href="/api/reports/{job_id}/pdf?download=1"' in html
+    export_menu = re.search(
+        r'<ul class="dropdown-menu rv-export-menu".*?</ul>', html, re.DOTALL
+    )
+    assert export_menu is not None
+    export_text = re.sub(r"<[^>]+>", " ", export_menu.group(0))
+    assert re.findall(r"\b(JSON|HTML|PDF)\b", export_text) == ["JSON", "HTML", "PDF"]
+    assert 'id="reportExportDropdownToggle"' in html
+    assert 'data-bs-toggle="dropdown"' in html
+    assert 'onclick="document.getElementById(\'reportExportDropdownToggle\').click()"' in html
 
     assert 'id="reportPrintDropdown"' in html
     assert 'id="btnPrintReportPdf"' in html
     assert 'id="btnPrintReportHtml"' in html
     assert f'href="/api/reports/{job_id}/html?print=1"' in html
     assert 'target="_blank"' in html
+    print_menu = re.search(
+        r'<ul class="dropdown-menu rv-print-menu".*?</ul>', html, re.DOTALL
+    )
+    assert print_menu is not None
+    print_text = re.sub(r"<[^>]+>", " ", print_menu.group(0))
+    assert re.findall(r"\b(Print as PDF|Print as HTML)\b", print_text) == [
+        "Print as PDF", "Print as HTML"
+    ]
 
 
 def test_print_mode_omits_report_action_bar(tmp_path):
     _, normal_html = _render_report(tmp_path)
     _, print_html = _render_report(tmp_path, "?print=1")
 
-    assert "Back to History" in normal_html
-    assert "Back to History" not in print_html
-    assert 'id="reportExportDropdown"' not in print_html
-    assert 'id="reportPrintDropdown"' not in print_html
+    assert 'id="reportToolbar"' in normal_html
+    assert 'id="reportToolbar"' not in print_html
+    assert 'id="btnCopyReportLink"' not in print_html
