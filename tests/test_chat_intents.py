@@ -65,6 +65,11 @@ def test_classifies_short_non_investigative_messages_as_need_ioc(text):
         "\u0e15\u0e23\u0e27\u0e08\u0e2a\u0e2d\u0e1a\u0e21\u0e31\u0e25\u0e41\u0e27\u0e23\u0e4c",
         "CVE-2024-3094",
         "a" * 41,
+        "what is mirai",
+        "who is apt29",
+        "explain this verdict",
+        "\u0e17\u0e33\u0e44\u0e21\u0e16\u0e36\u0e07\u0e40\u0e1b\u0e47\u0e19 CLEAN",
+        "mirai \u0e04\u0e37\u0e2d\u0e2d\u0e30\u0e44\u0e23",
     ],
 )
 def test_investigation_requests_and_long_text_are_not_need_ioc(text):
