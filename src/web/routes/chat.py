@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 
 from ...agent.playbook_engine import PlaybookValidationError
 from ..auth import authorize_role, get_current_user, require_role
+from ..chat_intents import build_instant_reply, classify_intent
 from ..visibility import serialize_chat_session
 
 logger = logging.getLogger(__name__)
@@ -65,6 +66,11 @@ async def send_message(
         authorize_role(current_user, ["Incident Responder", "admin"])
     else:
         authorize_role(current_user, ["Threat Hunter", "admin"])
+
+    if not body.playbook_id and not body.session_id:
+        intent = classify_intent(body.message)
+        if intent:
+            return build_instant_reply(intent, body.message)
 
     agent_loop = request.app.state.agent_loop
     if agent_loop is None:

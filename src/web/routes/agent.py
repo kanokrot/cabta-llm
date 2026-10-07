@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from ..auth import get_current_user, require_role
+from ..chat_intents import build_instant_reply, classify_intent
 from ..visibility import (
     serialize_agent_session,
     serialize_agent_stats,
@@ -66,6 +67,11 @@ async def start_investigation(
     current_user: dict = Depends(get_current_user),
 ):
     """Start a new agent investigation."""
+    if body.playbook_id is None and body.case_id is None:
+        intent = classify_intent(body.goal)
+        if intent:
+            return build_instant_reply(intent, body.goal)
+
     agent_loop = _require_agent_loop(request)
     session_id = await agent_loop.investigate(
         body.goal,
