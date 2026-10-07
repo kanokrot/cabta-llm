@@ -1,53 +1,103 @@
 {% extends "base_auth.html" %}
 
 {% block title %}Request access - CABTA{% endblock %}
+{% block body_class %} auth-console auth-request{% endblock %}
+{% block extra_head %}
+<link href="/static/css/auth.css?v=4" rel="stylesheet">
+{% endblock %}
 
 {% block content %}
-<div class="card shadow-lg">
-    <div class="card-body p-4 p-md-5">
-        <div class="mb-4">
-            <h1 class="h3 mb-2">Request access</h1>
-            <p class="text-muted mb-0">Tell an administrator how you will use CABTA.</p>
+<main class="auth-console-layout">
+    <section class="auth-console-intro" aria-labelledby="auth-console-headline">
+        <div>
+            <p class="auth-console-eyebrow"><span class="auth-console-idx">[01]</span> Access request</p>
+            <h1 id="auth-console-headline">Tell an administrator <span class="auth-console-accent">how you will use CABTA</span><span class="auth-console-cursor" aria-hidden="true"></span></h1>
+            <p class="auth-console-description">Send a short request. An administrator reviews it before you get access.</p>
         </div>
 
-        {% if submitted %}
-        <div class="alert alert-success" role="status">
-            Your request was submitted. An administrator will review it and send an invitation if approved.
+        <div class="auth-console-list" aria-label="What happens next">
+            <p class="auth-console-eyebrow"><span class="auth-console-idx">[02]</span> What happens next</p>
+            <div class="auth-console-row auth-console-row-nometa">
+                <span class="auth-console-row-idx">01</span>
+                <i class="bi bi-send" aria-hidden="true"></i>
+                <span>Submit your request</span>
+                <i class="bi bi-chevron-right auth-console-row-arrow" aria-hidden="true"></i>
+            </div>
+            <div class="auth-console-row auth-console-row-nometa">
+                <span class="auth-console-row-idx">02</span>
+                <i class="bi bi-person-check" aria-hidden="true"></i>
+                <span>Administrator reviews it</span>
+                <i class="bi bi-chevron-right auth-console-row-arrow" aria-hidden="true"></i>
+            </div>
+            <div class="auth-console-row auth-console-row-nometa">
+                <span class="auth-console-row-idx">03</span>
+                <i class="bi bi-envelope" aria-hidden="true"></i>
+                <span>Receive an invitation</span>
+                <i class="bi bi-chevron-right auth-console-row-arrow" aria-hidden="true"></i>
+            </div>
         </div>
-        {% endif %}
-        {% if error %}
-        <div class="alert alert-danger" role="alert">{{ error }}</div>
-        {% endif %}
+    </section>
 
-        <form method="post" action="/request-access" novalidate>
-            <div class="mb-3">
-                <label class="form-label" for="request-name">Name</label>
-                <input class="form-control" id="request-name" name="name" type="text"
-                       maxlength="120" autocomplete="name"
-                       value="{{ form_values.get('name', '') | e }}" required autofocus>
-            </div>
-            <div class="mb-3">
-                <label class="form-label" for="request-email">Email</label>
-                <input class="form-control" id="request-email" name="email" type="email"
-                       maxlength="254" autocomplete="email"
-                       value="{{ form_values.get('email', '') | e }}" required>
-            </div>
-            <div class="mb-3">
-                <label class="form-label" for="request-reason">Reason</label>
-                <textarea class="form-control" id="request-reason" name="reason" rows="4"
-                          maxlength="1000" required>{{ form_values.get('reason', '') | e }}</textarea>
-                <div class="form-text">Keep it brief; this helps the administrator review your request.</div>
-            </div>
-            <button class="btn btn-accent w-100" type="submit">
-                <i class="bi bi-send me-1"></i>Submit access request
-            </button>
-        </form>
+    <section class="auth-console-card" aria-labelledby="auth-console-title">
+        <span class="auth-console-corner auth-console-corner-tl" aria-hidden="true"></span>
+        <span class="auth-console-corner auth-console-corner-tr" aria-hidden="true"></span>
+        <span class="auth-console-corner auth-console-corner-bl" aria-hidden="true"></span>
+        <span class="auth-console-corner auth-console-corner-br" aria-hidden="true"></span>
 
-        <p class="text-muted small text-center mt-4 mb-0">
-            Already have an invitation?
-            <a href="/register">Activate your account</a>
-            · <a href="/login">Back to sign in</a>
-        </p>
-    </div>
-</div>
+        <div class="auth-console-card-inner">
+            <div class="auth-console-card-meta" aria-hidden="true"><span>auth</span><span>request</span></div>
+            <header class="auth-console-card-heading">
+                <h2 id="auth-console-title">Request access<span class="auth-console-cursor-mark" aria-hidden="true">_</span></h2>
+                <p>Tell an administrator how you will use CABTA.</p>
+            </header>
+
+            {% if submitted %}
+            <div class="alert alert-success" role="status">
+                Your request was submitted. An administrator will review it and send an invitation if approved.
+            </div>
+            {% endif %}
+            {% if error %}
+            <div class="alert alert-danger" role="alert">{{ error }}</div>
+            {% endif %}
+
+            <form method="post" action="/request-access" novalidate>
+                <div class="auth-console-field-group">
+                    <label for="request-name"><span class="auth-console-idx">01</span> Name</label>
+                    <div class="auth-console-field">
+                        <i class="bi bi-person" aria-hidden="true"></i>
+                        <input id="request-name" name="name" type="text"
+                               maxlength="120" autocomplete="name"
+                               value="{{ form_values.get('name', '') | e }}" required autofocus>
+                    </div>
+                </div>
+                <div class="auth-console-field-group">
+                    <label for="request-email"><span class="auth-console-idx">02</span> Email</label>
+                    <div class="auth-console-field">
+                        <i class="bi bi-envelope" aria-hidden="true"></i>
+                        <input id="request-email" name="email" type="email"
+                               maxlength="254" autocomplete="email"
+                               value="{{ form_values.get('email', '') | e }}" required>
+                    </div>
+                </div>
+                <div class="auth-console-field-group">
+                    <label for="request-reason"><span class="auth-console-idx">03</span> Reason</label>
+                    <div class="auth-console-field auth-console-field-textarea">
+                        <i class="bi bi-chat-left-text" aria-hidden="true"></i>
+                        <textarea id="request-reason" name="reason" rows="4" maxlength="1000"
+                                  aria-describedby="request-reason-hint" required>{{ form_values.get('reason', '') | e }}</textarea>
+                    </div>
+                    <div id="request-reason-hint" class="auth-console-hint">Keep it brief; this helps the administrator review your request.</div>
+                </div>
+                <button class="btn btn-accent auth-console-submit" type="submit">
+                    <span>Submit access request</span><i class="bi bi-send" aria-hidden="true"></i>
+                </button>
+            </form>
+
+            <footer class="auth-console-footer">
+                <p>Already have an invitation? <a href="/register">Activate your account</a></p>
+                <p><a href="/login">Back to sign in</a></p>
+            </footer>
+        </div>
+    </section>
+</main>
 {% endblock %}
