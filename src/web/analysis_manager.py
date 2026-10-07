@@ -503,6 +503,93 @@ class AnalysisManager:
             raise RuntimeError("Analysis history summary counts are inconsistent")
         return summary
 
+    def get_ioc_dashboard_stats(
+        self,
+        *,
+        user_id: Optional[int] = None,
+        user_ids: Optional[Sequence[int]] = None,
+        utc_offset_minutes: int = 0,
+        days: int = 14,
+    ) -> Dict:
+        """Return scoped, read-only IOC dashboard totals, daily counts, and feed."""
+        offset = timezone(timedelta(minutes=utc_offset_minutes))
+        today = datetime.now(offset).date()
+        first_day = today - timedelta(days=max(days - 1, 0))
+        clauses = []
+        params = []
+        if user_id is not None:
+            clauses.append("user_id = ?")
+            params.append(user_id)
+        if user_ids is not None:
+            if not user_ids:
+                clauses.append("1 = 0")
+            else:
+                placeholders = ", ".join("?" for _ in user_ids)
+                clauses.append(f"user_id IN ({placeholders})")
+                params.extend(user_ids)
+        where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
+
+        conn = self._connect()
+        try:
+            rows = conn.execute(
+                "SELECT id, params, verdict, score, created_at, user_id "
+                f"FROM analysis_jobs{where}",
+                params,
+            ).fetchall()
+        finally:
+            conn.close()
+
+        totals = {"malicious": 0, "suspicious": 0, "clean": 0, "other": 0}
+        daily = {
+            (first_day + timedelta(days=index)).isoformat(): {
+                "malicious": 0, "suspicious": 0, "clean": 0, "other": 0,
+            }
+            for index in range(days)
+        }
+        feed = []
+        for job_id, raw_params, verdict, score, created_at, owner_id in rows:
+            try:
+                job_params = json.loads(raw_params) if raw_params else {}
+            except (TypeError, json.JSONDecodeError):
+                job_params = {}
+            if not isinstance(job_params, dict):
+                job_params = {}
+            normalized = str(verdict or "").upper()
+            group = (
+                "malicious" if normalized in VERDICT_GROUPS["malicious"] else
+                "suspicious" if normalized in VERDICT_GROUPS["suspicious"] else
+                "clean" if normalized in VERDICT_GROUPS["clean"] else "other"
+            )
+            totals[group] += 1
+            local_day = None
+            if created_at:
+                try:
+                    parsed = datetime.fromisoformat(str(created_at).replace("Z", "+00:00"))
+                    if parsed.tzinfo is None:
+                        parsed = parsed.replace(tzinfo=timezone.utc)
+                    local_day = parsed.astimezone(offset).date()
+                except (TypeError, ValueError, OverflowError):
+                    local_day = None
+            if local_day is not None and local_day.isoformat() in daily:
+                daily[local_day.isoformat()][group] += 1
+
+            if normalized in VERDICT_GROUPS["malicious"]:
+                feed.append({
+                    "id": job_id,
+                    "indicator": job_params.get("value") or job_params.get("filename") or job_id,
+                    "score": score,
+                    "created_at": created_at,
+                    "user_id": owner_id,
+                })
+
+        feed.sort(key=lambda item: item.get("created_at") or "", reverse=True)
+        return {
+            "total": len(rows),
+            **totals,
+            "daily": [{"date": day, **counts} for day, counts in daily.items()],
+            "feed": feed[:3],
+        }
+
     def update_progress(
         self,
         job_id: str,

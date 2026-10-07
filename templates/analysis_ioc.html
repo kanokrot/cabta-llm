@@ -1388,12 +1388,116 @@
         .verdict-label { font-size: 1.1rem; }
         .source-detail-grid { grid-template-columns: 1fr 1fr; }
     }
+
+    .ioc-dashboard { --dash-mal: var(--color-danger); --dash-sus: var(--color-warning); --dash-clean: var(--color-success); --dash-other: var(--text-muted); padding: 0 20px 24px; color: var(--text-primary); }
+    body:has(.ioc-dashboard) .sub-header { height: 0; min-height: 0; margin-top: 0 !important; overflow: hidden; padding: 0; border: 0; }
+    .ioc-dashboard-heading { margin: 0 0 18px; font-size: 22px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; text-shadow: 0 0 14px var(--color-info); }
+    .ioc-dashboard-heading em { color: var(--color-info); font-style: normal; }
+    .ioc-dashboard-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 340px); align-items: start; gap: 16px; }
+    .ioc-dashboard-main { display: grid; gap: 16px; min-width: 0; }
+    .ioc-dashboard-panel { min-width: 0; padding: 18px; border: 1px solid var(--border-color); border-radius: 0; background: var(--bg-card); }
+    .ioc-dashboard-panel-title { display: flex; align-items: center; gap: 9px; margin: 0 0 16px; color: var(--text-primary); font-size: 12px; font-weight: 700; letter-spacing: .11em; text-transform: uppercase; }
+    .ioc-dashboard-panel-title i { color: var(--color-info); }
+    .ioc-dashboard-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+    .ioc-dashboard-stat { min-width: 0; padding: 14px; border: 1px solid var(--border-color); border-left: 2px solid var(--dash-tone, var(--color-info)); background: var(--bg-secondary); }
+    .ioc-dashboard-stat-label { display: block; color: var(--text-muted); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; }
+    .ioc-dashboard-stat-value { display: block; margin-top: 7px; color: var(--dash-tone, var(--text-primary)); font-size: 26px; line-height: 1; }
+    .ioc-dashboard-stat-malicious { --dash-tone: var(--dash-mal); } .ioc-dashboard-stat-suspicious { --dash-tone: var(--dash-sus); } .ioc-dashboard-stat-clean { --dash-tone: var(--dash-clean); }
+    .ioc-dashboard-panels { display: grid; grid-template-columns: minmax(230px, .78fr) minmax(0, 1.4fr); gap: 16px; }
+    .ioc-dashboard-segments { display: flex; width: 100%; height: 10px; overflow: hidden; margin-bottom: 15px; background: var(--bg-tertiary); }
+    .ioc-dashboard-segment { min-width: 0; transition: width .25s ease; }
+    .ioc-dashboard-segment-malicious { background: var(--dash-mal); } .ioc-dashboard-segment-suspicious { background: var(--dash-sus); } .ioc-dashboard-segment-clean { background: var(--dash-clean); } .ioc-dashboard-segment-other { background: var(--dash-other); }
+    .ioc-dashboard-verdict-row { display: grid; grid-template-columns: 10px 1fr auto; align-items: center; gap: 9px; padding: 7px 0; border-bottom: 1px solid var(--border-color); font-size: 12px; }
+    .ioc-dashboard-verdict-row:last-child { border-bottom: 0; }
+    .ioc-dashboard-dot { width: 8px; height: 8px; background: var(--dash-tone); }
+    .ioc-dashboard-verdict-count { color: var(--text-primary); font-weight: 700; font-variant-numeric: tabular-nums; }
+    .ioc-dashboard-chart-wrap { min-height: 190px; }
+    .ioc-dashboard-chart { display: block; width: 100%; height: 170px; overflow: visible; }
+    .ioc-dashboard-chart text { fill: var(--text-muted); font: 9px ui-monospace, Consolas, monospace; }
+    .ioc-dashboard-chart-grid { stroke: var(--border-color); stroke-width: 1; }
+    .ioc-dashboard-chart-line { fill: none; stroke-width: 2; vector-effect: non-scaling-stroke; }
+    .ioc-dashboard-chart-point { stroke: var(--bg-card); stroke-width: 1; }
+    .ioc-dashboard-legend { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 4px; color: var(--text-muted); font-size: 10px; }
+    .ioc-dashboard-legend span { display: inline-flex; align-items: center; gap: 5px; }
+    .ioc-dashboard-legend i { width: 8px; height: 8px; background: var(--dash-tone); }
+    .ioc-dashboard-lookup { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; }
+    .ioc-dashboard-lookup input { min-width: 0; min-height: 42px; border: 1px solid var(--border-strong); border-radius: 0; background: var(--bg-primary); color: var(--text-primary); padding: 9px 12px; }
+    .ioc-dashboard-lookup input:focus { outline: 2px solid var(--color-info); outline-offset: 1px; }
+    .ioc-dashboard-lookup button, .ioc-dashboard-button { min-height: 42px; border: 1px solid var(--color-info); border-radius: 0; background: color-mix(in srgb, var(--color-info) 14%, var(--bg-card)); color: var(--text-primary); padding: 9px 14px; font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+    .ioc-dashboard-lookup button:hover, .ioc-dashboard-button:hover { background: color-mix(in srgb, var(--color-info) 25%, var(--bg-card)); }
+    .ioc-dashboard-lookup-error { min-height: 18px; margin: 8px 0 0; color: var(--color-danger); font-size: 11px; }
+    .ioc-dashboard-feed { display: grid; gap: 10px; }
+    .ioc-dashboard-feed-item { padding: 12px 0; border-top: 1px solid var(--border-color); }
+    .ioc-dashboard-feed-item:first-child { padding-top: 0; border-top: 0; }
+    .ioc-dashboard-feed-verdict { color: var(--dash-mal); font-size: 11px; font-weight: 700; letter-spacing: .04em; }
+    .ioc-dashboard-feed-time { float: right; color: var(--text-muted); font-size: 10px; }
+    .ioc-dashboard-feed-indicator { display: block; margin: 9px 0; color: var(--text-primary); font-size: 11px; overflow-wrap: anywhere; word-break: break-all; }
+    .ioc-dashboard-feed-link { color: var(--color-info); font-size: 10px; text-decoration: none; }
+    .ioc-dashboard-feed-link:hover { text-decoration: underline; }
+    .ioc-dashboard-feed-actions { display: block; width: 100%; margin-top: 14px; text-align: center; text-decoration: none; }
+    .ioc-dashboard-state { padding: 18px 0; color: var(--text-muted); font-size: 11px; text-align: center; }
+    .ioc-dashboard-state-error { color: var(--color-danger); }
+    .ioc-dashboard-origin { display: grid; min-height: 120px; place-items: center; border: 1px dashed var(--border-strong); color: var(--text-muted); font-size: 11px; text-align: center; }
+    .ioc-legacy-layout { display: none; }
+    @media (max-width: 900px) { .ioc-dashboard-layout { grid-template-columns: minmax(0, 1fr); } .ioc-dashboard-feed-column { grid-row: 2; } }
+    @media (max-width: 640px) { .ioc-dashboard { padding: 0 12px 18px; } .ioc-dashboard-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } .ioc-dashboard-panels { grid-template-columns: minmax(0, 1fr); } .ioc-dashboard-panel { padding: 14px; } .ioc-dashboard-lookup { grid-template-columns: minmax(0, 1fr); } }
 </style>
 {% endblock %}
 
 {% block content %}
 <section class="ioc-analysis-page">
-<div class="row g-4">
+<div class="ioc-dashboard" aria-label="IOC dashboard">
+    <h1 class="ioc-dashboard-heading">IOC <em>Dashboard</em></h1>
+    <div class="ioc-dashboard-layout">
+        <div class="ioc-dashboard-main">
+            <section class="ioc-dashboard-panel" aria-label="Analysis totals">
+                <div class="ioc-dashboard-stats">
+                    <div class="ioc-dashboard-stat"><span class="ioc-dashboard-stat-label">Total analyses</span><strong class="ioc-dashboard-stat-value" id="iocDashTotal">—</strong></div>
+                    <div class="ioc-dashboard-stat ioc-dashboard-stat-malicious"><span class="ioc-dashboard-stat-label">Malicious</span><strong class="ioc-dashboard-stat-value" id="iocDashMalicious">—</strong></div>
+                    <div class="ioc-dashboard-stat ioc-dashboard-stat-suspicious"><span class="ioc-dashboard-stat-label">Suspicious</span><strong class="ioc-dashboard-stat-value" id="iocDashSuspicious">—</strong></div>
+                    <div class="ioc-dashboard-stat ioc-dashboard-stat-clean"><span class="ioc-dashboard-stat-label">Clean</span><strong class="ioc-dashboard-stat-value" id="iocDashClean">—</strong></div>
+                </div>
+                <div class="ioc-dashboard-state" id="iocDashStatsState" role="status" hidden></div>
+            </section>
+            <div class="ioc-dashboard-panels">
+                <section class="ioc-dashboard-panel" aria-labelledby="iocDashDistributionTitle">
+                    <h2 class="ioc-dashboard-panel-title" id="iocDashDistributionTitle"><i class="bi bi-bar-chart-steps" aria-hidden="true"></i>Verdict distribution</h2>
+                    <div id="iocDashDistributionState" class="ioc-dashboard-state" hidden></div>
+                    <div id="iocDashSegments" class="ioc-dashboard-segments" role="img" aria-label="Verdict distribution"></div>
+                    <div id="iocDashVerdictRows"></div>
+                </section>
+                <section class="ioc-dashboard-panel" aria-labelledby="iocDashChartTitle">
+                    <h2 class="ioc-dashboard-panel-title" id="iocDashChartTitle"><i class="bi bi-graph-up" aria-hidden="true"></i>Analyses per day</h2>
+                    <div id="iocDashChartState" class="ioc-dashboard-state" hidden></div>
+                    <div class="ioc-dashboard-chart-wrap" id="iocDashChart"></div>
+                    <div class="ioc-dashboard-legend" id="iocDashLegend" aria-label="Chart legend"></div>
+                </section>
+            </div>
+            <section class="ioc-dashboard-panel" aria-labelledby="iocDashLookupTitle">
+                <h2 class="ioc-dashboard-panel-title" id="iocDashLookupTitle"><i class="bi bi-search" aria-hidden="true"></i>Quick IOC lookup</h2>
+                <form id="iocDashboardLookup" class="ioc-dashboard-lookup">
+                    <label class="visually-hidden" for="iocDashboardValue">IP, domain, URL, hash, or email</label>
+                    <input id="iocDashboardValue" type="text" autocomplete="off" placeholder="IP, domain, URL, hash, or email">
+                    <button type="submit"><i class="bi bi-crosshair me-1" aria-hidden="true"></i>Investigate</button>
+                </form>
+                <div class="ioc-dashboard-lookup-error" id="iocDashboardLookupError" role="alert" aria-live="polite"></div>
+            </section>
+            <section class="ioc-dashboard-panel" aria-labelledby="iocDashOriginTitle">
+                <h2 class="ioc-dashboard-panel-title" id="iocDashOriginTitle"><i class="bi bi-globe2" aria-hidden="true"></i>Threat origin</h2>
+                <div class="ioc-dashboard-origin">Threat origin visualization coming soon</div>
+            </section>
+        </div>
+        <aside class="ioc-dashboard-feed-column">
+            <section class="ioc-dashboard-panel" aria-labelledby="iocDashFeedTitle">
+                <h2 class="ioc-dashboard-panel-title" id="iocDashFeedTitle"><i class="bi bi-activity" aria-hidden="true"></i>Malicious feed</h2>
+                <div id="iocDashFeedState" class="ioc-dashboard-state" role="status">Loading recent malicious analyses…</div>
+                <div id="iocDashFeed" class="ioc-dashboard-feed"></div>
+                <a class="ioc-dashboard-button ioc-dashboard-feed-actions" href="/history">View all analyses</a>
+            </section>
+        </aside>
+    </div>
+</div>
+<div class="row g-4 ioc-legacy-layout">
     <!-- IOC Submit Form -->
     <div class="col-lg-7">
         <div class="card ioc-form-card">
@@ -1609,6 +1713,213 @@
 {% endblock %}
 
 {% block scripts %}
+<script>
+(function () {
+    'use strict';
+    var dashboard = document.querySelector('.ioc-dashboard');
+    if (!dashboard) return;
+
+    var series = [
+        { key: 'malicious', label: 'Malicious', tone: '--dash-mal' },
+        { key: 'suspicious', label: 'Suspicious', tone: '--dash-sus' },
+        { key: 'clean', label: 'Clean', tone: '--dash-clean' },
+        { key: 'other', label: 'Other', tone: '--dash-other' }
+    ];
+    var stateColor = window.getComputedStyle(dashboard);
+    series.forEach(function (item) { item.color = stateColor.getPropertyValue(item.tone).trim(); });
+
+    function showState(id, message, isError) {
+        var node = document.getElementById(id);
+        node.textContent = message;
+        node.hidden = !message;
+        node.classList.toggle('ioc-dashboard-state-error', Boolean(isError));
+    }
+
+    function renderDistribution(data) {
+        var total = Number(data.total) || 0;
+        var segments = document.getElementById('iocDashSegments');
+        var rows = document.getElementById('iocDashVerdictRows');
+        segments.replaceChildren();
+        rows.replaceChildren();
+        if (!total) {
+            showState('iocDashDistributionState', 'No analyses to summarize yet.', false);
+            segments.hidden = true;
+            return;
+        }
+        showState('iocDashDistributionState', '', false);
+        segments.hidden = false;
+        series.forEach(function (item) {
+            var count = Number(data[item.key]) || 0;
+            var segment = document.createElement('span');
+            segment.className = 'ioc-dashboard-segment ioc-dashboard-segment-' + item.key;
+            segment.style.width = (count / total * 100) + '%';
+            segment.setAttribute('aria-hidden', 'true');
+            segments.appendChild(segment);
+
+            var row = document.createElement('div');
+            row.className = 'ioc-dashboard-verdict-row';
+            var dot = document.createElement('i');
+            dot.className = 'ioc-dashboard-dot';
+            dot.style.setProperty('--dash-tone', item.color);
+            dot.setAttribute('aria-hidden', 'true');
+            var label = document.createElement('span');
+            label.textContent = item.label;
+            var value = document.createElement('strong');
+            value.className = 'ioc-dashboard-verdict-count';
+            value.textContent = String(count);
+            row.append(dot, label, value);
+            rows.appendChild(row);
+        });
+    }
+
+    function renderChart(points) {
+        var host = document.getElementById('iocDashChart');
+        var legend = document.getElementById('iocDashLegend');
+        host.replaceChildren();
+        legend.replaceChildren();
+        var hasTimestampedAnalyses = points.some(function (point) {
+            return series.some(function (item) { return Number(point[item.key]) > 0; });
+        });
+        if (!hasTimestampedAnalyses) {
+            showState('iocDashChartState', 'No timestamped analyses in this period.', false);
+            return;
+        }
+        showState('iocDashChartState', '', false);
+
+        var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('viewBox', '0 0 640 180');
+        svg.setAttribute('class', 'ioc-dashboard-chart');
+        svg.setAttribute('role', 'img');
+        svg.setAttribute('aria-label', 'Daily analyses by verdict for the last ' + points.length + ' days');
+        var left = 36, right = 630, top = 12, bottom = 148;
+        var maxValue = Math.max(1, ...points.flatMap(function (point) {
+            return series.map(function (item) { return Number(point[item.key]) || 0; });
+        }));
+        var ceiling = Math.max(1, Math.ceil(maxValue / 2) * 2);
+        for (var tick = 0; tick <= 2; tick += 1) {
+            var y = bottom - (bottom - top) * tick / 2;
+            var grid = document.createElementNS(svg.namespaceURI, 'line');
+            grid.setAttribute('x1', left); grid.setAttribute('x2', right);
+            grid.setAttribute('y1', y); grid.setAttribute('y2', y);
+            grid.setAttribute('class', 'ioc-dashboard-chart-grid'); svg.appendChild(grid);
+            var label = document.createElementNS(svg.namespaceURI, 'text');
+            label.setAttribute('x', left - 8); label.setAttribute('y', y + 3);
+            label.setAttribute('text-anchor', 'end'); label.textContent = String(Math.round(ceiling * tick / 2));
+            svg.appendChild(label);
+        }
+        series.forEach(function (item) {
+            var coords = points.map(function (point, index) {
+                var x = points.length < 2 ? (left + right) / 2 : left + (right - left) * index / (points.length - 1);
+                var val = Number(point[item.key]) || 0;
+                return { x: x, y: bottom - (bottom - top) * val / ceiling, value: val };
+            });
+            var path = document.createElementNS(svg.namespaceURI, 'polyline');
+            path.setAttribute('points', coords.map(function (point) { return point.x + ',' + point.y; }).join(' '));
+            path.setAttribute('class', 'ioc-dashboard-chart-line'); path.setAttribute('stroke', item.color);
+            svg.appendChild(path);
+            coords.forEach(function (point, index) {
+                var dot = document.createElementNS(svg.namespaceURI, 'circle');
+                dot.setAttribute('cx', point.x); dot.setAttribute('cy', point.y); dot.setAttribute('r', '2.5');
+                dot.setAttribute('fill', item.color); dot.setAttribute('class', 'ioc-dashboard-chart-point');
+                var title = document.createElementNS(svg.namespaceURI, 'title');
+                title.textContent = points[index].date + ': ' + item.label + ' ' + point.value;
+                dot.appendChild(title); svg.appendChild(dot);
+            });
+            var legendItem = document.createElement('span');
+            var marker = document.createElement('i'); marker.style.setProperty('--dash-tone', item.color);
+            marker.setAttribute('aria-hidden', 'true');
+            legendItem.append(marker, document.createTextNode(item.label)); legend.appendChild(legendItem);
+        });
+        points.forEach(function (point, index) {
+            if (index % Math.max(1, Math.ceil(points.length / 5)) !== 0 && index !== points.length - 1) return;
+            var label = document.createElementNS(svg.namespaceURI, 'text');
+            var x = points.length < 2 ? (left + right) / 2 : left + (right - left) * index / (points.length - 1);
+            label.setAttribute('x', x); label.setAttribute('y', 168); label.setAttribute('text-anchor', 'middle');
+            label.textContent = point.date.slice(5); svg.appendChild(label);
+        });
+        host.appendChild(svg);
+    }
+
+    function formatTimestamp(value) {
+        if (!value) return '—';
+        var parsed = new Date(value);
+        if (Number.isNaN(parsed.getTime())) return '—';
+        return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(parsed);
+    }
+
+    function renderFeed(items) {
+        var host = document.getElementById('iocDashFeed');
+        host.replaceChildren();
+        if (!items.length) {
+            showState('iocDashFeedState', 'No malicious analyses yet.', false);
+            return;
+        }
+        showState('iocDashFeedState', '', false);
+        items.forEach(function (item) {
+            var article = document.createElement('article'); article.className = 'ioc-dashboard-feed-item';
+            var verdict = document.createElement('span'); verdict.className = 'ioc-dashboard-feed-verdict';
+            verdict.textContent = 'Malicious ' + (item.score === null || item.score === undefined ? '—' : item.score);
+            var time = document.createElement('time'); time.className = 'ioc-dashboard-feed-time';
+            time.textContent = formatTimestamp(item.created_at);
+            var indicator = document.createElement('code'); indicator.className = 'ioc-dashboard-feed-indicator';
+            indicator.textContent = item.indicator || '—';
+            var link = document.createElement('a'); link.className = 'ioc-dashboard-feed-link';
+            link.href = '/report/' + encodeURIComponent(item.id); link.textContent = 'View report';
+            article.append(verdict, time, indicator, link); host.appendChild(article);
+        });
+    }
+
+    function loadDashboard() {
+        var offset = -new Date().getTimezoneOffset();
+        fetch('/api/analysis/dashboard/stats?utc_offset_minutes=' + encodeURIComponent(offset), { credentials: 'same-origin' })
+            .then(function (response) { if (!response.ok) throw new Error('HTTP ' + response.status); return response.json(); })
+            .then(function (data) {
+                document.getElementById('iocDashTotal').textContent = String(data.total || 0);
+                document.getElementById('iocDashMalicious').textContent = String(data.malicious || 0);
+                document.getElementById('iocDashSuspicious').textContent = String(data.suspicious || 0);
+                document.getElementById('iocDashClean').textContent = String(data.clean || 0);
+                showState('iocDashStatsState', data.total ? '' : 'No analysis records yet.', false);
+                renderDistribution(data);
+                renderChart(Array.isArray(data.daily) ? data.daily : []);
+                renderFeed(Array.isArray(data.feed) ? data.feed : []);
+            })
+            .catch(function () {
+                ['iocDashTotal', 'iocDashMalicious', 'iocDashSuspicious', 'iocDashClean'].forEach(function (id) {
+                    document.getElementById(id).textContent = '—';
+                });
+                showState('iocDashStatsState', 'Dashboard statistics are temporarily unavailable.', true);
+                showState('iocDashDistributionState', 'Unable to load verdict distribution.', true);
+                document.getElementById('iocDashSegments').hidden = true;
+                document.getElementById('iocDashVerdictRows').replaceChildren();
+                showState('iocDashChartState', 'Unable to load daily analysis counts.', true);
+                document.getElementById('iocDashChart').replaceChildren();
+                document.getElementById('iocDashLegend').replaceChildren();
+                document.getElementById('iocDashFeed').replaceChildren();
+                showState('iocDashFeedState', 'Unable to load the malicious feed.', true);
+            });
+    }
+
+    var lookup = document.getElementById('iocDashboardLookup');
+    lookup.addEventListener('submit', function (event) {
+        event.preventDefault();
+        var value = document.getElementById('iocDashboardValue').value.trim();
+        var error = document.getElementById('iocDashboardLookupError');
+        error.textContent = '';
+        if (!value) { error.textContent = 'Enter an IP, domain, URL, hash, or email.'; return; }
+        var legacyInput = document.getElementById('iocValue');
+        var legacyForm = document.getElementById('iocForm');
+        if (!legacyInput || !legacyForm || typeof legacyForm.requestSubmit !== 'function') {
+            error.textContent = 'IOC investigation is unavailable. Refresh the page and try again.';
+            return;
+        }
+        if (typeof window.setIOCMode === 'function') window.setIOCMode('single');
+        legacyInput.value = value;
+        legacyForm.requestSubmit();
+    });
+
+    loadDashboard();
+})();
+</script>
 <script>
 (function () {
     'use strict';
