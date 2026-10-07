@@ -230,6 +230,23 @@
     .report-v2 .rv-rule-action:disabled { opacity: .5; }
     .report-v2 .rv-rule-action[data-rule-action="download"]:not(:disabled),
     .report-v2 .rv-rule-action[data-rule-action="deploy"]:not(:disabled) { color: var(--rv-cyan) !important; border-color: color-mix(in srgb, var(--rv-cyan) 65%, var(--rv-line)) !important; opacity: 1; cursor: pointer; }
+    .report-v2 .rv-rule-approval-dialog { position: fixed; inset: 0; width: min(440px, calc(100% - 2rem)); max-width: none; max-height: calc(100% - 2rem); margin: auto; padding: 1.25rem; overflow: visible; color: var(--rv-text); background: var(--rv-bg); border: 1px solid var(--rv-line); border-radius: 8px; box-shadow: 0 24px 70px #0009; }
+    .report-v2 .rv-rule-approval-dialog::before, .report-v2 .rv-rule-approval-dialog::after { content: ""; position: absolute; width: 12px; height: 12px; border: 2px solid var(--rv-cyan); pointer-events: none; }
+    .report-v2 .rv-rule-approval-dialog::before { top: -2px; left: -2px; border-right: 0; border-bottom: 0; }
+    .report-v2 .rv-rule-approval-dialog::after { right: -2px; bottom: -2px; border-left: 0; border-top: 0; }
+    .report-v2 .rv-rule-approval-dialog::backdrop { background: rgb(1 5 12 / 72%); backdrop-filter: blur(2px); }
+    .report-v2 .rv-rule-approval-dialog [data-rule-approval-title] { display: block; margin-bottom: .55rem; color: var(--rv-cyan); font: 600 .78rem ui-monospace, monospace; letter-spacing: .1em; text-transform: uppercase; }
+    .report-v2 .rv-rule-approval-dialog [data-rule-approval-title]::before { content: "// "; color: var(--rv-cyan); }
+    .report-v2 .rv-rule-approval-dialog p { margin: 0 0 1rem; color: var(--rv-muted); font: .78rem/1.5 ui-monospace, monospace; }
+    .report-v2 .rv-rule-approval-dialog label { display: block; margin-bottom: .35rem; color: var(--rv-muted); font: .66rem ui-monospace, monospace; letter-spacing: .06em; text-transform: uppercase; }
+    .report-v2 .rv-rule-approval-dialog input { width: 100%; padding: .55rem .65rem; color: var(--rv-text); background: var(--rv-panel); border: 1px solid var(--rv-line); border-radius: 4px; font: .82rem ui-monospace, monospace; }
+    .report-v2 .rv-rule-approval-dialog input:focus { outline: 2px solid color-mix(in srgb, var(--rv-cyan) 55%, transparent); outline-offset: 1px; }
+    .report-v2 .rv-rule-approval-actions { display: flex; justify-content: flex-end; gap: .5rem; margin-top: 1rem; }
+    .report-v2 .rv-rule-approval-actions button { border-radius: 4px; padding: .35rem .65rem; background: transparent; font: .68rem ui-monospace, monospace; }
+    .report-v2 .rv-rule-approval-cancel { color: var(--rv-muted); border: 1px solid var(--rv-line); }
+    .report-v2 .rv-rule-approval-submit { color: var(--rv-green); border: 1px solid color-mix(in srgb, var(--rv-green) 65%, var(--rv-line)); }
+    [data-theme="light"] .report-v2 .rv-rule-approval-dialog::backdrop { background: rgb(25 39 57 / 38%); backdrop-filter: none; }
+    [data-theme="light"] .report-v2 .rv-rule-approval-dialog { box-shadow: 0 18px 50px #23364a30; }
     .report-v2 .rv-rule-tabs.nav-tabs { display: flex; flex-wrap: wrap; gap: 2px; margin: 0; padding: .7rem 1rem 0; border-bottom: 1px solid var(--rv-line); }
     .report-v2 .rv-rule-tabs.nav-tabs .nav-link { border: 0; border-bottom: 2px solid transparent; border-radius: 0; padding: .5rem .65rem; background: transparent; color: var(--rv-muted); font: 650 .66rem ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: .08em; text-transform: uppercase; }
     .report-v2 .rv-rule-tabs.nav-tabs .nav-link:hover { color: var(--rv-cyan); border-color: transparent; }
@@ -263,6 +280,7 @@
     [data-theme="light"] .report-v2 #scoreGauge { filter: none !important; }
     @media print {
         .report-v2 .no-print { display: none !important; }
+        .report-v2 .rv-rule-approval-dialog { display: none !important; }
         .report-v2 .collapse { display: block !important; height: auto !important; visibility: visible !important; }
         .report-v2 .score-pill, .report-v2 .rv-pill { background: #fff !important; border-color: #6b7280 !important; color: #111827 !important; }
         .report-v2 #rawDataCollapse, .report-v2 #rawDataCollapse .card-body, .report-v2 #rawJsonPre { display: block !important; height: auto !important; max-height: none !important; overflow: visible !important; visibility: visible !important; position: static; width: auto; margin: 0; padding: 1rem; clip: auto; border: 1px solid #9ca3af; background: #fff !important; color: #111827 !important; }
@@ -1997,6 +2015,20 @@
     </div>
 </div>
 {% endif %}
+<dialog id="rvRuleApprovalDialog" class="rv-rule-approval-dialog no-print"
+        role="dialog" aria-modal="true" aria-labelledby="rvRuleApprovalTitle">
+    <form data-rule-approval-form>
+        <span id="rvRuleApprovalTitle" data-rule-approval-title>Approve rule export</span>
+        <p data-rule-approval-description></p>
+        <label for="rvRuleApprovalReviewer">Reviewer name</label>
+        <input id="rvRuleApprovalReviewer" name="reviewer" type="text" value="unknown"
+               autocomplete="name" data-rule-approval-input>
+        <div class="rv-rule-approval-actions">
+            <button class="rv-rule-approval-cancel" type="button" data-rule-approval-cancel>Cancel</button>
+            <button class="rv-rule-approval-submit" type="submit">Approve</button>
+        </div>
+    </form>
+</dialog>
 </div>
 {% endblock %}
 

@@ -2290,11 +2290,56 @@
         });
     }
 
-    function approveRuleArtifact(button) {
+    function requestRuleApproval(button, ruleType) {
+        var dialog = document.getElementById('rvRuleApprovalDialog');
+        if (!dialog || typeof dialog.showModal !== 'function') {
+            return Promise.resolve(window.prompt('Reviewer name for this rule export approval:', 'unknown'));
+        }
+        var form = dialog.querySelector('[data-rule-approval-form]');
+        var input = dialog.querySelector('[data-rule-approval-input]');
+        var description = dialog.querySelector('[data-rule-approval-description]');
+        var cancelButton = dialog.querySelector('[data-rule-approval-cancel]');
+        if (!form || !input || !description || !cancelButton) {
+            return Promise.resolve(window.prompt('Reviewer name for this rule export approval:', 'unknown'));
+        }
+
+        description.textContent = 'Approve ' + String(ruleType || 'rule').toUpperCase() + ' rule export?';
+        input.value = 'unknown';
+        dialog.returnValue = '';
+        return new Promise(function (resolve) {
+            function cleanup() {
+                form.removeEventListener('submit', submitApproval);
+                cancelButton.removeEventListener('click', cancelApproval);
+                dialog.removeEventListener('click', cancelOnBackdrop);
+            }
+            function closeResult() {
+                cleanup();
+                var result = dialog.returnValue === 'approve' ? input.value : null;
+                if (button.isConnected) button.focus();
+                resolve(result);
+            }
+            function submitApproval(event) {
+                event.preventDefault();
+                dialog.close('approve');
+            }
+            function cancelApproval() {
+                dialog.close('cancel');
+            }
+            function cancelOnBackdrop(event) {
+                if (event.target === dialog) dialog.close('cancel');
+            }
+            form.addEventListener('submit', submitApproval);
+            cancelButton.addEventListener('click', cancelApproval);
+            dialog.addEventListener('click', cancelOnBackdrop);
+            dialog.addEventListener('close', closeResult, { once: true });
+            dialog.showModal();
+            input.focus();
+        });
+    }
+
+    function approveRuleArtifact(button, approvedBy) {
         var analysisId = button.getAttribute('data-analysis-id');
         var ruleType = button.getAttribute('data-rule-type');
-        var approvedBy = window.prompt('Reviewer name for this rule export approval:', 'unknown');
-        if (approvedBy === null) return;
         button.disabled = true;
         fetch(ruleArtifactUrl(analysisId, ruleType, 'approve'), {
             method: 'POST',
@@ -2417,12 +2462,15 @@
         });
 
         document.querySelectorAll('[data-rule-action]').forEach(function (button) {
-            button.addEventListener('click', function () {
+            button.addEventListener('click', async function () {
                 var action = button.getAttribute('data-rule-action');
                 if (action === 'edit') editRuleArtifact(button);
                 if (action === 'save') saveRuleArtifactContent(button);
                 if (action === 'cancel') cancelRuleArtifactEdit(button);
-                if (action === 'approve') approveRuleArtifact(button);
+                if (action === 'approve') {
+                    var approvedBy = await requestRuleApproval(button, button.getAttribute('data-rule-type'));
+                    if (approvedBy !== null) approveRuleArtifact(button, approvedBy);
+                }
                 if (action === 'download') downloadRuleArtifact(button);
                 if (action === 'deploy') markRuleArtifactDeployed(button);
                 if (action === 'zip') exportSelectedRuleArtifacts(button);

@@ -631,6 +631,41 @@ def test_detection_rule_code_block_and_print_rules_remain_console_safe():
     assert "2 ERRORS" in html and "19 N/A" in html and "1 / 7" in html
 
 
+def test_rule_approval_dialog_has_accessible_console_markup_and_print_rule():
+    html = _render_report_with_rules(print_mode=True)
+    dialog = re.search(r'<dialog id="rvRuleApprovalDialog".*?</dialog>', html, re.DOTALL)
+    assert dialog
+    markup = dialog.group(0)
+
+    assert 'role="dialog" aria-modal="true" aria-labelledby="rvRuleApprovalTitle"' in markup
+    assert 'id="rvRuleApprovalTitle" data-rule-approval-title' in markup
+    assert 'for="rvRuleApprovalReviewer">Reviewer name</label>' in markup
+    assert 'value="unknown"' in markup
+    assert ">Cancel</button>" in markup and ">Approve</button>" in markup
+    assert ".report-v2 .rv-rule-approval-dialog { display: none !important; }" in html
+    assert "1 FLAGGED" in html and "7 RESPONDED" in html
+    assert "2 ERRORS" in html and "19 N/A" in html and "1 / 7" in html
+
+
+def test_cancelled_rule_approval_does_not_call_approval_api_and_prompt_fallback_exists():
+    script = Path(__file__).resolve().parents[1].joinpath(
+        "static/js/analysis.js"
+    ).read_text(encoding="utf-8")
+    click_handler = re.search(
+        r"button\.addEventListener\('click', async function \(\) \{(.*?)\n\s*\}\);",
+        script,
+        re.DOTALL,
+    ).group(1)
+
+    assert re.search(
+        r"var approvedBy = await requestRuleApproval\(button, button\.getAttribute\('data-rule-type'\)\);\s*"
+        r"if \(approvedBy !== null\) approveRuleArtifact\(button, approvedBy\);",
+        click_handler,
+    )
+    assert "window.prompt('Reviewer name for this rule export approval:', 'unknown')" in script
+    assert "if (!dialog || typeof dialog.showModal !== 'function')" in script
+
+
 def test_scored_chip_uses_scorer_constant_and_omits_report_only_virustotal(monkeypatch):
     monkeypatch.setitem(
         SOURCE_SCORING_MULTIPLIERS,
