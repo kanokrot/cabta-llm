@@ -1902,7 +1902,9 @@ class TestFastAPIEndpoints:
         app = self._build_app(agent_store)
         client = TestClient(app)
 
-        resp = client.post("/api/agent/investigate", json={"goal": "test"})
+        resp = client.post(
+            "/api/agent/investigate", json={"goal": "analyze 8.8.8.8"}
+        )
         assert resp.status_code == 503
 
 
