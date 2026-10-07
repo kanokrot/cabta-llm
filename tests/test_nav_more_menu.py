@@ -49,7 +49,7 @@ def test_more_menu_role_gates_and_unique_nav_links(tmp_path, monkeypatch, role: 
     user = {
         "id": 1,
         "email": "test@example.test",
-        "username": "test-user",
+        "username": "test_user",
         "role": role,
         "is_active": 1,
     }
@@ -58,6 +58,7 @@ def test_more_menu_role_gates_and_unique_nav_links(tmp_path, monkeypatch, role: 
     with TestClient(_build_page_app(tmp_path)) as client:
         client.cookies.set("cabta_session", "test-token")
         response = client.get("/account")
+        other_page = client.get("/history")
 
     assert response.status_code == 200
     assert "Admin only" not in response.text
@@ -84,22 +85,30 @@ def test_more_menu_role_gates_and_unique_nav_links(tmp_path, monkeypatch, role: 
     nav_start = response.text.index("<nav ")
     nav_end = response.text.index("</nav>", nav_start) + len("</nav>")
     nav_html = response.text[nav_start:nav_end]
-    badge = re.search(r'<span class="navbar-user-badge"[^>]*>.*?</span>', nav_html, re.S)
-    assert badge is not None
-    assert not re.search(r'<a\b[^>]*class="[^"]*navbar-user-badge', nav_html)
-    extra_account_links = [
-        anchor for anchor in re.findall(r'<a\b[^>]*>.*?</a>', nav_html, re.S)
-        if "navbar-account-link" in anchor
-    ]
-    assert len(extra_account_links) == (0 if role == "admin" else 1)
+    capsule_match = re.search(r'<div class="navbar-user-capsule">(.*?)</div>', nav_html, re.S)
+    assert capsule_match is not None
+    capsule = capsule_match.group(1)
+    assert '<span class="navbar-user-identity"' in capsule
+    assert '<span class="navbar-user-avatar" aria-hidden="true">TU</span>' in capsule
+    assert "navbar-user-name" in capsule
+    account_links = re.findall(r'<a\b[^>]*href="/account"[^>]*>.*?</a>', nav_html, re.S)
+    assert len(account_links) == (0 if role == "admin" else 1)
     assert len(re.findall(r'href="/account"', nav_html)) == (0 if role == "admin" else 1)
     if role != "admin":
-        extra_link = extra_account_links[0]
-        assert 'title="My settings"' in extra_link
-        assert 'aria-label="My settings"' in extra_link
-        assert '<i class="bi bi-person-gear"></i>' in extra_link
-        assert re.search(r'<span class="d-none d-lg-inline">My settings</span>', extra_link)
-        assert "navbar-account-link active" in extra_link
+        assert not re.search(r'<a\b', capsule.split('<a href="/account"', 1)[0])
+        account_link = account_links[0]
+        assert account_link in capsule
+        assert 'title="My settings"' in account_link
+        assert 'aria-label="My settings"' in account_link
+        assert "My settings" in re.sub(r"<[^>]+>", "", account_link)
+        assert '<i class="bi bi-person-gear navbar-account-icon"' in account_link
+        assert "navbar-account-link active" in account_link
+    else:
+        assert "navbar-account-link" not in capsule
+        assert capsule.count('class="navbar-user-identity"') == 1
+    history_nav = other_page.text[:other_page.text.index("</nav>") + len("</nav>")]
+    history_links = re.findall(r'<a\b[^>]*href="/account"[^>]*class="([^"]*)"', history_nav)
+    assert not any("active" in classes.split() for classes in history_links)
     assert "/static/js/gmail_settings.js" in response.text
 
     for href, roles in HREFS.items():
