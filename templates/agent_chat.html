@@ -2550,6 +2550,42 @@ var AgentChat = (function() {
         input.setSelectionRange(input.value.length, input.value.length);
     }
 
+    function renderInstantReply(data, btn) {
+        if (!data || data.type !== 'instant') return false;
+
+        btn.disabled = false;
+        stopTimer();
+
+        var msgs = document.getElementById('chatMessages');
+        removeEmptyState();
+        var bubble = document.createElement('div');
+        bubble.className = 'chat-bubble chat-bubble-agent';
+        var response = data.response == null ? '' : String(data.response);
+        bubble.innerHTML = '<div class="bubble-label">Agent</div><div class="agent-content">' + esc(response) + '</div>';
+
+        if (Array.isArray(data.actions) && data.actions.length) {
+            var actions = document.createElement('div');
+            actions.className = 'd-flex flex-wrap gap-2 mt-3';
+            data.actions.forEach(function(action) {
+                if (!action || typeof action !== 'object') return;
+                var button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'btn btn-outline-primary btn-sm';
+                var label = action.label == null ? '' : String(action.label);
+                var description = action.description == null ? '' : String(action.description);
+                button.innerHTML = esc(label) + (description ? '<span class="text-muted ms-1">' + esc(description) + '</span>' : '');
+                var prefix = action.prefix == null ? '' : String(action.prefix);
+                button.addEventListener('click', function() { quickAction(prefix); });
+                actions.appendChild(button);
+            });
+            bubble.appendChild(actions);
+        }
+
+        msgs.appendChild(bubble);
+        scrollToBottom();
+        return true;
+    }
+
     function renderSessionList() {
         var list = document.getElementById('sessionList');
         var viewAllButton = document.getElementById('sessionViewAllButton');
@@ -2991,6 +3027,7 @@ var AgentChat = (function() {
                 })
                 .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
                 .then(function(data) {
+                    if (renderInstantReply(data, btn)) return;
                     btn.disabled = false;
                     sessionId = data.session_id;
                     maxSteps = 200;
@@ -3016,6 +3053,7 @@ var AgentChat = (function() {
                 })
                 .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
                 .then(function(data) {
+                    if (renderInstantReply(data, btn)) return;
                     btn.disabled = false;
                     sessionId = data.session_id;
                     maxSteps = data.max_steps || 50;
