@@ -316,8 +316,12 @@ def test_details_show_extra_fields_only_when_present():
             "bare_source": {"status": "clean", "score": 0},
         }
     )
-    threatfox_row = re.search(r'<tr[^>]*>.*?ThreatFox.*?</tr>', html, re.DOTALL).group(0)
-    bare_row = re.search(r'<tr[^>]*>.*?Bare Source.*?</tr>', html, re.DOTALL).group(0)
+    threatfox_row = re.search(
+        r'<tr[^>]*>(?:(?!</tr>).)*?ThreatFox(?:(?!</tr>).)*?</tr>', html, re.DOTALL
+    ).group(0)
+    bare_row = re.search(
+        r'<tr[^>]*>(?:(?!</tr>).)*?Bare Source(?:(?!</tr>).)*?</tr>', html, re.DOTALL
+    ).group(0)
     threatfox_id = re.search(r'aria-controls="([^"]+)"', threatfox_row).group(1)
     bare_id = re.search(r'aria-controls="([^"]+)"', bare_row).group(1)
     threatfox_panel = re.search(
@@ -426,14 +430,19 @@ def _domain_enrichment(is_dga=True, confidence=80):
 def test_domain_intelligence_uses_console_title_and_confidence_badge():
     html = _render_report(_count_fixture_sources(), domain_enrichment=_domain_enrichment())
     domain_card = re.search(
-        r'<div class="rv-card card-print-flow">\s*<div class="rv-card-head card-header-collapsible" data-bs-toggle="collapse" data-bs-target="#domainIntelligenceCollapse".*?<!-- STATIC ANALYSIS \(File\) -->',
+        r'<div class="rv-card card-print-flow">\s*<div class="rv-card-head card-header-collapsible" data-bs-toggle="collapse" data-bs-target="#domainIntelligenceCollapse".*?</div>',
+        html,
+        re.DOTALL,
+    ).group(0)
+    dga_card = re.search(
+        r'<section class="rv-domain-card"><h3>DGA heuristic.*?</section>',
         html,
         re.DOTALL,
     ).group(0)
 
     assert '<h2 class="rv-console-title">Domain intelligence</h2>' in domain_card
     assert '.rv-card-head .rv-console-title::before { content: "// ";' in html
-    assert '<span class="rv-pill rv-pill--flag">80%</span>' in domain_card
+    assert '<span class="rv-pill rv-pill--flag">80%</span>' in dga_card
     assert "1 FLAGGED" in html and "7 RESPONDED" in html
     assert "2 ERRORS" in html and "19 N/A" in html and "1 / 7" in html
 
@@ -509,7 +518,10 @@ def test_detection_rules_uses_console_header_and_brackets():
     ).group(1)
 
     assert 'class="rv-console-title" role="heading" aria-level="2">Detection Rules</span>' in header
-    assert 'data-rule-approved-count data-analysis-id="display-test">approved 0 of 2' in header
+    assert re.search(
+        r'data-rule-approved-count\s+data-analysis-id="display-test">approved 0 of 2',
+        header,
+    )
     assert 'data-bs-toggle="collapse" data-bs-target="#rulesCollapse" aria-expanded="true"' in header
     assert "collapse-chevron" in header
     assert 'data-rule-action="zip"' in header
@@ -630,7 +642,7 @@ def test_detection_rule_export_selection_and_summary_hooks_remain_in_place():
 def test_detection_rule_code_block_and_print_rules_remain_console_safe():
     html = _render_report_with_rules(print_mode=True)
 
-    assert 'class="rv-rule-card card-print-flow mb-4"' in html
+    assert 'class="rv-card rv-rule-card card-print-flow mb-4"' in html
     assert ".rv-rule-card .rule-tab-content pre, .report-v2 .rv-rule-card .rule-wrapper > pre" in html
     assert "background: #02060e" in html
     assert "border-radius: 0" in html
@@ -751,8 +763,8 @@ def test_recommendations_warning_only_shows_recorded_reason_and_provider():
         provided,
         re.DOTALL,
     ).group(1)
-    assert "Reason: &lt;network timeout&gt;" in provided_panel
-    assert "Provider: ollama" in provided_panel
+    assert "<b>Reason:</b> &lt;network timeout&gt;" in provided_panel
+    assert "<b>Provider:</b> ollama" in provided_panel
     assert "<network timeout>" not in provided_panel
 
 
@@ -789,8 +801,12 @@ def test_scored_chip_uses_scorer_constant_and_omits_report_only_virustotal(monke
         SOURCE_SCORING_MULTIPLIERS["threatfox"] + 0.11,
     )
     html = _render_report(_count_fixture_sources())
-    threatfox_row = re.search(r'<tr[^>]*>.*?ThreatFox.*?</tr>', html, re.DOTALL).group(0)
-    virustotal_row = re.search(r'<tr[^>]*>.*?VirusTotal.*?</tr>', html, re.DOTALL).group(0)
+    threatfox_row = re.search(
+        r'<tr[^>]*>(?:(?!</tr>).)*?ThreatFox(?:(?!</tr>).)*?</tr>', html, re.DOTALL
+    ).group(0)
+    virustotal_row = re.search(
+        r'<tr[^>]*>(?:(?!</tr>).)*?VirusTotal(?:(?!</tr>).)*?</tr>', html, re.DOTALL
+    ).group(0)
     expected_weight = f"{SOURCE_SCORING_MULTIPLIERS['threatfox']:.2f}"
 
     assert f'title="Counted in threat score, weight {expected_weight}; contributes only when its score is greater than 0"' in threatfox_row
