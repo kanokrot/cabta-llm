@@ -355,6 +355,16 @@ def _safe_sources(value: Any, *, detailed: bool = False) -> dict[str, dict[str, 
                     for entry in item[:20]
                     if isinstance(entry, (str, int, float, bool))
                 ]
+        if not detailed:
+            error_value = source_value.get("error")
+            if isinstance(error_value, str):
+                http_match = re.search(r"\bHTTP\s+(\d{3})\b", error_value)
+                if http_match:
+                    http_status = int(http_match.group(1))
+                    if 100 <= http_status <= 599:
+                        row["http_status"] = http_status
+            if source_value.get("feed_status") == "unavailable":
+                row["feed_status"] = "unavailable"
         if row:
             output[source_name[:100]] = row
     return output
