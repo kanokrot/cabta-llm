@@ -3,8 +3,8 @@
 {% extends "base.html" %}
 
 {% block title %}Report - {{ job.id | default('N/A') | e }} - Blue Team Assistant{% endblock %}
-{% block page_title %}Analysis Report{% endblock %}
-{% block page_subtitle %}<span class="page-subtitle">{{ job.id | default('') | e | truncate(16) }}</span>{% endblock %}
+{% block page_title %}{% endblock %}
+{% block page_subtitle %}{% endblock %}
 
 {% block extra_head %}
 <style>
@@ -80,6 +80,105 @@
         border-radius: 20px; padding: 4px 12px; font-size: 0.8rem; margin: 3px;
     }
     .score-pill .pill-value { font-weight: 700; font-size: 0.9rem; }
+    .sub-header:has(+ #main-content .report-v2) {
+        height: 0;
+        min-height: 0;
+        margin-top: 0 !important;
+        overflow: hidden;
+        padding: 0;
+        border: 0;
+    }
+    .report-v2 {
+        --rv-bg: var(--bg-card, var(--bs-body-bg, #0b1220));
+        --rv-panel: var(--bg-tertiary, #121c2d);
+        --rv-line: var(--border-color, #26364b);
+        --rv-text: var(--text-primary, #e5edf7);
+        --rv-muted: var(--text-secondary, #9aabc0);
+        color: var(--rv-text);
+        padding-top: 56px;
+    }
+    [data-theme="dark"] .report-v2 { --rv-bg: var(--bg-card, #0b1220); --rv-panel: var(--bg-tertiary, #121c2d); --rv-line: var(--border-color, #26364b); --rv-text: var(--text-primary, #e5edf7); --rv-muted: var(--text-secondary, #9aabc0); }
+    [data-theme="light"] .report-v2 { --rv-bg: var(--bg-card, #fff); --rv-panel: var(--bg-secondary, #f3f7fb); --rv-line: var(--border-color, #cfdae8); --rv-text: var(--text-primary, #17263b); --rv-muted: var(--text-secondary, #596b80); }
+    .report-v2 .rv-card { background: var(--rv-bg); border: 1px solid var(--rv-line); border-radius: 10px; margin-bottom: 1rem; overflow: hidden; }
+    .report-v2 .rv-card-head { display: flex; align-items: center; flex-wrap: wrap; gap: .55rem; padding: .9rem 1rem; border-bottom: 1px solid var(--rv-line); }
+    .report-v2 .rv-card-head h2, .report-v2 .rv-card-head h3 { margin: 0; font-size: 1rem; font-weight: 650; }
+    .report-v2 .rv-card-head h2, .report-v2 .rv-card-head h3 { text-transform: uppercase; }
+    .report-v2 .rv-spacer { flex: 1 1 auto; }
+    .report-v2 .rv-muted { color: var(--rv-muted); }
+    .report-v2 .rv-mono { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+    .report-v2 .rv-hero { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 1.35rem; align-items: center; padding: 1.25rem; border-top: 3px solid var(--color-danger, #dc3545); }
+    .report-v2 .score-gauge { position: relative; width: 140px; height: 140px; flex: 0 0 140px; }
+    .report-v2 .score-gauge canvas { position: absolute; inset: 0; display: block; width: 140px !important; height: 140px !important; max-width: 140px; max-height: 140px; }
+    .report-v2 .score-gauge #scoreValue { position: absolute; top: 50%; left: 50%; inset: auto; display: grid; place-items: center; width: 100%; transform: translate(-50%, -50%); font: 700 2rem/1 ui-monospace, monospace; color: var(--rv-text); white-space: nowrap; z-index: 2; }
+    .report-v2 .score-gauge .score-label { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); font-size: .62rem; line-height: 1; letter-spacing: .12em; color: var(--rv-muted); white-space: nowrap; z-index: 2; }
+    .report-v2 .rv-title-row { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; }
+    .report-v2 .rv-title { margin: 0; color: var(--rv-text); font-size: clamp(1.15rem, 2.5vw, 1.65rem); overflow-wrap: anywhere; }
+    .report-v2 .rv-meta { display: flex; flex-wrap: wrap; gap: .35rem 1.1rem; color: var(--rv-muted); font: .78rem ui-monospace, monospace; margin-top: .55rem; }
+    .report-v2 .rv-meta strong { color: var(--rv-text); font-weight: 550; }
+    .report-v2 .rv-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .65rem; margin-top: 1rem; }
+    .report-v2 .rv-tile { min-width: 0; padding: .7rem .8rem; background: var(--rv-panel); border: 1px solid var(--rv-line); border-left: 3px solid var(--color-primary, #3b82f6); border-radius: 6px; }
+    .report-v2 .rv-tile-label { display: block; color: var(--rv-muted); font: .65rem ui-monospace, monospace; letter-spacing: .08em; text-transform: uppercase; }
+    .report-v2 .rv-tile-value { display: block; margin-top: .15rem; color: var(--rv-text); font: 650 1rem ui-monospace, monospace; overflow-wrap: anywhere; }
+    .report-v2 .rv-pill { display: inline-flex; align-items: center; border: 1px solid var(--rv-line); border-radius: 999px; padding: .15rem .55rem; color: var(--rv-muted); font: 700 .65rem ui-monospace, monospace; letter-spacing: .05em; text-transform: uppercase; }
+    .report-v2 .rv-pill--flag { color: var(--color-danger, #dc3545); border-color: var(--color-danger, #dc3545); }
+    .report-v2 .rv-pill--ok { color: var(--color-success, #198754); border-color: var(--color-success, #198754); }
+    .report-v2 .rv-pill--error { color: var(--color-warning, #b77900); border-color: var(--color-warning, #b77900); }
+    .report-v2 .rv-pill .badge { background: transparent; color: inherit; padding: 0; font-size: inherit; }
+    .report-v2 .rv-table-wrap { overflow-x: auto; }
+    .report-v2 .rv-table { width: 100%; border-collapse: collapse; }
+    .report-v2 .rv-table th { padding: .55rem .85rem; color: var(--rv-muted); text-align: left; font: 650 .65rem ui-monospace, monospace; letter-spacing: .1em; text-transform: uppercase; }
+    .report-v2 .rv-table td { padding: .65rem .85rem; border-top: 1px solid var(--rv-line); vertical-align: top; color: var(--rv-text); }
+    .report-v2 .rv-table tr.rv-hit td { background: color-mix(in srgb, var(--color-danger, #dc3545) 8%, transparent); }
+    .report-v2 .rv-details { color: var(--rv-muted); font-size: .83rem; overflow-wrap: anywhere; }
+    .report-v2 details.rv-na > summary { cursor: pointer; padding: .75rem 1rem; border-top: 1px solid var(--rv-line); color: var(--rv-muted); }
+    .report-v2 .rv-na-list { padding: 0 1rem 1rem; color: var(--rv-muted); }
+    .report-v2 .rv-two, .report-v2 .rv-domain-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .85rem; padding: 1rem; }
+    .report-v2 .rv-col, .report-v2 .rv-domain-card { min-width: 0; background: var(--rv-panel); border: 1px solid var(--rv-line); border-radius: 7px; padding: 1rem; }
+    .report-v2 .rv-col h3, .report-v2 .rv-domain-card h3 { display: flex; align-items: center; gap: .5rem; margin: 0 0 .8rem; font-size: .9rem; }
+    .report-v2 .rv-col ol { margin: 0; padding-left: 1.3rem; }
+    .report-v2 .rv-col li { margin-bottom: .5rem; overflow-wrap: anywhere; }
+    .report-v2 .rv-status-box { padding: .8rem; border: 1px dashed var(--color-warning, #b77900); border-radius: 6px; color: var(--rv-muted); }
+    .report-v2 .rv-status-box strong { display: block; color: var(--rv-text); margin-bottom: .3rem; }
+    .report-v2 .rv-analysis-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+    .report-v2 .rv-warning { padding: .7rem; border-left: 3px solid var(--color-warning, #b77900); background: color-mix(in srgb, var(--color-warning, #b77900) 8%, transparent); }
+    .report-v2 .rv-compare, .report-v2 .rv-raw-tools { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; padding: .8rem 1rem; }
+    .report-v2 .rv-domain-note { padding: 0 1rem 1rem; color: var(--rv-muted); font-size: .82rem; }
+    .report-v2 .rv-kv { display: grid; grid-template-columns: minmax(8rem, .8fr) minmax(0, 1.2fr); gap: .35rem .8rem; color: var(--rv-muted); }
+    .report-v2 .rv-kv strong { color: var(--rv-text); font-weight: 550; overflow-wrap: anywhere; }
+    .report-v2 .rule-tab-content pre { background: var(--rv-panel); border: 1px solid var(--rv-line); border-radius: 6px; padding: 3rem 1rem 1rem; overflow-x: auto; max-height: 400px; font-size: .8rem; line-height: 1.5; color: var(--rv-text); margin-bottom: 0; }
+    .report-v2 .rule-tab-content .tab-pane { padding-top: .75rem; }
+    .report-v2 .rule-wrapper { position: relative; }
+    .report-v2 .rule-wrapper > pre { padding-top: 3rem; }
+    .report-v2 .rule-copy-actions { position: absolute; top: .5rem; right: .5rem; display: flex; gap: .35rem; z-index: 2; }
+    .report-v2 .rule-export-actions { position: static; justify-content: flex-end; flex-wrap: wrap; margin-bottom: .5rem; }
+    .report-v2 .rule-export-actions + pre { padding-top: 1rem; }
+    .report-v2 .rv-raw-tools input { flex: 1 1 12rem; min-width: 10rem; padding: .45rem .6rem; border: 1px solid var(--rv-line); border-radius: 5px; background: var(--rv-panel); color: var(--rv-text); }
+    .report-v2 #rawJsonTree { padding: .8rem 1rem; background: var(--rv-panel); color: var(--rv-text); font: .8rem/1.65 ui-monospace, monospace; max-height: 420px; overflow: auto; }
+    .report-v2 #rawJsonTree details { margin-left: 1rem; }
+    .report-v2 #rawJsonTree > details { margin-left: 0; }
+    .report-v2 #rawJsonTree summary { cursor: pointer; list-style: none; }
+    .report-v2 #rawJsonTree summary::-webkit-details-marker { display: none; }
+    .report-v2 #rawJsonTree summary::before { content: "+ "; color: var(--color-primary, #3b82f6); }
+    .report-v2 #rawJsonTree details[open] > summary::before { content: "- "; }
+    .report-v2 .rv-json-line { margin-left: 1.4rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .report-v2 .rv-json-key { color: #8f7aea; }
+    .report-v2 .rv-json-string { color: var(--color-success, #198754); }
+    .report-v2 .rv-json-number { color: var(--color-warning, #b77900); }
+    .report-v2 .rv-json-bool { color: var(--color-primary, #3b82f6); }
+    .report-v2 .rv-json-null { color: var(--color-danger, #dc3545); }
+    .report-v2 .rv-json-summary { color: var(--rv-muted); }
+    .report-v2 .rv-json-highlight { background: color-mix(in srgb, var(--color-primary, #3b82f6) 25%, transparent); outline: 1px solid var(--color-primary, #3b82f6); }
+    .report-v2 #rawJsonPre { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: pre-wrap; border: 0; }
+    @media (max-width: 760px) { .report-v2 .rv-hero { grid-template-columns: 1fr; justify-items: center; text-align: center; } .report-v2 .rv-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; } .report-v2 .rv-two, .report-v2 .rv-domain-grid { grid-template-columns: 1fr; } }
+    @media print {
+        .report-v2 .no-print { display: none !important; }
+        .report-v2 .collapse { display: block !important; height: auto !important; visibility: visible !important; }
+        .report-v2 .score-pill, .report-v2 .rv-pill { background: #fff !important; border-color: #6b7280 !important; color: #111827 !important; }
+        .report-v2 #rawDataCollapse, .report-v2 #rawDataCollapse .card-body, .report-v2 #rawJsonPre { display: block !important; height: auto !important; max-height: none !important; overflow: visible !important; visibility: visible !important; position: static; width: auto; margin: 0; padding: 1rem; clip: auto; border: 1px solid #9ca3af; background: #fff !important; color: #111827 !important; }
+        .report-v2 #rawJsonTree, .report-v2 .rv-raw-tools { display: none !important; }
+        .report-v2 .card.card-print-flow { break-inside: auto; page-break-inside: auto; }
+        .report-v2 #scoreGauge { display: block !important; width: 140px !important; height: 140px !important; max-width: 140px; max-height: 140px; }
+    }
     @media print {
         .no-print { display: none !important; }
         .collapse {
@@ -180,6 +279,55 @@
 {% set ioc_type         = result.ioc_type | default('') %}
 {% set sources_checked  = result.sources_checked | default(0) %}
 {% set sources_flagged  = result.sources_flagged | default(0) %}
+{% set ai_status = result.get('ai_status') %}
+{% set ai_error = result.get('ai_error') %}
+{% set recommendations_source = result.get('recommendations_source') %}
+{% set domain_enrichment = result.get('domain_enrichment') if result.get('domain_enrichment') is mapping else {} %}
+{% set domain_age = domain_enrichment.get('domain_age') if domain_enrichment.get('domain_age') is mapping else {} %}
+{% set dga_analysis = domain_enrichment.get('dga_analysis') if domain_enrichment.get('dga_analysis') is mapping else {} %}
+{% set dictionary_match = dga_analysis.get('dictionary_match') if dga_analysis.get('dictionary_match') is mapping else {} %}
+{% set raw_report_result = result.copy() %}
+{% if llm_analysis is mapping %}
+    {% set safe_llm_analysis = llm_analysis.copy() %}
+    {% set _ = safe_llm_analysis.pop('note', None) %}
+    {% set _ = safe_llm_analysis.pop('error', None) %}
+    {% set _ = raw_report_result.update({'llm_analysis': safe_llm_analysis}) %}
+{% endif %}
+{% set source_summary = namespace(flagged=0, responded=0, errors=0, na=0, classes={}, top_name='N/A', top_score=-1) %}
+{% for source_name, source_data in sources.items() %}
+    {% if source_data is mapping %}
+        {% set source_status = source_data.get('status', '') | string %}
+        {% set source_score = source_data.get('score', 0) | int(0) %}
+        {% if source_data.get('not_applicable') or source_status in ['\u2796', 'not_applicable'] %}
+            {% set source_class = 'na' %}
+        {% elif source_status in ['error', '\u26A0'] or ('error' in source_data) or source_data.get('feed_status') == 'unavailable' %}
+            {% set source_class = 'error' %}
+        {% elif source_status in ['found', 'detected', 'flagged'] or source_score >= 50 %}
+            {% set source_class = 'flagged' %}
+        {% elif source_status in ['not found', 'clean', 'ok'] or (source_score == 0 and source_status) %}
+            {% set source_class = 'clean' %}
+        {% elif source_status %}
+            {% set source_class = 'other' %}
+        {% else %}
+            {% set source_class = 'na' %}
+        {% endif %}
+        {% set _ = source_summary.classes.update({source_name: source_class}) %}
+        {% if source_class == 'flagged' %}
+            {% set source_summary.flagged = source_summary.flagged + 1 %}
+            {% set source_summary.responded = source_summary.responded + 1 %}
+        {% elif source_class == 'error' %}
+            {% set source_summary.errors = source_summary.errors + 1 %}
+        {% elif source_class == 'na' %}
+            {% set source_summary.na = source_summary.na + 1 %}
+        {% else %}
+            {% set source_summary.responded = source_summary.responded + 1 %}
+        {% endif %}
+        {% if source_class not in ['na', 'error'] and source_score > source_summary.top_score %}
+            {% set source_summary.top_score = source_score %}
+            {% set source_summary.top_name = source_name | string | title %}
+        {% endif %}
+    {% endif %}
+{% endfor %}
 
 {# File-specific #}
 {% set file_info          = result.file_info | default({}) %}
@@ -205,7 +353,39 @@
 {% set current_user_role = request.state.user.role if request.state.user is defined else '' %}
 {% set can_edit_detection_rules = current_user_role in ['Threat Hunter', 'admin'] %}
 
+{% macro report_timestamp(raw_value) -%}
+    {% set raw = raw_value | default('', true) | string %}
+    {% set tail = raw[19:] %}
+    {% if raw and (raw.endswith('+00:00') or raw.endswith('Z') or ('+' not in tail and '-' not in tail and 'Z' not in tail)) %}
+        {{ (raw[:19] | replace('T', ' ')) ~ ' UTC' }}
+    {% elif raw %}{{ raw | e }}{% else %}N/A{% endif %}
+{%- endmacro %}
+{% set duration_display = 'N/A' %}
+{% set created_raw = job.get('created_at', '') | default('', true) | string %}
+{% set completed_raw = job.get('completed_at', '') | default('', true) | string %}
+{% if created_raw and completed_raw and created_raw | length >= 19 and completed_raw | length >= 19 and created_raw[:10] == completed_raw[:10] %}
+    {% set date_shape_ok = created_raw[4:5] == '-' and created_raw[7:8] == '-' and completed_raw[4:5] == '-' and completed_raw[7:8] == '-' %}
+    {% set time_shape_ok = created_raw[10:11] in ['T', ' '] and completed_raw[10:11] in ['T', ' '] and created_raw[13:14] == ':' and completed_raw[13:14] == ':' and created_raw[16:17] == ':' and completed_raw[16:17] == ':' %}
+    {% set year_value = created_raw[:4] | int(-1) %}
+    {% set month_value = created_raw[5:7] | int(-1) %}
+    {% set day_value = created_raw[8:10] | int(-1) %}
+    {% set start_hour = created_raw[11:13] | int(-1) %}
+    {% set start_minute = created_raw[14:16] | int(-1) %}
+    {% set start_second = created_raw[17:19] | int(-1) %}
+    {% set end_hour = completed_raw[11:13] | int(-1) %}
+    {% set end_minute = completed_raw[14:16] | int(-1) %}
+    {% set end_second = completed_raw[17:19] | int(-1) %}
+    {% if date_shape_ok and time_shape_ok and year_value >= 0 and month_value >= 1 and month_value <= 12 and day_value >= 1 and day_value <= 31 and start_hour >= 0 and start_hour <= 23 and end_hour >= 0 and end_hour <= 23 and start_minute >= 0 and start_minute <= 59 and end_minute >= 0 and end_minute <= 59 and start_second >= 0 and start_second <= 59 and end_second >= 0 and end_second <= 59 %}
+        {% set duration_seconds = (end_hour * 3600 + end_minute * 60 + end_second) - (start_hour * 3600 + start_minute * 60 + start_second) %}
+        {% if duration_seconds >= 0 %}
+            {% if duration_seconds < 60 %}{% set duration_display = duration_seconds ~ 's' %}
+            {% elif duration_seconds < 3600 %}{% set duration_display = (duration_seconds // 60) ~ 'm ' ~ (duration_seconds % 60) ~ 's' %}
+            {% else %}{% set duration_display = (duration_seconds // 3600) ~ 'h ' ~ ((duration_seconds % 3600) // 60) ~ 'm ' ~ (duration_seconds % 60) ~ 's' %}{% endif %}
+        {% endif %}
+    {% endif %}
+{% endif %}
 {% block content %}
+<div class="report-v2">
 {% if not print_mode %}
 <!-- Back / Actions bar -->
 <div class="d-flex justify-content-between align-items-center mb-4 no-print">
@@ -262,91 +442,36 @@
 {% endif %}
 
 <!-- Report Header Card -->
-<div class="card mb-4">
-    <div class="card-body">
-        <div class="row align-items-center">
-            <div class="col-auto text-center">
-                <div class="score-gauge mx-auto">
-                    <canvas id="scoreGauge"></canvas>
-                    <div class="score-value" id="scoreValue">{{ threat_score }}</div>
-                    <div class="score-label">Threat Score</div>
-                </div>
-            </div>
-            <div class="col">
-                <div class="d-flex align-items-center mb-2 flex-wrap gap-2">
-                    <h3 class="mb-0 me-2" style="color: var(--text-primary);">{{ target_display | e }}</h3>
-                    {% if verdict == 'malicious' %}
-                        <span class="verdict-badge verdict-malicious fs-6">Malicious</span>
-                    {% elif verdict == 'suspicious' %}
-                        <span class="verdict-badge verdict-suspicious fs-6">Suspicious</span>
-                    {% elif verdict == 'clean' %}
-                        <span class="verdict-badge verdict-clean fs-6">Clean</span>
-                    {% else %}
-                        <span class="verdict-badge verdict-unknown fs-6">{{ verdict | e | title }}</span>
-                    {% endif %}
-                </div>
-                <!-- Quick stats pills -->
-                <div class="row g-2 mb-2">
-                    {% if sources_checked %}
-                    <div class="col-auto">
-                        <div class="score-pill">
-                            <i class="bi bi-shield-check" style="color:#3b82f6;"></i>
-                            <span>{{ sources_flagged }}/{{ sources_checked }} sources flagged</span>
-                        </div>
-                    </div>
-                    {% endif %}
-                    {% if ioc_value %}
-                    <div class="col-auto">
-                        <div class="score-pill">
-                            <i class="bi bi-bullseye" style="color:#f59e0b;"></i>
-                            <span>{{ ioc_value | e }}</span>
-                            {% if ioc_type %}<span class="badge badge-info">{{ ioc_type | e }}</span>{% endif %}
-                        </div>
-                    </div>
-                    {% endif %}
-                    {% if file_info and (file_info.filename or file_info.name) %}
-                    <div class="col-auto">
-                        <div class="score-pill">
-                            <i class="bi bi-file-earmark-binary" style="color:#a78bfa;"></i>
-                            <span>{{ (file_info.filename | default(file_info.name)) | e }}</span>
-                        </div>
-                    </div>
-                    {% endif %}
-                    {% if email_data and email_data.subject %}
-                    <div class="col-auto">
-                        <div class="score-pill">
-                            <i class="bi bi-envelope" style="color:#34d399;"></i>
-                            <span>{{ email_data.subject | e | truncate(60) }}</span>
-                        </div>
-                    </div>
-                    {% endif %}
-                </div>
-                <!-- Metadata row -->
-                <div class="row g-3" style="color: var(--text-secondary); font-size: 0.9rem;">
-                    <div class="col-auto">
-                        <i class="bi bi-hash me-1"></i><strong>ID:</strong>
-                        <code>{{ job.id | default('N/A') | e }}</code>
-                    </div>
-                    <div class="col-auto">
-                        <i class="bi bi-tag me-1"></i><strong>Type:</strong> {{ analysis_type | e }}
-                    </div>
-                    <div class="col-auto">
-                        <i class="bi bi-calendar me-1"></i><strong>Date:</strong> {{ job.created_at | default('N/A') | e }}
-                    </div>
-                    {% if job.completed_at %}
-                    <div class="col-auto">
-                        <i class="bi bi-check2-circle me-1"></i><strong>Completed:</strong> {{ job.completed_at | e }}
-                    </div>
-                    {% endif %}
-                    <div class="col-auto">
-                        {% if job.status == 'completed' %}<span class="badge badge-success">Completed</span>
-                        {% elif job.status == 'running' %}<span class="badge badge-primary">Running</span>
-                        {% elif job.status == 'failed' %}<span class="badge badge-danger">Failed</span>
-                        {% else %}<span class="badge badge-info">{{ job.status | default('N/A') | e }}</span>
-                        {% endif %}
-                    </div>
-                </div>
-            </div>
+<div class="rv-card rv-hero card-print-flow">
+    <div class="score-gauge" aria-label="Threat score {{ threat_score }} out of 100">
+        <canvas id="scoreGauge"></canvas>
+        <div class="score-value" id="scoreValue">{{ threat_score }}</div>
+        <div class="score-label">Threat Score</div>
+    </div>
+    <div class="rv-hero-content">
+        <div class="rv-title-row">
+            <h1 class="rv-title">{{ target_display | e }}</h1>
+            <span class="rv-pill {% if verdict == 'malicious' %}rv-pill--flag{% elif verdict == 'clean' %}rv-pill--ok{% else %}rv-pill--error{% endif %}">{{ verdict | e | title }}</span>
+            <span class="rv-pill">{{ ioc_type | default(analysis_type) | e | upper }}</span>
+        </div>
+        <div class="rv-meta">
+            <span>ID <strong>{{ job.id | default('N/A') | e }}</strong></span>
+            <span>TYPE <strong>{{ analysis_type | e }}</strong></span>
+            <span>STARTED <strong>{{ report_timestamp(job.get('created_at')) }}</strong></span>
+            {% if job.completed_at %}<span>COMPLETED <strong>{{ report_timestamp(job.get('completed_at')) }}</strong></span>{% endif %}
+            <span>DURATION <strong>{{ duration_display | e }}</strong></span>
+            {% if job.status == 'completed' %}<span class="rv-pill badge badge-success">Completed</span>
+            {% elif job.status == 'running' %}<span class="rv-pill badge badge-primary">Running</span>
+            {% elif job.status == 'failed' %}<span class="rv-pill badge badge-danger">Failed</span>
+            {% else %}<span class="rv-pill badge badge-secondary">{{ job.status | default('N/A') | e }}</span>{% endif %}
+        </div>
+        {% if file_info and (file_info.filename or file_info.name) %}<span class="rv-pill">FILE {{ (file_info.filename | default(file_info.name)) | e }}</span>{% endif %}
+        {% if email_data and email_data.subject %}<span class="rv-pill">SUBJECT {{ email_data.subject | e | truncate(60) }}</span>{% endif %}
+        <div class="rv-tiles">
+            <div class="rv-tile"><span class="rv-tile-label">Flagged / responded</span><strong class="rv-tile-value">{{ source_summary.flagged }} / {{ source_summary.responded }}</strong></div>
+            <div class="rv-tile"><span class="rv-tile-label">Top source</span><strong class="rv-tile-value">{% if source_summary.top_score >= 0 %}{{ source_summary.top_name | e }} {{ source_summary.top_score }}{% else %}N/A{% endif %}</strong></div>
+            <div class="rv-tile"><span class="rv-tile-label">DGA heuristic</span><strong class="rv-tile-value">{% if dga_analysis.get('confidence') is not none %}{{ dga_analysis.get('confidence') | e }}%{% else %}N/A{% endif %}</strong></div>
+            <div class="rv-tile"><span class="rv-tile-label">Domain age</span><strong class="rv-tile-value">{% if domain_age.get('age_days') is not none %}{{ domain_age.get('age_days') | e }} days{% else %}N/A{% endif %}</strong></div>
         </div>
     </div>
 </div>
@@ -531,156 +656,79 @@
 {% endif %}
 
 <!-- ══ THREAT INTELLIGENCE SOURCES — sources is a DICT keyed by source name ══ -->
-{% if sources and sources | length > 0 %}
-<div class="card mb-4 card-print-flow">
-    <div class="card-header card-header-collapsible d-flex justify-content-between align-items-center"
-         data-bs-toggle="collapse" data-bs-target="#sourcesCollapse" aria-expanded="true">
-        <h5 class="mb-0">
-            <i class="bi bi-shield-check me-2"></i>Threat Intelligence Sources
-            {% if sources_checked %}<span class="badge badge-secondary ms-2">{{ sources_checked }} checked</span>{% endif %}
-            {% if sources_flagged %}<span class="badge badge-danger ms-1">{{ sources_flagged }} flagged</span>{% endif %}
-        </h5>
-        <i class="bi bi-chevron-up collapse-chevron"></i>
+<div class="rv-card card-print-flow">
+    <div class="rv-card-head card-header-collapsible" data-bs-toggle="collapse" data-bs-target="#sourcesCollapse" aria-expanded="true">
+        <h2>Threat Intelligence Sources</h2>
+        <span class="rv-pill rv-pill--flag">{{ source_summary.flagged }} FLAGGED</span>
+        <span class="rv-pill rv-pill--ok">{{ source_summary.responded }} RESPONDED</span>
+        <span class="rv-pill rv-pill--error">{{ source_summary.errors }} ERRORS</span>
+        <span class="rv-pill">{{ source_summary.na }} N/A</span>
+        <span class="rv-spacer"></span><span class="rv-muted">Applicable sources only</span>
     </div>
     <div class="collapse show" id="sourcesCollapse">
-        <div class="card-body p-0">
-            <div class="table-responsive">
-                <table class="table table-sm table-hover mb-0">
-                    <thead>
-                        <tr style="background-color: var(--bg-tertiary);">
-                            <th style="width:160px;">Source</th>
-                            <th style="width:90px;">Status</th>
-                            <th style="width:110px;">Score</th>
-                            <th>Details</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {# FIX: sources is a DICT — iterate with .items() not as list #}
-                        {% for source_name, source_data in sources.items() %}
-                        <tr>
-                            <td><strong style="color:var(--text-primary);">{{ source_name | e | title }}</strong></td>
-                            <td>
-                                {% set src_status = source_data.status | default('') | string %}
-                                {% set src_score  = source_data.score  | default(0) | int %}
-                                {% if src_status == '➖' or source_data.not_applicable %}
-                                    <span class="badge badge-secondary">N/A</span>
-                                {% elif src_status == '⚠' or source_data.error or source_data.feed_status == 'unavailable' %}
-                                    {% set error_title = source_data.error | default(source_data.feed_status | default('Source unavailable'), true) | string %}
-                                    <span class="badge badge-warning" title="{{ error_title | e }}">Error</span>
-                                {% elif src_status in ['found','detected','flagged'] or src_score >= 50 %}
-                                    <span class="badge badge-danger">Flagged</span>
-                                {% elif src_status in ['not found','clean','ok'] or (src_score == 0 and src_status) %}
-                                    <span class="badge badge-success">Clean</span>
-                                {% elif src_status %}
-                                    <span class="badge badge-warning">{{ src_status | e }}</span>
-                                {% else %}
-                                    <span class="badge badge-secondary">N/A</span>
-                                {% endif %}
-                            </td>
-                            <td>
-                                {% if source_data.score is defined %}
-                                    {% set s = source_data.score | int %}
-                                    <span style="color:{% if s>=70 %}#dc3545{% elif s>=40 %}#ffc107{% else %}#28a745{% endif %};font-weight:600;">{{ s }}</span>
-                                    <span class="source-score-bar {% if s>=70 %}score-high{% elif s>=40 %}score-medium{% else %}score-clean{% endif %}"
-                                          style="width:{{ [s,60] | min }}px;"></span>
-                                {% else %}<span style="color:var(--text-secondary);">&#8212;</span>{% endif %}
-                            </td>
-                            <td style="font-size:0.82rem;color:var(--text-secondary);">
-                                {% for key, val in source_data.items() %}
-                                    {% if key not in ['status','score'] %}
-                                    <span class="me-2">
-                                        <span style="color:var(--text-muted);font-size:0.75rem;">{{ key | e }}:</span>
-                                        {% if val is mapping %}
-                                            <span style="color:var(--text-primary);">{{ val | tojson }}</span>
-                                        {% elif val is iterable and val is not string %}
-                                            <span style="color:var(--text-primary);">{{ val | join(', ') | e }}</span>
-                                        {% else %}
-                                            <span style="color:var(--text-primary);">{{ val | e }}</span>
-                                        {% endif %}
-                                    </span>
-                                    {% endif %}
-                                {% endfor %}
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
+        <div class="rv-table-wrap"><table class="rv-table">
+            <thead><tr><th>Source</th><th>Status</th><th>Score</th><th>Details</th></tr></thead>
+            <tbody>
+            {% for source_name, source_data in sources.items() %}
+                {% if source_data is mapping %}
+                    {% set source_class = source_summary.classes.get(source_name, 'na') %}
+                    {% set source_status = source_data.get('status', '') | string %}
+                    {% if source_class != 'na' %}
+                    <tr class="{% if source_class == 'flagged' %}rv-hit{% endif %}">
+                        <td><strong>{{ source_name | string | title | e }}</strong></td>
+                        <td>
+                            {% if source_class == 'error' %}{% set error_title = source_data.get('error') or source_data.get('message') or source_data.get('feed_status') or 'Source unavailable' %}<span class="rv-pill badge badge-warning" title="{{ error_title | string | e }}"><span class="badge badge-warning">Error</span></span>
+                            {% elif source_class == 'flagged' %}<span class="rv-pill badge badge-danger"><span class="badge badge-danger">Flagged</span></span>
+                            {% elif source_class == 'clean' %}<span class="rv-pill badge badge-success"><span class="badge badge-success">Clean</span></span>
+                            {% else %}<span class="rv-pill badge badge-secondary"><span class="badge badge-secondary">{{ source_status | e }}</span></span>{% endif %}
+                        </td>
+                        <td class="rv-mono">{% if source_data.get('score') is not none %}{{ source_data.get('score') | e }}{% else %}-{% endif %}</td>
+                        <td class="rv-details">
+                            {% if source_class == 'error' %}{{ (source_data.get('error') or source_data.get('message') or source_data.get('feed_status') or 'Source error') | string | e }}
+                            {% else %}
+                                {% for detail_key, detail_value in source_data.items() if detail_key not in ['status', 'score', 'not_applicable'] %}<span>{{ detail_key | string | e }}: {% if detail_value is mapping or (detail_value is iterable and detail_value is not string) %}{{ detail_value | tojson | e }}{% else %}{{ detail_value | string | e }}{% endif %}</span>{% if not loop.last %}<span> / </span>{% endif %}{% endfor %}
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endif %}
+                {% endif %}
+            {% endfor %}
+            </tbody>
+        </table></div>
     </div>
+    {% if source_summary.na %}<details class="rv-na"><summary>{{ source_summary.na }} sources not applicable to this IOC</summary><div class="rv-na-list">{% for source_name, source_data in sources.items() if source_data is mapping %}{% set na_status = source_data.get('status', '') | string | lower %}{% if source_summary.classes.get(source_name) == 'na' %}<div><strong>{{ source_name | string | title | e }}</strong> <span class="rv-pill badge badge-secondary"><span class="badge badge-secondary">N/A</span></span></div>{% endif %}{% endfor %}</div></details>{% endif %}
 </div>
-{% endif %}
-
-<!-- ══ STATIC ANALYSIS (File) ════════════════════════════════════ -->
-{% if result.domain_enrichment is mapping %}
-{% set domain_intel = result.domain_enrichment %}
-{% set domain_age = domain_intel.domain_age if domain_intel.domain_age is mapping else {} %}
-{% set dga_analysis = domain_intel.dga_analysis if domain_intel.dga_analysis is mapping else {} %}
-{% set dictionary_match = dga_analysis.dictionary_match if dga_analysis.dictionary_match is mapping else {} %}
-{% set created_date = domain_age.creation_date | default('', true) | string %}
-{% set dga_confidence = dga_analysis.confidence | default(0) | float %}
-<div class="card mb-4 card-print-flow">
-    <div class="card-header card-header-collapsible d-flex justify-content-between align-items-center"
-         data-bs-toggle="collapse" data-bs-target="#domainIntelligenceCollapse" aria-expanded="true">
-        <h5 class="mb-0"><i class="bi bi-globe2 me-2"></i>Domain intelligence</h5>
-        {% if dga_analysis.is_dga and dga_confidence >= 70 %}
-        <span class="badge badge-danger">DGA likely</span>
-        {% elif dga_analysis.is_dga and dga_confidence < 70 %}
-        <span class="badge badge-warning">Weak signal</span>
-        {% else %}
-        <span class="badge badge-secondary">Not flagged</span>
-        {% endif %}
+<!-- STATIC ANALYSIS (File) -->
+{% if domain_enrichment %}
+<div class="rv-card card-print-flow">
+    <div class="rv-card-head card-header-collapsible" data-bs-toggle="collapse" data-bs-target="#domainIntelligenceCollapse" aria-expanded="true">
+        <h2>Domain intelligence</h2><span class="rv-spacer"></span>
+        {% set dga_confidence = dga_analysis.get('confidence', 0) | float %}
+        {% if dga_analysis.get('is_dga') and dga_confidence >= 70 %}<span class="rv-pill badge badge-danger">DGA likely</span>
+        {% elif dga_analysis.get('is_dga') and dga_confidence < 70 %}<span class="rv-pill badge badge-warning">Weak signal</span>
+        {% else %}<span class="rv-pill badge badge-secondary">Not flagged</span>{% endif %}
     </div>
     <div class="collapse show" id="domainIntelligenceCollapse">
-        <div class="card-body">
-            <div class="row g-3">
-                <div class="col-12 col-lg-6">
-                    <h6 style="color:var(--text-secondary);">Domain age</h6>
-                    <dl class="row mb-0">
-                        <dt class="col-sm-5">Created</dt>
-                        <dd class="col-sm-7">
-                            {% if created_date %}{{ created_date.split('T')[0] | e }}{% else %}N/A{% endif %}
-                        </dd>
-                        <dt class="col-sm-5">Age (days)</dt>
-                        <dd class="col-sm-7">{% if domain_age.age_days is defined %}{{ domain_age.age_days | e }}{% else %}N/A{% endif %}</dd>
-                        <dt class="col-sm-5">Newly registered</dt>
-                        <dd class="col-sm-7">{% if domain_age.is_newly_registered %}Yes{% else %}No{% endif %}</dd>
-                        <dt class="col-sm-5">Risk level</dt>
-                        <dd class="col-sm-7">{% if domain_age.risk_level is defined %}{{ domain_age.risk_level | e }}{% else %}N/A{% endif %}</dd>
-                    </dl>
-                    {% if domain_age.error %}
-                    <div class="mt-2" style="color:var(--text-secondary);">Lookup failed: {{ domain_age.error | e }}</div>
-                    {% endif %}
-                </div>
-                <div class="col-12 col-lg-6">
-                    <h6 style="color:var(--text-secondary);">DGA heuristic</h6>
-                    <dl class="row mb-0">
-                        <dt class="col-sm-5">Confidence</dt>
-                        <dd class="col-sm-7">{% if dga_analysis.confidence is defined %}{{ dga_analysis.confidence | e }}%{% else %}N/A{% endif %}</dd>
-                        <dt class="col-sm-5">Family guess</dt>
-                        <dd class="col-sm-7">{% if dga_analysis.dga_family_guess %}{{ dga_analysis.dga_family_guess | e }}{% else %}none{% endif %}</dd>
-                        <dt class="col-sm-5">Analyzed label</dt>
-                        <dd class="col-sm-7">{% if dga_analysis.sld is defined %}{{ dga_analysis.sld | e }}{% else %}N/A{% endif %}</dd>
-                        <dt class="col-sm-5">Entropy</dt>
-                        <dd class="col-sm-7">{% if dga_analysis.entropy is defined %}{{ dga_analysis.entropy | e }}{% else %}N/A{% endif %}</dd>
-                        <dt class="col-sm-5">Consonant ratio</dt>
-                        <dd class="col-sm-7">{% if dga_analysis.consonant_ratio is defined %}{{ dga_analysis.consonant_ratio | e }}{% else %}N/A{% endif %}</dd>
-                        <dt class="col-sm-5">Dictionary words found</dt>
-                        <dd class="col-sm-7">
-                            {% if dictionary_match.words_found is sequence and dictionary_match.words_found is not string and dictionary_match.words_found | length > 0 %}
-                                {{ dictionary_match.words_found | join(', ') | e }}
-                            {% else %}none{% endif %}
-                        </dd>
-                    </dl>
-                </div>
-            </div>
-            <div class="mt-3" style="color:var(--text-secondary);font-size:0.85rem;">Heuristic signal. Not part of the verdict score.</div>
+        <div class="rv-domain-grid">
+            <section class="rv-domain-card"><h3>Domain age</h3><div class="rv-kv">
+                <span>Created</span><strong>{% if domain_age.get('creation_date') %}{{ domain_age.get('creation_date') | string | truncate(10, true, '') | e }}{% else %}N/A{% endif %}</strong>
+                <span>Age</span><strong>{% if domain_age.get('age_days') is not none %}{{ domain_age.get('age_days') | e }} days{% else %}N/A{% endif %}</strong>
+                <span>Newly registered</span><strong>{% if domain_age.get('is_newly_registered') %}Yes{% else %}No{% endif %}</strong>
+                <span>Risk level</span><strong>{{ domain_age.get('risk_level', 'N/A') | string | e }}</strong>
+            </div></section>
+            <section class="rv-domain-card"><h3>DGA heuristic</h3><div class="rv-kv">
+                <span>Confidence</span><strong>{% if dga_analysis.get('confidence') is not none %}{{ dga_analysis.get('confidence') | e }}%{% else %}N/A{% endif %}</strong>
+                <span>Family guess</span><strong>{{ dga_analysis.get('dga_family_guess', 'N/A') | string | e }}</strong>
+                <span>Analyzed label</span><strong>{{ dga_analysis.get('sld', 'N/A') | string | e }}</strong>
+                <span>Entropy</span><strong>{{ dga_analysis.get('entropy', 'N/A') | string | e }}</strong>
+                <span>Consonant ratio</span><strong>{{ dga_analysis.get('consonant_ratio', 'N/A') | string | e }}</strong>
+                <span>Dictionary words</span><strong>{% if dictionary_match.get('words_found') %}{{ dictionary_match.get('words_found') | join(', ') | e }}{% else %}none{% endif %}</strong>
+            </div></section>
         </div>
+        <div class="rv-domain-note">Heuristic signal. Not part of the verdict score.</div>
     </div>
 </div>
 {% endif %}
-
-
 {% if static_analysis and static_analysis | length > 0 %}
 <div class="card mb-4 card-print-flow">
     <div class="card-header card-header-collapsible d-flex justify-content-between align-items-center"
@@ -1393,61 +1441,6 @@
 </div>
 {% endif %}
 
-<!-- ══ LLM ANALYSIS — FIX: llm_analysis is a DICT {verdict, analysis, recommendations} ══ -->
-{% if llm_analysis %}
-<div class="card mb-4">
-    <div class="card-header">
-        <h5 class="mb-0"><i class="bi bi-robot me-2"></i>AI Analysis</h5>
-    </div>
-    <div class="card-body">
-        {% if llm_analysis is mapping %}
-            {# Show AI verdict badge #}
-            {% if llm_analysis.verdict %}
-            {% set lv = llm_analysis.verdict | string | lower %}
-            <div class="mb-3 d-flex align-items-center gap-2">
-                <span style="color:var(--text-secondary);font-size:0.85rem;">AI Verdict:</span>
-                {% if lv == 'malicious' %}<span class="verdict-badge verdict-malicious">Malicious</span>
-                {% elif lv == 'suspicious' %}<span class="verdict-badge verdict-suspicious">Suspicious</span>
-                {% elif lv == 'clean' %}<span class="verdict-badge verdict-clean">Clean</span>
-                {% else %}<span class="verdict-badge verdict-unknown">{{ llm_analysis.verdict | e | title }}</span>
-                {% endif %}
-            </div>
-            {% endif %}
-            {# Main analysis text #}
-            {% if llm_analysis.analysis %}
-            <div class="p-3 rounded mb-3" style="background-color:var(--bg-tertiary);border:1px solid var(--border-color);">
-                <p class="llm-analysis-text mb-0">{{ llm_analysis.analysis | e }}</p>
-            </div>
-            {% endif %}
-            {# AI recommendations list #}
-            {% if llm_analysis.recommendations %}
-            <div class="mb-2">
-                <h6 style="color:var(--text-secondary);"><i class="bi bi-lightbulb me-1"></i>AI Recommendations</h6>
-                <ol class="mb-0">
-                    {% for rec in llm_analysis.recommendations %}
-                    <li style="color:var(--text-primary);margin-bottom:0.4rem;font-size:0.9rem;">{{ rec | e }}</li>
-                    {% endfor %}
-                </ol>
-            </div>
-            {% endif %}
-            {# Any extra keys not already handled #}
-            {% for key, val in llm_analysis.items() %}
-                {% if key not in ['verdict','analysis','recommendations'] %}
-                <div class="mt-3">
-                    <h6 style="color:var(--text-secondary);">{{ key | replace('_',' ') | title | e }}</h6>
-                    <p style="color:var(--text-primary);white-space:pre-wrap;font-size:0.9rem;margin-bottom:0;">{{ val | e }}</p>
-                </div>
-                {% endif %}
-            {% endfor %}
-        {% else %}
-            {# Fallback: render as plain string if somehow not a dict #}
-            <div class="p-3 rounded" style="background-color:var(--bg-tertiary);border:1px solid var(--border-color);">
-                <p class="llm-analysis-text mb-0">{{ llm_analysis | e }}</p>
-            </div>
-        {% endif %}
-    </div>
-</div>
-{% endif %}
 
 <!-- ══ DETECTION RULES — FIX: detection_rules is a DICT {"kql":"...","spl":"...",...} ══ -->
 {% if detection_rules and detection_rules | length > 0 %}
@@ -1660,52 +1653,83 @@
 {% endif %}
 
 <!-- ══ RECOMMENDATIONS ════════════════════════════════════════════ -->
-{% if recommendations and recommendations | length > 0 %}
-<div class="card mb-4">
-    <div class="card-header">
-        <h5 class="mb-0"><i class="bi bi-lightbulb me-2"></i>Recommendations</h5>
-    </div>
-    <div class="card-body">
-        {% set ai_recommendations = llm_analysis.recommendations | default([]) %}
-        {% set rule_based_recommendations = result.recommendations_rule_based | default([]) %}
-        {% if rule_based_recommendations and ai_recommendations %}
-        <div class="row g-3">
-            <div class="col-12 col-md-6">
-                <h6 style="color:var(--text-secondary);">AI analysis</h6>
-                <ol class="mb-0">
-                    {% for rec in ai_recommendations %}
-                    <li style="color:var(--text-primary);margin-bottom:0.5rem;font-size:0.9rem;">{{ rec | e }}</li>
-                    {% endfor %}
-                </ol>
-            </div>
-            <div class="col-12 col-md-6">
-                <h6 style="color:var(--text-secondary);">Rule-based playbook</h6>
-                <ol class="mb-0">
-                    {% for rec in rule_based_recommendations %}
-                    <li style="color:var(--text-primary);margin-bottom:0.5rem;font-size:0.9rem;">{{ rec | e }}</li>
-                    {% endfor %}
-                </ol>
-            </div>
-        </div>
-        {% elif result.recommendations_source == 'rule_based' %}
-        <h6 style="color:var(--text-secondary);">Rule-based recommendations (AI unavailable)</h6>
-        <ol class="mb-0">
-            {% for rec in recommendations %}
-            <li style="color:var(--text-primary);margin-bottom:0.5rem;font-size:0.9rem;">{{ rec | e }}</li>
-            {% endfor %}
-        </ol>
-        {% else %}
-        <ol class="mb-0">
-            {% for rec in recommendations %}
-            <li style="color:var(--text-primary);margin-bottom:0.5rem;font-size:0.9rem;">{{ rec | e }}</li>
-            {% endfor %}
-        </ol>
-        {% endif %}
+{% set show_recommendation_columns = ('recommendations_rule_based' in result) or (ai_status is not none) %}
+{% if not show_recommendation_columns and llm_analysis %}
+<div class="rv-card card-print-flow rv-legacy-ai">
+    <div class="rv-card-head"><h2>AI Analysis</h2><span class="rv-muted">Language model analysis</span></div>
+    <div class="rv-col">
+        {% if llm_analysis is mapping %}
+            {% if llm_analysis.get('verdict') %}<p><strong>AI verdict:</strong> <span class="rv-pill">{{ llm_analysis.get('verdict') | string | e | title }}</span></p>{% endif %}
+            {% if llm_analysis.get('analysis') %}<p class="rv-analysis-text">{{ llm_analysis.get('analysis') | string | e }}</p>{% endif %}
+            {% if llm_analysis.get('recommendations') %}<h3>AI recommendations</h3><ol>{% for rec in llm_analysis.get('recommendations') %}<li>{{ rec | string | e }}</li>{% endfor %}</ol>{% endif %}
+            {% if llm_analysis.get('hallucination_warning') %}<p class="rv-warning">{{ llm_analysis.get('hallucination_warning') | string | e }}</p>{% endif %}
+        {% elif llm_analysis is string %}<p class="rv-analysis-text">{{ llm_analysis | e }}</p>{% endif %}
     </div>
 </div>
 {% endif %}
-
-<!-- ══ SCORING BREAKDOWN ══════════════════════════════════════════ -->
+{% set ai_recommendations = llm_analysis.get('recommendations', []) if llm_analysis is mapping else [] %}
+{% set rule_based_recommendations = result.get('recommendations_rule_based') or recommendations %}
+{% macro strip_leading_rule_emoji(value) -%}
+    {% set prefixes = ['\U0001F300', '\U0001F4A5', '\U0001F6A8', '\U0001F50D', '\U0001F4BB', '\U0001F4CB', '\U0001F510', '\U0001F195', '\U0001F4CA', '\U0001F440', '\U0001F4DD', '\U0001F441\uFE0F', '\U0001F441', '\U00002753', '\U0001F6E1\uFE0F', '\U0001F6E1', '\U0001F512', '\U0001F6E0', '\U0001F4CC', '\U0001F4A1', '\U0001F3AF', '\U0001F6AB', '\U0001F4E1', '\U0001F9F9', '\u26A0\uFE0F', '\u26A0', '\u2705', '\u274C', '\u26A1\uFE0F', '\u26A1', '\u2139\uFE0F', '\u2139', '\uFE0F'] %}
+    {% set cleaned = namespace(text=value | string) %}
+    {% for pass in range(8) %}{% for prefix in prefixes %}{% if cleaned.text.startswith(prefix) %}{% set cleaned.text = cleaned.text[prefix | length:] %}{% endif %}{% endfor %}{% endfor %}
+    {{ cleaned.text | trim | e }}
+{%- endmacro %}
+{% if show_recommendation_columns %}
+<div class="rv-card card-print-flow">
+    <div class="rv-card-head"><h2>Recommendations</h2><span class="rv-muted">AI and rule-based analysis</span><span class="rv-spacer"></span><button class="btn btn-sm btn-outline-secondary" type="button" disabled title="Available after C4">Retry AI analysis</button></div>
+    <div class="rv-two">
+        <section class="rv-col" aria-labelledby="aiAnalysisTitle">
+            <h3 id="aiAnalysisTitle">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v3"/><circle cx="12" cy="2.5" r="1" fill="currentColor"/><rect x="4" y="6" width="16" height="12" rx="3"/><circle cx="9" cy="12" r="1.5" fill="currentColor"/><circle cx="15" cy="12" r="1.5" fill="currentColor"/><path d="M9.5 15.5h5M2 11v3M22 11v3M8 18v3M16 18v3"/></svg>
+                <span>AI analysis</span>
+            </h3>
+            {% if ai_status == 'complete' %}
+                {% if llm_analysis is mapping %}
+                    {% if llm_analysis.get('verdict') %}<p><strong>AI verdict:</strong> {{ llm_analysis.get('verdict') | string | e }}</p>{% endif %}
+                    {% if llm_analysis.get('analysis') %}<p class="rv-analysis-text">{{ llm_analysis.get('analysis') | string | e }}</p>{% endif %}
+                    {% if ai_recommendations %}<h4>Recommendations</h4><ol>{% for rec in ai_recommendations %}<li>{{ rec | string | e }}</li>{% endfor %}</ol>{% endif %}
+                    {% if llm_analysis.get('hallucination_warning') %}<p class="rv-warning">{{ llm_analysis.get('hallucination_warning') | string | e }}</p>{% endif %}
+                {% else %}<p class="rv-muted">AI analysis completed without report details.</p>{% endif %}
+            {% elif ai_status == 'failed' %}
+                <div class="rv-status-box"><strong>AI analysis failed</strong>{% if ai_error %}<span>{{ ai_error | string | e }}</span>{% else %}<span>details restricted</span>{% endif %}</div>
+                {% if llm_analysis is mapping %}
+                    {% if llm_analysis.get('verdict') %}<p><strong>AI verdict:</strong> {{ llm_analysis.get('verdict') | string | e }}</p>{% endif %}
+                    {% if llm_analysis.get('analysis') %}<p class="rv-analysis-text">{{ llm_analysis.get('analysis') | string | e }}</p>{% endif %}
+                    {% if llm_analysis.get('recommendations') %}<ol>{% for rec in llm_analysis.get('recommendations') %}<li>{{ rec | string | e }}</li>{% endfor %}</ol>{% endif %}
+                    {% if llm_analysis.get('hallucination_warning') %}<p class="rv-warning">{{ llm_analysis.get('hallucination_warning') | string | e }}</p>{% endif %}
+                {% endif %}
+            {% elif ai_status == 'disabled' %}
+                <div class="rv-status-box"><strong>AI analysis is disabled in configuration</strong></div>
+            {% elif ai_recommendations or recommendations_source == 'llm' %}
+                {% if llm_analysis is mapping %}
+                    {% if llm_analysis.get('verdict') %}<p><strong>AI verdict:</strong> {{ llm_analysis.get('verdict') | string | e }}</p>{% endif %}
+                    {% if llm_analysis.get('analysis') %}<p class="rv-analysis-text">{{ llm_analysis.get('analysis') | string | e }}</p>{% endif %}
+                    {% if ai_recommendations %}<h4>Recommendations</h4><ol>{% for rec in ai_recommendations %}<li>{{ rec | string | e }}</li>{% endfor %}</ol>{% endif %}
+                    {% if llm_analysis.get('hallucination_warning') %}<p class="rv-warning">{{ llm_analysis.get('hallucination_warning') | string | e }}</p>{% endif %}
+                {% endif %}
+            {% else %}
+                <div class="rv-status-box"><strong>AI status not recorded for this report</strong></div>
+            {% endif %}
+        </section>
+        <section class="rv-col" aria-labelledby="ruleBasedTitle">
+            <h3 id="ruleBasedTitle">Rule-based playbook</h3>
+            {% if rule_based_recommendations %}<ol>{% for rec in rule_based_recommendations %}<li>{{ strip_leading_rule_emoji(rec) }}</li>{% endfor %}</ol>{% else %}<p class="rv-muted">No rule-based recommendations are available.</p>{% endif %}
+        </section>
+    </div>
+    <div class="rv-compare" aria-label="Recommendation comparison">
+        <span class="rv-pill">AGREEMENT: -</span><span class="rv-pill">ONLY IN AI: -</span><span class="rv-pill">ONLY IN RULES: -</span>
+    </div>
+</div>
+{% else %}
+<div class="card mb-4">
+    <div class="card-header"><h5 class="mb-0">Recommendations</h5></div>
+    <div class="card-body">
+        {% if recommendations %}<ul class="mb-0">{% for recommendation in recommendations %}<li>{{ recommendation | e }}</li>{% endfor %}</ul>{% else %}<p class="text-muted mb-0">No recommendations available.</p>{% endif %}
+    </div>
+</div>
+{% endif %}
+<!-- SCORING BREAKDOWN -->
 {% if scoring and scoring | length > 0 %}
 <div class="card mb-4">
     <div class="card-header card-header-collapsible d-flex justify-content-between align-items-center"
@@ -1812,24 +1836,23 @@
 
 <!-- ══ RAW JSON VIEWER (collapsible, closed by default) ══════════ -->
 {% if result %}
-<div class="card mb-4 card-print-flow">
-    <div class="card-header d-flex justify-content-between align-items-center">
-        <h5 class="mb-0"><i class="bi bi-braces me-2"></i>Raw JSON Data</h5>
-        <button class="btn btn-sm btn-outline-secondary no-print" type="button"
-                data-bs-toggle="collapse" data-bs-target="#rawDataCollapse"
-                aria-expanded="false" aria-controls="rawDataCollapse">
-            <i class="bi bi-chevron-expand me-1"></i>Toggle
-        </button>
+<div class="rv-card card-print-flow">
+    <div class="rv-card-head"><h2>Raw JSON Data</h2><span class="rv-muted">Select a node to fold or unfold</span><span class="rv-spacer"></span><span class="rv-pill" id="cnt">JSON</span></div>
+    <div class="rv-raw-tools no-print">
+        <input id="q" type="search" placeholder="Search keys or values" autocomplete="off" aria-label="Search raw JSON">
+        <button class="btn btn-sm btn-outline-primary" id="ex" type="button">Expand all</button>
+        <button class="btn btn-sm btn-outline-secondary" id="co" type="button">Collapse all</button>
+        <button class="btn btn-sm btn-outline-success" id="cp" type="button">Copy JSON</button>
     </div>
     <div class="collapse" id="rawDataCollapse">
-        <div class="card-body">
-            <pre class="p-3 rounded mb-0" id="rawJsonPre"
-                 style="background-color:var(--bg-tertiary);border:1px solid var(--border-color);
-                        max-height:500px;overflow:auto;font-size:0.78rem;"></pre>
+        <div class="card-body p-0">
+            <div id="rawJsonTree" role="tree" aria-label="Raw JSON tree"></div>
+            <pre class="p-3 rounded mb-0" id="rawJsonPre">{% if print_mode %}{{ raw_report_result | tojson(indent=2) | e }}{% endif %}</pre>
         </div>
     </div>
 </div>
 {% endif %}
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -1925,20 +1948,115 @@
         return '```' + language + '\n' + rule + '\n```';
     }
 
+{% if not print_mode %}
     /* ── Raw JSON viewer — safe textContent only, no innerHTML ── */
     var rawJsonPre = document.getElementById('rawJsonPre');
     if (rawJsonPre) {
-        var resultData = {{ (job.result | default({})) | tojson }};
+        var resultData = {{ raw_report_result | tojson }};
         var codeEl = document.createElement('code');
         codeEl.textContent = JSON.stringify(resultData, null, 2);
         rawJsonPre.appendChild(codeEl);
+        var treeRoot = document.getElementById('rawJsonTree');
+        if (treeRoot) {
+            var nodeCount = 0;
+            function addJsonText(parent, className, value) {
+                var span = document.createElement('span');
+                span.className = className;
+                span.textContent = value;
+                parent.appendChild(span);
+                return span;
+            }
+            function buildJsonNode(value, key, isRoot) {
+                nodeCount += 1;
+                var isArray = Array.isArray(value);
+                if (value === null || typeof value !== 'object') {
+                    var line = document.createElement('div');
+                    line.className = 'rv-json-line';
+                    if (key !== null) {
+                        addJsonText(line, 'rv-json-key rv-json-token', key);
+                        line.appendChild(document.createTextNode(': '));
+                    }
+                    var valueClass = value === null ? 'rv-json-null' : typeof value === 'string' ? 'rv-json-string' : typeof value === 'number' ? 'rv-json-number' : 'rv-json-bool';
+                    addJsonText(line, valueClass + ' rv-json-token', typeof value === 'string' ? JSON.stringify(value) : String(value));
+                    return line;
+                }
+                var keys = Object.keys(value);
+                var details = document.createElement('details');
+                details.open = Boolean(isRoot);
+                if (isRoot) details.id = 'rawJsonRoot';
+                var summary = document.createElement('summary');
+                if (key !== null) {
+                    addJsonText(summary, 'rv-json-key rv-json-token', key);
+                    summary.appendChild(document.createTextNode(' '));
+                }
+                addJsonText(summary, 'rv-json-summary rv-json-token', isArray ? '[ ' + keys.length + ' items ]' : '{ ' + keys.length + ' keys }');
+                details.appendChild(summary);
+                keys.forEach(function (childKey) {
+                    details.appendChild(buildJsonNode(value[childKey], isArray ? '[' + childKey + ']' : childKey, false));
+                });
+                return details;
+            }
+            treeRoot.appendChild(buildJsonNode(resultData, 'result', true));
+            var countElement = document.getElementById('cnt');
+            if (countElement) countElement.textContent = nodeCount + ' NODES';
+            function setTreeExpanded(expanded) {
+                treeRoot.querySelectorAll('details').forEach(function (item) { item.open = expanded; });
+                var rootNode = document.getElementById('rawJsonRoot');
+                if (rootNode) rootNode.open = true;
+            }
+            var expandButton = document.getElementById('ex');
+            if (expandButton) expandButton.addEventListener('click', function () { setTreeExpanded(true); });
+            var collapseButton = document.getElementById('co');
+            if (collapseButton) collapseButton.addEventListener('click', function () { setTreeExpanded(false); });
+            var searchInput = document.getElementById('q');
+            if (searchInput) searchInput.addEventListener('input', function () {
+                var needle = searchInput.value.toLowerCase();
+                treeRoot.querySelectorAll('.rv-json-highlight').forEach(function (item) { item.classList.remove('rv-json-highlight'); });
+                if (!needle) return;
+                setTreeExpanded(true);
+                treeRoot.querySelectorAll('.rv-json-token').forEach(function (item) {
+                    if (item.textContent.toLowerCase().indexOf(needle) === -1) return;
+                    item.classList.add('rv-json-highlight');
+                    var parentDetails = item.closest('details');
+                    while (parentDetails) {
+                        parentDetails.open = true;
+                        parentDetails = parentDetails.parentElement ? parentDetails.parentElement.closest('details') : null;
+                    }
+                });
+            });
+            var copyJsonButton = document.getElementById('cp');
+            var copyJsonResetTimer = null;
+            var copyJsonAttempt = 0;
+            if (copyJsonButton) copyJsonButton.addEventListener('click', function () {
+                copyJsonAttempt += 1;
+                var thisAttempt = copyJsonAttempt;
+                if (copyJsonResetTimer !== null) window.clearTimeout(copyJsonResetTimer);
+                function showCopyStatus(label) {
+                    if (thisAttempt !== copyJsonAttempt) return;
+                    copyJsonButton.textContent = label;
+                    copyJsonResetTimer = window.setTimeout(function () {
+                        if (thisAttempt === copyJsonAttempt) copyJsonButton.textContent = 'Copy JSON';
+                        copyJsonResetTimer = null;
+                    }, 1500);
+                }
+                try {
+                    Promise.resolve(navigator.clipboard.writeText(JSON.stringify(resultData, null, 2))).then(function () {
+                        showCopyStatus('Copied');
+                    }).catch(function () { showCopyStatus('Copy blocked'); });
+                } catch (error) {
+                    showCopyStatus('Copy blocked');
+                }
+            });
+        }
     }
 
+    {% endif %}
+    {% if not print_mode %}
     /* ── Export JSON ─────────────────────────────────────────── */
     var exportBtn = document.getElementById('btnExportReportJson');
     if (exportBtn) {
         exportBtn.addEventListener('click', function () {
-            var exportData = {{ (job.result | default({})) | tojson }};
+            var exportData = {{ raw_report_result | tojson }};
             exportData._meta = {
                 id:            {{ job.id            | default('') | tojson }},
                 analysis_type: {{ job.analysis_type | default('') | tojson }},
@@ -1958,6 +2076,7 @@
         });
     }
 
+    {% endif %}
     /* ── Shared clipboard helper (no innerHTML anywhere) ──────── */
     function copyTextToClipboard(text, btn, isRuleBtn, defaultLabel) {
         function onSuccess() {

@@ -50,9 +50,14 @@ def test_report_source_badges_follow_source_status_mapping():
     assert badges == [
         ('badge-warning', 'Error'),
         ('badge-warning', 'Error'),
-        ('badge-secondary', 'N/A'),
         ('badge-success', 'Clean'),
         ('badge-success', 'Clean'),
         ('badge-danger', 'Flagged'),
     ]
     assert source_section.count('title="Source unavailable"') == 2
+    assert 'N/A' not in source_section          # N/A lives only in the collapsed list
+    na_details = rendered.split('<details class="rv-na"', 1)[1].split('</details>', 1)[0]
+    assert 'abuseipdb' in na_details.lower()
+    assert len(re.findall(
+        r'<span class="badge badge-secondary"[^>]*>N/A</span>', na_details
+    )) == 1
