@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
 import pytest
 from fastapi import FastAPI
@@ -60,8 +61,16 @@ def test_more_menu_role_gates_and_unique_nav_links(tmp_path, monkeypatch, role: 
 
     assert response.status_code == 200
     assert "Admin only" not in response.text
+    assert "Extra evidence only. These keys never change the score or verdict." in response.text
+    assert "account-avatar" in response.text
+    assert '<div class="account-avatar" aria-hidden="true">TU</div>' in response.text
+    assert 'aria-labelledby="gmailHeading"' in response.text
+    for gmail_id in ("gmailStatusLabel", "gmailAccount", "gmailScopes", "gmailLastRefresh", "gmailConnect", "gmailDisconnect", "gmailError"):
+        assert f'id="{gmail_id}"' in response.text
+    account_template = (Path(__file__).parents[1] / "templates" / "account.html").read_text(encoding="utf-8")
+    assert all(label not in account_template for label in ("VirusTotal", "AbuseIPDB", "AlienVault OTX"))
     if role == "admin":
-        assert "<h1 class=\"h3 mb-0\">My settings</h1>" in response.text
+        assert '<h1 class="h3">My settings</h1>' in response.text
         account_side_nav = re.search(r'<aside class="settings-side-nav".*?<nav class="settings-nav-list"[^>]*>(.*?)</nav>', response.text, re.S)
         assert account_side_nav is not None
         account_links = re.findall(r'<a\b[^>]*class="([^"]*settings-nav-link[^"]*)"[^>]*href="([^"]+)"[^>]*>(.*?)</a>', account_side_nav.group(1), re.S)
@@ -70,7 +79,7 @@ def test_more_menu_role_gates_and_unique_nav_links(tmp_path, monkeypatch, role: 
         assert "active" in account_links[0][0]
         assert all("active" not in classes for classes, _href, _label in account_links[1:])
     else:
-        assert "<h1 class=\"h3 mb-4\">My settings</h1>" in response.text
+        assert '<h1 class="h3">My settings</h1>' in response.text
         assert '<aside class="settings-side-nav"' not in response.text
     nav_start = response.text.index("<nav ")
     nav_end = response.text.index("</nav>", nav_start) + len("</nav>")
@@ -153,5 +162,5 @@ def test_non_admin_account_navigation_and_settings_guard_are_unchanged(tmp_path,
     assert account.status_code == 200
     assert '<aside class="settings-side-nav"' not in account.text
     assert "Admin only" not in account.text
-    assert "<h1 class=\"h3 mb-4\">My settings</h1>" in account.text
+    assert '<h1 class="h3">My settings</h1>' in account.text
     assert settings.status_code == 403
