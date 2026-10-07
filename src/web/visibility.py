@@ -811,6 +811,7 @@ def serialize_agent_session(session: Mapping[str, Any], steps: Optional[Iterable
     authorize_flow(role, "agent")
     output = _safe_session(session)
     metadata = session.get("metadata")
+    output["session_type"] = "playbook" if _as_dict(metadata).get("kind") == "playbook" else "agent"
     output["has_report"] = (
         bool(metadata.get("ioc_investigation_result"))
         if isinstance(metadata, Mapping) else False
