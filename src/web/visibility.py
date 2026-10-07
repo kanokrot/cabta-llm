@@ -421,6 +421,19 @@ def _safe_findings(value: Any) -> list[dict[str, Any]]:
     return output
 
 
+def _safe_ai_status(value: Any) -> Optional[str]:
+    if isinstance(value, str) and value in {"disabled", "complete", "failed"}:
+        return value
+    return None
+
+
+def _safe_ai_error(value: Any) -> Optional[str]:
+    if not isinstance(value, str):
+        return None
+    cleaned_text = " ".join(re.sub(r"[\x00-\x1f\x7f-\x9f]", " ", value).split())
+    return cleaned_text[:300] or None
+
+
 def _safe_result(
     result: Mapping[str, Any],
     *,
@@ -437,6 +450,13 @@ def _safe_result(
     for key in scalar_fields:
         if key in result and isinstance(result[key], (str, int, float, bool)):
             output[key] = result[key]
+    ai_status = _safe_ai_status(result.get("ai_status"))
+    if ai_status is not None:
+        output["ai_status"] = ai_status
+    if detailed:
+        ai_error = _safe_ai_error(result.get("ai_error"))
+        if ai_error is not None:
+            output["ai_error"] = ai_error
     if isinstance(result.get("sources"), dict):
         output["sources"] = _safe_sources(result["sources"], detailed=detailed)
     if "extra_evidence" in result:
