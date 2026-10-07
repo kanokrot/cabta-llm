@@ -455,7 +455,7 @@ def test_domain_intelligence_uses_lowercase_labels_and_merged_entropy_row():
 
     for label in (
         "created", "age", "newly registered", "risk level", "family guess",
-        "analyzed label", "entropy", "consonant ratio", "dictionary words",
+        "analyzed label", "entropy", "/ consonant ratio", "dictionary words",
     ):
         assert f">{label}</span>" in html
     assert (

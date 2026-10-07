@@ -90,7 +90,10 @@ def test_recommendation_columns_and_old_single_list_behavior():
     }
     rendered_both = _render(both)
     assert re.search(r">AI analysis<", rendered_both)
-    assert re.search(r">Rule-based playbook<", rendered_both)
+    # The Phase 2 recommendations redesign labels this column "Rule-based"
+    # and marks it as always on.
+    assert re.search(r">Rule-based<", rendered_both)
+    assert ">ALWAYS ON</span>" in rendered_both
 
     old_job = {
         "ioc": "kurs.if.ua",
