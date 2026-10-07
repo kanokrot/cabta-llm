@@ -14,7 +14,7 @@ from src.web.report_source_display import (
 from src.scoring.intelligent_scoring import SOURCE_SCORING_MULTIPLIERS
 
 
-def _render_report(sources, *, print_mode=False):
+def _render_report(sources, *, print_mode=False, domain_enrichment=None):
     templates_dir = Path(__file__).resolve().parents[1] / "templates"
     environment = Environment(
         loader=FileSystemLoader(str(templates_dir)),
@@ -39,7 +39,7 @@ def _render_report(sources, *, print_mode=False):
             "recommendations": [],
             "recommendations_rule_based": [],
             "detection_rules": {},
-            "domain_enrichment": {},
+            "domain_enrichment": domain_enrichment or {},
         },
     }
     return environment.get_template("report_view.html").render(
@@ -246,7 +246,135 @@ def test_existing_source_count_fixture_keeps_summary_counts_and_tile():
     assert "19 N/A" in html
     assert "1 / 7" in html
     assert "ThreatFox 90" in html
-    assert 'class="rv-source-chevron-placeholder" aria-hidden="true"' in virustotal_row
+    assert 'class="rv-source-toggle"' in virustotal_row
+    assert "rv-source-chevron-placeholder" not in html
+
+
+def test_virustotal_with_only_summary_fields_still_has_expandable_raw_details():
+    html = _render_report(
+        {
+            "virustotal": {
+                "status": "\u2713",
+                "score": 30,
+                "detections": "6/91",
+                "last_analysis": "2026-10-06 12:30 UTC",
+            }
+        }
+    )
+    source_row = re.search(r'<tr[^>]*>.*?VirusTotal.*?</tr>', html, re.DOTALL).group(0)
+    detail_id = re.search(r'aria-controls="([^"]+)"', source_row).group(1)
+    detail_panel = re.search(
+        rf'<tr class="rv-source-detail" id="{re.escape(detail_id)}" hidden>(.*?)</tr>',
+        html,
+        re.DOTALL,
+    ).group(1)
+
+    assert 'class="rv-source-toggle"' in source_row
+    assert "Scoring:</strong> not used in score" in detail_panel
+    assert "Raw status:</strong> " + "\u2713" in detail_panel
+    assert "Raw score:</strong> 30" in detail_panel
+    assert "detections" in detail_panel
+    assert "last analysis" in detail_panel
+
+
+def test_threatfox_expanded_panel_contains_raw_status_and_score():
+    html = _render_report(
+        {"threatfox": {"status": "found", "score": 90, "confidence": 100}}
+    )
+    source_row = re.search(r'<tr[^>]*>.*?ThreatFox.*?</tr>', html, re.DOTALL).group(0)
+    detail_id = re.search(r'aria-controls="([^"]+)"', source_row).group(1)
+    detail_panel = re.search(
+        rf'<tr class="rv-source-detail" id="{re.escape(detail_id)}" hidden>(.*?)</tr>',
+        html,
+        re.DOTALL,
+    ).group(1)
+
+    assert "Raw status:</strong> found" in detail_panel
+    assert "Raw score:</strong> 90" in detail_panel
+
+
+def test_details_show_extra_fields_only_when_present():
+    html = _render_report(
+        {
+            "threatfox": {
+                "status": "found",
+                "score": 90,
+                "confidence": 100,
+                "evidence": "<script>feed value</script>",
+            },
+            "bare_source": {"status": "clean", "score": 0},
+        }
+    )
+    threatfox_row = re.search(r'<tr[^>]*>.*?ThreatFox.*?</tr>', html, re.DOTALL).group(0)
+    bare_row = re.search(r'<tr[^>]*>.*?Bare Source.*?</tr>', html, re.DOTALL).group(0)
+    threatfox_id = re.search(r'aria-controls="([^"]+)"', threatfox_row).group(1)
+    bare_id = re.search(r'aria-controls="([^"]+)"', bare_row).group(1)
+    threatfox_panel = re.search(
+        rf'<tr class="rv-source-detail" id="{re.escape(threatfox_id)}" hidden>(.*?)</tr>', html, re.DOTALL
+    ).group(1)
+    bare_panel = re.search(
+        rf'<tr class="rv-source-detail" id="{re.escape(bare_id)}" hidden>(.*?)</tr>', html, re.DOTALL
+    ).group(1)
+
+    assert "confidence" in threatfox_panel
+    assert "&lt;script&gt;feed value&lt;/script&gt;" in threatfox_panel
+    assert "<script>feed value</script>" not in threatfox_panel
+    assert 'class="rv-detail-item"' not in bare_panel
+
+
+def test_all_normal_rows_have_expand_buttons_and_na_chips_do_not():
+    html = _render_report(
+        {
+            "virustotal": {"status": "\u2713", "score": 30},
+            "bare_source": {"status": "clean", "score": 0},
+            "na_source": {"status": "\u2796", "not_applicable": True},
+        }
+    )
+    main_table = re.search(r'<tbody>(.*?)</tbody>', html, re.DOTALL).group(1)
+    source_rows = re.findall(r'(<tr(?: class="[^"]*")?>.*?</tr>)', main_table, re.DOTALL)
+    na_section = re.search(r'<details class="rv-na".*?</details>', html, re.DOTALL).group(0)
+
+    assert source_rows
+    assert all('class="rv-source-toggle"' in row for row in source_rows if "rv-source-detail" not in row)
+    assert "rv-source-chevron-placeholder" not in main_table
+    assert 'class="rv-source-toggle"' not in na_section
+    assert "aria-controls=" not in na_section
+
+
+def test_every_source_panel_starts_hidden_with_collapsed_button():
+    html = _render_report(
+        {
+            "threatfox": {"status": "found", "score": 90},
+            "virustotal": {"status": "\u2713", "score": 30},
+            "na_source": {"status": "\u2796", "not_applicable": True},
+        }
+    )
+    controls = re.findall(
+        r'<button class="rv-source-toggle"[^>]*aria-expanded="([^"]+)"[^>]*aria-controls="([^"]+)"',
+        html,
+    )
+    panels = {
+        panel_id: attrs
+        for panel_id, attrs in re.findall(
+            r'<tr class="rv-source-detail" id="([^"]+)"([^>]*)>', html
+        )
+    }
+
+    assert controls
+    assert all(expanded == "false" for expanded, _ in controls)
+    assert all(panel_id in panels and "hidden" in panels[panel_id] for _, panel_id in controls)
+    assert len(panels) == len(controls)
+
+
+def test_print_keeps_scored_chip_and_hides_expanded_source_panel():
+    html = _render_report(
+        {"threatfox": {"status": "found", "score": 90, "confidence": 100}},
+        print_mode=True,
+    )
+
+    assert ".report-v2 .rv-source-detail, .report-v2 .rv-source-detail[hidden] { display: none !important; }" in html
+    assert ">SCORED</span>" in html
+    assert 'class="rv-source-detail"' in html
 
 
 def test_not_applicable_sources_render_as_wrapping_chips_with_scored_marker():
@@ -262,6 +390,92 @@ def test_not_applicable_sources_render_as_wrapping_chips_with_scored_marker():
     assert 'class="rv-na-chip"><strong>ThreatFox</strong>' in na_section
     assert 'class="rv-na-chip"><strong>VirusTotal</strong>' in na_section
     assert ">SCORED</span>" in na_section
+
+
+def _domain_enrichment(is_dga=True, confidence=80):
+    return {
+        "domain_age": {
+            "creation_date": "2016-02-11T00:00:00Z",
+            "age_days": 3889,
+            "is_newly_registered": False,
+            "risk_level": "none",
+        },
+        "dga_analysis": {
+            "is_dga": is_dga,
+            "confidence": confidence,
+            "dga_family_guess": "generic_random",
+            "sld": "bossbey",
+            "entropy": 2.2359,
+            "consonant_ratio": 0.7143,
+            "dictionary_match": {"words_found": ["boss"]},
+        },
+    }
+
+
+def test_domain_intelligence_uses_console_title_and_confidence_badge():
+    html = _render_report(_count_fixture_sources(), domain_enrichment=_domain_enrichment())
+    domain_card = re.search(
+        r'<div class="rv-card card-print-flow">\s*<div class="rv-card-head card-header-collapsible" data-bs-toggle="collapse" data-bs-target="#domainIntelligenceCollapse".*?<!-- STATIC ANALYSIS \(File\) -->',
+        html,
+        re.DOTALL,
+    ).group(0)
+
+    assert '<h2 class="rv-console-title">Domain intelligence</h2>' in domain_card
+    assert '.rv-card-head h2.rv-console-title::before { content: "// ";' in html
+    assert '<span class="rv-pill rv-pill--flag">80%</span>' in domain_card
+    assert "1 FLAGGED" in html and "7 RESPONDED" in html
+    assert "2 ERRORS" in html and "19 N/A" in html and "1 / 7" in html
+
+
+def test_domain_intelligence_uses_lowercase_labels_and_merged_entropy_row():
+    html = _render_report(
+        {"threatfox": {"status": "found", "score": 90}},
+        domain_enrichment=_domain_enrichment(),
+    )
+
+    for label in (
+        "created", "age", "newly registered", "risk level", "family guess",
+        "analyzed label", "entropy", "consonant ratio", "dictionary words",
+    ):
+        assert f">{label}</span>" in html
+    assert (
+        'entropy</span><strong>2.2359 <span class="rv-domain-secondary-label">'
+        "/ consonant ratio</span> 0.7143</strong>"
+    ) in html
+    assert ">Confidence</span>" not in html
+
+
+def test_domain_intelligence_keeps_existing_dga_pill_conditions():
+    likely_html = _render_report(
+        {}, domain_enrichment=_domain_enrichment(is_dga=True, confidence=70)
+    )
+    weak_html = _render_report(
+        {}, domain_enrichment=_domain_enrichment(is_dga=True, confidence=69)
+    )
+    neutral_html = _render_report(
+        {}, domain_enrichment=_domain_enrichment(is_dga=False, confidence=90)
+    )
+
+    assert ">DGA likely</span>" in likely_html
+    assert ">Weak signal</span>" in weak_html
+    assert ">Not flagged</span>" in neutral_html
+    assert 'class="rv-pill rv-pill--flag">70%</span>' in likely_html
+    assert 'class="rv-pill rv-pill--error">69%</span>' in weak_html
+
+
+def test_domain_intelligence_keeps_console_markup_in_print_mode():
+    html = _render_report(
+        _count_fixture_sources(),
+        print_mode=True,
+        domain_enrichment=_domain_enrichment(),
+    )
+
+    assert 'id="domainIntelligenceCollapse"' in html
+    assert '<h2 class="rv-console-title">Domain intelligence</h2>' in html
+    assert '<span class="rv-pill rv-pill--flag">80%</span>' in html
+    assert ".report-v2 .card.card-print-flow { break-inside: auto; page-break-inside: auto; }" in html
+    assert "1 FLAGGED" in html and "7 RESPONDED" in html
+    assert "2 ERRORS" in html and "19 N/A" in html and "1 / 7" in html
 
 
 def test_scored_chip_uses_scorer_constant_and_omits_report_only_virustotal(monkeypatch):

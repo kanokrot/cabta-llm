@@ -106,8 +106,8 @@
     .report-v2 .rv-card-head { display: flex; align-items: center; flex-wrap: wrap; gap: .55rem; padding: .9rem 1rem; border-bottom: 1px solid var(--rv-line); }
     .report-v2 .rv-card-head h2, .report-v2 .rv-card-head h3 { margin: 0; font-size: 1rem; font-weight: 650; }
     .report-v2 .rv-card-head h2, .report-v2 .rv-card-head h3 { text-transform: uppercase; }
-    .report-v2 .rv-card-head h2:has(+ .rv-pill--flag) { font: 600 .78rem ui-monospace, monospace; letter-spacing: .1em; }
-    .report-v2 .rv-card-head h2:has(+ .rv-pill--flag)::before { content: "// "; color: var(--rv-cyan); }
+    .report-v2 .rv-card-head h2.rv-console-title { font: 600 .78rem ui-monospace, monospace; letter-spacing: .1em; }
+    .report-v2 .rv-card-head h2.rv-console-title::before { content: "// "; color: var(--rv-cyan); }
     .report-v2 .rv-spacer { flex: 1 1 auto; }
     .report-v2 .rv-muted { color: var(--rv-muted); }
     .report-v2 .rv-mono { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
@@ -116,10 +116,11 @@
     [data-theme="light"] .report-v2 { --rv-cyan: #0088aa; --rv-red: #c6283d; --rv-amber: #9b6500; --rv-green: #167344; --rv-hero-grid: #c9d8ee66; }
     .report-v2 .rv-hero { position: relative; display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 26px; align-items: center; padding: 24px; border: 1px solid color-mix(in srgb, var(--rv-red) 38%, var(--rv-line)); overflow: visible; }
     .report-v2 .rv-hero::before, .report-v2 .rv-hero::after,
-    .report-v2 .rv-card:has(> #sourcesCollapse)::before, .report-v2 .rv-card:has(> #sourcesCollapse)::after { content: ""; position: absolute; width: 12px; height: 12px; border: 2px solid var(--rv-cyan); opacity: .85; pointer-events: none; z-index: 2; }
-    .report-v2 .rv-hero::before, .report-v2 .rv-card:has(> #sourcesCollapse)::before { top: -1px; left: -1px; border-right: 0; border-bottom: 0; }
-    .report-v2 .rv-hero::after, .report-v2 .rv-card:has(> #sourcesCollapse)::after { right: -1px; bottom: -1px; border-left: 0; border-top: 0; }
-    .report-v2 .rv-card:has(> #sourcesCollapse) { position: relative; overflow: visible; }
+    .report-v2 .rv-card:has(> #sourcesCollapse)::before, .report-v2 .rv-card:has(> #sourcesCollapse)::after,
+    .report-v2 .rv-card:has(> #domainIntelligenceCollapse)::before, .report-v2 .rv-card:has(> #domainIntelligenceCollapse)::after { content: ""; position: absolute; width: 12px; height: 12px; border: 2px solid var(--rv-cyan); opacity: .85; pointer-events: none; z-index: 2; }
+    .report-v2 .rv-hero::before, .report-v2 .rv-card:has(> #sourcesCollapse)::before, .report-v2 .rv-card:has(> #domainIntelligenceCollapse)::before { top: -1px; left: -1px; border-right: 0; border-bottom: 0; }
+    .report-v2 .rv-hero::after, .report-v2 .rv-card:has(> #sourcesCollapse)::after, .report-v2 .rv-card:has(> #domainIntelligenceCollapse)::after { right: -1px; bottom: -1px; border-left: 0; border-top: 0; }
+    .report-v2 .rv-card:has(> #sourcesCollapse), .report-v2 .rv-card:has(> #domainIntelligenceCollapse) { position: relative; overflow: visible; }
     .report-v2 .score-gauge { position: relative; box-sizing: border-box; width: 200px; height: 200px; max-width: 100%; flex: 0 0 200px; }
     .report-v2 .score-gauge canvas { position: absolute; inset: 0; display: block; width: 100% !important; height: 100% !important; max-width: 100%; max-height: 100%; }
     .report-v2 .score-gauge::before { content: ""; position: absolute; z-index: 1; pointer-events: none; width: 89%; height: 89%; top: 50%; left: 50%; transform: translate(-50%, -50%); background: var(--rv-bg); border-radius: 50%; }
@@ -159,7 +160,6 @@
     .report-v2 .rv-scored-chip { display: inline-flex; align-items: center; border: 1px solid var(--rv-cyan); border-radius: 999px; padding: .1rem .38rem; color: var(--rv-cyan); font: 700 .58rem ui-monospace, monospace; letter-spacing: .06em; }
     .report-v2 .rv-score-legend { flex: 1 0 100%; color: var(--rv-muted); font: .68rem ui-monospace, monospace; }
     .report-v2 .rv-source-chevron { display: inline-flex; justify-content: center; width: .55rem; flex: 0 0 .55rem; }
-    .report-v2 .rv-source-chevron-placeholder { display: inline-block; width: .95rem; flex: 0 0 .95rem; }
     .report-v2 .rv-source-toggle:focus-visible { outline: 2px solid var(--rv-cyan); outline-offset: 3px; border-radius: 2px; }
     .report-v2 .rv-source-chevron { color: var(--rv-cyan); transition: transform .15s ease; }
     .report-v2 .rv-source-toggle[aria-expanded="true"] .rv-source-chevron { transform: rotate(90deg); }
@@ -193,6 +193,9 @@
     .report-v2 .rv-domain-note { padding: 0 1rem 1rem; color: var(--rv-muted); font-size: .82rem; }
     .report-v2 .rv-kv { display: grid; grid-template-columns: minmax(8rem, .8fr) minmax(0, 1.2fr); gap: .35rem .8rem; color: var(--rv-muted); }
     .report-v2 .rv-kv strong { color: var(--rv-text); font-weight: 550; overflow-wrap: anywhere; }
+    .report-v2 .rv-domain-grid .rv-kv { grid-template-columns: max-content minmax(0, 1fr); gap: 0 .65rem; font: .78rem/1.9 ui-monospace, SFMono-Regular, Consolas, monospace; }
+    .report-v2 .rv-domain-grid .rv-domain-card h3 { font: 600 .78rem ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: .1em; text-transform: uppercase; }
+    .report-v2 .rv-domain-grid .rv-domain-secondary-label { color: var(--rv-muted); font-weight: 400; }
     .report-v2 .rule-tab-content pre { background: var(--rv-panel); border: 1px solid var(--rv-line); border-radius: 6px; padding: 3rem 1rem 1rem; overflow-x: auto; max-height: 400px; font-size: .8rem; line-height: 1.5; color: var(--rv-text); margin-bottom: 0; }
     .report-v2 .rule-tab-content .tab-pane { padding-top: .75rem; }
     .report-v2 .rule-wrapper { position: relative; }
@@ -717,7 +720,7 @@
 {% set source_display_rows = build_source_display_rows(sources, source_summary.classes) if build_source_display_rows is defined else [] %}
 <div class="rv-card card-print-flow">
     <div class="rv-card-head card-header-collapsible" data-bs-toggle="collapse" data-bs-target="#sourcesCollapse" aria-expanded="true">
-        <h2>Threat Intelligence Sources</h2>
+        <h2 class="rv-console-title">Threat Intelligence Sources</h2>
         <span class="rv-pill rv-pill--flag">{{ source_summary.flagged }} FLAGGED</span>
         <span class="rv-pill rv-pill--ok">{{ source_summary.responded }} RESPONDED</span>
         <span class="rv-pill rv-pill--error">{{ source_summary.errors }} ERRORS</span>
@@ -735,8 +738,7 @@
                     <tr class="{% if row.source_class == 'flagged' %}rv-hit{% endif %}">
                         <td>
                             <div class="rv-source-name-group">
-                                {% if row.has_details %}<button class="rv-source-toggle" type="button" aria-expanded="false" aria-controls="{{ detail_id }}"><span class="rv-source-chevron" aria-hidden="true">&#9656;</span><span>{{ row.display_name | e }}</span></button>
-                                {% else %}<span class="rv-source-chevron-placeholder" aria-hidden="true"></span><strong>{{ row.display_name | e }}</strong>{% endif %}
+                                <button class="rv-source-toggle" type="button" aria-expanded="false" aria-controls="{{ detail_id }}"><span class="rv-source-chevron" aria-hidden="true">&#9656;</span><span>{{ row.display_name | e }}</span></button>
                                 {% if row.scored %}<span class="rv-scored-chip" title="{{ row.scoring_title | e }}">SCORED</span>{% endif %}
                             </div>
                         </td>
@@ -747,10 +749,11 @@
                         </td>
                         <td class="rv-details"><span class="rv-source-summary" title="{{ row.summary_title | e }}">{{ row.summary | e }}</span></td>
                     </tr>
-                    {% if row.has_details %}<tr class="rv-source-detail" id="{{ detail_id }}" hidden><td colspan="4"><div class="rv-detail-grid">
+                    <tr class="rv-source-detail" id="{{ detail_id }}" hidden><td colspan="4"><div class="rv-detail-grid">
                         <div class="rv-scoring-detail"><strong>Scoring:</strong> {% if row.scored %}weight {{ '%.2f' | format(row.weight) | e }}{% else %}not used in score{% endif %}</div>
-                        {% for field in row.detail_fields %}<div class="rv-detail-item"><span class="rv-detail-key">{% if row.group_key == 'nrd' %}<strong>{{ field.source_label | e }}</strong> · {% endif %}{{ field.key | e }}</span><span class="rv-detail-value">{{ field.value | e }}</span></div>{% endfor %}
-                    </div></td></tr>{% endif %}
+                        <div class="rv-scoring-detail"><strong>Raw status:</strong> {{ (row.get('raw_status') if row.get('raw_status') is not none else '-') | e }} / <strong>Raw score:</strong> {{ (row.get('raw_score') if row.get('raw_score') is not none else '-') | e }}</div>
+                        {% for field in row.extra_detail_fields %}<div class="rv-detail-item"><span class="rv-detail-key">{% if row.group_key == 'nrd' %}<strong>{{ field.source_label | e }}</strong> · {% endif %}{{ field.key | e }}</span><span class="rv-detail-value">{{ field.value | e }}</span></div>{% endfor %}
+                    </div></td></tr>
                 {% endfor %}
             {% else %}
             {% for source_name, source_data in sources.items() %}
@@ -793,7 +796,7 @@
 {% if domain_enrichment %}
 <div class="rv-card card-print-flow">
     <div class="rv-card-head card-header-collapsible" data-bs-toggle="collapse" data-bs-target="#domainIntelligenceCollapse" aria-expanded="true">
-        <h2>Domain intelligence</h2><span class="rv-spacer"></span>
+        <h2 class="rv-console-title">Domain intelligence</h2><span class="rv-spacer"></span>
         {% set dga_confidence = dga_analysis.get('confidence', 0) | float %}
         {% if dga_analysis.get('is_dga') and dga_confidence >= 70 %}<span class="rv-pill badge badge-danger">DGA likely</span>
         {% elif dga_analysis.get('is_dga') and dga_confidence < 70 %}<span class="rv-pill badge badge-warning">Weak signal</span>
@@ -802,18 +805,21 @@
     <div class="collapse show" id="domainIntelligenceCollapse">
         <div class="rv-domain-grid">
             <section class="rv-domain-card"><h3>Domain age</h3><div class="rv-kv">
-                <span>Created</span><strong>{% if domain_age.get('creation_date') %}{{ domain_age.get('creation_date') | string | truncate(10, true, '') | e }}{% else %}N/A{% endif %}</strong>
-                <span>Age</span><strong>{% if domain_age.get('age_days') is not none %}{{ domain_age.get('age_days') | e }} days{% else %}N/A{% endif %}</strong>
-                <span>Newly registered</span><strong>{% if domain_age.get('is_newly_registered') %}Yes{% else %}No{% endif %}</strong>
-                <span>Risk level</span><strong>{{ domain_age.get('risk_level', 'N/A') | string | e }}</strong>
+                <span>created</span><strong>{% if domain_age.get('creation_date') %}{{ domain_age.get('creation_date') | string | truncate(10, true, '') | e }}{% else %}N/A{% endif %}</strong>
+                <span>age</span><strong>{% if domain_age.get('age_days') is not none %}{{ domain_age.get('age_days') | e }} days{% else %}N/A{% endif %}</strong>
+                <span>newly registered</span><strong>{% if domain_age.get('is_newly_registered') %}Yes{% else %}No{% endif %}</strong>
+                <span>risk level</span><strong>{{ domain_age.get('risk_level', 'N/A') | string | e }}</strong>
             </div></section>
-            <section class="rv-domain-card"><h3>DGA heuristic</h3><div class="rv-kv">
-                <span>Confidence</span><strong>{% if dga_analysis.get('confidence') is not none %}{{ dga_analysis.get('confidence') | e }}%{% else %}N/A{% endif %}</strong>
-                <span>Family guess</span><strong>{{ dga_analysis.get('dga_family_guess', 'N/A') | string | e }}</strong>
-                <span>Analyzed label</span><strong>{{ dga_analysis.get('sld', 'N/A') | string | e }}</strong>
-                <span>Entropy</span><strong>{{ dga_analysis.get('entropy', 'N/A') | string | e }}</strong>
-                <span>Consonant ratio</span><strong>{{ dga_analysis.get('consonant_ratio', 'N/A') | string | e }}</strong>
-                <span>Dictionary words</span><strong>{% if dictionary_match.get('words_found') %}{{ dictionary_match.get('words_found') | join(', ') | e }}{% else %}none{% endif %}</strong>
+            <section class="rv-domain-card"><h3>DGA heuristic
+                {% if dga_analysis.get('confidence') is not none %}
+                    {% if dga_confidence >= 70 %}<span class="rv-pill rv-pill--flag">{{ dga_analysis.get('confidence') | e }}%</span>
+                    {% else %}<span class="rv-pill rv-pill--error">{{ dga_analysis.get('confidence') | e }}%</span>{% endif %}
+                {% else %}<span class="rv-pill">N/A</span>{% endif %}
+            </h3><div class="rv-kv">
+                <span>family guess</span><strong>{{ dga_analysis.get('dga_family_guess', 'N/A') | string | e }}</strong>
+                <span>analyzed label</span><strong>{{ dga_analysis.get('sld', 'N/A') | string | e }}</strong>
+                <span>entropy</span><strong>{{ dga_analysis.get('entropy', 'N/A') | string | e }} <span class="rv-domain-secondary-label">/ consonant ratio</span> {{ dga_analysis.get('consonant_ratio', 'N/A') | string | e }}</strong>
+                <span>dictionary words</span><strong>{% if dictionary_match.get('words_found') %}{{ dictionary_match.get('words_found') | join(', ') | e }}{% else %}none{% endif %}</strong>
             </div></section>
         </div>
         <div class="rv-domain-note">Heuristic signal. Not part of the verdict score.</div>
@@ -2003,6 +2009,10 @@
     /* ── Hash copy buttons via data-copy attribute ────────────── */
     /* Source detail panels use native buttons; insert no feed data into HTML. */
     document.querySelectorAll('.report-v2 .rv-source-toggle').forEach(function (button) {
+        var initialPanelId = button.getAttribute('aria-controls');
+        var initialPanel = initialPanelId ? document.getElementById(initialPanelId) : null;
+        button.setAttribute('aria-expanded', 'false');
+        if (initialPanel) initialPanel.hidden = true;
         button.addEventListener('click', function () {
             var panelId = button.getAttribute('aria-controls');
             var panel = panelId ? document.getElementById(panelId) : null;

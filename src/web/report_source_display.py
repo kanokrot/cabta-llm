@@ -274,6 +274,10 @@ def _make_row(
         for key, value in source_data.items()
         if not _is_empty(value)
     ]
+    extra_detail_fields = [
+        field for field in detail_fields
+        if field["key"] not in {"status", "score", "not applicable"}
+    ]
     rank = {"flagged": 0, "other": 1, "error": 2, "clean": 3, "na": 4}.get(source_class, 1)
     normalized_score = score if score is not None else -1.0
     score_text = "-" if score is None else str(int(score)) if score.is_integer() else str(score)
@@ -287,12 +291,15 @@ def _make_row(
         "summary_title": full_summary,
         "summary_keys": summary_keys,
         "detail_fields": detail_fields,
+        "extra_detail_fields": extra_detail_fields,
         "has_details": any(
             field["key"].replace(" ", "_") not in summary_keys
             and field["key"].replace(" ", "_") not in {"status", "score", "not_applicable"}
             for field in detail_fields
         ),
         "score": score,
+        "raw_status": _compact_value(source_data["status"]) if not _is_empty(source_data.get("status")) else "-",
+        "raw_score": _compact_value(source_data["score"]) if not _is_empty(source_data.get("score")) else "-",
         "score_text": score_text,
         "score_width": max(0, min(100, score or 0)),
         "score_level": _score_level(score) if score is not None and score > 0 else "",
@@ -320,6 +327,7 @@ def _merge_nrd_rows(
     score_texts = [row["score_text"] for row in (first, second)]
     score_text = score_texts[0] if score_texts[0] == score_texts[1] else " / ".join(score_texts)
     detail_fields = first["detail_fields"] + second["detail_fields"]
+    extra_detail_fields = first["extra_detail_fields"] + second["extra_detail_fields"]
     return {
         "source_name": "smet_nrd+hagezi_nrd",
         "source_names": first["source_names"] + second["source_names"],
@@ -330,8 +338,11 @@ def _merge_nrd_rows(
         "summary_title": full_summary,
         "summary_keys": first["summary_keys"] | second["summary_keys"],
         "detail_fields": detail_fields,
+        "extra_detail_fields": extra_detail_fields,
         "has_details": first["has_details"] or second["has_details"],
         "score": max_score,
+        "raw_status": f"Smet NRD: {first['raw_status']} / HaGeZi NRD: {second['raw_status']}",
+        "raw_score": f"Smet NRD: {first['raw_score']} / HaGeZi NRD: {second['raw_score']}",
         "score_text": score_text,
         "score_width": max(0, min(100, max_score or 0)),
         "score_level": _score_level(max_score) if max_score is not None and max_score > 0 else "",
