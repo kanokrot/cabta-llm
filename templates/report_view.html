@@ -94,31 +94,55 @@
         --rv-line: var(--border-color, #26364b);
         --rv-text: var(--text-primary, #e5edf7);
         --rv-muted: var(--text-secondary, #9aabc0);
+        position: relative;
+        isolation: isolate;
         color: var(--rv-text);
         padding-top: 56px;
     }
+    .report-v2::before { content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none; background-image: linear-gradient(var(--rv-hero-grid) 1px, transparent 1px), linear-gradient(90deg, var(--rv-hero-grid) 1px, transparent 1px); background-size: 44px 44px; background-attachment: fixed; }
     [data-theme="dark"] .report-v2 { --rv-bg: var(--bg-card, #0b1220); --rv-panel: var(--bg-tertiary, #121c2d); --rv-line: var(--border-color, #26364b); --rv-text: var(--text-primary, #e5edf7); --rv-muted: var(--text-secondary, #9aabc0); }
     [data-theme="light"] .report-v2 { --rv-bg: var(--bg-card, #fff); --rv-panel: var(--bg-secondary, #f3f7fb); --rv-line: var(--border-color, #cfdae8); --rv-text: var(--text-primary, #17263b); --rv-muted: var(--text-secondary, #596b80); }
     .report-v2 .rv-card { background: var(--rv-bg); border: 1px solid var(--rv-line); border-radius: 10px; margin-bottom: 1rem; overflow: hidden; }
     .report-v2 .rv-card-head { display: flex; align-items: center; flex-wrap: wrap; gap: .55rem; padding: .9rem 1rem; border-bottom: 1px solid var(--rv-line); }
     .report-v2 .rv-card-head h2, .report-v2 .rv-card-head h3 { margin: 0; font-size: 1rem; font-weight: 650; }
     .report-v2 .rv-card-head h2, .report-v2 .rv-card-head h3 { text-transform: uppercase; }
+    .report-v2 .rv-card-head h2:has(+ .rv-pill--flag) { font: 600 .78rem ui-monospace, monospace; letter-spacing: .1em; }
+    .report-v2 .rv-card-head h2:has(+ .rv-pill--flag)::before { content: "// "; color: var(--rv-cyan); }
     .report-v2 .rv-spacer { flex: 1 1 auto; }
     .report-v2 .rv-muted { color: var(--rv-muted); }
     .report-v2 .rv-mono { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
-    .report-v2 .rv-hero { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 1.35rem; align-items: center; padding: 1.25rem; border-top: 3px solid var(--color-danger, #dc3545); }
-    .report-v2 .score-gauge { position: relative; width: 140px; height: 140px; flex: 0 0 140px; }
-    .report-v2 .score-gauge canvas { position: absolute; inset: 0; display: block; width: 140px !important; height: 140px !important; max-width: 140px; max-height: 140px; }
-    .report-v2 .score-gauge #scoreValue { position: absolute; top: 50%; left: 50%; inset: auto; display: grid; place-items: center; width: 100%; transform: translate(-50%, -50%); font: 700 2rem/1 ui-monospace, monospace; color: var(--rv-text); white-space: nowrap; z-index: 2; }
-    .report-v2 .score-gauge .score-label { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); font-size: .62rem; line-height: 1; letter-spacing: .12em; color: var(--rv-muted); white-space: nowrap; z-index: 2; }
+    .report-v2 { --rv-cyan: #00cfe8; --rv-red: #dc3545; --rv-amber: #d99a00; --rv-green: #198754; --rv-hero-grid: color-mix(in srgb, var(--rv-line) 38%, transparent); }
+    [data-theme="dark"] .report-v2 { --rv-cyan: #00e5ff; --rv-red: #ff3b6b; --rv-amber: #ffc233; --rv-green: #2cff9a; --rv-hero-grid: #16335a55; }
+    [data-theme="light"] .report-v2 { --rv-cyan: #0088aa; --rv-red: #c6283d; --rv-amber: #9b6500; --rv-green: #167344; --rv-hero-grid: #c9d8ee66; }
+    .report-v2 .rv-hero { position: relative; display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 26px; align-items: center; padding: 24px; border: 1px solid color-mix(in srgb, var(--rv-red) 38%, var(--rv-line)); overflow: visible; }
+    .report-v2 .rv-hero::before, .report-v2 .rv-hero::after,
+    .report-v2 .rv-card:has(> #sourcesCollapse)::before, .report-v2 .rv-card:has(> #sourcesCollapse)::after { content: ""; position: absolute; width: 12px; height: 12px; border: 2px solid var(--rv-cyan); opacity: .85; pointer-events: none; z-index: 2; }
+    .report-v2 .rv-hero::before, .report-v2 .rv-card:has(> #sourcesCollapse)::before { top: -1px; left: -1px; border-right: 0; border-bottom: 0; }
+    .report-v2 .rv-hero::after, .report-v2 .rv-card:has(> #sourcesCollapse)::after { right: -1px; bottom: -1px; border-left: 0; border-top: 0; }
+    .report-v2 .rv-card:has(> #sourcesCollapse) { position: relative; overflow: visible; }
+    .report-v2 .score-gauge { position: relative; box-sizing: border-box; width: 200px; height: 200px; max-width: 100%; flex: 0 0 200px; }
+    .report-v2 .score-gauge canvas { position: absolute; inset: 0; display: block; width: 100% !important; height: 100% !important; max-width: 100%; max-height: 100%; }
+    .report-v2 .score-gauge::before { content: ""; position: absolute; z-index: 1; pointer-events: none; width: 89%; height: 89%; top: 50%; left: 50%; transform: translate(-50%, -50%); background: var(--rv-bg); border-radius: 50%; }
+    .report-v2 .score-gauge::after { content: ""; position: absolute; z-index: 2; pointer-events: none; width: 76%; height: 76%; top: 50%; left: 50%; transform: translate(-50%, -50%); border: 1px dashed color-mix(in srgb, var(--rv-line) 80%, transparent); border-radius: 50%; opacity: .7; }
+    .report-v2 .score-gauge #scoreValue { position: absolute; top: 43%; left: 50%; display: grid; place-items: center; width: 100%; transform: translate(-50%, -50%); font: 700 clamp(2rem, 4vw, 2.9rem)/1 ui-monospace, monospace; color: var(--rv-text); white-space: nowrap; z-index: 3; }
+    .report-v2 .score-gauge .score-label { position: absolute; top: 58%; bottom: auto; left: 50%; transform: translate(-50%, -50%); font: .58rem/1 ui-monospace, monospace; letter-spacing: .12em; color: var(--rv-muted); white-space: nowrap; z-index: 3; }
     .report-v2 .rv-title-row { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; }
-    .report-v2 .rv-title { margin: 0; color: var(--rv-text); font-size: clamp(1.15rem, 2.5vw, 1.65rem); overflow-wrap: anywhere; }
+    .report-v2 .rv-title { margin: 0; color: var(--rv-cyan); font: 600 clamp(1.15rem, 2.5vw, 1.65rem) ui-monospace, monospace; overflow-wrap: anywhere; }
     .report-v2 .rv-meta { display: flex; flex-wrap: wrap; gap: .35rem 1.1rem; color: var(--rv-muted); font: .78rem ui-monospace, monospace; margin-top: .55rem; }
     .report-v2 .rv-meta strong { color: var(--rv-text); font-weight: 550; }
+    .report-v2 .rv-meta span:first-child strong { color: var(--rv-cyan); }
     .report-v2 .rv-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .65rem; margin-top: 1rem; }
     .report-v2 .rv-tile { min-width: 0; padding: .7rem .8rem; background: var(--rv-panel); border: 1px solid var(--rv-line); border-left: 3px solid var(--color-primary, #3b82f6); border-radius: 6px; }
     .report-v2 .rv-tile-label { display: block; color: var(--rv-muted); font: .65rem ui-monospace, monospace; letter-spacing: .08em; text-transform: uppercase; }
     .report-v2 .rv-tile-value { display: block; margin-top: .15rem; color: var(--rv-text); font: 650 1rem ui-monospace, monospace; overflow-wrap: anywhere; }
+    .report-v2 .rv-tile:nth-child(1) { border-left-color: var(--rv-red); }
+    .report-v2 .rv-tile:nth-child(1) .rv-tile-value { color: var(--rv-red); }
+    .report-v2 .rv-tile:nth-child(2) { border-left-color: var(--rv-cyan); }
+    .report-v2 .rv-tile:nth-child(2) .rv-tile-value { color: var(--rv-cyan); }
+    .report-v2 .rv-tile:nth-child(3) { border-left-color: var(--rv-amber); }
+    .report-v2 .rv-tile:nth-child(3) .rv-tile-value { color: var(--rv-amber); }
+    .report-v2 .rv-tile:nth-child(4) { border-left-color: var(--rv-green); }
+    .report-v2 .rv-tile:nth-child(4) .rv-tile-value { color: var(--rv-green); }
     .report-v2 .rv-pill { display: inline-flex; align-items: center; border: 1px solid var(--rv-line); border-radius: 999px; padding: .15rem .55rem; color: var(--rv-muted); font: 700 .65rem ui-monospace, monospace; letter-spacing: .05em; text-transform: uppercase; }
     .report-v2 .rv-pill--flag { color: var(--color-danger, #dc3545); border-color: var(--color-danger, #dc3545); }
     .report-v2 .rv-pill--ok { color: var(--color-success, #198754); border-color: var(--color-success, #198754); }
@@ -130,8 +154,32 @@
     .report-v2 .rv-table td { padding: .65rem .85rem; border-top: 1px solid var(--rv-line); vertical-align: top; color: var(--rv-text); }
     .report-v2 .rv-table tr.rv-hit td { background: color-mix(in srgb, var(--color-danger, #dc3545) 8%, transparent); }
     .report-v2 .rv-details { color: var(--rv-muted); font-size: .83rem; overflow-wrap: anywhere; }
+    .report-v2 .rv-source-toggle { display: inline-flex; align-items: center; gap: .4rem; border: 0; padding: 0; background: transparent; color: var(--rv-text); font: inherit; font-weight: 650; text-align: left; cursor: pointer; }
+    .report-v2 .rv-source-name-group { display: inline-flex; align-items: center; flex-wrap: wrap; gap: .45rem; }
+    .report-v2 .rv-scored-chip { display: inline-flex; align-items: center; border: 1px solid var(--rv-cyan); border-radius: 999px; padding: .1rem .38rem; color: var(--rv-cyan); font: 700 .58rem ui-monospace, monospace; letter-spacing: .06em; }
+    .report-v2 .rv-score-legend { flex: 1 0 100%; color: var(--rv-muted); font: .68rem ui-monospace, monospace; }
+    .report-v2 .rv-source-chevron { display: inline-flex; justify-content: center; width: .55rem; flex: 0 0 .55rem; }
+    .report-v2 .rv-source-chevron-placeholder { display: inline-block; width: .95rem; flex: 0 0 .95rem; }
+    .report-v2 .rv-source-toggle:focus-visible { outline: 2px solid var(--rv-cyan); outline-offset: 3px; border-radius: 2px; }
+    .report-v2 .rv-source-chevron { color: var(--rv-cyan); transition: transform .15s ease; }
+    .report-v2 .rv-source-toggle[aria-expanded="true"] .rv-source-chevron { transform: rotate(90deg); }
+    .report-v2 .rv-source-summary { display: block; max-width: 34rem; overflow: hidden; color: var(--rv-muted); font-size: .8rem; text-overflow: ellipsis; white-space: nowrap; }
+    .report-v2 .rv-score-track { width: 5.6rem; height: 4px; margin-top: .25rem; overflow: hidden; border-radius: 4px; background: var(--rv-line); }
+    .report-v2 .rv-score-fill { display: block; height: 100%; border-radius: inherit; }
+    .report-v2 .rv-score--high { background: var(--rv-red); }
+    .report-v2 .rv-score--medium { background: var(--rv-amber); }
+    .report-v2 .rv-score--low { background: var(--rv-green); }
+    .report-v2 .rv-source-detail[hidden] { display: none !important; }
+    .report-v2 .rv-source-detail:not([hidden]) { display: table-row; }
+    .report-v2 .rv-source-detail td { background: var(--rv-panel); }
+    .report-v2 .rv-detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .35rem .9rem; font-size: .78rem; }
+    .report-v2 .rv-scoring-detail { grid-column: 1 / -1; padding-bottom: .35rem; border-bottom: 1px solid var(--rv-line); color: var(--rv-cyan); font: 650 .72rem ui-monospace, monospace; }
+    .report-v2 .rv-detail-item { display: grid; grid-template-columns: minmax(6.5rem, .7fr) minmax(0, 1.3fr); gap: .5rem; min-width: 0; }
+    .report-v2 .rv-detail-key { color: var(--rv-muted); }
+    .report-v2 .rv-detail-value { color: var(--rv-text); overflow-wrap: anywhere; }
     .report-v2 details.rv-na > summary { cursor: pointer; padding: .75rem 1rem; border-top: 1px solid var(--rv-line); color: var(--rv-muted); }
-    .report-v2 .rv-na-list { padding: 0 1rem 1rem; color: var(--rv-muted); }
+    .report-v2 .rv-na-list { display: flex; flex-wrap: wrap; align-items: center; gap: .45rem; padding: 0 1rem 1rem; color: var(--rv-muted); }
+    .report-v2 .rv-na-chip { display: inline-flex; align-items: center; flex-wrap: wrap; gap: .4rem; max-width: 100%; padding: .28rem .55rem; border: 1px solid var(--rv-line); border-radius: 999px; color: var(--rv-text); font-size: .75rem; }
     .report-v2 .rv-two, .report-v2 .rv-domain-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .85rem; padding: 1rem; }
     .report-v2 .rv-col, .report-v2 .rv-domain-card { min-width: 0; background: var(--rv-panel); border: 1px solid var(--rv-line); border-radius: 7px; padding: 1rem; }
     .report-v2 .rv-col h3, .report-v2 .rv-domain-card h3 { display: flex; align-items: center; gap: .5rem; margin: 0 0 .8rem; font-size: .9rem; }
@@ -169,7 +217,12 @@
     .report-v2 .rv-json-summary { color: var(--rv-muted); }
     .report-v2 .rv-json-highlight { background: color-mix(in srgb, var(--color-primary, #3b82f6) 25%, transparent); outline: 1px solid var(--color-primary, #3b82f6); }
     .report-v2 #rawJsonPre { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: pre-wrap; border: 0; }
-    @media (max-width: 760px) { .report-v2 .rv-hero { grid-template-columns: 1fr; justify-items: center; text-align: center; } .report-v2 .rv-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; } .report-v2 .rv-two, .report-v2 .rv-domain-grid { grid-template-columns: 1fr; } }
+    @media (max-width: 760px) { .report-v2 .rv-hero { grid-template-columns: minmax(0, 1fr); justify-items: center; text-align: center; } .report-v2 .score-gauge { width: min(200px, 100%); height: auto; aspect-ratio: 1; flex-basis: min(200px, 100%); } .report-v2 .rv-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; } .report-v2 .rv-two, .report-v2 .rv-domain-grid { grid-template-columns: 1fr; } }
+    @media (max-width: 760px) { .report-v2 .rv-detail-grid { grid-template-columns: 1fr; } }
+    [data-theme="light"] .report-v2 .rv-hero { box-shadow: none; }
+    [data-theme="light"] .report-v2::before { background-image: none; }
+    [data-theme="light"] .report-v2 .rv-hero { background-image: none; }
+    [data-theme="light"] .report-v2 #scoreGauge { filter: none !important; }
     @media print {
         .report-v2 .no-print { display: none !important; }
         .report-v2 .collapse { display: block !important; height: auto !important; visibility: visible !important; }
@@ -177,7 +230,11 @@
         .report-v2 #rawDataCollapse, .report-v2 #rawDataCollapse .card-body, .report-v2 #rawJsonPre { display: block !important; height: auto !important; max-height: none !important; overflow: visible !important; visibility: visible !important; position: static; width: auto; margin: 0; padding: 1rem; clip: auto; border: 1px solid #9ca3af; background: #fff !important; color: #111827 !important; }
         .report-v2 #rawJsonTree, .report-v2 .rv-raw-tools { display: none !important; }
         .report-v2 .card.card-print-flow { break-inside: auto; page-break-inside: auto; }
-        .report-v2 #scoreGauge { display: block !important; width: 140px !important; height: 140px !important; max-width: 140px; max-height: 140px; }
+        .report-v2 .rv-source-detail, .report-v2 .rv-source-detail[hidden] { display: none !important; }
+        .report-v2 .rv-source-chevron { display: none !important; }
+        .report-v2::before { display: none; }
+        .report-v2 .score-gauge { width: 140px; height: 140px; max-width: 140px; flex-basis: 140px; }
+        .report-v2 #scoreGauge { display: block !important; width: 140px !important; height: 140px !important; max-width: 140px; max-height: 140px; filter: none !important; }
     }
     @media print {
         .no-print { display: none !important; }
@@ -467,9 +524,10 @@
         </div>
         {% if file_info and (file_info.filename or file_info.name) %}<span class="rv-pill">FILE {{ (file_info.filename | default(file_info.name)) | e }}</span>{% endif %}
         {% if email_data and email_data.subject %}<span class="rv-pill">SUBJECT {{ email_data.subject | e | truncate(60) }}</span>{% endif %}
+        {% set top_source_display_name = display_source_name(source_summary.top_name) if display_source_name is defined else source_summary.top_name %}
         <div class="rv-tiles">
             <div class="rv-tile"><span class="rv-tile-label">Flagged / responded</span><strong class="rv-tile-value">{{ source_summary.flagged }} / {{ source_summary.responded }}</strong></div>
-            <div class="rv-tile"><span class="rv-tile-label">Top source</span><strong class="rv-tile-value">{% if source_summary.top_score >= 0 %}{{ source_summary.top_name | e }} {{ source_summary.top_score }}{% else %}N/A{% endif %}</strong></div>
+            <div class="rv-tile"><span class="rv-tile-label">Top source</span><strong class="rv-tile-value">{% if source_summary.top_score >= 0 %}{{ top_source_display_name | e }} {{ source_summary.top_score }}{% else %}N/A{% endif %}</strong></div>
             <div class="rv-tile"><span class="rv-tile-label">DGA heuristic</span><strong class="rv-tile-value">{% if dga_analysis.get('confidence') is not none %}{{ dga_analysis.get('confidence') | e }}%{% else %}N/A{% endif %}</strong></div>
             <div class="rv-tile"><span class="rv-tile-label">Domain age</span><strong class="rv-tile-value">{% if domain_age.get('age_days') is not none %}{{ domain_age.get('age_days') | e }} days{% else %}N/A{% endif %}</strong></div>
         </div>
@@ -656,6 +714,7 @@
 {% endif %}
 
 <!-- ══ THREAT INTELLIGENCE SOURCES — sources is a DICT keyed by source name ══ -->
+{% set source_display_rows = build_source_display_rows(sources, source_summary.classes) if build_source_display_rows is defined else [] %}
 <div class="rv-card card-print-flow">
     <div class="rv-card-head card-header-collapsible" data-bs-toggle="collapse" data-bs-target="#sourcesCollapse" aria-expanded="true">
         <h2>Threat Intelligence Sources</h2>
@@ -664,11 +723,36 @@
         <span class="rv-pill rv-pill--error">{{ source_summary.errors }} ERRORS</span>
         <span class="rv-pill">{{ source_summary.na }} N/A</span>
         <span class="rv-spacer"></span><span class="rv-muted">Applicable sources only</span>
+        <span class="rv-score-legend">SCORED = counted in the threat score &middot; other sources are context only</span>
     </div>
     <div class="collapse show" id="sourcesCollapse">
         <div class="rv-table-wrap"><table class="rv-table">
             <thead><tr><th>Source</th><th>Status</th><th>Score</th><th>Details</th></tr></thead>
             <tbody>
+            {% if build_source_display_rows is defined %}
+                {% for row in source_display_rows if row.source_class != 'na' %}
+                    {% set detail_id = 'sourceDetails' ~ loop.index %}
+                    <tr class="{% if row.source_class == 'flagged' %}rv-hit{% endif %}">
+                        <td>
+                            <div class="rv-source-name-group">
+                                {% if row.has_details %}<button class="rv-source-toggle" type="button" aria-expanded="false" aria-controls="{{ detail_id }}"><span class="rv-source-chevron" aria-hidden="true">&#9656;</span><span>{{ row.display_name | e }}</span></button>
+                                {% else %}<span class="rv-source-chevron-placeholder" aria-hidden="true"></span><strong>{{ row.display_name | e }}</strong>{% endif %}
+                                {% if row.scored %}<span class="rv-scored-chip" title="{{ row.scoring_title | e }}">SCORED</span>{% endif %}
+                            </div>
+                        </td>
+                        <td><span class="rv-pill {% if row.source_class == 'flagged' %}rv-pill--flag badge badge-danger{% elif row.source_class == 'error' %}rv-pill--error badge badge-warning{% elif row.source_class == 'clean' %}rv-pill--ok badge badge-success{% else %}badge badge-secondary{% endif %}">{{ row.display_status | e }}</span></td>
+                        <td class="rv-mono">
+                            {{ row.score_text | e }}
+                            {% if row.score is not none and row.score > 0 %}<div class="rv-score-track" aria-label="Score {{ row.score_text | e }} out of 100"><i class="rv-score-fill rv-score--{{ row.score_level | e }}" style="width:{{ row.score_width }}%"></i></div>{% endif %}
+                        </td>
+                        <td class="rv-details"><span class="rv-source-summary" title="{{ row.summary_title | e }}">{{ row.summary | e }}</span></td>
+                    </tr>
+                    {% if row.has_details %}<tr class="rv-source-detail" id="{{ detail_id }}" hidden><td colspan="4"><div class="rv-detail-grid">
+                        <div class="rv-scoring-detail"><strong>Scoring:</strong> {% if row.scored %}weight {{ '%.2f' | format(row.weight) | e }}{% else %}not used in score{% endif %}</div>
+                        {% for field in row.detail_fields %}<div class="rv-detail-item"><span class="rv-detail-key">{% if row.group_key == 'nrd' %}<strong>{{ field.source_label | e }}</strong> · {% endif %}{{ field.key | e }}</span><span class="rv-detail-value">{{ field.value | e }}</span></div>{% endfor %}
+                    </div></td></tr>{% endif %}
+                {% endfor %}
+            {% else %}
             {% for source_name, source_data in sources.items() %}
                 {% if source_data is mapping %}
                     {% set source_class = source_summary.classes.get(source_name, 'na') %}
@@ -693,10 +777,17 @@
                     {% endif %}
                 {% endif %}
             {% endfor %}
+            {% endif %}
             </tbody>
         </table></div>
     </div>
-    {% if source_summary.na %}<details class="rv-na"><summary>{{ source_summary.na }} sources not applicable to this IOC</summary><div class="rv-na-list">{% for source_name, source_data in sources.items() if source_data is mapping %}{% set na_status = source_data.get('status', '') | string | lower %}{% if source_summary.classes.get(source_name) == 'na' %}<div><strong>{{ source_name | string | title | e }}</strong> <span class="rv-pill badge badge-secondary"><span class="badge badge-secondary">N/A</span></span></div>{% endif %}{% endfor %}</div></details>{% endif %}
+    {% if source_summary.na %}<details class="rv-na"><summary>{{ source_summary.na }} sources not applicable to this IOC</summary><div class="rv-na-list">
+        {% if build_source_display_rows is defined %}
+            {% for row in source_display_rows if row.source_class == 'na' %}<div class="rv-na-chip"><strong>{{ row.display_name | e }}</strong> <span class="rv-pill badge badge-secondary">{{ row.display_status | e }}</span>{% if row.scored %}<span class="rv-scored-chip" title="{{ row.scoring_title | e }}">SCORED</span>{% endif %}</div>{% endfor %}
+        {% else %}
+            {% for source_name, source_data in sources.items() if source_data is mapping %}{% if source_summary.classes.get(source_name) == 'na' %}<div class="rv-na-chip"><strong>{{ source_name | string | title | e }}</strong> <span class="rv-pill badge badge-secondary"><span class="badge badge-secondary">N/A</span></span></div>{% endif %}{% endfor %}
+        {% endif %}
+    </div></details>{% endif %}
 </div>
 <!-- STATIC ANALYSIS (File) -->
 {% if domain_enrichment %}
@@ -1871,6 +1962,7 @@
     var gaugeCanvas = document.getElementById('scoreGauge');
     if (gaugeCanvas && typeof Chart !== 'undefined') {
         var gaugeColor = score >= 70 ? '#dc3545' : score >= 40 ? '#ffc107' : '#28a745';
+        gaugeCanvas.style.filter = 'drop-shadow(0 0 8px ' + gaugeColor + ')';
         var bgColor = getComputedStyle(document.documentElement)
                         .getPropertyValue('--bg-tertiary').trim() || '#2d323e';
         new Chart(gaugeCanvas, {
@@ -1884,7 +1976,7 @@
             },
             options: {
                 responsive: true, maintainAspectRatio: true,
-                cutout: '75%', rotation: -90, circumference: 180,
+                cutout: '78%',
                 plugins: { legend: { display: false }, tooltip: { enabled: false } }
             }
         });
@@ -1909,6 +2001,18 @@
     });
 
     /* ── Hash copy buttons via data-copy attribute ────────────── */
+    /* Source detail panels use native buttons; insert no feed data into HTML. */
+    document.querySelectorAll('.report-v2 .rv-source-toggle').forEach(function (button) {
+        button.addEventListener('click', function () {
+            var panelId = button.getAttribute('aria-controls');
+            var panel = panelId ? document.getElementById(panelId) : null;
+            if (!panel) return;
+            var expanded = button.getAttribute('aria-expanded') === 'true';
+            button.setAttribute('aria-expanded', expanded ? 'false' : 'true');
+            panel.hidden = expanded;
+        });
+    });
+
     document.querySelectorAll('button[data-copy]').forEach(function (btn) {
         btn.addEventListener('click', function () {
             copyTextToClipboard(btn.getAttribute('data-copy'), btn, false);
@@ -1957,6 +2061,7 @@
         codeEl.textContent = JSON.stringify(resultData, null, 2);
         rawJsonPre.appendChild(codeEl);
         var treeRoot = document.getElementById('rawJsonTree');
+        var rawDataPanel = document.getElementById('rawDataCollapse');
         if (treeRoot) {
             var nodeCount = 0;
             function addJsonText(parent, className, value) {
@@ -1999,13 +2104,22 @@
             treeRoot.appendChild(buildJsonNode(resultData, 'result', true));
             var countElement = document.getElementById('cnt');
             if (countElement) countElement.textContent = nodeCount + ' NODES';
+            function showRawDataPanel() {
+                if (!rawDataPanel || rawDataPanel.classList.contains('show')) return;
+                if (window.bootstrap && window.bootstrap.Collapse) {
+                    window.bootstrap.Collapse.getOrCreateInstance(rawDataPanel, { toggle: false }).show();
+                } else {
+                    rawDataPanel.classList.add('show');
+                }
+            }
             function setTreeExpanded(expanded) {
                 treeRoot.querySelectorAll('details').forEach(function (item) { item.open = expanded; });
-                var rootNode = document.getElementById('rawJsonRoot');
-                if (rootNode) rootNode.open = true;
             }
             var expandButton = document.getElementById('ex');
-            if (expandButton) expandButton.addEventListener('click', function () { setTreeExpanded(true); });
+            if (expandButton) expandButton.addEventListener('click', function () {
+                showRawDataPanel();
+                setTreeExpanded(true);
+            });
             var collapseButton = document.getElementById('co');
             if (collapseButton) collapseButton.addEventListener('click', function () { setTreeExpanded(false); });
             var searchInput = document.getElementById('q');

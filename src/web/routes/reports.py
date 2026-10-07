@@ -21,6 +21,7 @@ from starlette.background import BackgroundTask
 from ...detection.rule_validator import validate_rule
 from ...reporting.ioc_pdf import generate_ioc_pdf
 from ..auth import TEAM_LEAD, get_current_user, require_role
+from ..report_source_display import build_source_display_rows, display_source_name
 from ..visibility import serialize_report_job, serialize_report_mitre, serialize_report_payload
 
 logger = logging.getLogger(__name__)
@@ -202,6 +203,8 @@ async def get_report_html(request: Request, analysis_id: str, current_user: dict
             current_user['role'],
             viewer_user_id=current_user.get('id'),
         ),
+        'build_source_display_rows': build_source_display_rows,
+        'display_source_name': display_source_name,
     })
 
 
@@ -222,7 +225,9 @@ async def download_report_html(request: Request, analysis_id: str, current_user:
                 job,
                 current_user['role'],
                 viewer_user_id=current_user.get('id'),
-            )
+            ),
+            'build_source_display_rows': build_source_display_rows,
+            'display_source_name': display_source_name,
         },
         headers={
             'Content-Disposition': (
