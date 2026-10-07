@@ -20,6 +20,7 @@ from ..utils.helpers import (
 )
 from ..utils.domain_age_checker import check_domain_age
 from ..utils.dga_detector import detect_dga
+from ..utils.ip_geo import lookup_ip_country
 from ..scoring.intelligent_scoring import IntelligentScoring
 from ..detection.rule_generator import RuleGenerator
 from ..reporting.html_report_generator import HTMLReportGenerator
@@ -422,6 +423,24 @@ class IOCInvestigator:
             'rag_references': rag_hits
         }
 
+        # The IOC extractor uses ``ipv4`` for IP indicators; ``ip`` is kept
+        # for callers that already use that label. This enrichment is added
+        # after score and verdict calculation and never changes source data.
+        if ioc_type in ('ip', 'ipv4'):
+            country_code, country_name = self._provider_country_details(
+                intel_results.get('sources', {})
+            )
+            if country_code is None:
+                try:
+                    country_code = lookup_ip_country(ioc)
+                except Exception as exc:
+                    # Keep the analysis result unchanged if enrichment fails.
+                    logger.debug("IP country enrichment failed: %s", exc, exc_info=True)
+            if country_code:
+                result['country_code'] = country_code
+                if country_name:
+                    result['country_name'] = country_name
+
         logger.info(f"[IOC] Investigation complete: {ioc} → {verdict} ({threat_score}/100)")
 
         # Create an incident ticket if the verdict is malicious or suspicious
@@ -433,6 +452,66 @@ class IOCInvestigator:
                 logger.error(f"[IOC] Failed to create incident ticket: {e}")
 
         return result
+
+    @staticmethod
+    def _provider_country_details(sources: Dict):
+        """Return a provider country code and optional display name."""
+        if not isinstance(sources, dict):
+            return None, None
+
+        provider_items = []
+        ip2proxy = sources.get('ip2proxy')
+        if isinstance(ip2proxy, dict):
+            provider_items.append(ip2proxy)
+        provider_items.extend(
+            data for name, data in sources.items()
+            if name != 'ip2proxy' and isinstance(data, dict)
+        )
+
+        code = None
+        country_name = None
+        for data in provider_items:
+            for key in ('country_code', 'countryCode', 'country'):
+                value = data.get(key)
+                if (
+                    isinstance(value, str)
+                    and len(value.strip()) == 2
+                    and value.strip().isascii()
+                    and value.strip().isalpha()
+                ):
+                    code = value.strip().upper()
+                    break
+            if code is None:
+                location = data.get('location')
+                if isinstance(location, dict):
+                    for key in ('country_code', 'countryCode', 'country'):
+                        value = location.get(key)
+                        if (
+                            isinstance(value, str)
+                            and len(value.strip()) == 2
+                            and value.strip().isascii()
+                            and value.strip().isalpha()
+                        ):
+                            code = value.strip().upper()
+                            break
+            if country_name is None:
+                for key in ('country_name', 'countryName', 'country', 'location'):
+                    value = data.get(key)
+                    if isinstance(value, dict):
+                        value = value.get('country_name') or value.get('country')
+                    if (
+                        isinstance(value, str)
+                        and value.strip()
+                        and value.strip() not in ('-', 'Unknown', 'N/A')
+                        and not (
+                            len(value.strip()) == 2
+                            and value.strip().isascii()
+                            and value.strip().isalpha()
+                        )
+                    ):
+                        country_name = value.strip()
+                        break
+        return code, country_name
     
     def _generate_recommendations(self, verdict: str, intel_results: Dict) -> list:
         """Generate action recommendations based on verdict."""
