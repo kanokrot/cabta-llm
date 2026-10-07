@@ -9,6 +9,7 @@ ioc_investigator.py
 import asyncio
 from typing import Dict, Optional, Set
 import logging
+import re
 from ..integrations.threat_intel import ThreatIntelligence
 from ..integrations.llm_analyzer import LLMAnalyzer
 from ..integrations.ticketing import create_incident_ticket
@@ -27,6 +28,23 @@ from ..reporting.html_report_generator import HTMLReportGenerator
 from ..rag.rag_knowledge_base import RAGKnowledgeBase, load_playbooks_from_yaml
 
 logger = logging.getLogger(__name__)
+_AI_URL_RE = re.compile(r"(?i)https?://[^\s\"'<>()\]]+")
+_AI_SECRET_RE = re.compile(
+    r"(?i)\b(api[_-]?key|token|secret|password|authorization)\b[\"']?\s*[:=]\s*[\"']?[^\s,;\"'}]+"
+)
+_AI_BEARER_RE = re.compile(r"(?i)\bBearer\s+\S+")
+
+
+def _safe_ai_error(value: object) -> Optional[str]:
+    """Bound AI error text and remove URLs and credential-shaped values."""
+    if value is None:
+        return None
+    message = str(value).strip()
+    message = _AI_URL_RE.sub("[URL]", message)
+    message = _AI_BEARER_RE.sub("Bearer [REDACTED]", message)
+    message = _AI_SECRET_RE.sub(r"\1=[REDACTED]", message)
+    message = re.sub(r"\s+", " ", message).strip()
+    return message[:300] or None
 
 # Trusted infrastructure - NEVER flag as malicious
 TRUSTED_DOMAINS = {
@@ -324,8 +342,11 @@ class IOCInvestigator:
                 rag_hits = []
 
         # Get LLM analysis if enabled (non-blocking: failure is OK)
+        llm_enabled = self.config.get('analysis', {}).get('enable_llm', True)
         llm_analysis = {}
-        if self.config.get('analysis', {}).get('enable_llm', True):
+        ai_status = 'disabled' if not llm_enabled else 'failed'
+        ai_error = None
+        if llm_enabled:
             try:
                 llm_analysis = await self.llm_analyzer.analyze_ioc_results(
                     ioc,
@@ -337,9 +358,22 @@ class IOCInvestigator:
                 )
                 if llm_analysis is None:
                     llm_analysis = {'note': 'LLM unavailable - results based on threat intelligence only'}
+                    ai_error = _safe_ai_error('LLM returned no result')
+                elif isinstance(llm_analysis, dict) and llm_analysis.get('error'):
+                    error_message = (
+                        llm_analysis.get('exception_message')
+                        or llm_analysis.get('error')
+                    )
+                    exception_type = llm_analysis.get('exception_type')
+                    if exception_type:
+                        error_message = f'{exception_type}: {error_message}'
+                    ai_error = _safe_ai_error(error_message)
             except Exception as llm_err:
                 logger.warning(f"[IOC] LLM analysis failed (non-fatal): {llm_err}")
                 llm_analysis = {'note': f'LLM analysis failed: {llm_err}'}
+                ai_error = _safe_ai_error(
+                    f'{type(llm_err).__name__}: {llm_err}'
+                )
 
         # Generate detection rules
         malware_family = self._extract_malware_family(intel_results.get('sources', {}))
@@ -382,6 +416,14 @@ class IOCInvestigator:
             recommendations_source = 'rule_based'
             logger.info("[IOC] LLM recommendations unavailable, using static fallback list.")
 
+        if recommendations_source == 'llm':
+            ai_status = 'complete'
+            ai_error = None
+        elif llm_enabled:
+            ai_status = 'failed'
+            if ai_error is None:
+                ai_error = _safe_ai_error('LLM returned no usable recommendations')
+
         # Add domain-specific recommendations
         if domain_enrichment:
             domain_age = domain_enrichment.get('domain_age', {})
@@ -416,6 +458,8 @@ class IOCInvestigator:
             # Domain enrichment (domain_age + DGA analysis)
             'domain_enrichment': domain_enrichment if domain_enrichment else None,
             'llm_analysis': llm_analysis,
+            'ai_status': ai_status,
+            'ai_error': ai_error,
             'detection_rules': detection_rules,
             'recommendations': recommendations,
             'recommendations_rule_based': list(recommendations_rule_based),
