@@ -14,7 +14,14 @@ from src.web.report_source_display import (
 from src.scoring.intelligent_scoring import SOURCE_SCORING_MULTIPLIERS
 
 
-def _render_report(sources, *, print_mode=False, domain_enrichment=None, detection_rules=None):
+def _render_report(
+    sources,
+    *,
+    print_mode=False,
+    domain_enrichment=None,
+    detection_rules=None,
+    report_fields=None,
+):
     templates_dir = Path(__file__).resolve().parents[1] / "templates"
     environment = Environment(
         loader=FileSystemLoader(str(templates_dir)),
@@ -44,6 +51,8 @@ def _render_report(sources, *, print_mode=False, domain_enrichment=None, detecti
     }
     if detection_rules is not None:
         job["result"]["detection_rules"] = detection_rules
+    if report_fields:
+        job["result"].update(report_fields)
     return environment.get_template("report_view.html").render(
         request=request,
         job=job,
@@ -664,6 +673,113 @@ def test_cancelled_rule_approval_does_not_call_approval_api_and_prompt_fallback_
     )
     assert "window.prompt('Reviewer name for this rule export approval:', 'unknown')" in script
     assert "if (!dialog || typeof dialog.showModal !== 'function')" in script
+
+
+def test_recommendations_card_console_header_retry_hooks_and_corners():
+    html = _render_report(
+        _count_fixture_sources(),
+        report_fields={"recommendations_rule_based": ["Keep watching the IOC."]},
+    )
+
+    assert 'class="rv-console-title">Recommendations</h2>' in html
+    assert '<span class="rv-muted rv-recommendations-subtitle">AI vs rule-based</span>' in html
+    assert re.search(
+        r'<button(?=[^>]*disabled)(?=[^>]*title="Available after C4")'
+        r'(?=[^>]*class="[^"]*rv-retry-ai")[^>]*>Retry AI analysis</button>',
+        html,
+    )
+    assert ".rv-recommendations-card::before" in html
+    assert ".rv-recommendations-card::after" in html
+    assert '.rv-card-head .rv-console-title::before { content: "// ";' in html
+
+
+def test_recommendations_ai_badge_maps_report_states():
+    expected = {
+        "complete": ('rv-ai-state--complete">COMPLETE',),
+        "running": ('rv-ai-state--running">RUNNING',),
+        "failed": ('rv-ai-state--unavailable">UNAVAILABLE',),
+        "unavailable": ('rv-ai-state--unavailable">UNAVAILABLE',),
+        "disabled": ('rv-ai-state--unavailable">UNAVAILABLE',),
+    }
+    for status, needles in expected.items():
+        html = _render_report(
+            _count_fixture_sources(),
+            report_fields={
+                "ai_status": status,
+                "recommendations_rule_based": ["Keep watching the IOC."],
+            },
+        )
+        assert needles[0] in html
+
+    missing = _render_report(
+        _count_fixture_sources(),
+        report_fields={"recommendations_rule_based": ["Keep watching the IOC."]},
+    )
+    assert 'rv-ai-state--unavailable">UNAVAILABLE' in missing
+    assert "AI status not recorded for this report" in missing
+
+
+def test_recommendations_warning_only_shows_recorded_reason_and_provider():
+    rule_recommendations = ["Keep watching the IOC."]
+    absent = _render_report(
+        _count_fixture_sources(),
+        report_fields={
+            "ai_status": "failed",
+            "recommendations_rule_based": rule_recommendations,
+        },
+    )
+    absent_panel = re.search(
+        r'<section class="rv-col" aria-labelledby="aiAnalysisTitle">(.*?)</section>',
+        absent,
+        re.DOTALL,
+    ).group(1)
+    assert "AI analysis failed for this report." in absent_panel
+    assert "Reason:" not in absent_panel
+    assert "Provider:" not in absent_panel
+
+    provided = _render_report(
+        _count_fixture_sources(),
+        report_fields={
+            "ai_status": "failed",
+            "ai_error": "<network timeout>",
+            "llm_analysis": {"provider": "ollama"},
+            "recommendations_rule_based": rule_recommendations,
+        },
+    )
+    provided_panel = re.search(
+        r'<section class="rv-col" aria-labelledby="aiAnalysisTitle">(.*?)</section>',
+        provided,
+        re.DOTALL,
+    ).group(1)
+    assert "Reason: &lt;network timeout&gt;" in provided_panel
+    assert "Provider: ollama" in provided_panel
+    assert "<network timeout>" not in provided_panel
+
+
+def test_recommendations_rule_based_badge_footer_note_and_print_rules():
+    absent_ai = _render_report(
+        _count_fixture_sources(),
+        print_mode=True,
+        report_fields={"recommendations_rule_based": ["Keep watching the IOC."]},
+    )
+    assert '<span class="rv-pill rv-always-on">ALWAYS ON</span>' in absent_ai
+    assert '<span class="rv-rule-based-marker" aria-hidden="true">[::]</span>' in absent_ai
+    assert "filled automatically once AI analysis is available" in absent_ai
+    assert 'class="rv-card card-print-flow rv-recommendations-card"' in absent_ai
+    assert ".report-v2 .card.card-print-flow { break-inside: auto; page-break-inside: auto; }" in absent_ai
+    assert "1 FLAGGED" in absent_ai and "7 RESPONDED" in absent_ai
+    assert "2 ERRORS" in absent_ai and "19 N/A" in absent_ai and "1 / 7" in absent_ai
+
+    with_ai = _render_report(
+        _count_fixture_sources(),
+        report_fields={
+            "ai_status": "complete",
+            "llm_analysis": {"recommendations": ["Review source findings."]},
+            "recommendations_rule_based": ["Keep watching the IOC."],
+        },
+    )
+    assert "Review source findings." in with_ai
+    assert "filled automatically once AI analysis is available" not in with_ai
 
 
 def test_scored_chip_uses_scorer_constant_and_omits_report_only_virustotal(monkeypatch):

@@ -197,6 +197,27 @@
     .report-v2 .rv-analysis-text { white-space: pre-wrap; overflow-wrap: anywhere; }
     .report-v2 .rv-warning { padding: .7rem; border-left: 3px solid var(--color-warning, #b77900); background: color-mix(in srgb, var(--color-warning, #b77900) 8%, transparent); }
     .report-v2 .rv-compare, .report-v2 .rv-raw-tools { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; padding: .8rem 1rem; }
+    .report-v2 .rv-recommendations-card { position: relative; overflow: visible; }
+    .report-v2 .rv-recommendations-card::before, .report-v2 .rv-recommendations-card::after { content: ""; position: absolute; z-index: 2; width: 12px; height: 12px; border: 2px solid var(--rv-cyan); opacity: .85; pointer-events: none; }
+    .report-v2 .rv-recommendations-card::before { top: -1px; left: -1px; border-right: 0; border-bottom: 0; }
+    .report-v2 .rv-recommendations-card::after { right: -1px; bottom: -1px; border-left: 0; border-top: 0; }
+    .report-v2 .rv-recommendations-subtitle { font: .7rem ui-monospace, SFMono-Regular, Consolas, monospace; }
+    .report-v2 .rv-retry-ai { color: var(--rv-muted) !important; border-color: var(--rv-line) !important; background: transparent !important; font: .68rem ui-monospace, SFMono-Regular, Consolas, monospace; }
+    .report-v2 .rv-retry-ai::before { content: "↻"; display: inline-block; margin-right: .4rem; color: var(--rv-cyan); font-size: 1rem; line-height: .7; vertical-align: -.05em; }
+    .report-v2 .rv-recommendations-card .rv-col h3 { font: 600 .78rem ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: .1em; text-transform: uppercase; }
+    .report-v2 .rv-recommendations-card #aiAnalysisTitle { color: var(--rv-amber); }
+    .report-v2 .rv-recommendations-card #ruleBasedTitle { color: var(--rv-green); }
+    .report-v2 .rv-ai-state, .report-v2 .rv-always-on, .report-v2 .rv-compare .rv-pill { border-radius: 3px; background: transparent; }
+    .report-v2 .rv-ai-state--complete { color: var(--rv-green); border-color: color-mix(in srgb, var(--rv-green) 65%, var(--rv-line)); }
+    .report-v2 .rv-ai-state--running { color: var(--rv-cyan); border-color: color-mix(in srgb, var(--rv-cyan) 65%, var(--rv-line)); }
+    .report-v2 .rv-ai-state--unavailable { color: var(--rv-amber); border-color: color-mix(in srgb, var(--rv-amber) 65%, var(--rv-line)); }
+    .report-v2 .rv-always-on { color: var(--rv-green); border-color: color-mix(in srgb, var(--rv-green) 65%, var(--rv-line)); }
+    .report-v2 .rv-ai-warning { border-color: var(--rv-amber); background: color-mix(in srgb, var(--rv-amber) 7%, transparent); }
+    .report-v2 .rv-ai-warning strong { color: var(--rv-amber); }
+    .report-v2 .rv-ai-warning span { display: block; margin-top: .35rem; overflow-wrap: anywhere; }
+    .report-v2 .rv-ai-warning span b { color: var(--rv-text); font-weight: 600; }
+    .report-v2 .rv-rule-based-marker { color: var(--rv-green); font-weight: 700; }
+    .report-v2 .rv-compare-note { color: var(--rv-muted); font: .7rem ui-monospace, SFMono-Regular, Consolas, monospace; }
     .report-v2 .rv-domain-note { padding: 0 1rem 1rem; color: var(--rv-muted); font-size: .82rem; }
     .report-v2 .rv-kv { display: grid; grid-template-columns: minmax(8rem, .8fr) minmax(0, 1.2fr); gap: .35rem .8rem; color: var(--rv-muted); }
     .report-v2 .rv-kv strong { color: var(--rv-text); font-weight: 550; overflow-wrap: anywhere; }
@@ -1818,8 +1839,8 @@
 <!-- ══ RECOMMENDATIONS ════════════════════════════════════════════ -->
 {% set show_recommendation_columns = ('recommendations_rule_based' in result) or (ai_status is not none) %}
 {% if not show_recommendation_columns and llm_analysis %}
-<div class="rv-card card-print-flow rv-legacy-ai">
-    <div class="rv-card-head"><h2>AI Analysis</h2><span class="rv-muted">Language model analysis</span></div>
+<div class="rv-card card-print-flow rv-legacy-ai rv-recommendations-card">
+    <div class="rv-card-head"><h2 class="rv-console-title">AI Analysis</h2><span class="rv-muted">Language model analysis</span></div>
     <div class="rv-col">
         {% if llm_analysis is mapping %}
             {% if llm_analysis.get('verdict') %}<p><strong>AI verdict:</strong> <span class="rv-pill">{{ llm_analysis.get('verdict') | string | e | title }}</span></p>{% endif %}
@@ -1832,6 +1853,13 @@
 {% endif %}
 {% set ai_recommendations = llm_analysis.get('recommendations', []) if llm_analysis is mapping else [] %}
 {% set rule_based_recommendations = result.get('recommendations_rule_based') or recommendations %}
+{% set ai_reason = ai_error %}
+{% if not ai_reason and llm_analysis is mapping %}{% set ai_reason = llm_analysis.get('exception_message') or llm_analysis.get('error') %}{% endif %}
+{% set ai_provider = llm_analysis.get('provider') if llm_analysis is mapping else none %}
+{% set ai_badge_text = 'UNAVAILABLE' %}
+{% set ai_badge_tone = 'unavailable' %}
+{% if ai_status == 'complete' %}{% set ai_badge_text = 'COMPLETE' %}{% set ai_badge_tone = 'complete' %}
+{% elif ai_status == 'running' %}{% set ai_badge_text = 'RUNNING' %}{% set ai_badge_tone = 'running' %}{% endif %}
 {% macro strip_leading_rule_emoji(value) -%}
     {% set prefixes = ['\U0001F300', '\U0001F4A5', '\U0001F6A8', '\U0001F50D', '\U0001F4BB', '\U0001F4CB', '\U0001F510', '\U0001F195', '\U0001F4CA', '\U0001F440', '\U0001F4DD', '\U0001F441\uFE0F', '\U0001F441', '\U00002753', '\U0001F6E1\uFE0F', '\U0001F6E1', '\U0001F512', '\U0001F6E0', '\U0001F4CC', '\U0001F4A1', '\U0001F3AF', '\U0001F6AB', '\U0001F4E1', '\U0001F9F9', '\u26A0\uFE0F', '\u26A0', '\u2705', '\u274C', '\u26A1\uFE0F', '\u26A1', '\u2139\uFE0F', '\u2139', '\uFE0F'] %}
     {% set cleaned = namespace(text=value | string) %}
@@ -1839,13 +1867,14 @@
     {{ cleaned.text | trim | e }}
 {%- endmacro %}
 {% if show_recommendation_columns %}
-<div class="rv-card card-print-flow">
-    <div class="rv-card-head"><h2>Recommendations</h2><span class="rv-muted">AI and rule-based analysis</span><span class="rv-spacer"></span><button class="btn btn-sm btn-outline-secondary" type="button" disabled title="Available after C4">Retry AI analysis</button></div>
+<div class="rv-card card-print-flow rv-recommendations-card">
+    <div class="rv-card-head"><h2 class="rv-console-title">Recommendations</h2><span class="rv-muted rv-recommendations-subtitle">AI vs rule-based</span><span class="rv-spacer"></span><button class="btn btn-sm btn-outline-secondary rv-retry-ai" type="button" disabled title="Available after C4">Retry AI analysis</button></div>
     <div class="rv-two">
         <section class="rv-col" aria-labelledby="aiAnalysisTitle">
-            <h3 id="aiAnalysisTitle">
+            <h3 id="aiAnalysisTitle" class="rv-ai-title">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v3"/><circle cx="12" cy="2.5" r="1" fill="currentColor"/><rect x="4" y="6" width="16" height="12" rx="3"/><circle cx="9" cy="12" r="1.5" fill="currentColor"/><circle cx="15" cy="12" r="1.5" fill="currentColor"/><path d="M9.5 15.5h5M2 11v3M22 11v3M8 18v3M16 18v3"/></svg>
                 <span>AI analysis</span>
+                <span class="rv-pill rv-ai-state rv-ai-state--{{ ai_badge_tone | e }}">{{ ai_badge_text | e }}</span>
             </h3>
             {% if ai_status == 'complete' %}
                 {% if llm_analysis is mapping %}
@@ -1854,8 +1883,11 @@
                     {% if ai_recommendations %}<h4>Recommendations</h4><ol>{% for rec in ai_recommendations %}<li>{{ rec | string | e }}</li>{% endfor %}</ol>{% endif %}
                     {% if llm_analysis.get('hallucination_warning') %}<p class="rv-warning">{{ llm_analysis.get('hallucination_warning') | string | e }}</p>{% endif %}
                 {% else %}<p class="rv-muted">AI analysis completed without report details.</p>{% endif %}
-            {% elif ai_status == 'failed' %}
-                <div class="rv-status-box"><strong>AI analysis failed</strong>{% if ai_error %}<span>{{ ai_error | string | e }}</span>{% else %}<span>details restricted</span>{% endif %}</div>
+            {% elif ai_status in ['failed', 'unavailable'] %}
+                <div class="rv-status-box rv-ai-warning"><strong>{% if ai_status == 'failed' %}AI analysis failed for this report.{% else %}AI analysis did not run for this report.{% endif %}</strong>
+                    {% if ai_reason %}<span><b>Reason:</b> {{ ai_reason | string | e }}</span>{% elif ai_status == 'failed' %}<span>details restricted</span>{% endif %}
+                    {% if ai_provider %}<span><b>Provider:</b> {{ ai_provider | string | e }}</span>{% endif %}
+                </div>
                 {% if llm_analysis is mapping %}
                     {% if llm_analysis.get('verdict') %}<p><strong>AI verdict:</strong> {{ llm_analysis.get('verdict') | string | e }}</p>{% endif %}
                     {% if llm_analysis.get('analysis') %}<p class="rv-analysis-text">{{ llm_analysis.get('analysis') | string | e }}</p>{% endif %}
@@ -1863,7 +1895,9 @@
                     {% if llm_analysis.get('hallucination_warning') %}<p class="rv-warning">{{ llm_analysis.get('hallucination_warning') | string | e }}</p>{% endif %}
                 {% endif %}
             {% elif ai_status == 'disabled' %}
-                <div class="rv-status-box"><strong>AI analysis is disabled in configuration</strong></div>
+                <div class="rv-status-box rv-ai-warning"><strong>AI analysis is disabled in configuration</strong></div>
+            {% elif ai_status == 'running' %}
+                <div class="rv-status-box"><strong>AI analysis is running.</strong></div>
             {% elif ai_recommendations or recommendations_source == 'llm' %}
                 {% if llm_analysis is mapping %}
                     {% if llm_analysis.get('verdict') %}<p><strong>AI verdict:</strong> {{ llm_analysis.get('verdict') | string | e }}</p>{% endif %}
@@ -1876,12 +1910,13 @@
             {% endif %}
         </section>
         <section class="rv-col" aria-labelledby="ruleBasedTitle">
-            <h3 id="ruleBasedTitle">Rule-based playbook</h3>
+            <h3 id="ruleBasedTitle"><span class="rv-rule-based-marker" aria-hidden="true">[::]</span><span>Rule-based</span><span class="rv-pill rv-always-on">ALWAYS ON</span></h3>
             {% if rule_based_recommendations %}<ol>{% for rec in rule_based_recommendations %}<li>{{ strip_leading_rule_emoji(rec) }}</li>{% endfor %}</ol>{% else %}<p class="rv-muted">No rule-based recommendations are available.</p>{% endif %}
         </section>
     </div>
     <div class="rv-compare" aria-label="Recommendation comparison">
         <span class="rv-pill">AGREEMENT: -</span><span class="rv-pill">ONLY IN AI: -</span><span class="rv-pill">ONLY IN RULES: -</span>
+        {% if not (ai_recommendations or recommendations_source == 'llm') %}<span class="rv-compare-note">filled automatically once AI analysis is available</span>{% endif %}
     </div>
 </div>
 {% else %}
