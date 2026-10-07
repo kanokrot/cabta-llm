@@ -550,25 +550,6 @@ async def get_history_summary(
     return mgr.get_history_summary(**_history_scope(current_user))
 
 
-@router.get('/dashboard/stats')
-async def get_ioc_dashboard_stats(
-    request: Request,
-    utc_offset_minutes: int = Query(default=0, ge=-720, le=840),
-    current_user: dict = Depends(get_current_user),
-):
-    """Return role-scoped IOC dashboard stats without changing analysis state."""
-    mgr = request.app.state.analysis_manager
-    stats = mgr.get_ioc_dashboard_stats(
-        utc_offset_minutes=utc_offset_minutes,
-        **_history_scope(current_user),
-    )
-    if current_user.get("role") == TEAM_LEAD:
-        _audit_team_lead_history_reads(request, current_user, stats["feed"])
-    for item in stats["feed"]:
-        item.pop("user_id", None)
-    return stats
-
-
 @router.get('/{analysis_id}/status')
 async def get_analysis_status(
     request: Request,
