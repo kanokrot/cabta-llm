@@ -215,7 +215,7 @@ class ThreatFeeds:
 
     async def _refresh_sslbl_cache(self) -> None:
         """Download and parse SSLBL CSVs into sets of SHA1 fingerprints and IPs."""
-        if not self._sslbl_sha1.is_stale():
+        if not self._sslbl_sha1.is_stale() and not self._sslbl_ips.is_stale():
             return
 
         logger.info("[SSLBL] Refreshing SSL Blacklist cache")
@@ -232,8 +232,10 @@ class ThreatFeeds:
                 self._parse_sslbl_ip_csv(ip_csv)
                 self._sslbl_ip_feed_deprecated = "deprecated" in ip_csv.lower()
 
-        self._sslbl_sha1.mark_fresh()
-        self._sslbl_ips.mark_fresh()
+        if cert_csv is not None:
+            self._sslbl_sha1.mark_fresh()
+        if ip_csv is not None:
+            self._sslbl_ips.mark_fresh()
         logger.info(
             f"[SSLBL] Cache refreshed: {len(self._sslbl_sha1.data)} SHA1, "
             f"{len(self._sslbl_ips.data)} IPs"
