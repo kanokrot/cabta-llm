@@ -28,6 +28,19 @@ UI_CATEGORY_ICONS = {
     "Forensics": "forensics",
 }
 
+# Friendly tool groups shown independently of MCP server names.
+MCP_SERVER_GROUP_LABELS = {
+    "osint_tools": "OSINT",
+    "free_osint_tools": "OSINT",
+    "network_tools": "Network",
+    "malwoverview_tools": "Threat Intel",
+    "forensics_tools": "Forensics",
+    "remnux_tools": "Malware Analysis",
+    "threat_intel_tools": "Threat Intel",
+    "remote_tools": "Remote Collection",
+    "vulnerability-tools": "Vulnerability Research",
+}
+
 _INTERNAL_CATEGORY_TO_UI = {
     "analysis": "Malware",
     "forensics": "Forensics",
@@ -135,6 +148,18 @@ MCP_TOOL_PRESENTATION: dict[tuple[str, str], MCPToolPresentation] = {
     ("vulnerability-tools", "epss_score"): _item("EPSS Score", "OSINT", "Retrieve FIRST EPSS exploitation probability for a CVE.", ("Check a CVE's 30-day exploitation probability", "Review EPSS percentile and risk level")),
 }
 
+# This tool is shipped by the configured vulnerability MCP server but is not
+# yet classified in the separate MCP execution allowlist. Keep its UI metadata
+# available without changing the classified-tool inventory above.
+ADDITIONAL_STATIC_MCP_PRESENTATION: dict[tuple[str, str], MCPToolPresentation] = {
+    ("vulnerability-tools", "ssl_vulnerability_check"): _item(
+        "SSL/TLS Vulnerability Check",
+        "OSINT",
+        "Checks a host's SSL/TLS settings for weak protocol versions, cipher suites, and certificate issues.",
+        ("Review supported TLS versions", "Check certificate and cipher configuration"),
+    ),
+}
+
 
 def fallback_presentation(raw_tool_name: str, category: str = "") -> MCPToolPresentation:
     """Build safe UI metadata for a newly discovered, unmapped tool."""
@@ -154,7 +179,9 @@ def get_mcp_tool_presentation(
     category: str = "",
 ) -> MCPToolPresentation:
     """Return explicit metadata, with a deterministic UI-only fallback."""
-    return MCP_TOOL_PRESENTATION.get(
-        (str(server_name), str(raw_tool_name)),
-        fallback_presentation(raw_tool_name, category),
+    key = (str(server_name), str(raw_tool_name))
+    return (
+        MCP_TOOL_PRESENTATION.get(key)
+        or ADDITIONAL_STATIC_MCP_PRESENTATION.get(key)
+        or fallback_presentation(raw_tool_name, category)
     )

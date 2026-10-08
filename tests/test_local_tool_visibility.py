@@ -2,6 +2,7 @@
 
 from src.agent.mcp_tool_presentation import MCP_TOOL_PRESENTATION
 from src.agent.mcp_tool_classification import MCP_TOOL_CLASSIFICATIONS
+from src.agent.local_tool_presentation import LOCAL_TOOL_PRESENTATION
 from src.agent.tool_registry import ToolRegistry
 from src.web.visibility import serialize_tool_definition
 
@@ -9,7 +10,7 @@ from src.web.visibility import serialize_tool_definition
 UNAVAILABLE_SUMMARY = "Tool description is not available from the registered metadata."
 
 
-def test_all_registerable_local_tools_keep_descriptions_as_summaries():
+def test_all_registerable_local_tools_use_presentation_summaries():
     registry = ToolRegistry()
     dependency = object()
     registry.register_default_tools(
@@ -29,7 +30,9 @@ def test_all_registerable_local_tools_keep_descriptions_as_summaries():
     for item, tool in zip(serialized, local_tools):
         assert item["source"] == "local"
         assert item["description"] == tool.description
-        assert item["summary"] == tool.description
+        assert item["summary"] == LOCAL_TOOL_PRESENTATION[tool.name].summary
+        assert item["summary"]
+        assert item["summary"] != tool.name
         assert item["summary"] != UNAVAILABLE_SUMMARY
 
 

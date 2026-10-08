@@ -11,6 +11,105 @@ from typing import Any, Callable, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
+_TOOL_CALL_BLOCK_RE = re.compile(
+    r"<\|tool_call>[\s\S]*?(?:<tool_call\|>|$)", re.IGNORECASE,
+)
+_TOOL_CALL_MARKER_RE = re.compile(
+    r"<\|tool_call>|<tool_call\|>|<\|[^<>\r\n]{1,100}\|>", re.IGNORECASE,
+)
+
+
+def contains_tool_call_template(text: Any) -> bool:
+    """Detect leaked tool-call markup and model special tokens in answer text."""
+    return isinstance(text, str) and bool(_TOOL_CALL_MARKER_RE.search(text))
+
+
+def _strip_tool_call_template(text: str) -> str:
+    cleaned = _TOOL_CALL_BLOCK_RE.sub(" ", text)
+    cleaned = _TOOL_CALL_MARKER_RE.sub(" ", cleaned)
+    cleaned = re.sub(
+        r"\s*\[(?:MALICIOUS|SUSPICIOUS|CLEAN|UNKNOWN)\]\s*",
+        " ",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+    return re.sub(r"\s+", " ", cleaned).strip()
+
+
+def _meaningful_character_count(text: str) -> int:
+    return sum(1 for char in text if char.isalnum())
+
+
+def _answer_language(goal: Any) -> str:
+    return "th" if isinstance(goal, str) and any("\u0e00" <= char <= "\u0e7f" for char in goal) else "en"
+
+
+def _scoring_source_coverage(evidence: dict) -> tuple[int, int]:
+    """Count replies from the exact scoring-source rows shown in evidence."""
+    rows = evidence.get("scoring_sources")
+    if not isinstance(rows, list):
+        return 0, 0
+    responding = sum(
+        1 for row in rows
+        if isinstance(row, dict) and row.get("state") in {"flagged", "clean"}
+    )
+    return responding, len(rows)
+
+
+def build_final_answer_fallback(findings: list, goal: str) -> str:
+    """Create a concise answer from scoring evidence, or a neutral no-answer notice."""
+    language = _answer_language(goal)
+    evidence = build_evidence_card(findings, goal)
+    if evidence is not None:
+        responding, total = _scoring_source_coverage(evidence)
+        verdict = evidence["verdict"]
+        score = evidence["threat_score"]
+        ioc = evidence["ioc"]
+        if language == "th":
+            return (
+                f"ผล scoring: {verdict} · {score}/100 · {responding} จาก {total} แหล่งตอบกลับ "
+                f"สำหรับ {ioc} โมเดลไม่ได้ส่งข้อความสรุปที่อ่านได้ โปรดดูตารางหลักฐาน"
+            )
+        return (
+            f"Scoring result: {verdict} · {score}/100 · {responding} of {total} sources responded "
+            f"for {ioc}. No readable model summary was provided; see the evidence table."
+        )
+
+    finding = select_scoring_finding(findings)
+    if finding is not None:
+        result = finding.get("result")
+        if isinstance(result, dict):
+            verdict = result.get("verdict")
+            score = result.get("threat_score", result.get("score"))
+            ioc = result.get("ioc")
+            if isinstance(verdict, str) and verdict.strip():
+                score_text = (
+                    f" · {score}/100"
+                    if isinstance(score, (int, float)) and not isinstance(score, bool)
+                    else ""
+                )
+                ioc_text = f" · {ioc[:256]}" if isinstance(ioc, str) and ioc else ""
+                if language == "th":
+                    return f"ผล scoring: {verdict.strip().upper()}{score_text}{ioc_text} โมเดลไม่ได้ส่งข้อความสรุปที่อ่านได้"
+                return f"Scoring result: {verdict.strip().upper()}{score_text}{ioc_text}. No readable model summary was provided."
+
+    return (
+        "โมเดลไม่ได้ส่งคำตอบที่อ่านได้"
+        if language == "th"
+        else "The model did not provide a readable answer."
+    )
+
+
+def sanitize_final_answer(answer: Any, findings: list, goal: str) -> str:
+    """Remove leaked tool-call template text without interpreting it as a call."""
+    raw = answer if isinstance(answer, str) else str(answer or "")
+    if not contains_tool_call_template(raw):
+        return raw
+    cleaned = _strip_tool_call_template(raw)
+    if _meaningful_character_count(cleaned) < 20:
+        return build_final_answer_fallback(findings, goal)
+    return cleaned
+
 
 def extract_verdict(text: str) -> str:
     """Extract verdict keyword from text.
@@ -351,12 +450,7 @@ def _build_evidence_card(findings: list, goal: str) -> Optional[dict]:
         return value if isinstance(value, int) and not isinstance(value, bool) else 0
 
     card = {
-        "lang": (
-            "th"
-            if isinstance(goal, str)
-            and any("\u0e00" <= char <= "\u0e7f" for char in goal)
-            else "en"
-        ),
+        "lang": _answer_language(goal),
         "ioc": ioc[:256],
         "ioc_type": ioc_type[:32],
         "threat_score": threat_score,

@@ -22,8 +22,10 @@ from .agent_state import AgentPhase, AgentState
 from .agent_store import AgentStore
 from .tool_registry import ToolRegistry
 from .agent_response_parsing import (
+    contains_tool_call_template,
     extract_deterministic_verdict,
     extract_deterministic_verdict_source,
+    sanitize_final_answer,
     sanitize_unscored_answer,
     normalise_decision,
     parse_tool_call_response,
@@ -639,7 +641,15 @@ class AgentLoop:
 
                 # ---- Check for final answer ----
                 if decision.get('action') == 'final_answer':
-                    summary = decision.get('answer', '')
+                    raw_summary = decision.get('answer', '')
+                    leaked_tool_template = contains_tool_call_template(raw_summary)
+                    summary = sanitize_final_answer(raw_summary, state.findings, state.goal)
+                    if leaked_tool_template:
+                        raw_preview = " ".join(str(raw_summary).split())[:200]
+                        logger.warning(
+                            "[AGENT] Removed tool-call template from final answer: %s",
+                            raw_preview,
+                        )
                     verdict_source = extract_deterministic_verdict_source(state.findings)
                     verdict = (
                         extract_deterministic_verdict(state.findings)
@@ -650,7 +660,7 @@ class AgentLoop:
                         build_evidence_card(state.findings, state.goal)
                         if verdict_source is not None else None
                     )
-                    if verdict is None:
+                    if verdict is None and not leaked_tool_template:
                         summary = sanitize_unscored_answer(summary, state.goal)
                     final_decision = {"answer": summary}
                     if verdict is not None and verdict_source is not None:

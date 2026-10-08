@@ -1206,6 +1206,7 @@ def _serialize_playbook_step(step: Mapping[str, Any]) -> dict[str, Any]:
 def serialize_tool_definition(tool: Any, role: str = THREAT_HUNTER) -> Optional[dict[str, Any]]:
     from src.agent.mcp_tool_presentation import get_mcp_tool_presentation
     from src.agent.local_tool_presentation import get_local_tool_presentation
+    from src.agent.mcp_tool_presentation import MCP_SERVER_GROUP_LABELS
 
     unavailable_summary = "Tool description is not available from the registered metadata."
 
@@ -1260,10 +1261,7 @@ def serialize_tool_definition(tool: Any, role: str = THREAT_HUNTER) -> Optional[
         icon = icon or presentation.icon
     ui_category = ui_category or presentation.ui_category
     if source == "local":
-        # Local ToolDefinition currently has no separate summary field.  Do not
-        # expose the MCP presentation fallback when a local description exists.
-        if not summary or summary == unavailable_summary:
-            summary = description
+        summary = local_presentation.summary if local_presentation is not None else description
     else:
         summary = summary or presentation.summary
     examples = examples or list(presentation.examples)
@@ -1272,6 +1270,7 @@ def serialize_tool_definition(tool: Any, role: str = THREAT_HUNTER) -> Optional[
         input_schema = {}
     if not isinstance(examples, list):
         examples = list(examples) if isinstance(examples, (tuple, set)) else list(presentation.examples)
+    group_label = "Local" if source == "local" else MCP_SERVER_GROUP_LABELS.get(source, "MCP")
     return {
         "name": name, "description": _text(description, 1000) or "",
         "source": _text(source, 200), "category": _text(category, 100),
@@ -1281,6 +1280,7 @@ def serialize_tool_definition(tool: Any, role: str = THREAT_HUNTER) -> Optional[
         "ui_category": _text(ui_category, 100) or "Malware",
         "icon": _text(icon, 100) or "malware",
         "summary": _text(summary, 1000) or ("" if source == "local" else unavailable_summary),
+        "group_label": group_label,
         "examples": [_text(item, 300) for item in examples[:4] if isinstance(item, str)],
         "logo": _text(logo, 300) if isinstance(logo, str) else None,
         "inputSchema": input_schema,
