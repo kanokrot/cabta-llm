@@ -902,8 +902,16 @@
                         <i class="bi bi-cloud-arrow-up drop-icon"></i>
                         <p class="mt-2 mb-1 fw-semibold">Drag and drop a file here or click to browse</p>
                         <p class="mb-1 text-muted small">
-                            Supported: PE, ELF, PDF, Office documents, scripts, archives
+                            Supported filename extensions: {{ allowed_extensions|length }}. Files without an extension are also accepted.
                         </p>
+                        <details class="text-start small mb-2">
+                            <summary class="text-muted">View all supported extensions</summary>
+                            <ul id="allowedFileExtensions" class="list-unstyled d-flex flex-wrap gap-2 mt-2 mb-0">
+                                {% for extension in allowed_extensions %}
+                                <li><code>{{ extension }}</code></li>
+                                {% endfor %}
+                            </ul>
+                        </details>
                         <p class="mb-2 text-muted small">Max 50 MB</p>
                         <div class="file-type-icons ma-file-type-icons mt-2">
                             <span><i class="bi bi-filetype-exe"></i>PE</span>
@@ -1291,6 +1299,7 @@
     var fileClear = document.getElementById('fileClear');
     var submitBtn = document.getElementById('fileSubmitBtn');
     var form = document.getElementById('fileForm');
+    var ALLOWED_FILE_EXTENSIONS = new Set({{ allowed_extensions|tojson }});
 
     var progressArea = document.getElementById('fileProgressArea');
     var progressBar = document.getElementById('fileProgressBar');
@@ -1305,6 +1314,7 @@
 
     var progressTimer = null;
     var progressStartedAt = 0;
+    var uploadExtensionErrorVisible = false;
 
     var fileTypeIcon = document.getElementById('fileTypeIcon');
     var fileTypeBadge = document.getElementById('fileTypeBadge');
@@ -1410,6 +1420,31 @@
 
         /* Compute client-side SHA256 */
         computeSha256(file);
+    }
+
+    function getLastFileSuffix(filename) {
+        var normalizedName = String(filename || '').replace(/[ .]+$/g, '');
+        var basename = normalizedName.split(/[\\/]/).pop() || '';
+        var lastDot = basename.lastIndexOf('.');
+        return lastDot > 0 ? basename.slice(lastDot).toLowerCase() : '';
+    }
+
+    function validateUploadExtension(file) {
+        var suffix = getLastFileSuffix(file && file.name);
+        if (!suffix || ALLOWED_FILE_EXTENSIONS.has(suffix)) {
+            if (uploadExtensionErrorVisible) {
+                progressArea.style.display = 'none';
+                uploadExtensionErrorVisible = false;
+            }
+            return true;
+        }
+
+        clearFile();
+        resultsArea.style.display = 'none';
+        progressArea.style.display = 'block';
+        failProgress('Unsupported file extension: ' + suffix + '. Choose a supported extension or a file without an extension.');
+        uploadExtensionErrorVisible = true;
+        return false;
     }
 
     function clearFile() {
@@ -1961,6 +1996,7 @@
             e.stopPropagation();
             dropZone.classList.remove('drag-over');
             if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                if (!validateUploadExtension(e.dataTransfer.files[0])) return;
                 fileInput.files = e.dataTransfer.files;
                 showFileInfo(e.dataTransfer.files[0]);
             }
@@ -1970,6 +2006,7 @@
     if (fileInput) {
         fileInput.addEventListener('change', function () {
             if (fileInput.files && fileInput.files.length > 0) {
+                if (!validateUploadExtension(fileInput.files[0])) return;
                 showFileInfo(fileInput.files[0]);
             }
         });
@@ -1994,6 +2031,7 @@
             if (!fileInput.files || !fileInput.files.length) return;
 
             var currentFile = fileInput.files[0];
+            if (!validateUploadExtension(currentFile)) return;
 
             beginProgress(currentFile.name);
             if (currentFile.size > 50 * 1024 * 1024) {

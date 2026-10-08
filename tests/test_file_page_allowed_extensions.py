@@ -1,3 +1,5 @@
+import re
+
 from fastapi import FastAPI
 from fastapi.templating import Jinja2Templates
 from fastapi.testclient import TestClient
@@ -40,3 +42,16 @@ def test_file_page_passes_sorted_server_allowlist_to_template(monkeypatch):
     assert response.status_code == 200
     assert len(captured_contexts) == 1
     assert captured_contexts[0]["allowed_extensions"] == sorted(FILE_ALLOWED_EXTENSIONS)
+
+    allowlist_match = re.search(
+        r'<ul id="allowedFileExtensions"[^>]*>(.*?)</ul>', response.text, re.DOTALL
+    )
+    assert allowlist_match is not None
+    rendered_extensions = re.findall(r"<li><code>(\.[^<]+)</code></li>", allowlist_match.group(1))
+    assert set(rendered_extensions) == FILE_ALLOWED_EXTENSIONS
+    assert {".exe", ".pdf", ".docx", ".ps1", ".zip"}.issubset(rendered_extensions)
+    assert "accept=" not in response.text
+    assert "new Set(" in response.text
+    assert "if (!suffix || ALLOWED_FILE_EXTENSIONS.has(suffix))" in response.text
+    assert "validateUploadExtension(e.dataTransfer.files[0])" in response.text
+    assert "validateUploadExtension(fileInput.files[0])" in response.text
