@@ -77,7 +77,7 @@ def _build_page_app() -> FastAPI:
     app.add_middleware(PageAuthMiddleware)
     app.state.analysis_manager = SimpleNamespace(
         get_stats=lambda: {},
-        list_jobs=lambda limit=10: [],
+        list_jobs=lambda limit=10, **kwargs: [],
     )
     _register_page_routes(app)
     return app

@@ -55,8 +55,11 @@ def _agent_app(role: str) -> FastAPI:
         cancel_session=AsyncMock(),
         get_state=lambda _session_id: None,
     )
+    app.state.agent_stats_calls = []
     app.state.agent_store = SimpleNamespace(
-        get_agent_stats=lambda: {"total": 1},
+        get_agent_stats=lambda **kwargs: (
+            app.state.agent_stats_calls.append(kwargs) or {"total": 1}
+        ),
         get_session=lambda session_id, user_id=None: (
             {
                 "id": session_id,
@@ -92,6 +95,22 @@ def _agent_app(role: str) -> FastAPI:
     )
     app.include_router(agent_routes.router, prefix="/api/agent")
     return app
+
+
+@pytest.mark.parametrize(
+    ("role", "expected_user_id"),
+    [
+        (THREAT_HUNTER, _user(THREAT_HUNTER)["id"]),
+        (ADMIN, None),
+    ],
+)
+def test_agent_stats_passes_owner_scope_to_store(role, expected_user_id):
+    app = _agent_app(role)
+    with TestClient(app) as client:
+        response = client.get("/api/agent/stats")
+
+    assert response.status_code == 200
+    assert app.state.agent_stats_calls == [{"user_id": expected_user_id}]
 
 
 AGENT_CASES = (
