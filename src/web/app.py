@@ -644,7 +644,13 @@ def _register_page_routes(app: FastAPI) -> None:
 
     @app.get('/analysis/file', response_class=HTMLResponse, include_in_schema=False)
     async def file_page(request: Request):
-        return templates.TemplateResponse(request, 'analysis_file.html', {})
+        from .upload_validation import FILE_ALLOWED_EXTENSIONS
+
+        return templates.TemplateResponse(
+            request,
+            'analysis_file.html',
+            {'allowed_extensions': sorted(FILE_ALLOWED_EXTENSIONS)},
+        )
 
     @app.get('/analysis/email', response_class=HTMLResponse, include_in_schema=False)
     async def email_page(request: Request):
