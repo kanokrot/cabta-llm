@@ -5,6 +5,7 @@ Analysis API endpoints.
 
 import asyncio
 import csv
+from email.parser import BytesParser
 import hashlib
 import inspect
 import logging
@@ -25,6 +26,11 @@ from ..models import (
 from ..auth import TEAM_LEAD, get_current_user, get_user_ids_by_role, require_role
 from ..email_capabilities import get_email_capabilities
 from ..oversight import record_cross_user_read
+from ..upload_validation import (
+    EMAIL_ALLOWED_EXTENSIONS,
+    FILE_ALLOWED_EXTENSIONS,
+    has_allowed_extension,
+)
 from ..visibility import serialize_analysis_job, serialize_status
 
 logger = logging.getLogger(__name__)
@@ -399,6 +405,14 @@ async def analyze_file(
     from src.tools.malware_analyzer import MALWARE_ANALYSIS_STEPS
     mgr = request.app.state.analysis_manager
 
+    if not has_allowed_extension(
+        file.filename, FILE_ALLOWED_EXTENSIONS, allow_no_suffix=True
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Unsupported file extension. Use a supported extension or omit the extension for content-based detection.",
+        )
+
     # Read file content
     content = await _read_file_upload_with_limit(file)
     sha256 = hashlib.sha256(content).hexdigest()
@@ -450,7 +464,25 @@ async def analyze_email(
     from src.tools.email_analyzer import EMAIL_ANALYSIS_STEPS
     mgr = request.app.state.analysis_manager
 
+    if not has_allowed_extension(file.filename, EMAIL_ALLOWED_EXTENSIONS):
+        raise HTTPException(
+            status_code=400,
+            detail="Unsupported email extension. Accepted extension: .eml",
+        )
+
     content = await _read_email_upload_with_limit(file)
+    try:
+        parsed_email = BytesParser().parsebytes(content)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=400,
+            detail="Uploaded content is not a valid email; expected at least one of the From, To, Subject, or Date headers.",
+        ) from exc
+    if not any(header in parsed_email for header in ("From", "To", "Subject", "Date")):
+        raise HTTPException(
+            status_code=400,
+            detail="Uploaded content is not a valid email; expected at least one of the From, To, Subject, or Date headers.",
+        )
     sha256 = hashlib.sha256(content).hexdigest()
 
     with tempfile.NamedTemporaryFile(delete=False, suffix='.eml') as tmp:
