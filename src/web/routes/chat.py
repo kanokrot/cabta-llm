@@ -79,7 +79,7 @@ async def send_message(
         if agent_loop is None:
             raise HTTPException(503, "Agent loop not initialized. Check LLM configuration.")
         instant = await route_chat_message(
-            agent_loop, body.message, body.history,
+            agent_loop, body.message, body.history, role=role,
         )
         if instant is not None:
             return instant

@@ -76,6 +76,20 @@ _ACTIONS_TH = (
     ("\u0e2a\u0e23\u0e49\u0e32\u0e07\u0e01\u0e0e\u0e15\u0e23\u0e27\u0e08\u0e08\u0e31\u0e1a", "Generate detection rules for: ", "\u0e2a\u0e23\u0e49\u0e32\u0e07\u0e01\u0e0e\u0e15\u0e23\u0e27\u0e08\u0e08\u0e31\u0e1a\u0e08\u0e32\u0e01\u0e20\u0e31\u0e22\u0e04\u0e38\u0e01\u0e04\u0e32\u0e21\u0e17\u0e35\u0e48\u0e1e\u0e1a"),
 )
 
+_EXAMPLES_EN = (
+    "Investigate 8.8.8.8",
+    "Analyze this suspicious domain: evil.com",
+    "Hunt for threats matching: 8.8.8.8",
+    "Triage the alert: repeated failed logins from 8.8.8.8",
+)
+
+_EXAMPLES_TH = (
+    "ตรวจสอบ IOC: 8.8.8.8",
+    "ตรวจสอบโดเมนที่น่าสงสัย: evil.com",
+    "ค้นหาภัยคุกคามที่เกี่ยวข้องกับ: 8.8.8.8",
+    "คัดกรองการแจ้งเตือน: พบการเข้าสู่ระบบล้มเหลวซ้ำจาก 8.8.8.8",
+)
+
 
 def _normalize(text: str) -> str:
     normalized = unicodedata.normalize("NFC", text.strip().lower())
@@ -310,18 +324,54 @@ def build_gate_reply(result: dict[str, str]) -> dict[str, Any]:
     }
 
 
+def _greeting_examples(text: str, role: Optional[str]) -> list[str]:
+    """Return fixed example prompts only for exact greeting/help inputs."""
+    if classify_intent(text, allow_need_ioc=False) not in {"greeting", "help"}:
+        return []
+    # Only these roles can pass the existing gate that starts investigations.
+    # Unknown and non-investigative roles get no prompts that would be rejected.
+    if role not in {"Threat Hunter", "admin"}:
+        return []
+    is_thai = any("\u0e00" <= char <= "\u0e7f" for char in text)
+    return list(_EXAMPLES_TH if is_thai else _EXAMPLES_EN)
+
+
+def _greeting_response(text: str) -> str:
+    """Keep greeting/help replies short, static, and limited to supported tasks."""
+    is_thai = any("\u0e00" <= char <= "\u0e7f" for char in text)
+    if is_thai:
+        return "ช่วยตรวจสอบ IOC วิเคราะห์ไฟล์หรืออีเมล สร้างกฎตรวจจับ ล่าภัย และคัดกรอง alert ได้ ช่วยอะไรได้บ้าง"
+    return "I can check IOCs, analyze files or emails, create detection rules, hunt threats, and triage alerts. How can I help?"
+
+
+def _with_greeting_examples(reply: dict[str, Any], text: str, role: Optional[str]) -> dict[str, Any]:
+    reply["response"] = _greeting_response(text)
+    # The legacy fallback actions include investigation prompts for every role.
+    # Greeting examples replace them with the role-filtered fixed prompt set.
+    reply["actions"] = []
+    reply["examples"] = _greeting_examples(text, role)
+    return reply
+
+
 async def route_chat_message(
     agent_loop: Any,
     latest_message: str,
     history: Any = None,
+    role: Optional[str] = None,
 ) -> Optional[dict[str, Any]]:
     """Return an instant payload for converse/clarify, or None to investigate."""
     result = await gate_chat_intent(agent_loop, latest_message, history)
     if result is None:
         fallback_intent = classify_intent(latest_message, allow_need_ioc=True)
         if fallback_intent:
-            return build_instant_reply(fallback_intent, latest_message)
+            reply = build_instant_reply(fallback_intent, latest_message)
+            if fallback_intent in {"greeting", "help"}:
+                return _with_greeting_examples(reply, latest_message, role)
+            return reply
         result = {"intent": "clarify", "reply": _CLARIFY_REPLY}
     if result["intent"] == "investigate":
         return None
-    return build_gate_reply(result)
+    reply = build_gate_reply(result)
+    if classify_intent(latest_message, allow_need_ioc=False) in {"greeting", "help"}:
+        reply = _with_greeting_examples(reply, latest_message, role)
+    return reply

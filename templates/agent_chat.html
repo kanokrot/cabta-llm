@@ -374,6 +374,25 @@
         font-size: 0.66rem;
         line-height: 1.35;
     }
+    .agent-starter-example {
+        display: inline-flex;
+        align-items: center;
+        min-height: 34px;
+        padding: 0.4rem 0.65rem;
+        border: 1px solid var(--border-color);
+        border-radius: 999px;
+        background: var(--bg-secondary);
+        color: var(--text-primary);
+        font-size: 0.75rem;
+        text-align: left;
+        transition: border-color 0.15s, background 0.15s;
+    }
+    .agent-starter-example:hover,
+    .agent-starter-example:focus-visible {
+        border-color: var(--color-accent);
+        background: var(--bg-tertiary);
+        color: var(--text-primary);
+    }
     .agent-follow-up {
         display: flex;
         flex-direction: column;
@@ -2743,7 +2762,29 @@ var AgentChat = (function() {
         var bubble = document.createElement('div');
         bubble.className = 'chat-bubble chat-bubble-agent';
         var response = data.response == null ? '' : String(data.response);
-        bubble.innerHTML = '<div class="bubble-label">Agent</div><div class="agent-content">' + esc(response) + '</div>';
+        var bubbleLabel = document.createElement('div');
+        bubbleLabel.className = 'bubble-label';
+        bubbleLabel.textContent = 'Agent';
+        var agentContent = document.createElement('div');
+        agentContent.className = 'agent-content';
+        agentContent.textContent = response;
+        bubble.appendChild(bubbleLabel);
+        bubble.appendChild(agentContent);
+
+        if (Array.isArray(data.examples) && data.examples.length) {
+            var examples = document.createElement('div');
+            examples.className = 'd-flex flex-wrap gap-2 mt-3';
+            data.examples.forEach(function(example) {
+                if (typeof example !== 'string' || !example) return;
+                var button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'agent-starter-example';
+                button.textContent = example;
+                button.addEventListener('click', function() { quickAction(example); });
+                examples.appendChild(button);
+            });
+            if (examples.childNodes.length) bubble.appendChild(examples);
+        }
 
         if (Array.isArray(data.actions) && data.actions.length) {
             var actions = document.createElement('div');
@@ -2755,7 +2796,15 @@ var AgentChat = (function() {
                 button.className = 'btn btn-outline-primary btn-sm';
                 var label = action.label == null ? '' : String(action.label);
                 var description = action.description == null ? '' : String(action.description);
-                button.innerHTML = esc(label) + (description ? '<span class="text-muted ms-1">' + esc(description) + '</span>' : '');
+                var labelText = document.createElement('span');
+                labelText.textContent = label;
+                button.appendChild(labelText);
+                if (description) {
+                    var descriptionText = document.createElement('span');
+                    descriptionText.className = 'text-muted ms-1';
+                    descriptionText.textContent = description;
+                    button.appendChild(descriptionText);
+                }
                 var prefix = action.prefix == null ? '' : String(action.prefix);
                 button.addEventListener('click', function() { quickAction(prefix); });
                 actions.appendChild(button);

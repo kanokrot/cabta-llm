@@ -102,7 +102,9 @@ async def start_investigation(
     # dispatch behavior without asking the conversational intent gate.
     if not body.case_id and not body.playbook_id:
         agent_loop = _require_agent_loop(request)
-        instant = await route_chat_message(agent_loop, body.goal, body.history)
+        instant = await route_chat_message(
+            agent_loop, body.goal, body.history, role=role,
+        )
         if instant is not None:
             return instant
 
