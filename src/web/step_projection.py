@@ -139,6 +139,12 @@ def _summary(tool_name: str, result: dict[str, Any] | None, scoring_context: Any
         return None, "unknown"
     error = result.get("error")
     if error not in (None, "", False, 0):
+        if (
+            tool_name == "reverse_dns"
+            and result.get("hostname") is None
+            and error == "No PTR record found"
+        ):
+            return "No PTR record", "ok"
         return None, "error"
 
     if tool_name == "investigate_ioc":

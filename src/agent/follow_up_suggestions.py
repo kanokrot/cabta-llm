@@ -180,6 +180,7 @@ def build_follow_up_suggestions(findings: Any, role: str) -> list[dict[str, str]
 
     findings_list = findings if isinstance(findings, (list, tuple)) else []
     suggestions = [{
+        "code": "investigate_other",
         "kind": "prefill",
         "label": "ตรวจ IOC อื่น",
         "message": "Investigate another IOC: ",
@@ -201,7 +202,7 @@ def build_follow_up_suggestions(findings: Any, role: str) -> list[dict[str, str]
                 continue
             seen.add(target)
             message = f"Investigate related IOC: {target}"
-            suggestions.append({"kind": "investigate", "label": message, "message": message})
+            suggestions.append({"code": "investigate_related", "kind": "investigate", "label": message, "message": message})
             if len(suggestions) >= MAX_SUGGESTIONS:
                 break
 

@@ -24,8 +24,9 @@ def test_no_findings_returns_only_generic_prefill_chip():
     suggestions = build_follow_up_suggestions([], "Threat Hunter")
 
     assert suggestions == [{
+        "code": "investigate_other",
         "kind": "prefill",
-        "label": "ตรวจ IOC อื่น",
+        "label": "\u0e15\u0e23\u0e27\u0e08 IOC \u0e2d\u0e37\u0e48\u0e19",
         "message": "Investigate another IOC: ",
     }]
 

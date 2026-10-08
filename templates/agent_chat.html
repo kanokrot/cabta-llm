@@ -250,9 +250,10 @@
         min-height: 0;
     }
     .chat-messages {
-        flex: 1;
+        flex: 1 1 auto;
         min-height: 0;
         overflow-y: auto;
+        overflow-x: hidden;
         padding: 1rem;
         display: flex;
         flex-direction: column;
@@ -839,6 +840,65 @@
         white-space: nowrap;
     }
     .investigation-progress .progress-right { margin-left: auto; display: flex; align-items: center; gap: 0.5rem; }
+
+    /* ===== Agent live investigation card and flat tool rows ===== */
+    .agent-live-card {
+        align-self: stretch;
+        flex: 0 0 auto;
+        max-width: 100%;
+        margin: 0.35rem 0;
+        min-height: 0;
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        background: var(--bg-secondary);
+    }
+    .agent-live-card-header {
+        display: flex;
+        align-items: center;
+        gap: 0.65rem;
+        min-height: 2.6rem;
+        padding: 0.65rem 0.8rem;
+        border-bottom: 1px solid var(--border-color);
+        color: var(--text-primary);
+        font-weight: 600;
+    }
+    .agent-live-card-title { min-width: 0; overflow-wrap: anywhere; }
+    .agent-live-card-status { margin-left: auto; color: var(--text-muted); font-size: 0.75rem; }
+    .agent-live-rows { padding: 0.25rem 0.65rem; }
+    .agent-live-row { border-bottom: 1px solid var(--border-color); }
+    .agent-live-row:last-child { border-bottom: 0; }
+    .agent-live-row-summary {
+        display: flex;
+        align-items: center;
+        gap: 0.55rem;
+        min-height: 2.55rem;
+        padding: 0.35rem 0.2rem;
+        cursor: pointer;
+        list-style: none;
+    }
+    .agent-live-row-summary::-webkit-details-marker { display: none; }
+    .agent-live-row:not([open]) > .agent-live-row-body { display: none; }
+    .agent-live-row[open] > .agent-live-row-body { display: grid; }
+    .agent-live-row-icon { width: 1rem; text-align: center; flex: 0 0 1rem; }
+    .agent-live-row-icon.is-running { border: 2px solid var(--border-color); border-top-color: var(--color-accent); border-radius: 50%; height: 1rem; animation: spinnerRotate 0.8s linear infinite; }
+    .agent-live-row-icon.is-ok { color: var(--color-success); }
+    .agent-live-row-icon.is-hit { color: var(--color-warning); }
+    .agent-live-row-icon.is-error { color: var(--color-danger); }
+    .agent-live-row-icon.is-unknown { color: var(--text-muted); }
+    .agent-live-row-name { font-weight: 600; color: var(--text-primary); }
+    .agent-live-row-group { flex: 0 0 auto; }
+    .agent-live-row-description { min-width: 0; flex: 1 1 auto; color: var(--text-secondary); font-size: 0.78rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .agent-live-row-duration { flex: 0 0 auto; color: var(--text-muted); font-size: 0.72rem; font-family: 'Consolas', monospace; }
+    .agent-live-row-chevron { flex: 0 0 auto; color: var(--text-muted); transition: transform 0.15s ease; }
+    .agent-live-row[open] .agent-live-row-chevron { transform: rotate(180deg); }
+    .agent-live-row-body { display: grid; gap: 0.45rem; padding: 0.25rem 0.4rem 0.7rem 1.8rem; }
+    .agent-live-row-field { display: grid; gap: 0.12rem; min-width: 0; font-size: 0.78rem; }
+    .agent-live-row-label { color: var(--text-muted); font-weight: 600; }
+    .agent-live-row-value { color: var(--text-primary); overflow-wrap: anywhere; white-space: pre-wrap; }
+    @media (prefers-reduced-motion: reduce) {
+        .agent-live-row-icon.is-running { animation: none; }
+        .agent-live-row-chevron { transition: none; }
+    }
 
     /* ===== Live Tool Indicator ===== */
     .live-tool-indicator {
@@ -1655,6 +1715,16 @@ var AgentChat = (function() {
     var toolElapsedTimer = null;
     var toolPresentationByName = {};
     var loadedTools = [];
+    var liveToolRows = Object.create(null);
+    var liveToolRowCounter = 0;
+    var liveToolDisplayCounter = 0;
+    var liveCardSessionId = null;
+    var liveCardElement = null;
+    var liveCardTitleElement = null;
+    var liveCardSpinnerElement = null;
+    var liveCardStatusElement = null;
+    var liveCardTarget = '';
+    var liveCardTargetChosen = false;
     var SESSION_PREVIEW_COUNT = 8;
     var SESSION_FETCH_LIMIT = 50;
     var loadedSessions = [];
@@ -2494,6 +2564,7 @@ var AgentChat = (function() {
                 tools.forEach(function(t) {
                     if (t.name) toolPresentationByName[t.name] = t;
                 });
+                refreshLiveRowPresentations();
                 renderToolCategoryFilters();
                 renderToolsList();
             })
@@ -2886,6 +2957,7 @@ var AgentChat = (function() {
     function newSession() {
         if (playbookSessionMode) return;
         if (ws) ws.close();
+        clearLiveToolRows(true);
         setConnectionStatus('Disconnected', 'bg-secondary');
         sessionId = null;
         currentStep = 0;
@@ -2913,6 +2985,7 @@ var AgentChat = (function() {
     function switchSession(id) {
         if (!id) { newSession(); return; }
         if (ws) ws.close();
+        clearLiveToolRows(true);
         stopTimer();
         currentStep = 0;
         maxSteps = 0;
@@ -3071,9 +3144,25 @@ var AgentChat = (function() {
     }
 
     function handleWSMessage(msg) {
+        var liveRowUpdate = !playbookSessionMode &&
+            ['phase', 'acting', 'tool_call', 'observation', 'tool_result'].indexOf(msg.type) >= 0;
+        var wasAtBottom = chatIsAtBottom();
         switch (msg.type) {
             case 'phase':
                 var phase = msg.phase || 'thinking';
+                if (!playbookSessionMode) {
+                    ensureLiveInvestigationCard(msg.input);
+                    if (phase === 'acting' && msg.tool) {
+                        upsertLiveToolRow(msg, 'phase');
+                        investigationData.tools_used.push(msg.tool);
+                        if (isToolMCP(msg.tool)) investigationData.mcp_tools.push(msg.tool);
+                    }
+                    if (typeof msg.step === 'number' && Number.isInteger(msg.step) && msg.step >= 0) {
+                        currentStep = msg.step;
+                    }
+                    updateProgress(0, 0);
+                    break;
+                }
                 if (phase === 'thinking') {
                     addPhaseIndicator('thinking', 'Analyzing (step ' + (msg.step || currentStep) + ')...');
                     setCurrentPhase('think');
@@ -3095,21 +3184,38 @@ var AgentChat = (function() {
                 updateProgress(currentStep, maxSteps);
                 break;
             case 'thinking':
+                if (!playbookSessionMode) {
+                    ensureLiveInvestigationCard(null);
+                    break;
+                }
                 addPhaseIndicator('thinking', msg.content || 'Analyzing...');
                 setCurrentPhase('think');
                 hideLiveToolIndicator();
                 break;
             case 'acting':
+                if (!playbookSessionMode) {
+                    ensureLiveInvestigationCard(msg.input);
+                    if (msg.tool) {
+                        upsertLiveToolRow(msg, 'phase');
+                        investigationData.tools_used.push(msg.tool);
+                        if (isToolMCP(msg.tool)) investigationData.mcp_tools.push(msg.tool);
+                    }
+                    break;
+                }
                 addPhaseIndicator('acting', msg.content || 'Executing action...');
                 setCurrentTool(msg.tool || '');
                 setCurrentPhase('act');
                 if (msg.tool) showLiveToolIndicator(msg.tool, 'act');
                 break;
             case 'observing':
+                if (!playbookSessionMode) break;
                 addPhaseIndicator('observing', msg.content || 'Reviewing results...');
                 setCurrentPhase('observe');
                 break;
             case 'observation':
+                if (!playbookSessionMode) {
+                    break;
+                }
                 currentStep = msg.step || (currentStep + 1);
                 updateProgress(currentStep, maxSteps);
                 var obsDuration = stopToolTimer();
@@ -3123,6 +3229,15 @@ var AgentChat = (function() {
                 setCurrentPhase('observe');
                 break;
             case 'tool_call':
+                if (!playbookSessionMode) {
+                    ensureLiveInvestigationCard(msg.input);
+                    upsertLiveToolRow(msg, 'phase');
+                    if (msg.tool) {
+                        investigationData.tools_used.push(msg.tool);
+                        if (isToolMCP(msg.tool)) investigationData.mcp_tools.push(msg.tool);
+                    }
+                    break;
+                }
                 currentStep = msg.step || currentStep;
                 updateProgress(currentStep, maxSteps);
                 addToolCall(msg.tool || 'tool', playbookSessionMode ? null : msg.args, msg.source);
@@ -3132,6 +3247,11 @@ var AgentChat = (function() {
                 if (isToolMCP(msg.tool)) investigationData.mcp_tools.push(msg.tool);
                 break;
             case 'tool_result':
+                if (!playbookSessionMode) {
+                    ensureLiveInvestigationCard(null);
+                    upsertLiveToolRow(msg, 'result');
+                    break;
+                }
                 currentStep = msg.step || currentStep;
                 updateProgress(currentStep, maxSteps);
                 var trDuration = stopToolTimer();
@@ -3140,6 +3260,7 @@ var AgentChat = (function() {
                 setCurrentPhase('observe');
                 break;
             case 'step':
+                if (!playbookSessionMode) break;
                 if (playbookSessionMode && msg.step && typeof msg.step === 'object') {
                     currentStep = msg.step.step_number || currentStep;
                 } else {
@@ -3154,6 +3275,7 @@ var AgentChat = (function() {
                         if (!playbookDetailLoaded) renderPlaybookSession(msg.session);
                         break;
                     }
+                    if (liveCardSessionId !== String(sessionId || '')) clearLiveToolRows(true);
                     if (typeof msg.session.goal === 'string') currentGoal = msg.session.goal;
                     maxSteps = msg.session.max_steps || 50;
                     var steps = msg.session.steps || msg.steps || [];
@@ -3187,7 +3309,8 @@ var AgentChat = (function() {
                 showApproval(msg); break;
             case 'completed':
                 stopTimer();
-                hideLiveToolIndicator();
+                if (playbookSessionMode) hideLiveToolIndicator();
+                else finishLiveInvestigationCard('completed');
                 clearPhaseIndicators();
                 addBubble(msg.summary || 'Investigation completed.', 'agent', false, msg.verdict, msg.verdict_source, msg.evidence, currentGoal);
                 renderEvidenceCard(msg.evidence, msg.verdict_source);
@@ -3199,14 +3322,16 @@ var AgentChat = (function() {
                 break;
             case 'failed':
                 stopTimer();
-                hideLiveToolIndicator();
+                if (playbookSessionMode) hideLiveToolIndicator();
+                else finishLiveInvestigationCard('failed');
                 clearPhaseIndicators();
                 updateProgress(0, 0);
                 addBubble('Investigation failed: ' + (msg.error || msg.summary || 'Unknown error'), 'system');
                 loadSessions(); break;
             case 'cancelled':
                 stopTimer();
-                hideLiveToolIndicator();
+                if (playbookSessionMode) hideLiveToolIndicator();
+                else finishLiveInvestigationCard('cancelled');
                 clearPhaseIndicators();
                 updateProgress(0, 0);
                 addBubble('Investigation cancelled.', 'system');
@@ -3217,7 +3342,8 @@ var AgentChat = (function() {
                 addBubble('Error: ' + (msg.content || msg.error || msg.message), 'system'); break;
             case 'heartbeat': break;
         }
-        scrollToBottom();
+        if (liveRowUpdate) scrollToBottomIfPinned(wasAtBottom);
+        else scrollToBottom();
     }
 
     function send() {
@@ -3236,6 +3362,7 @@ var AgentChat = (function() {
         btn.disabled = true;
 
         if (!sessionId) {
+            clearLiveToolRows(true);
             toolCallCounter = 0;
             investigationData = { tools_used: [], iocs_found: [], steps: [], mcp_tools: [] };
             currentPhase = 'think';
@@ -3533,9 +3660,10 @@ var AgentChat = (function() {
 
         var section = document.createElement('section');
         section.className = 'agent-follow-up';
+        var isThai = evidenceLanguage(null, currentGoal) === 'th';
         var title = document.createElement('div');
         title.className = 'agent-follow-up-title';
-        title.textContent = 'ก้าวถัดไป';
+        title.textContent = isThai ? '\u0e01\u0e49\u0e32\u0e27\u0e16\u0e31\u0e14\u0e44\u0e1b' : 'Next steps';
         section.appendChild(title);
         var chips = document.createElement('div');
         chips.className = 'agent-follow-up-chips';
@@ -3543,15 +3671,29 @@ var AgentChat = (function() {
         suggestions.forEach(function(suggestion) {
             if (!suggestion || typeof suggestion.message !== 'string' || typeof suggestion.label !== 'string') return;
             if (suggestion.kind !== 'prefill' && suggestion.kind !== 'investigate') return;
+            var displayText = suggestion.label;
+            var sendText = suggestion.message;
+            if (suggestion.code === 'investigate_other' && suggestion.kind === 'prefill') {
+                displayText = isThai ? '\u0e15\u0e23\u0e27\u0e08 IOC \u0e2d\u0e37\u0e48\u0e19' : 'Check another IOC';
+                sendText = isThai ? '\u0e15\u0e23\u0e27\u0e08 IOC \u0e2d\u0e37\u0e48\u0e19: ' : 'Investigate another IOC: ';
+            } else if (suggestion.code === 'investigate_related' && suggestion.kind === 'investigate') {
+                var targetPrefix = 'Investigate related IOC: ';
+                var candidateTarget = suggestion.message.indexOf(targetPrefix) === 0
+                    ? suggestion.message.slice(targetPrefix.length)
+                    : '';
+                if (!isValidatedSuggestionTarget(candidateTarget)) return;
+                displayText = (isThai ? '\u0e15\u0e23\u0e27\u0e08 IOC \u0e17\u0e35\u0e48\u0e40\u0e01\u0e35\u0e48\u0e22\u0e27\u0e02\u0e49\u0e2d\u0e07: ' : targetPrefix) + candidateTarget;
+                sendText = targetPrefix + candidateTarget;
+            }
             var button = document.createElement('button');
             button.type = 'button';
             button.className = 'agent-follow-up-chip';
-            button.textContent = suggestion.kind === 'prefill' ? suggestion.label : suggestion.message;
-            button.setAttribute('aria-label', suggestion.kind === 'prefill' ? suggestion.label : suggestion.message);
+            button.textContent = displayText;
+            button.setAttribute('aria-label', displayText);
             button.addEventListener('click', function() {
                 var input = document.getElementById('chatInput');
                 if (!input) return;
-                input.value = suggestion.message;
+                input.value = sendText;
                 if (suggestion.kind === 'investigate') {
                     send();
                     return;
@@ -3567,6 +3709,22 @@ var AgentChat = (function() {
             messages.appendChild(section);
             scrollToBottom();
         }
+    }
+
+    function isValidatedSuggestionTarget(value) {
+        if (typeof value !== 'string' || !value || value.length > 253 || value !== value.trim() || !/^[\x00-\x7F]+$/.test(value)) return false;
+        if (/^(?:[0-9a-f]{32}|[0-9a-f]{40}|[0-9a-f]{64})$/i.test(value)) return true;
+        if (/^[0-9.]+$/.test(value)) {
+            var octets = value.split('.');
+            return octets.length === 4 && octets.every(function(part) {
+                return /^\d{1,3}$/.test(part) && Number(part) <= 255;
+            });
+        }
+        if (value.indexOf(':') >= 0) return /^[0-9a-f:]+$/i.test(value) && value.indexOf('::') !== -1;
+        var labels = value.toLowerCase().split('.');
+        return labels.length >= 2 && labels.every(function(label) {
+            return label.length <= 63 && /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(label);
+        }) && (labels[labels.length - 1].length >= 2 || labels[labels.length - 1].indexOf('xn--') === 0);
     }
 
     function visibleAgentAnswer(text) {
@@ -3617,6 +3775,297 @@ var AgentChat = (function() {
         msgs.querySelectorAll('.phase-indicator').forEach(function(indicator) {
             var card = indicator.closest('.chat-bubble-agent');
             if (card) card.remove();
+        });
+    }
+
+    function liveRowLanguage() {
+        return evidenceLanguage(null, currentGoal);
+    }
+
+    function liveRowText(en, th) {
+        return liveRowLanguage() === 'th' ? th : en;
+    }
+
+    function clearLiveToolRows(removeCard) {
+        liveToolRows = Object.create(null);
+        liveToolRowCounter = 0;
+        liveToolDisplayCounter = 0;
+        liveCardSessionId = null;
+        liveCardElement = null;
+        liveCardTitleElement = null;
+        liveCardSpinnerElement = null;
+        liveCardStatusElement = null;
+        liveCardTarget = '';
+        liveCardTargetChosen = false;
+        if (removeCard) {
+            document.querySelectorAll('.agent-live-card').forEach(function(card) { card.remove(); });
+        }
+    }
+
+    function ensureLiveInvestigationCard(inputValue) {
+        if (playbookSessionMode) return null;
+        var sid = String(sessionId || 'new-session');
+        if (liveCardSessionId !== sid) {
+            clearLiveToolRows(true);
+            liveCardSessionId = sid;
+        }
+        if (!liveCardElement) {
+            var messages = document.getElementById('chatMessages');
+            if (!messages) return null;
+            removeEmptyState();
+            liveCardElement = document.createElement('section');
+            liveCardElement.className = 'agent-live-card';
+            liveCardElement.setAttribute('aria-label', liveRowText('Live investigation', '\u0e01\u0e32\u0e23\u0e2a\u0e37\u0e1a\u0e2a\u0e27\u0e19\u0e17\u0e35\u0e48\u0e01\u0e33\u0e25\u0e31\u0e07\u0e14\u0e33\u0e40\u0e19\u0e34\u0e19\u0e2d\u0e22\u0e39\u0e48'));
+            var header = document.createElement('div');
+            header.className = 'agent-live-card-header';
+            liveCardSpinnerElement = document.createElement('span');
+            liveCardSpinnerElement.className = 'agent-live-row-icon is-running';
+            liveCardSpinnerElement.setAttribute('aria-hidden', 'true');
+            liveCardTitleElement = document.createElement('span');
+            liveCardTitleElement.className = 'agent-live-card-title';
+            liveCardStatusElement = document.createElement('span');
+            liveCardStatusElement.className = 'agent-live-card-status';
+            liveCardStatusElement.setAttribute('aria-live', 'polite');
+            header.appendChild(liveCardSpinnerElement);
+            header.appendChild(liveCardTitleElement);
+            header.appendChild(liveCardStatusElement);
+            var rows = document.createElement('div');
+            rows.className = 'agent-live-rows';
+            rows.setAttribute('aria-live', 'polite');
+            liveCardElement.appendChild(header);
+            liveCardElement.appendChild(rows);
+            messages.appendChild(liveCardElement);
+        }
+        if (!liveCardTargetChosen && typeof inputValue === 'string' && inputValue.trim()) {
+            liveCardTarget = inputValue.trim();
+            liveCardTargetChosen = true;
+        }
+        if (liveCardTitleElement) {
+            var title = liveCardTarget
+                ? liveRowText('Checking ', '\u0e01\u0e33\u0e25\u0e31\u0e07\u0e15\u0e23\u0e27\u0e08\u0e2a\u0e2d\u0e1a ') + liveCardTarget + liveRowText(' against threat intel sources', '\u0020\u0e01\u0e31\u0e1a\u0e41\u0e2b\u0e25\u0e48\u0e07\u0e02\u0e49\u0e2d\u0e21\u0e39\u0e25\u0e20\u0e31\u0e22\u0e04\u0e38\u0e01\u0e04\u0e32\u0e21')
+                : liveRowText('Checking indicators against threat intel sources', '\u0e01\u0e33\u0e25\u0e31\u0e07\u0e15\u0e23\u0e27\u0e08\u0e2a\u0e2d\u0e1a\u0e15\u0e31\u0e27\u0e1a\u0e48\u0e07\u0e0a\u0e35\u0e49\u0e01\u0e31\u0e1a\u0e41\u0e2b\u0e25\u0e48\u0e07\u0e02\u0e49\u0e2d\u0e21\u0e39\u0e25\u0e20\u0e31\u0e22\u0e04\u0e38\u0e01\u0e04\u0e32\u0e21');
+            liveCardTitleElement.textContent = title;
+        }
+        return liveCardElement.querySelector('.agent-live-rows');
+    }
+
+    function liveRowIdentityKey(event, kind) {
+        var sid = String(sessionId || 'new-session');
+        var tool = typeof event.tool === 'string' && event.tool ? event.tool : '';
+        var step = event.step;
+        if (tool && typeof step === 'number' && Number.isInteger(step) && step >= 0) {
+            return JSON.stringify([sid, step, tool]);
+        }
+        liveToolRowCounter++;
+        return JSON.stringify([sid, 'orphan', kind, liveToolRowCounter]);
+    }
+
+    function liveToolPresentation(toolName, event) {
+        var registry = toolPresentationByName[toolName] || null;
+        var eventName = typeof event.display_name === 'string' ? event.display_name.trim() : '';
+        var registryName = registry && typeof registry.display_name === 'string' ? registry.display_name.trim() : '';
+        var eventGroup = typeof event.group_label === 'string' ? event.group_label.trim() : '';
+        var registryGroup = registry && typeof registry.group_label === 'string' ? registry.group_label.trim() : '';
+        return {
+            displayName: eventName || registryName || liveRowText('Investigation step', '\u0e02\u0e31\u0e49\u0e19\u0e15\u0e2d\u0e19\u0e01\u0e32\u0e23\u0e2a\u0e37\u0e1a\u0e2a\u0e27\u0e19'),
+            groupLabel: eventGroup || registryGroup,
+            description: registry && typeof registry.summary === 'string' ? registry.summary.trim() : ''
+        };
+    }
+
+    function createLiveRowField(body, labelText, valueText) {
+        var field = document.createElement('div');
+        field.className = 'agent-live-row-field';
+        var label = document.createElement('span');
+        label.className = 'agent-live-row-label';
+        label.textContent = labelText;
+        var value = document.createElement('span');
+        value.className = 'agent-live-row-value';
+        value.textContent = valueText;
+        field.appendChild(label);
+        field.appendChild(value);
+        body.appendChild(field);
+        return value;
+    }
+
+    function createLiveToolRow(toolName, event, rowKey, rowsContainer) {
+        var presentation = liveToolPresentation(toolName, event);
+        var details = document.createElement('details');
+        details.className = 'agent-live-row';
+        var summary = document.createElement('summary');
+        summary.className = 'agent-live-row-summary';
+        summary.setAttribute('aria-label', liveRowText('Tool step details', '\u0e23\u0e32\u0e22\u0e25\u0e30\u0e40\u0e2d\u0e35\u0e22\u0e14\u0e02\u0e31\u0e49\u0e19\u0e15\u0e2d\u0e19\u0e40\u0e04\u0e23\u0e37\u0e48\u0e2d\u0e07\u0e21\u0e37\u0e2d'));
+        var icon = document.createElement('span');
+        icon.className = 'agent-live-row-icon is-running';
+        icon.setAttribute('aria-hidden', 'true');
+        liveToolDisplayCounter += 1;
+        var ordinal = document.createElement('span');
+        ordinal.className = 'agent-live-row-index';
+        ordinal.textContent = String(liveToolDisplayCounter);
+        var name = document.createElement('span');
+        name.className = 'agent-live-row-name';
+        name.textContent = presentation.displayName;
+        var group = document.createElement('span');
+        group.className = 'agent-live-row-group source-badge';
+        group.textContent = presentation.groupLabel;
+        if (!presentation.groupLabel) group.hidden = true;
+        var description = document.createElement('span');
+        description.className = 'agent-live-row-description';
+        description.textContent = presentation.description;
+        var duration = document.createElement('span');
+        duration.className = 'agent-live-row-duration';
+        var chevron = document.createElement('i');
+        chevron.className = 'bi bi-chevron-down agent-live-row-chevron';
+        chevron.setAttribute('aria-hidden', 'true');
+        summary.appendChild(icon);
+        summary.appendChild(ordinal);
+        summary.appendChild(name);
+        summary.appendChild(group);
+        summary.appendChild(description);
+        summary.appendChild(duration);
+        summary.appendChild(chevron);
+        var body = document.createElement('div');
+        body.className = 'agent-live-row-body';
+        var whatValue = createLiveRowField(body, liveRowText('What it does', '\u0e01\u0e32\u0e23\u0e17\u0e33\u0e07\u0e32\u0e19'), presentation.description || liveRowText('No description is available.', '\u0e44\u0e21\u0e48\u0e21\u0e35\u0e04\u0e33\u0e2d\u0e18\u0e34\u0e1a\u0e32\u0e22'));
+        var whatField = whatValue.parentElement;
+        whatField.hidden = !presentation.description || presentation.description === description.textContent;
+        var fields = {
+            what: whatValue,
+            whatField: whatField,
+            input: createLiveRowField(body, liveRowText('Input', '\u0e02\u0e49\u0e2d\u0e21\u0e39\u0e25\u0e17\u0e35\u0e48\u0e15\u0e23\u0e27\u0e08'), typeof event.input === 'string' && event.input ? event.input : liveRowText('No validated input is available.', '\u0e44\u0e21\u0e48\u0e21\u0e35\u0e02\u0e49\u0e2d\u0e21\u0e39\u0e25\u0e17\u0e35\u0e48\u0e1c\u0e48\u0e32\u0e19\u0e01\u0e32\u0e23\u0e15\u0e23\u0e27\u0e08\u0e23\u0e39\u0e1b\u0e41\u0e1a\u0e1a')),
+            result: createLiveRowField(body, liveRowText('Result', '\u0e1c\u0e25\u0e25\u0e31\u0e1e\u0e18\u0e4c'), liveRowResultFallback('unknown'))
+        };
+        var detailsWasAtBottom = false;
+        summary.addEventListener('click', function() {
+            detailsWasAtBottom = chatIsAtBottom();
+        });
+        details.addEventListener('toggle', function() {
+            if (!details.open) return;
+            window.requestAnimationFrame(function() {
+                details.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+                scrollToBottomIfPinned(detailsWasAtBottom);
+            });
+        });
+        details.appendChild(summary);
+        details.appendChild(body);
+        rowsContainer.appendChild(details);
+        return {
+            toolName: toolName,
+            eventDisplayName: typeof event.display_name === 'string' ? event.display_name.trim() : '',
+            eventGroupLabel: typeof event.group_label === 'string' ? event.group_label.trim() : '',
+            details: details,
+            icon: icon,
+            ordinal: ordinal,
+            name: name,
+            group: group,
+            description: description,
+            duration: duration,
+            fields: fields,
+            resultSeen: false
+        };
+    }
+
+    function updateLiveToolRow(row, event, kind) {
+        var presentation = liveToolPresentation(row.toolName, event);
+        row.eventDisplayName = row.eventDisplayName || (typeof event.display_name === 'string' ? event.display_name.trim() : '');
+        row.eventGroupLabel = row.eventGroupLabel || (typeof event.group_label === 'string' ? event.group_label.trim() : '');
+        row.name.textContent = row.eventDisplayName || presentation.displayName;
+        row.group.textContent = row.eventGroupLabel || presentation.groupLabel;
+        row.group.hidden = !row.group.textContent;
+        row.description.textContent = presentation.description;
+        row.fields.what.textContent = presentation.description || liveRowText('No description is available.', '\u0e44\u0e21\u0e48\u0e21\u0e35\u0e04\u0e33\u0e2d\u0e18\u0e34\u0e1a\u0e32\u0e22');
+        row.fields.whatField.hidden = !presentation.description || presentation.description === row.description.textContent;
+        if (typeof event.input === 'string' && event.input) {
+            row.fields.input.textContent = event.input;
+        }
+        if (kind === 'result') {
+            row.resultSeen = true;
+            var status = ['ok', 'hit', 'error', 'unknown'].indexOf(event.status) >= 0 ? event.status : 'unknown';
+            var iconMap = {
+                ok: ['bi bi-check-lg', 'is-ok', liveRowText('Completed', '\u0e40\u0e2a\u0e23\u0e47\u0e08\u0e41\u0e25\u0e49\u0e27')],
+                hit: ['bi bi-exclamation-triangle-fill', 'is-hit', liveRowText('Match found', '\u0e1e\u0e1a\u0e23\u0e32\u0e22\u0e01\u0e32\u0e23\u0e15\u0e23\u0e07\u0e01\u0e31\u0e19')],
+                error: ['bi bi-x-lg', 'is-error', liveRowText('Failed', '\u0e44\u0e21\u0e48\u0e2a\u0e33\u0e40\u0e23\u0e47\u0e08')],
+                unknown: ['bi bi-question-lg', 'is-unknown', liveRowText('Result unavailable', '\u0e44\u0e21\u0e48\u0e21\u0e35\u0e02\u0e49\u0e2d\u0e21\u0e39\u0e25\u0e1c\u0e25\u0e25\u0e31\u0e1e\u0e18\u0e4c')]
+            }[status];
+            row.icon.className = 'agent-live-row-icon ' + iconMap[1];
+            row.icon.textContent = '';
+            row.icon.style.border = '0';
+            var statusIcon = document.createElement('i');
+            statusIcon.className = iconMap[0];
+            statusIcon.setAttribute('aria-hidden', 'true');
+            row.icon.appendChild(statusIcon);
+            var durationMs = event.duration_ms;
+            row.duration.textContent = typeof durationMs === 'number' && Number.isInteger(durationMs) && durationMs >= 0
+                ? durationMs + ' ms'
+                : '';
+            row.fields.result.textContent = typeof event.summary === 'string' && event.summary.trim()
+                ? event.summary
+                : liveRowResultFallback(status);
+        }
+    }
+
+    function upsertLiveToolRow(event, kind) {
+        var rowsContainer = ensureLiveInvestigationCard(kind === 'phase' ? event.input : null);
+        if (!rowsContainer) return;
+        var toolName = typeof event.tool === 'string' ? event.tool : '';
+        var key = liveRowIdentityKey(event, kind);
+        var row = liveToolRows[key];
+        if (!row) {
+            row = createLiveToolRow(toolName, event, key, rowsContainer);
+            liveToolRows[key] = row;
+        }
+        if (kind === 'phase' && row.resultSeen) {
+            var phasePresentation = liveToolPresentation(toolName, event);
+            if (event.display_name || event.group_label) updateLiveToolRow(row, event, 'phase');
+            if (!row.description.textContent && phasePresentation.description) row.description.textContent = phasePresentation.description;
+            return;
+        }
+        updateLiveToolRow(row, event, kind);
+    }
+
+    function liveRowResultFallback(status) {
+        if (status === 'error') return liveRowText('Failed', '\u0e44\u0e21\u0e48\u0e2a\u0e33\u0e40\u0e23\u0e47\u0e08');
+        if (status === 'unknown') return liveRowText('Details not available', '\u0e44\u0e21\u0e48\u0e21\u0e35\u0e23\u0e32\u0e22\u0e25\u0e30\u0e40\u0e2d\u0e35\u0e22\u0e14');
+        return liveRowText('Completed', '\u0e40\u0e2a\u0e23\u0e47\u0e08\u0e41\u0e25\u0e49\u0e27');
+    }
+
+    function refreshLiveRowPresentations() {
+        Object.keys(liveToolRows).forEach(function(key) {
+            var row = liveToolRows[key];
+            var presentation = liveToolPresentation(row.toolName, {
+                display_name: row.eventDisplayName,
+                group_label: row.eventGroupLabel
+            });
+            if (!row.eventDisplayName) row.name.textContent = presentation.displayName;
+            if (!row.eventGroupLabel) {
+                row.group.textContent = presentation.groupLabel;
+                row.group.hidden = !presentation.groupLabel;
+            }
+            row.description.textContent = presentation.description;
+            row.fields.what.textContent = presentation.description || liveRowText('No description is available.', '\u0e44\u0e21\u0e48\u0e21\u0e35\u0e04\u0e33\u0e2d\u0e18\u0e34\u0e1a\u0e32\u0e22');
+            row.fields.whatField.hidden = !presentation.description || presentation.description === row.description.textContent;
+        });
+    }
+
+    function finishLiveInvestigationCard(status) {
+        if (liveCardSpinnerElement) liveCardSpinnerElement.hidden = true;
+        if (liveCardStatusElement) {
+            var labels = {
+                completed: ['Complete', '\u0e40\u0e2a\u0e23\u0e47\u0e08\u0e2a\u0e21\u0e1a\u0e39\u0e23\u0e13\u0e4c'],
+                failed: ['Failed', '\u0e44\u0e21\u0e48\u0e2a\u0e33\u0e40\u0e23\u0e47\u0e08'],
+                cancelled: ['Cancelled', '\u0e22\u0e01\u0e40\u0e25\u0e34\u0e01\u0e41\u0e25\u0e49\u0e27']
+            };
+            var label = labels[status] || labels.completed;
+            liveCardStatusElement.textContent = liveRowLanguage() === 'th' ? label[1] : label[0];
+        }
+        Object.keys(liveToolRows).forEach(function(key) {
+            var row = liveToolRows[key];
+            if (row.resultSeen) return;
+            row.icon.className = 'agent-live-row-icon is-unknown';
+            row.icon.style.border = '0';
+            row.icon.textContent = '?';
+            row.duration.textContent = '';
+            row.fields.result.textContent = liveRowResultFallback('unknown');
         });
     }
 
@@ -3742,10 +4191,12 @@ var AgentChat = (function() {
         var eventSteps = toNonnegativeInteger(msg.steps);
         var summarySteps = eventSteps === null ? toNonnegativeInteger(currentStep) : eventSteps;
         if (summarySteps === null) summarySteps = 0;
+        var summaryLanguage = evidenceLanguage(null, currentGoal);
+        var displayedToolCalls = Object.keys(liveToolRows).length;
 
         html += '<div class="summary-stats">';
-        html += '<div class="summary-stat"><div class="stat-value text-accent">' + summarySteps + '</div><div class="stat-label">Steps</div></div>';
-        html += '<div class="summary-stat"><div class="stat-value text-info">' + uniqueTools.length + '</div><div class="stat-label">Tools Used</div></div>';
+        html += '<div class="summary-stat"><div class="stat-value text-accent">' + summarySteps + '</div><div class="stat-label">' + (summaryLanguage === 'th' ? '\u0e02\u0e31\u0e49\u0e19\u0e15\u0e2d\u0e19\u0e40\u0e2d\u0e40\u0e08\u0e19\u0e15\u0e4c' : 'Agent steps') + '</div></div>';
+        html += '<div class="summary-stat"><div class="stat-value text-info">' + displayedToolCalls + '</div><div class="stat-label">' + (summaryLanguage === 'th' ? '\u0e40\u0e04\u0e23\u0e37\u0e48\u0e2d\u0e07\u0e21\u0e37\u0e2d\u0e17\u0e35\u0e48\u0e43\u0e0a\u0e49' : 'Tools Used') + '</div></div>';
         html += '<div class="summary-stat"><div class="stat-value" style="color:#22c55e;">' + (localCount > 0 ? localCount : 0) + '</div><div class="stat-label">Local Tools</div></div>';
         html += '<div class="summary-stat"><div class="stat-value" style="color:#38bdf8;">' + uniqueMcp.length + '</div><div class="stat-label">MCP Tools</div></div>';
         html += '<div class="summary-stat"><div class="stat-value text-warning">' + elapsedStr + '</div><div class="stat-label">Duration</div></div>';
@@ -3827,6 +4278,10 @@ var AgentChat = (function() {
     function updateProgress(step, max) {
         var bar = document.getElementById('investigationProgress');
         if (!bar) return;
+        if (!playbookSessionMode) {
+            bar.classList.add('d-none');
+            return;
+        }
         var numericStep = toNonnegativeInteger(step);
         if (numericStep === null) numericStep = 0;
         if (max > 0 || numericStep > 0) {
@@ -3854,8 +4309,24 @@ var AgentChat = (function() {
         if (el) el.innerHTML = makePhaseBadge(phase);
     }
 
+    function chatIsAtBottom() {
+        var msgs = document.getElementById('chatMessages');
+        if (!msgs) return true;
+        return msgs.scrollHeight - msgs.clientHeight - msgs.scrollTop <= 32;
+    }
+
+    function scrollToBottomIfPinned(wasPinned) {
+        if (!wasPinned) return;
+        var msgs = document.getElementById('chatMessages');
+        if (!msgs) return;
+        window.requestAnimationFrame(function() {
+            msgs.scrollTop = msgs.scrollHeight;
+        });
+    }
+
     function scrollToBottom() {
         var msgs = document.getElementById('chatMessages');
+        if (!msgs) return;
         setTimeout(function() { msgs.scrollTop = msgs.scrollHeight; }, 50);
     }
 
