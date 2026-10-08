@@ -892,15 +892,36 @@ def _safe_session(session: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-def serialize_agent_step(step: Mapping[str, Any], role: str = THREAT_HUNTER) -> dict[str, Any]:
+def serialize_agent_step(
+    step: Mapping[str, Any],
+    role: str = THREAT_HUNTER,
+    *,
+    findings: Optional[list[Any]] = None,
+    goal: str = "",
+    project_tools: bool = False,
+) -> dict[str, Any]:
     authorize_flow(role, "agent")
     output = {}
     for key in ("id", "step_number", "step_type", "tool_name", "status", "duration_ms", "timestamp"):
         if key in step and isinstance(step[key], (str, int, float, bool)):
             output[key] = step[key]
+    if project_tools and step.get("step_type") == "tool_call" and isinstance(step.get("tool_name"), str):
+        from .step_projection import project_agent_step
+
+        projection = project_agent_step(
+            step.get("tool_name"),
+            params=step.get("tool_params"),
+            result=step.get("tool_result"),
+            duration_ms=step.get("duration_ms"),
+        )
+        output.update(projection)
+        output["status"] = projection["status"]
+        output["duration_ms"] = projection["duration_ms"]
     if "content" in step:
         if step.get("step_type") == "final_answer":
-            output["summary"] = _text(_agent_history_content(step), 2000)
+            output["summary"] = _text(
+                _agent_history_content(step, goal, findings), 2000,
+            )
             verdict = _agent_history_verdict(step)
             source = _agent_history_verdict_source(step)
             if verdict is not None and source is not None:
@@ -909,27 +930,57 @@ def serialize_agent_step(step: Mapping[str, Any], role: str = THREAT_HUNTER) -> 
                 evidence = _agent_history_evidence(step)
                 if evidence is not None:
                     output["evidence"] = evidence
-        else:
+        elif step.get("step_type") != "tool_call":
             output["summary"] = _text(step.get("content"), 2000)
     return {key: value for key, value in output.items() if value is not None}
 
 
-def _agent_history_content(step: Mapping[str, Any], goal: str = "") -> Optional[str]:
+def _agent_history_content(
+    step: Mapping[str, Any], goal: str = "", findings: Optional[list[Any]] = None,
+    *, sanitize_agent_output: bool = True,
+) -> Optional[str]:
+    from ..agent.agent_response_parsing import (
+        contains_tool_call_template,
+        sanitize_final_answer,
+    )
+
     raw_content = _text(step.get("content"), 100000)
     if raw_content is None:
         return None
+    stored_mode = getattr(step, "_sanitize_agent_output", None)
+    if isinstance(stored_mode, bool):
+        sanitize_agent_output = stored_mode
     if step.get("step_type") != "final_answer":
         return raw_content
     try:
         decision = json.loads(raw_content)
     except (TypeError, json.JSONDecodeError):
-        return _sanitize_legacy_unscored_answer(raw_content, goal)
+        from ..agent.agent_response_parsing import (
+            contains_tool_call_template,
+            sanitize_final_answer,
+        )
+
+        if sanitize_agent_output and contains_tool_call_template(raw_content):
+            raw_content = sanitize_final_answer(raw_content, findings or [], goal)
+        return (
+            _sanitize_legacy_unscored_answer(raw_content, goal)
+            if sanitize_agent_output else raw_content
+        )
     if isinstance(decision, Mapping):
         answer = _text(decision.get("answer"), 4000)
-        if answer is not None and serialize_verdict_source(decision.get("verdict_source")) is None:
+        if answer is None:
+            return None
+        if sanitize_agent_output and contains_tool_call_template(answer):
+            answer = sanitize_final_answer(answer, findings or [], goal)
+        if sanitize_agent_output and serialize_verdict_source(decision.get("verdict_source")) is None:
             return _sanitize_legacy_unscored_answer(answer, goal)
         return answer
-    return _sanitize_legacy_unscored_answer(raw_content, goal)
+    if sanitize_agent_output and contains_tool_call_template(raw_content):
+        raw_content = sanitize_final_answer(raw_content, findings or [], goal)
+    return (
+        _sanitize_legacy_unscored_answer(raw_content, goal)
+        if sanitize_agent_output else raw_content
+    )
 
 
 def _sanitize_legacy_unscored_answer(answer: str, goal: str) -> str:
@@ -1075,14 +1126,49 @@ def serialize_agent_session(session: Mapping[str, Any], steps: Optional[Iterable
         bool(metadata.get("ioc_investigation_result"))
         if isinstance(metadata, Mapping) else False
     )
+    session_findings = session.get("findings")
+    if isinstance(session_findings, str):
+        try:
+            session_findings = json.loads(session_findings)
+        except (TypeError, json.JSONDecodeError):
+            session_findings = []
+    if not isinstance(session_findings, list):
+        session_findings = []
     history = []
     goal = _text(session.get("goal"), 4000)
     has_verdict_source = False
     if goal:
         history.append({"role": "user", "content": goal})
     if steps is not None:
-        raw_steps = list(steps)[:500]
-        output["steps"] = [serialize_agent_step(step, role=role) for step in raw_steps]
+        class _SessionStep(dict):
+            def __init__(self, source: Mapping[str, Any], sanitize_agent_output: bool) -> None:
+                super().__init__(source)
+                self._sanitize_agent_output = sanitize_agent_output
+
+        raw_steps = [
+            _SessionStep(step, output["session_type"] == "agent")
+            if isinstance(step, Mapping) else step
+            for step in list(steps)[:500]
+        ]
+        if output["session_type"] == "agent":
+            output["steps"] = [
+                serialize_agent_step(
+                    step, role=role, findings=session_findings, goal=goal or "",
+                    project_tools=True,
+                )
+                for step in raw_steps
+            ]
+            output["tools_count"] = sum(
+                1 for step in raw_steps
+                if isinstance(step, Mapping)
+                and isinstance(step.get("tool_name"), str)
+                and bool(step.get("tool_name").strip())
+            )
+        else:
+            output["steps"] = [
+                serialize_agent_step(step, role=role, project_tools=False)
+                for step in raw_steps
+            ]
         ordered_steps = sorted(
             raw_steps,
             key=lambda step: step.get("step_number")
@@ -1093,7 +1179,10 @@ def serialize_agent_session(session: Mapping[str, Any], steps: Optional[Iterable
                 continue
             if _agent_history_verdict_source(step) is not None and _agent_history_verdict(step) is not None:
                 has_verdict_source = True
-            content = _agent_history_content(step, goal or "")
+            content = _agent_history_content(
+                step, goal or "", session_findings,
+                sanitize_agent_output=output["session_type"] == "agent",
+            )
             if content is not None:
                 history_item = {"role": "agent", "content": content}
                 verdict = _agent_history_verdict(step)
@@ -1123,9 +1212,15 @@ def serialize_agent_session(session: Mapping[str, Any], steps: Optional[Iterable
             session.get("findings"), goal or "", session.get("summary"),
         )
         if recovered is not None:
+            from ..agent.agent_response_parsing import sanitize_final_answer
+
+            recovered_answer = recovered["answer"]
+            recovered_answer = sanitize_final_answer(
+                recovered_answer, session_findings, goal or "",
+            )
             history.append({
                 "role": "agent",
-                "content": recovered["answer"],
+                "content": recovered_answer,
                 "verdict": recovered["verdict"],
                 "verdict_source": recovered["verdict_source"],
                 **({"evidence": recovered["evidence"]} if "evidence" in recovered else {}),
@@ -1135,12 +1230,20 @@ def serialize_agent_session(session: Mapping[str, Any], steps: Optional[Iterable
             notice = _missing_saved_answer_notice(goal)
             history.append({"role": "agent", "content": notice})
             output["summary"] = notice
-    if (
-        not has_verdict_source
-        and isinstance(output.get("summary"), str)
-        and (has_final_answer or session.get("status") != "completed")
-    ):
-        output["summary"] = _sanitize_legacy_unscored_answer(output["summary"], goal or "")
+    if output["session_type"] == "agent" and isinstance(output.get("summary"), str):
+        from ..agent.agent_response_parsing import (
+            contains_tool_call_template,
+            sanitize_final_answer,
+        )
+
+        if contains_tool_call_template(output["summary"]):
+            output["summary"] = sanitize_final_answer(
+                output["summary"], session_findings, goal or "",
+            )
+        if not has_verdict_source and (has_final_answer or session.get("status") != "completed"):
+            output["summary"] = _sanitize_legacy_unscored_answer(
+                output["summary"], goal or "",
+            )
     if isinstance(live_state, Mapping):
         output["live_state"] = {
             key: live_state[key] for key in ("phase", "step_count", "max_steps", "current_tool")
@@ -1514,6 +1617,9 @@ def serialize_websocket_frame(frame: Mapping[str, Any], *, role: str, flow: str)
                 findings_count = frame.get("findings_count")
                 if isinstance(findings_count, int) and not isinstance(findings_count, bool) and findings_count >= 0:
                     output["findings_count"] = findings_count
+                steps = frame.get("steps")
+                if isinstance(steps, int) and not isinstance(steps, bool) and steps >= 0:
+                    output["steps"] = steps
                 verdict = frame.get("verdict")
                 if verdict_source is not None:
                     normalized_verdict = verdict.strip().upper() if isinstance(verdict, str) else ""
@@ -1538,12 +1644,42 @@ def serialize_websocket_frame(frame: Mapping[str, Any], *, role: str, flow: str)
             for key in ("phase", "tool", "tool_source", "tool_server"):
                 if key in frame and isinstance(frame[key], str):
                     output[key] = frame[key][:200]
+            if frame_type == "phase" and frame.get("phase") == "acting" and isinstance(frame.get("tool"), str):
+                from .step_projection import project_agent_step
+
+                projection = project_agent_step(
+                    frame.get("tool"),
+                    frame.get("tool_source"),
+                    frame.get("tool_server"),
+                    params=frame.get("params"),
+                )
+                output.update({
+                    "display_name": projection["display_name"],
+                    "group_label": projection["group_label"],
+                    "input": projection["input"],
+                })
             if frame_type == "step" and isinstance(frame.get("step"), Mapping):
-                output["step"] = serialize_agent_step(frame["step"], role=role)
+                output["step"] = serialize_agent_step(
+                    frame["step"], role=role, project_tools=True,
+                )
             if frame_type == "tool_result":
-                safe_result = _safe_agent_tool_result(frame.get("result"), role)
-                if safe_result is not None:
-                    output["result"] = safe_result
+                from .step_projection import project_agent_step
+
+                projection = project_agent_step(
+                    frame.get("tool"),
+                    frame.get("tool_source"),
+                    frame.get("tool_server"),
+                    params=frame.get("params"),
+                    result=frame.get("result"),
+                    duration_ms=frame.get("duration_ms"),
+                )
+                output.update({
+                    "display_name": projection["display_name"],
+                    "group_label": projection["group_label"],
+                    "status": projection["status"],
+                    "summary": projection["summary"],
+                    "duration_ms": projection["duration_ms"],
+                })
             if frame_type == "approval_required":
                 description = frame.get("description")
                 if isinstance(description, str):

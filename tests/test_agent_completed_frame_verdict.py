@@ -9,7 +9,7 @@ from src.web.websocket import _stored_agent_evidence, _stored_agent_verdict
 
 def test_agent_completed_frame_keeps_scored_verdict_and_omits_unscored_verdict():
     completed = serialize_websocket_frame(
-        {"type": "completed", "summary": "done", "verdict": "MALICIOUS",
+        {"type": "completed", "summary": "done", "steps": 7, "verdict": "MALICIOUS",
          "verdict_source": {"tool": "investigate_ioc", "step": 0}},
         role="admin",
         flow="websocket_agent",
@@ -22,6 +22,7 @@ def test_agent_completed_frame_keeps_scored_verdict_and_omits_unscored_verdict()
 
     assert completed == {
         "type": "completed", "summary": "done", "verdict": "MALICIOUS",
+        "steps": 7,
         "verdict_source": {"tool": "investigate_ioc", "step": 0},
     }
     assert no_verdict == {"type": "completed", "summary": "done"}

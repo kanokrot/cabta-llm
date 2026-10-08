@@ -28,6 +28,10 @@ _SPECIAL_GLOBAL_NETWORKS = tuple(
         "2002::/16",
     )
 )
+_PRIVATE_IOC_NETWORKS = tuple(
+    ipaddress.ip_network(network)
+    for network in ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "fc00::/7")
+)
 _IOCs_BY_FIELD = {
     "ip": "ip",
     "ipv4": "ip",
@@ -74,7 +78,7 @@ def _valid_domain(value: str) -> bool:
     return True
 
 
-def validate_ioc(value: Any, ioc_type: Any = None) -> str | None:
+def validate_ioc(value: Any, ioc_type: Any = None, *, allow_private: bool = False) -> str | None:
     """Return a canonical public IP, ASCII domain, or file hash, otherwise None."""
     if not isinstance(value, str) or not value or value != value.strip():
         return None
@@ -90,10 +94,14 @@ def validate_ioc(value: Any, ioc_type: Any = None) -> str | None:
                 address.version == network.version and address in network
                 for network in _SPECIAL_GLOBAL_NETWORKS
             )
+            allowed_private = allow_private and any(
+                address.version == network.version and address in network
+                for network in _PRIVATE_IOC_NETWORKS
+            )
             return (
                 str(address)
                 if (
-                    address.is_global
+                    (address.is_global or allowed_private)
                     and not address.is_reserved
                     and not special_global
                     and kind != "domain"
