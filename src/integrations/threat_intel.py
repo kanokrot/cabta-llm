@@ -834,6 +834,7 @@ class ThreatIntelligence:
             results = {
                 'found': False,
                 'sources_checked': 0,
+                'sources_failed': 0,
                 'sources_found': [],
                 'malware_families': [],
                 'c2_frameworks': [],
@@ -899,11 +900,13 @@ class ThreatIntelligence:
                                                         if fw not in results['c2_frameworks']:
                                                             results['c2_frameworks'].append(fw)
                                                 break
+                            else:
+                                results['sources_failed'] += 1
                                 
                     except asyncio.TimeoutError:
-                        continue
+                        results['sources_failed'] += 1
                     except Exception:
-                        continue
+                        results['sources_failed'] += 1
             
             # Calculate score
             if results['found']:
@@ -913,11 +916,13 @@ class ThreatIntelligence:
                 if len(results['sources_found']) > 2:
                     results['score'] = min(100, results['score'] + 5)
             
-            return {
-                'status': '✓' if results['found'] else '✗',
+            unavailable = not results['found'] and results['sources_failed'] > 0
+            result = {
+                'status': '✓' if results['found'] else ('⚠' if unavailable else '✗'),
                 'found': results['found'],
                 'is_c2': results['found'],
                 'sources_checked': results['sources_checked'],
+                'sources_failed': results['sources_failed'],
                 'sources_found': results['sources_found'],
                 'malware_families': results['malware_families'],
                 'c2_frameworks': results['c2_frameworks'],
@@ -925,6 +930,10 @@ class ThreatIntelligence:
                 'last_seen': results['last_seen'],
                 'score': results['score']
             }
+            if unavailable:
+                result['error'] = f"{results['sources_failed']} C2 tracker feed(s) failed"
+                result['unavailable'] = True
+            return result
         
         except Exception as e:
             logger.error(f"[C2Tracker] Error: {e}")
