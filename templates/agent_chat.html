@@ -3281,7 +3281,6 @@ var AgentChat = (function() {
                     var steps = msg.session.steps || msg.steps || [];
                     currentStep = steps.length;
                     updateProgress(currentStep, maxSteps);
-                    if (msg.session.goal) addBubble(msg.session.goal, 'user');
                     var restoredAgentHistory = (msg.session.history || []).filter(function(m) { return m.role === 'agent'; });
                     steps.forEach(function(s) {
                         if (s.step_type === 'tool_call' && s.tool_name) {
