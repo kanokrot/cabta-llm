@@ -628,10 +628,41 @@ def _register_page_routes(app: FastAPI) -> None:
         redirect = _page_auth_redirect(request)
         if redirect is not None:
             return redirect
-        stats = app.state.analysis_manager.get_stats()
-        recent = app.state.analysis_manager.list_jobs(limit=10)
+        current_user = getattr(request.state, 'user', None) or _page_auth_user(request)
+        if current_user is None:
+            return RedirectResponse('/login?next=%2Fdashboard', status_code=303)
+
+        from .visibility import serialize_dashboard_job, serialize_dashboard_stats
+
+        manager = app.state.analysis_manager
+        role = current_user.get('role')
+        stats = serialize_dashboard_stats(
+            manager.get_stats(), role
+        )
+        if role == TEAM_LEAD:
+            from .oversight import record_cross_user_read
+            recent = manager.list_jobs(
+                limit=10,
+                user_ids=get_user_ids_by_role('SOC Analyst Tier 1-2'),
+            )
+            for job in recent:
+                if job.get('user_id') != current_user.get('id'):
+                    record_cross_user_read(
+                        request,
+                        actor_user_id=current_user['id'],
+                        actor_role=TEAM_LEAD,
+                        target_user_id=job.get('user_id'),
+                        resource_type='dashboard',
+                        resource_id=job.get('id'),
+                    )
+        else:
+            recent = manager.list_jobs(
+                limit=10,
+                user_id=None if role == 'admin' else current_user.get('id'),
+            )
+        recent_jobs = [serialize_dashboard_job(job, role=role) for job in recent]
         return templates.TemplateResponse(request, 'dashboard.html', {
-            'stats': stats, 'recent_jobs': recent,
+            'stats': stats, 'recent_jobs': recent_jobs,
         })
 
     @app.get('/soc-operations', response_class=HTMLResponse, include_in_schema=False)
@@ -737,9 +768,16 @@ def _register_page_routes(app: FastAPI) -> None:
     async def agent_investigations_page(request: Request):
         sessions = []
         stats = {"total": 0, "active": 0, "completed": 0, "failed": 0}
+        current_user = getattr(request.state, 'user', None) or _page_auth_user(request)
+        if current_user is None:
+            return RedirectResponse('/login?next=%2Fagent%2Finvestigations', status_code=303)
+        role = current_user.get('role')
+        owner_id = None if role == 'admin' else current_user.get('id')
         if app.state.agent_store:
-            sessions = app.state.agent_store.list_sessions(limit=100)
-            stats = app.state.agent_store.get_agent_stats()
+            sessions = app.state.agent_store.list_sessions(
+                limit=100, user_id=owner_id
+            )
+            stats = app.state.agent_store.get_agent_stats(user_id=owner_id)
         return templates.TemplateResponse(request, 'agent_investigations.html', {
             'sessions': sessions, 'stats': stats,
         })

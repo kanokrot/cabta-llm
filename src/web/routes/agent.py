@@ -131,7 +131,12 @@ async def start_investigation(
 async def agent_stats(request: Request, current_user: dict = Depends(get_current_user)):
     """Get agent statistics."""
     store = _require_agent_store(request)
-    stats = store.get_agent_stats()
+    stats = store.get_agent_stats(
+        user_id=(
+            None if current_user.get("role") == "admin"
+            else current_user.get("id")
+        )
+    )
     # Add tool count
     tool_registry = request.app.state.tool_registry
     if tool_registry:

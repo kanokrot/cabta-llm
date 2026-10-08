@@ -553,17 +553,24 @@ class AgentStore:
     #  Statistics
     # ================================================================== #
 
-    def get_agent_stats(self) -> Dict:
-        """Return aggregate statistics across sessions and steps."""
+    def get_agent_stats(self, user_id: Optional[int] = None) -> Dict:
+        """Return aggregate statistics, optionally scoped to one session owner."""
         conn = self._connect()
 
+        session_filter = ""
+        session_params: tuple = ()
+        if user_id is not None:
+            session_filter = " WHERE user_id = ?"
+            session_params = (int(user_id),)
+
         cur = conn.execute(
-            """SELECT
+            f"""SELECT
                  COUNT(*) AS total,
                  SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) AS active,
                  SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS completed,
                  SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed
-               FROM agent_sessions"""
+               FROM agent_sessions{session_filter}""",
+            session_params,
         )
         row = cur.fetchone()
         total_sessions = row[0] or 0
@@ -571,7 +578,14 @@ class AgentStore:
         completed_sessions = row[2] or 0
         failed_sessions = row[3] or 0
 
-        cur2 = conn.execute("SELECT COUNT(*) FROM agent_steps")
+        if user_id is None:
+            cur2 = conn.execute("SELECT COUNT(*) FROM agent_steps")
+        else:
+            cur2 = conn.execute(
+                "SELECT COUNT(*) FROM agent_steps WHERE session_id IN "
+                "(SELECT id FROM agent_sessions WHERE user_id = ?)",
+                session_params,
+            )
         total_steps = cur2.fetchone()[0] or 0
 
         conn.close()

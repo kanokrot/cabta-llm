@@ -407,11 +407,10 @@
                             <tbody id="recent-analyses-body">
                                 {% if recent_jobs %}
                                     {% for job in recent_jobs %}
-                                    {% set params = job.params if job.params is mapping else {} %}
-                                    {% set indicator = params.get('value') or params.get('filename') or job.id %}
+                                    {% set indicator = job.ioc or job.filename or job.id %}
                                     <tr>
                                         <td><a class="dash-indicator" href="/api/reports/{{ job.id }}/html" title="{{ indicator }}">{{ indicator }}</a></td>
-                                        <td>{{ params.get('ioc_type') or job.analysis_type or '—' }}</td>
+                                        <td>{{ job.ioc_type or job.type or '—' }}</td>
                                         <td>
                                             {% set verdict = job.verdict or 'UNKNOWN' %}
                                             {% if verdict == 'MALICIOUS' %}{% set verdict_class = 'dash-pill--danger' %}
@@ -422,7 +421,7 @@
                                             {% else %}{% set verdict_class = 'dash-pill--neutral' %}{% endif %}
                                             <span class="dash-pill {{ verdict_class }}">{{ verdict }}</span>
                                         </td>
-                                        <td>{{ (job.score ~ '/100') if job.score is not none else '—' }}</td>
+                                        <td>{{ (job.threat_score ~ '/100') if job.threat_score is not none else '—' }}</td>
                                         <td><time class="dash-time" data-utc-time="{{ job.created_at or '' }}">—</time></td>
                                     </tr>
                                     {% endfor %}
