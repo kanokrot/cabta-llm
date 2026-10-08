@@ -104,6 +104,12 @@ def test_indicator_locations_map_and_country_centroids() -> None:
     country_path_lines = re.findall(r'<path class="dash-map-land dash-map-country"[^>]+>', partial_text)
     assert len(country_path_lines) > 150
     assert all('data-n3="' in line or 'data-name="' in line for line in country_path_lines)
+    france_path = next(
+        line for line in country_path_lines if 'data-n3="250"' in line
+    )
+    france_geometry = re.search(r'\bd="([^"]+)"', france_path)
+    assert france_geometry is not None
+    assert len(re.findall(r'M', france_geometry.group(1))) == 2
     assert "dash-map-dots" not in template
     assert 'class="dash-map-graticule"' in template
     assert 'class="dash-map-legend"' in template
