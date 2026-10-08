@@ -1423,7 +1423,7 @@
                                        placeholder="e.g. 8.8.8.8, evil.com, d41d8cd98f00b204...">
                                 <span id="iocTypeHint" class="ioc-type-hint text-end" hidden></span>
                             </div>
-                            <div class="form-text">Enter an IP address, domain, URL, file hash, email address, or CVE ID.</div>
+                            <div class="form-text">Supported: IP addresses, domains, URLs, and file hashes (MD5, SHA1, or SHA256). Email addresses and CVE IDs are not supported in IOC analysis.</div>
                         </div>
                     </div>
 
@@ -1432,7 +1432,7 @@
                         <div class="mb-3">
                             <label for="bulkIOCValue" class="form-label">IOC Values <span class="bulk-count" id="bulkCount">(0 IOCs)</span></label>
                             <textarea id="bulkIOCValue" class="form-control bulk-textarea"
-                                      placeholder="Paste one IOC per line, e.g.&#10;8.8.8.8&#10;evil.com&#10;d41d8cd98f00b204e9800998ecf8427e&#10;CVE-2024-1234"></textarea>
+                                      placeholder="Paste one supported IOC per line, e.g.&#10;8.8.8.8&#10;evil.com&#10;d41d8cd98f00b204e9800998ecf8427e"></textarea>
                             <div class="form-text">
                                 One indicator per line. Empty lines and duplicates are ignored.
                             </div>
@@ -1450,8 +1450,6 @@
                             <option value="hash_md5">MD5 Hash</option>
                             <option value="hash_sha1">SHA1 Hash</option>
                             <option value="hash_sha256">SHA256 Hash</option>
-                            <option value="email">Email Address</option>
-                            <option value="cve">CVE ID</option>
                         </select>
                         <div class="ioc-type-chips" role="group" aria-label="IOC type">
                             <button type="button" class="ioc-type-chip" data-ioc-type="auto" aria-pressed="true">Auto-detect</button>
@@ -1459,8 +1457,6 @@
                             <button type="button" class="ioc-type-chip" data-ioc-type="domain" aria-pressed="false">Domain</button>
                             <button type="button" class="ioc-type-chip" data-ioc-type="url" aria-pressed="false">URL</button>
                             <button type="button" class="ioc-type-chip" data-ioc-type="hash" aria-pressed="false">Hash</button>
-                            <button type="button" class="ioc-type-chip" data-ioc-type="email" aria-pressed="false">Email</button>
-                            <button type="button" class="ioc-type-chip" data-ioc-type="cve" aria-pressed="false">CVE</button>
                         </div>
                     </div>
 

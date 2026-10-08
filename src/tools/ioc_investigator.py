@@ -243,6 +243,14 @@ class IOCInvestigator:
         # Detect IOC type
         ioc_type = IOCExtractor.categorize_ioc(ioc)
 
+        # Email addresses and CVE IDs are not supported by IOC investigation.
+        # Keep this guard local so categorize_ioc() remains usable by other
+        # callers that need to recognize these values.
+        if ioc_type == 'email':
+            return {'error': 'Unsupported IOC type: email'}
+        if re.fullmatch(r'CVE-\d{4}-\d{4,7}', ioc.strip(), flags=re.IGNORECASE):
+            return {'error': 'Unsupported IOC type: cve'}
+
         if ioc_type == 'unknown':
             return {'error': f'Unable to categorize IOC: {ioc}'}
 

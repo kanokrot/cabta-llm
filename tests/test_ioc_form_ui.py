@@ -43,7 +43,7 @@ def test_required_ioc_ids_remain_present():
     assert re.search(r'<select[^>]+id="iocType"', text)
 
 
-def test_seven_type_chips_are_buttons():
+def test_supported_type_chips_are_buttons():
     text = _template_text()
     expected = {
         "auto": "Auto-detect",
@@ -51,14 +51,32 @@ def test_seven_type_chips_are_buttons():
         "domain": "Domain",
         "url": "URL",
         "hash": "Hash",
-        "email": "Email",
-        "cve": "CVE",
     }
     for value, label in expected.items():
         assert re.search(
             rf'<button\s+type="button"[^>]+data-ioc-type="{value}"[^>]*>{label}</button>',
             text,
         )
+
+
+def test_email_and_cve_are_not_selectable_ioc_types():
+    text = _template_text()
+    select = re.search(r'<select[^>]+id="iocType"[^>]*>(.*?)</select>', text, re.DOTALL).group(1)
+    assert 'value="email"' not in select
+    assert 'value="cve"' not in select
+    assert 'data-ioc-type="email"' not in text
+    assert 'data-ioc-type="cve"' not in text
+
+
+def test_ioc_form_explains_supported_types_and_bulk_examples():
+    text = _template_text()
+    assert "Supported: IP addresses, domains, URLs, and file hashes" in text
+    assert "Email addresses and CVE IDs are not supported" in text
+    bulk_placeholder = re.search(
+        r'<textarea[^>]+id="bulkIOCValue"[^>]+placeholder="([^"]+)"', text
+    ).group(1)
+    assert "CVE" not in bulk_placeholder
+    assert "one supported IOC per line" in bulk_placeholder
 
 
 def test_progress_ui_has_no_fixed_source_count_or_detected_wording():
