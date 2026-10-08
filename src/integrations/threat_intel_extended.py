@@ -272,23 +272,47 @@ class ThreatIntelExtended:
             query = f'{reversed_ip}.zen.spamhaus.org'
             
             try:
-                socket.gethostbyname(query)
+                answer = socket.gethostbyname(query)
+            except socket.gaierror as e:
+                if e.errno == socket.EAI_NONAME:
+                    return {
+                        'source': 'Spamhaus',
+                        'found': False,
+                        'listed': False,
+                        'status': '\u2717'
+                    }
+                return {
+                    'source': 'Spamhaus',
+                    'found': False,
+                    'status': '\u26a0',
+                    'error': f'DNS resolver error: {e}',
+                    'unavailable': True,
+                }
+
+            octets = answer.split('.')
+            if len(octets) == 4 and octets[:3] == ['127', '0', '0']:
                 return {
                     'source': 'Spamhaus',
                     'found': True,
                     'listed': True,
-                    'status': '✓'
+                    'status': '\u2713'
                 }
-            except socket.gaierror:
-                return {
-                    'source': 'Spamhaus',
-                    'found': False,
-                    'listed': False,
-                    'status': '✗'
-                }
+            return {
+                'source': 'Spamhaus',
+                'found': False,
+                'status': '\u26a0',
+                'error': f'Unexpected Spamhaus DNSBL answer: {answer}',
+                'unavailable': True,
+            }
         except Exception as e:
             logger.error(f"[Spamhaus] Error: {e}")
-            return {'source': 'Spamhaus', 'status': '⚠', 'error': str(e), 'found': False}
+            return {
+                'source': 'Spamhaus',
+                'status': '\u26a0',
+                'error': str(e),
+                'found': False,
+                'unavailable': True,
+            }
     
     async def check_phishtank(self, url: str) -> Dict:
         """PhishTank - Phishing URL database."""
