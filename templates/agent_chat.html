@@ -373,11 +373,48 @@
         font-size: 0.66rem;
         line-height: 1.35;
     }
+    .agent-follow-up {
+        display: flex;
+        flex-direction: column;
+        gap: 0.45rem;
+        margin: 0.75rem 0 1rem;
+        padding: 0 0.25rem;
+    }
+    .agent-follow-up-title {
+        color: var(--text-secondary);
+        font-size: 0.72rem;
+        font-weight: 700;
+    }
+    .agent-follow-up-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.45rem;
+    }
+    .agent-follow-up-chip {
+        max-width: 100%;
+        padding: 0.4rem 0.7rem;
+        overflow-wrap: anywhere;
+        border: 1px solid var(--border-color);
+        border-radius: 999px;
+        background: var(--bg-secondary);
+        color: var(--text-primary);
+        font-size: 0.75rem;
+        text-align: left;
+        transition: border-color 0.15s, background 0.15s;
+    }
+    .agent-follow-up-chip:hover,
+    .agent-follow-up-chip:focus-visible {
+        border-color: var(--color-accent);
+        background: var(--bg-tertiary);
+        color: var(--text-primary);
+    }
     .agent-card-header-status {
         display: flex;
         align-items: center;
         justify-content: flex-end;
         gap: 0.45rem;
+        flex-wrap: wrap;
+        min-width: 0;
         min-width: 0;
     }
     .agent-card-header-status .agent-status-item {
@@ -808,6 +845,12 @@
         display: flex;
         align-items: center;
         gap: 0.5rem;
+        width: 100%;
+        box-sizing: border-box;
+        flex-wrap: wrap;
+        clear: both;
+        position: relative;
+        z-index: 1;
         padding: 0.35rem 0.75rem;
         background: var(--bg-secondary);
         border-bottom: 1px solid var(--border-color);
@@ -1368,21 +1411,17 @@
                             <{{ server_status_tag }}{% if nav_role == 'admin' %} href="/mcp/servers"{% endif %} id="agentStatusServers" class="agent-status-value{% if nav_role == 'admin' %} agent-status-link{% endif %}">–</{{ server_status_tag }}>
                         </div>
                         <span id="elapsedTime" class="text-muted" style="font-size:0.72rem;"></span>
-                        <span id="agentStatusAgent" class="agent-status-value d-none">Disconnected</span>
                         <div id="connectionStatus" class="d-none" aria-live="polite">
                             <span class="badge bg-secondary"><i class="bi bi-circle-fill me-1" style="font-size:0.45rem;"></i>Disconnected</span>
                         </div>
+                        <span id="agentStatusAgent" class="d-none" aria-hidden="true">Disconnected</span>
                     </div>
                 </div>
             </div>
 
             <div id="investigationProgress" class="investigation-progress d-none">
                 <i class="bi bi-activity"></i>
-                <span>Step</span>
-                <span class="step-counter" id="stepCounter">0 / 0</span>
-                <div class="progress flex-grow-1" style="height:4px;max-width:200px;">
-                    <div id="stepProgressBar" class="progress-bar bg-accent" style="width:0%"></div>
-                </div>
+                <span class="step-counter" id="stepCounter"></span>
                 <span id="currentPhaseBadge"></span>
                 <div class="progress-right">
                     <span class="current-tool" id="currentToolName"></span>
@@ -1606,6 +1645,7 @@ var AgentChat = (function() {
     var selectedExportFormat = 'json';
     var maxSteps = 0;
     var currentStep = 0;
+    var currentGoal = '';
     var startTime = null;
     var elapsedTimer = null;
     var toolCallCounter = 0;
@@ -1631,10 +1671,8 @@ var AgentChat = (function() {
 
     function renderAgentStatus() {
         var serverEl = document.getElementById('agentStatusServers');
-        var connectionEl = document.getElementById('agentStatusAgent');
         var hasServerStatus = typeof agentStatus.serverOnline === 'number' &&
             typeof agentStatus.serverTotal === 'number';
-        var connectionVisible = agentStatus.connection === 'Connected' || agentStatus.connection === 'Error';
 
         if (serverEl) {
             var offline = hasServerStatus ? agentStatus.serverTotal - agentStatus.serverOnline : 0;
@@ -1643,10 +1681,6 @@ var AgentChat = (function() {
                 ? agentStatus.serverOnline + '/' + agentStatus.serverTotal + ' servers online' +
                     (offline > 0 ? ' (' + offline + ' offline)' : '')
                 : '–';
-        }
-        if (connectionEl) {
-            connectionEl.textContent = agentStatus.connection || '–';
-            connectionEl.classList.toggle('d-none', !connectionVisible);
         }
     }
 
@@ -2711,6 +2745,14 @@ var AgentChat = (function() {
         visibleSessions.forEach(function(s) {
             var id = s.session_id || s.id;
             var goal = s.goal || 'Session';
+            var sessionLanguage = evidenceLanguage(null, String(goal));
+            var sessionType = s.session_type === 'playbook' ? 'playbook' :
+                (s.session_type === 'agent' ? 'agent' : '');
+            var sessionTypeLabel = sessionType
+                ? (sessionLanguage === 'th'
+                    ? (sessionType === 'playbook' ? '\u0e40\u0e1e\u0e25\u0e22\u0e4c\u0e1a\u0e38\u0e4a\u0e01' : '\u0e40\u0e2d\u0e40\u0e08\u0e19\u0e15\u0e4c')
+                    : (sessionType === 'playbook' ? 'Playbook' : 'Agent'))
+                : '';
             var button = document.createElement('button');
             button.type = 'button';
             button.className = 'agent-session-item';
@@ -2722,7 +2764,7 @@ var AgentChat = (function() {
             }
             var label = document.createElement('span');
             label.className = 'agent-session-label';
-            label.textContent = goal;
+            label.textContent = sessionTypeLabel ? String(goal) + ' · ' + sessionTypeLabel : String(goal);
             button.appendChild(label);
             var status = s.status === 'active' ? 'running' : (s.status || '');
             if (status) {
@@ -2848,6 +2890,7 @@ var AgentChat = (function() {
         sessionId = null;
         currentStep = 0;
         maxSteps = 0;
+        currentGoal = '';
         stopTimer();
         hideLiveToolIndicator();
         toolCallCounter = 0;
@@ -2873,6 +2916,7 @@ var AgentChat = (function() {
         stopTimer();
         currentStep = 0;
         maxSteps = 0;
+        currentGoal = '';
         updateProgress(0, 0);
         hideLiveToolIndicator();
         sessionId = id;
@@ -2980,12 +3024,14 @@ var AgentChat = (function() {
                 var msgs = document.getElementById('chatMessages');
                 while (msgs.firstChild) msgs.removeChild(msgs.firstChild);
                 var history = data.history || data.messages || [];
+                currentGoal = typeof data.goal === 'string' ? data.goal : '';
                 if (!history.length) restoreEmptyState();
                 history.forEach(function(m) {
                     if (m.role === 'user') addBubble(m.content, 'user');
-                    else addBubble(m.content, 'agent', false, m.verdict, m.verdict_source);
+                    else addBubble(m.content, 'agent', false, m.verdict, m.verdict_source, m.evidence, currentGoal);
                     if (m.role === 'agent') renderEvidenceCard(m.evidence, m.verdict_source);
                 });
+                if (data.status === 'completed') renderFollowUpSuggestions(data.suggestions);
                 if (data.status === 'active' && data.steps) {
                     currentStep = data.current_step || data.steps.length || 0;
                     maxSteps = data.max_steps || 50;
@@ -3108,6 +3154,7 @@ var AgentChat = (function() {
                         if (!playbookDetailLoaded) renderPlaybookSession(msg.session);
                         break;
                     }
+                    if (typeof msg.session.goal === 'string') currentGoal = msg.session.goal;
                     maxSteps = msg.session.max_steps || 50;
                     var steps = msg.session.steps || msg.steps || [];
                     currentStep = steps.length;
@@ -3121,13 +3168,13 @@ var AgentChat = (function() {
                     });
                     if (restoredAgentHistory.length) {
                         restoredAgentHistory.forEach(function(m) {
-                            addBubble(m.content, 'agent', false, m.verdict, m.verdict_source);
+                            addBubble(m.content, 'agent', false, m.verdict, m.verdict_source, m.evidence, currentGoal);
                             renderEvidenceCard(m.evidence, m.verdict_source);
                         });
                     } else {
                         steps.forEach(function(s) {
                             if (s.step_type === 'final_answer') {
-                                addBubble(s.data || s.summary || 'Investigation complete.', 'agent', false, s.verdict, s.verdict_source);
+                                addBubble(s.data || s.summary || 'Investigation complete.', 'agent', false, s.verdict, s.verdict_source, s.evidence, currentGoal);
                                 renderEvidenceCard(s.evidence, s.verdict_source);
                             }
                         });
@@ -3141,28 +3188,26 @@ var AgentChat = (function() {
             case 'completed':
                 stopTimer();
                 hideLiveToolIndicator();
-                addBubble(msg.summary || 'Investigation completed.', 'agent', false, msg.verdict, msg.verdict_source);
+                clearPhaseIndicators();
+                addBubble(msg.summary || 'Investigation completed.', 'agent', false, msg.verdict, msg.verdict_source, msg.evidence, currentGoal);
                 renderEvidenceCard(msg.evidence, msg.verdict_source);
                 if (!playbookSessionMode) addInvestigationSummary(msg);
                 updateProgress(0, 0);
                 if (!playbookSessionMode) document.getElementById('exportDropdownWrap').style.display = 'inline-flex';
                 loadSessions();
-                if (!playbookSessionMode) fetch('/api/agent/sessions/' + encodeURIComponent(sessionId))
-                    .then(function(r) { return r.json(); })
-                    .then(function(data) {
-                        setExportHtmlAvailability(data.has_report === true);
-                    })
-                    .catch(function() {});
+                if (!playbookSessionMode) refetchCompletedSession(sessionId, 0);
                 break;
             case 'failed':
                 stopTimer();
                 hideLiveToolIndicator();
+                clearPhaseIndicators();
                 updateProgress(0, 0);
                 addBubble('Investigation failed: ' + (msg.error || msg.summary || 'Unknown error'), 'system');
                 loadSessions(); break;
             case 'cancelled':
                 stopTimer();
                 hideLiveToolIndicator();
+                clearPhaseIndicators();
                 updateProgress(0, 0);
                 addBubble('Investigation cancelled.', 'system');
                 loadSessions(); break;
@@ -3184,6 +3229,7 @@ var AgentChat = (function() {
         if (!text) return;
         var history = getRecentChatHistory();
         input.value = '';
+        if (!sessionId) currentGoal = text;
         addBubble(text, 'user');
         scrollToBottom();
 
@@ -3282,12 +3328,50 @@ var AgentChat = (function() {
         if (emptyState) emptyState.remove();
     }
 
+    function evidenceLanguage(evidence, goal) {
+        if (evidence && (evidence.lang === 'th' || evidence.lang === 'en')) return evidence.lang;
+        var languageGoal = typeof goal === 'string' ? goal : currentGoal;
+        return /[\u0E00-\u0E7F]/.test(languageGoal || '') ? 'th' : 'en';
+    }
+
+    function getScoringCoverage(evidence) {
+        var scoringSources = evidence && Array.isArray(evidence.scoring_sources)
+            ? evidence.scoring_sources
+            : [];
+        var responding = scoringSources.filter(function(source) {
+            return source && (source.state === 'flagged' || source.state === 'clean');
+        }).length;
+        var unavailable = scoringSources.filter(function(source) {
+            return source && source.state === 'unavailable';
+        }).length;
+        var missing = scoringSources.filter(function(source) {
+            return source && source.state === 'missing';
+        }).length;
+        return { responding: responding, total: scoringSources.length, unavailable: unavailable, missing: missing };
+    }
+
+    function scoringSummaryText(evidence, language) {
+        if (!evidence || typeof evidence !== 'object') return '';
+        var verdict = typeof evidence.verdict === 'string' ? evidence.verdict.trim() : '';
+        var score = typeof evidence.threat_score === 'boolean' || evidence.threat_score === null ||
+            evidence.threat_score === undefined || evidence.threat_score === ''
+            ? NaN
+            : Number(evidence.threat_score);
+        if (!verdict || !Number.isFinite(score)) return '';
+        var coverage = getScoringCoverage(evidence);
+        var scoreText = Number(score) + '/100';
+        var coverageText = language === 'th'
+            ? Number(coverage.responding) + ' \u0e08\u0e32\u0e01 ' + Number(coverage.total) + ' \u0e41\u0e2b\u0e25\u0e48\u0e07\u0e15\u0e2d\u0e1a\u0e01\u0e25\u0e31\u0e1a'
+            : Number(coverage.responding) + ' of ' + Number(coverage.total) + ' sources responded';
+        return verdict.toUpperCase() + ' \u00b7 ' + scoreText + ' \u00b7 ' + coverageText;
+    }
+
     function renderEvidenceCard(evidence, verdictSource) {
         var sourceLabel = verdictSourceLabel(verdictSource);
         if (!evidence || typeof evidence !== 'object' || !sourceLabel || verdictSource.tool !== 'investigate_ioc') return;
         var messages = document.getElementById('chatMessages');
         if (!messages) return;
-        var isThai = evidence.lang === 'th';
+        var isThai = evidenceLanguage(evidence) === 'th';
         var labels = isThai
             ? { flagged: 'พบ', clean: 'ไม่พบ', unavailable: 'ไม่ตอบ', missing: 'ไม่มีข้อมูล' }
             : { flagged: 'Flagged', clean: 'Not found', unavailable: 'Unavailable', missing: 'No data' };
@@ -3299,11 +3383,16 @@ var AgentChat = (function() {
         title.textContent = isThai ? 'หลักฐานจาก scoring engine' : 'Scoring engine evidence';
         card.appendChild(title);
 
-        var summary = document.createElement('div');
-        summary.className = 'evidence-summary';
-        summary.textContent = String(evidence.verdict || '') + ' · ' +
-            String(evidence.threat_score) + '/100';
-        card.appendChild(summary);
+        var evidenceScore = typeof evidence.threat_score === 'boolean' || evidence.threat_score === null ||
+            evidence.threat_score === undefined || evidence.threat_score === ''
+            ? NaN
+            : Number(evidence.threat_score);
+        if (Number.isFinite(evidenceScore)) {
+            var summary = document.createElement('div');
+            summary.className = 'evidence-summary';
+            summary.textContent = String(evidence.verdict || '') + ' · ' + Number(evidenceScore) + '/100';
+            card.appendChild(summary);
+        }
 
         var provenance = document.createElement('div');
         provenance.className = 'evidence-section-title';
@@ -3349,29 +3438,26 @@ var AgentChat = (function() {
         });
         card.appendChild(sourceRows);
 
-        var unavailableCount = scoringSources.filter(function(source) {
-            return source && source.state === 'unavailable';
-        }).length;
+        var scoringCoverage = getScoringCoverage(evidence);
+        var unavailableCount = scoringCoverage.unavailable;
         if (unavailableCount > 0) {
             var warning = document.createElement('div');
             warning.className = 'evidence-warning';
             warning.textContent = isThai
-                ? 'แหล่งตัดสิน ' + unavailableCount + ' จาก 6 แหล่งไม่ตอบ ผล ' +
+                ? 'แหล่งตัดสิน ' + Number(unavailableCount) + ' จาก 6 แหล่งไม่ตอบ ผล ' +
                     String(evidence.verdict || '') + ' นี้มี coverage ลดลง'
-                : unavailableCount + ' of 6 scoring sources did not respond; this ' +
+                : Number(unavailableCount) + ' of 6 scoring sources did not respond; this ' +
                     String(evidence.verdict || '').toUpperCase() + ' result has reduced coverage.';
             card.appendChild(warning);
         }
 
-        var missingCount = scoringSources.filter(function(source) {
-            return source && source.state === 'missing';
-        }).length;
+        var missingCount = scoringCoverage.missing;
         if (missingCount > 0) {
             var coverageNotice = document.createElement('div');
             coverageNotice.className = 'evidence-warning';
             coverageNotice.textContent = isThai
-                ? missingCount + ' จาก 6 แหล่งตัดสินไม่ครอบคลุม IOC ประเภทนี้'
-                : missingCount + ' of 6 scoring sources do not cover this IOC type.';
+                ? Number(missingCount) + ' จาก 6 แหล่งตัดสินไม่ครอบคลุม IOC ประเภทนี้'
+                : Number(missingCount) + ' of 6 scoring sources do not cover this IOC type.';
             card.appendChild(coverageNotice);
         }
 
@@ -3408,7 +3494,88 @@ var AgentChat = (function() {
         scrollToBottom();
     }
 
+    function refetchCompletedSession(requestedSessionId, attempt) {
+        if (!requestedSessionId || String(requestedSessionId) !== String(sessionId)) return;
+        fetch('/api/agent/sessions/' + encodeURIComponent(requestedSessionId))
+            .then(function(response) {
+                if (!response.ok) throw new Error('Session refresh failed (HTTP ' + response.status + ')');
+                return response.json();
+            })
+            .then(function(data) {
+                if (String(requestedSessionId) !== String(sessionId)) return;
+                setExportHtmlAvailability(data.has_report === true);
+                var suggestions = Array.isArray(data.suggestions) ? data.suggestions : [];
+                if (data.status === 'completed' && suggestions.length > 0) {
+                    renderFollowUpSuggestions(suggestions);
+                    return;
+                }
+                if (attempt < 1) {
+                    window.setTimeout(function() {
+                        refetchCompletedSession(requestedSessionId, attempt + 1);
+                    }, 1000);
+                }
+            })
+            .catch(function(error) {
+                console.warn('Could not refresh completed session suggestions.', error);
+                if (attempt < 1) {
+                    window.setTimeout(function() {
+                        refetchCompletedSession(requestedSessionId, attempt + 1);
+                    }, 1000);
+                }
+            });
+    }
+
+    function renderFollowUpSuggestions(suggestions) {
+        var messages = document.getElementById('chatMessages');
+        if (!messages) return;
+        messages.querySelectorAll('.agent-follow-up').forEach(function(node) { node.remove(); });
+        if (!Array.isArray(suggestions) || !suggestions.length) return;
+
+        var section = document.createElement('section');
+        section.className = 'agent-follow-up';
+        var title = document.createElement('div');
+        title.className = 'agent-follow-up-title';
+        title.textContent = 'ก้าวถัดไป';
+        section.appendChild(title);
+        var chips = document.createElement('div');
+        chips.className = 'agent-follow-up-chips';
+
+        suggestions.forEach(function(suggestion) {
+            if (!suggestion || typeof suggestion.message !== 'string' || typeof suggestion.label !== 'string') return;
+            if (suggestion.kind !== 'prefill' && suggestion.kind !== 'investigate') return;
+            var button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'agent-follow-up-chip';
+            button.textContent = suggestion.kind === 'prefill' ? suggestion.label : suggestion.message;
+            button.setAttribute('aria-label', suggestion.kind === 'prefill' ? suggestion.label : suggestion.message);
+            button.addEventListener('click', function() {
+                var input = document.getElementById('chatInput');
+                if (!input) return;
+                input.value = suggestion.message;
+                if (suggestion.kind === 'investigate') {
+                    send();
+                    return;
+                }
+                input.focus();
+                input.setSelectionRange(input.value.length, input.value.length);
+            });
+            chips.appendChild(button);
+        });
+
+        if (chips.childElementCount) {
+            section.appendChild(chips);
+            messages.appendChild(section);
+            scrollToBottom();
+        }
+    }
+
+    function visibleAgentAnswer(text) {
+        return String(text == null ? '' : text).replace(/^[ \t]*VERDICT\s*:[^\r\n]*(?:\r?\n|$)/gim, '');
+    }
+
     function addBubble(text, type, trustedHtml = false, verdictOverride = null, verdictSource = null) {
+        var evidence = arguments.length > 5 ? arguments[5] : null;
+        var goal = arguments.length > 6 ? arguments[6] : null;
         var msgs = document.getElementById('chatMessages');
         removeEmptyState();
         var div = document.createElement('div');
@@ -3419,12 +3586,23 @@ var AgentChat = (function() {
             div.className = 'chat-bubble chat-bubble-agent';
             var safeSource = normalizeVerdictSource(verdictSource);
             var verdict = safeSource ? normalizeVerdict(verdictOverride) : null;
+            var visibleAnswer = visibleAgentAnswer(text);
             var verdictHtml = '';
             if (verdict) {
                 var vIcon = verdict === 'malicious' ? 'bi-exclamation-triangle-fill' : verdict === 'suspicious' ? 'bi-exclamation-circle-fill' : verdict === 'unknown' ? 'bi-question-circle-fill' : 'bi-check-circle-fill';
                 verdictHtml = '<div style="margin-bottom:0.4rem;"><span class="verdict-badge verdict-' + verdict + '"><i class="bi ' + vIcon + '"></i> ' + verdict.toUpperCase() + '</span> <small class="text-muted">Source: ' + esc(verdictSourceLabel(safeSource)) + '</small></div>';
             }
-            div.innerHTML = '<div class="bubble-label">Agent</div>' + verdictHtml + '<div class="agent-content">' + renderMarkdown(text) + '</div>';
+            div.innerHTML = '<div class="bubble-label">Agent</div>' + verdictHtml + '<div class="agent-content">' + renderMarkdown(visibleAnswer) + '</div>';
+            if (evidence && verdict && safeSource && safeSource.tool === 'investigate_ioc') {
+                var scoreSummary = scoringSummaryText(evidence, evidenceLanguage(evidence, goal));
+                if (scoreSummary) {
+                    var scoreLine = document.createElement('div');
+                    scoreLine.className = 'evidence-summary';
+                    scoreLine.textContent = scoreSummary;
+                    var answerContent = div.querySelector('.agent-content');
+                    if (answerContent) div.insertBefore(scoreLine, answerContent);
+                }
+            }
         } else {
             div.className = 'chat-bubble chat-bubble-system';
             if (trustedHtml) div.innerHTML = text || '';
@@ -3433,14 +3611,19 @@ var AgentChat = (function() {
         msgs.appendChild(div);
     }
 
+    function clearPhaseIndicators() {
+        var msgs = document.getElementById('chatMessages');
+        if (!msgs) return;
+        msgs.querySelectorAll('.phase-indicator').forEach(function(indicator) {
+            var card = indicator.closest('.chat-bubble-agent');
+            if (card) card.remove();
+        });
+    }
+
     function addPhaseIndicator(phase, text) {
         var msgs = document.getElementById('chatMessages');
         removeEmptyState();
-        // Remove last phase indicator to prevent clutter
-        var lastChild = msgs.lastElementChild;
-        if (lastChild && lastChild.querySelector('.phase-indicator')) {
-            msgs.removeChild(lastChild);
-        }
+        clearPhaseIndicators();
         var div = document.createElement('div');
         div.className = 'chat-bubble chat-bubble-agent';
         div.style.cssText = 'padding:0.5rem 0.75rem;max-width:60%;';
@@ -3464,10 +3647,8 @@ var AgentChat = (function() {
             try { argsStr = typeof args === 'string' ? args : JSON.stringify(args, null, 2); } catch(e) { argsStr = String(args); }
         }
 
-        var stepLabel = '<span style="font-size:0.65rem;color:var(--text-muted);margin-left:0.4rem;">Step ' + currentStep + '/' + maxSteps + '</span>';
-
         var html = '<div class="tool-call-block"><div class="tool-call-header" onclick="document.getElementById(\'' + blockId + '\').classList.toggle(\'show\')">';
-        html += '<div class="d-flex align-items-center gap-2">' + toolIdentityHtml(name || 'tool', source) + stepLabel + '</div>';
+        html += '<div class="d-flex align-items-center gap-2">' + toolIdentityHtml(name || 'tool', source) + '</div>';
         html += '<div class="tool-status d-flex align-items-center gap-2"><div class="lti-spinner" style="width:10px;height:10px;border-width:1.5px;"></div><i class="bi bi-chevron-down" style="font-size:0.65rem;"></i></div>';
         html += '</div>';
         if (argsStr) {
@@ -3475,6 +3656,13 @@ var AgentChat = (function() {
         }
         html += '</div>';
         div.innerHTML = html;
+        var toolHeader = div.querySelector('.tool-call-header .d-flex');
+        if (toolHeader) {
+            var stepLabel = document.createElement('span');
+            stepLabel.style.cssText = 'font-size:0.65rem;color:var(--text-muted);margin-left:0.4rem;';
+            stepLabel.textContent = formatStepLabel(currentStep, null);
+            toolHeader.appendChild(stepLabel);
+        }
         div.setAttribute('data-tool-block-id', blockId);
         msgs.appendChild(div);
         investigationData.tools_used.push(name || 'unknown');
@@ -3490,7 +3678,9 @@ var AgentChat = (function() {
         div.className = 'chat-bubble chat-bubble-agent';
         div.style.cssText = 'padding:0.4rem 0.6rem;max-width:92%;';
 
-        var previewText = preview || '';
+        var previewText = preview;
+        var hasPreview = previewText !== null && previewText !== undefined &&
+            (typeof previewText !== 'string' || previewText.trim().length > 0);
 
         var durationHtml = duration ? '<span class="trc-duration"><i class="bi bi-clock" style="font-size:0.6rem;"></i> ' + esc(String(duration)) + '</span>' : '';
 
@@ -3511,13 +3701,14 @@ var AgentChat = (function() {
         html += '</div>';
         html += '<div id="' + blockId + '" class="tool-result-card-body">';
         html += richContent;
-        html += '<details style="margin-top:0.4rem;"><summary style="font-size:0.68rem;color:var(--text-muted);cursor:pointer;">Visible output</summary>';
-        var visibleOutput = previewText &&
-            (typeof previewText === 'object' || String(previewText).trim())
-            ? (typeof previewText === 'object' ? JSON.stringify(previewText, null, 2) : String(previewText))
-            : 'No output is available under this view\'s visibility policy.';
-        html += '<pre id="' + blockId + '-raw" style="margin-top:0.3rem;font-size:0.72rem;max-height:200px;overflow-y:auto;background:var(--code-bg);padding:0.4rem;border-radius:4px;">' + esc(visibleOutput) + '</pre>';
-        html += '</details>';
+        if (hasPreview) {
+            html += '<details style="margin-top:0.4rem;"><summary style="font-size:0.68rem;color:var(--text-muted);cursor:pointer;">Visible output</summary>';
+            var visibleOutput = typeof previewText === 'object'
+                ? JSON.stringify(previewText, null, 2)
+                : String(previewText);
+            html += '<pre id="' + blockId + '-raw" style="margin-top:0.3rem;font-size:0.72rem;max-height:200px;overflow-y:auto;background:var(--code-bg);padding:0.4rem;border-radius:4px;">' + esc(visibleOutput) + '</pre>';
+            html += '</details>';
+        }
         html += '</div>';
         html += '</div>';
         div.innerHTML = html;
@@ -3548,14 +3739,18 @@ var AgentChat = (function() {
         var seenMcp = {};
         investigationData.mcp_tools.forEach(function(t) { if (!seenMcp[t]) { seenMcp[t] = true; uniqueMcp.push(t); } });
         var localCount = uniqueTools.length - uniqueMcp.length;
+        var eventSteps = toNonnegativeInteger(msg.steps);
+        var summarySteps = eventSteps === null ? toNonnegativeInteger(currentStep) : eventSteps;
+        if (summarySteps === null) summarySteps = 0;
 
         html += '<div class="summary-stats">';
-        html += '<div class="summary-stat"><div class="stat-value text-accent">' + currentStep + '</div><div class="stat-label">Steps</div></div>';
+        html += '<div class="summary-stat"><div class="stat-value text-accent">' + summarySteps + '</div><div class="stat-label">Steps</div></div>';
         html += '<div class="summary-stat"><div class="stat-value text-info">' + uniqueTools.length + '</div><div class="stat-label">Tools Used</div></div>';
         html += '<div class="summary-stat"><div class="stat-value" style="color:#22c55e;">' + (localCount > 0 ? localCount : 0) + '</div><div class="stat-label">Local Tools</div></div>';
         html += '<div class="summary-stat"><div class="stat-value" style="color:#38bdf8;">' + uniqueMcp.length + '</div><div class="stat-label">MCP Tools</div></div>';
         html += '<div class="summary-stat"><div class="stat-value text-warning">' + elapsedStr + '</div><div class="stat-label">Duration</div></div>';
-        var findingsCount = typeof msg.findings_count === 'number' ? msg.findings_count : '-';
+        var findingsCount = toNonnegativeInteger(msg.findings_count);
+        if (findingsCount === null) findingsCount = '-';
         html += '<div class="summary-stat"><div class="stat-value text-success">' + findingsCount + '</div><div class="stat-label">Findings</div></div>';
         html += '</div>';
 
@@ -3571,6 +3766,22 @@ var AgentChat = (function() {
 
         div.innerHTML = html;
         msgs.appendChild(div);
+    }
+
+    function toNonnegativeInteger(value) {
+        if (typeof value === 'boolean' || value === null || value === undefined || value === '') return null;
+        var numericValue = Number(value);
+        return Number.isFinite(numericValue) && Number.isInteger(numericValue) && numericValue >= 0
+            ? numericValue
+            : null;
+    }
+
+    function formatStepLabel(value, goal) {
+        var step = toNonnegativeInteger(value);
+        if (step === null) step = 0;
+        return evidenceLanguage(null, goal) === 'th'
+            ? '\u0e02\u0e31\u0e49\u0e19\u0e17\u0e35\u0e48 ' + Number(step)
+            : 'Step ' + Number(step);
     }
 
     function showApproval(msg) {
@@ -3616,10 +3827,11 @@ var AgentChat = (function() {
     function updateProgress(step, max) {
         var bar = document.getElementById('investigationProgress');
         if (!bar) return;
-        if (max > 0) {
+        var numericStep = toNonnegativeInteger(step);
+        if (numericStep === null) numericStep = 0;
+        if (max > 0 || numericStep > 0) {
             bar.classList.remove('d-none');
-            document.getElementById('stepCounter').textContent = step + ' / ' + max;
-            document.getElementById('stepProgressBar').style.width = Math.min(100, (step / max) * 100) + '%';
+            document.getElementById('stepCounter').textContent = formatStepLabel(numericStep, null);
         } else {
             bar.classList.add('d-none');
         }

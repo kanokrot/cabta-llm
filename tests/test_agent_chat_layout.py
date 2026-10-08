@@ -157,7 +157,7 @@ def test_agent_chat_layout_preserves_required_hooks_and_adds_redesign() -> None:
     assert template.count("data.has_report === true") == 2
     assert "data.metadata.ioc_investigation_result" not in template
     assert "function addBubble(text, type, trustedHtml = false, verdictOverride = null, verdictSource = null)" in template
-    assert "else addBubble(m.content, 'agent', false, m.verdict, m.verdict_source);" in template
+    assert "else addBubble(m.content, 'agent', false, m.verdict, m.verdict_source, m.evidence, currentGoal);" in template
     assert "renderEvidenceCard(m.evidence, m.verdict_source)" in template
     assert "var restoredAgentHistory = (msg.session.history || []).filter" in template
     assert "function normalizeVerdict(value)" in template

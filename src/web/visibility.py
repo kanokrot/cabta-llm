@@ -1066,6 +1066,11 @@ def serialize_agent_session(session: Mapping[str, Any], steps: Optional[Iterable
     output = _safe_session(session)
     metadata = session.get("metadata")
     output["session_type"] = "playbook" if _as_dict(metadata).get("kind") == "playbook" else "agent"
+    output["suggestions"] = []
+    if output["session_type"] == "agent" and session.get("status") == "completed":
+        from ..agent.follow_up_suggestions import build_follow_up_suggestions
+
+        output["suggestions"] = build_follow_up_suggestions(session.get("findings"), role)
     output["has_report"] = (
         bool(metadata.get("ioc_investigation_result"))
         if isinstance(metadata, Mapping) else False

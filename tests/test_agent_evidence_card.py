@@ -281,16 +281,18 @@ def test_evidence_renderer_uses_text_nodes_and_is_called_in_all_paths():
     renderer = template.split("function renderEvidenceCard(evidence, verdictSource)", 1)[1].split(
         "function addBubble", 1
     )[0]
+    coverage_helper = template.split("function getScoringCoverage(evidence)", 1)[1].split(
+        "function scoringSummaryText", 1
+    )[0]
 
     assert "innerHTML" not in renderer
     assert "textContent" in renderer
     assert "do not cover this IOC type" in renderer
     assert "!sourceLabel || verdictSource.tool !== 'investigate_ioc'" in renderer
-    unavailable_filter = renderer.split("var unavailableCount", 1)[1].split(
-        "if (unavailableCount", 1
-    )[0]
-    assert "source.state === 'unavailable'" in unavailable_filter
-    assert "source.state === 'missing'" not in unavailable_filter
+    assert "return source && source.state === 'unavailable';" in coverage_helper
+    assert "return source && source.state === 'missing';" in coverage_helper
+    assert "var unavailableCount = scoringCoverage.unavailable;" in renderer
+    assert "var missingCount = scoringCoverage.missing;" in renderer
     assert template.count("renderEvidenceCard(") >= 5
     assert "renderEvidenceCard(m.evidence, m.verdict_source)" in template
     assert "renderEvidenceCard(msg.evidence, msg.verdict_source)" in template
