@@ -6,7 +6,6 @@ import json
 import re
 from typing import Any, Dict, Iterable, Mapping, Optional
 
-
 SOC = "SOC Analyst Tier 1-2"
 INCIDENT_RESPONDER = "Incident Responder"
 THREAT_HUNTER = "Threat Hunter"
@@ -655,6 +654,30 @@ def _safe_result(
     return output
 
 
+def _safe_agent_tool_result(value: Any, role: str) -> Optional[dict[str, Any]]:
+    """Expose only the existing report-safe projection of structured tool results."""
+    if not isinstance(value, Mapping):
+        return None
+    safe = _safe_result(value, detailed=role == ADMIN)
+    if not safe:
+        return None
+    try:
+        encoded = json.dumps(safe, ensure_ascii=False, separators=(",", ":"))
+    except (TypeError, ValueError, UnicodeEncodeError):
+        return None
+    if len(encoded) <= 12000:
+        return safe
+
+    compact: dict[str, Any] = {}
+    for key in ("ioc", "ioc_type", "verdict", "threat_score", "summary", "executive_summary", "confidence"):
+        item = safe.get(key)
+        if isinstance(item, str):
+            compact[key] = item[:1000]
+        elif isinstance(item, (int, float, bool)):
+            compact[key] = item
+    return compact or {"notice": "Output omitted because it exceeds the display limit."}
+
+
 def serialize_analysis_job(job: Dict[str, Any], role: str = SOC, flow: str = "analysis") -> Dict[str, Any]:
     """Serialize an analysis job using the role/flow allowlist."""
     authorize_flow(role, flow)
@@ -876,12 +899,23 @@ def serialize_agent_step(step: Mapping[str, Any], role: str = THREAT_HUNTER) -> 
         if key in step and isinstance(step[key], (str, int, float, bool)):
             output[key] = step[key]
     if "content" in step:
-        output["summary"] = _text(step.get("content"), 2000)
+        if step.get("step_type") == "final_answer":
+            output["summary"] = _text(_agent_history_content(step), 2000)
+            verdict = _agent_history_verdict(step)
+            source = _agent_history_verdict_source(step)
+            if verdict is not None and source is not None:
+                output["verdict"] = verdict
+                output["verdict_source"] = source
+                evidence = _agent_history_evidence(step)
+                if evidence is not None:
+                    output["evidence"] = evidence
+        else:
+            output["summary"] = _text(step.get("content"), 2000)
     return {key: value for key, value in output.items() if value is not None}
 
 
-def _agent_history_content(step: Mapping[str, Any]) -> Optional[str]:
-    raw_content = _text(step.get("content"), 4000)
+def _agent_history_content(step: Mapping[str, Any], goal: str = "") -> Optional[str]:
+    raw_content = _text(step.get("content"), 100000)
     if raw_content is None:
         return None
     if step.get("step_type") != "final_answer":
@@ -889,16 +923,38 @@ def _agent_history_content(step: Mapping[str, Any]) -> Optional[str]:
     try:
         decision = json.loads(raw_content)
     except (TypeError, json.JSONDecodeError):
-        return raw_content
+        return _sanitize_legacy_unscored_answer(raw_content, goal)
     if isinstance(decision, Mapping):
-        return _text(decision.get("answer"), 4000)
-    return raw_content
+        answer = _text(decision.get("answer"), 4000)
+        if answer is not None and serialize_verdict_source(decision.get("verdict_source")) is None:
+            return _sanitize_legacy_unscored_answer(answer, goal)
+        return answer
+    return _sanitize_legacy_unscored_answer(raw_content, goal)
+
+
+def _sanitize_legacy_unscored_answer(answer: str, goal: str) -> str:
+    """Hide legacy LLM-authored verdict labels when stored provenance is absent."""
+    answer = re.sub(
+        r"\bVerdict\s*:\s*(?:MALICIOUS|SUSPICIOUS|CLEAN|UNKNOWN)\b",
+        "",
+        answer,
+        flags=re.IGNORECASE,
+    )
+    answer = re.sub(r"\n[ \t]*\n(?:[ \t]*\n)+", "\n\n", answer).strip()
+    is_thai = isinstance(goal, str) and any("\u0e00" <= char <= "\u0e7f" for char in goal)
+    notice = (
+        "ไม่มีผลประเมินจาก scoring engine — ข้อความนี้เป็นสรุปของ LLM ไม่ใช่ verdict"
+        if is_thai else "No scoring-engine result — this is an LLM summary, not a verdict."
+    )
+    if notice in answer:
+        return answer
+    return f"{answer}\n\n{notice}" if answer else notice
 
 
 def _agent_history_verdict(step: Mapping[str, Any]) -> Optional[str]:
     if step.get("step_type") != "final_answer":
         return None
-    raw_content = _text(step.get("content"), 4000)
+    raw_content = _text(step.get("content"), 100000)
     if raw_content is None:
         return None
     try:
@@ -907,6 +963,8 @@ def _agent_history_verdict(step: Mapping[str, Any]) -> Optional[str]:
         return None
     if not isinstance(decision, Mapping):
         return None
+    if serialize_verdict_source(decision.get("verdict_source")) is None:
+        return None
     verdict = decision.get("verdict")
     if not isinstance(verdict, str):
         return None
@@ -914,6 +972,37 @@ def _agent_history_verdict(step: Mapping[str, Any]) -> Optional[str]:
     if normalized in {"MALICIOUS", "SUSPICIOUS", "CLEAN", "UNKNOWN"}:
         return normalized
     return None
+
+
+def serialize_verdict_source(value: Any) -> Optional[dict[str, Any]]:
+    """Allow provenance only for recognized scoring tools and valid step indexes."""
+    if not isinstance(value, Mapping):
+        return None
+    tool = value.get("tool")
+    step = value.get("step")
+    if (
+        tool not in {"investigate_ioc", "analyze_malware", "analyze_email"}
+        or isinstance(step, bool)
+        or not isinstance(step, int)
+        or step < 0
+    ):
+        return None
+    return {"tool": tool, "step": step}
+
+
+def _agent_history_verdict_source(step: Mapping[str, Any]) -> Optional[dict[str, Any]]:
+    if step.get("step_type") != "final_answer":
+        return None
+    raw_content = _text(step.get("content"), 100000)
+    if raw_content is None:
+        return None
+    try:
+        decision = json.loads(raw_content)
+    except (TypeError, json.JSONDecodeError):
+        return None
+    if not isinstance(decision, Mapping):
+        return None
+    return serialize_verdict_source(decision.get("verdict_source"))
 
 
 def _agent_history_evidence(step: Mapping[str, Any]) -> Optional[dict[str, Any]]:
@@ -928,7 +1017,47 @@ def _agent_history_evidence(step: Mapping[str, Any]) -> Optional[dict[str, Any]]
         return None
     if not isinstance(decision, Mapping):
         return None
+    source = serialize_verdict_source(decision.get("verdict_source"))
+    if source is None or source["tool"] != "investigate_ioc":
+        return None
     return _safe_evidence(decision.get("evidence"))
+
+
+def _legacy_scored_decision(
+    findings: Any, goal: str, answer: Any,
+) -> Optional[dict[str, Any]]:
+    """Rebuild a legacy completed answer only from complete scoring findings."""
+    if isinstance(findings, str):
+        try:
+            findings = json.loads(findings)
+        except (TypeError, json.JSONDecodeError):
+            return None
+    if not isinstance(findings, list):
+        return None
+    from ..agent.agent_response_parsing import (
+        build_evidence_card,
+        extract_deterministic_verdict,
+        extract_deterministic_verdict_source,
+    )
+
+    source = extract_deterministic_verdict_source(findings)
+    verdict = extract_deterministic_verdict(findings)
+    # Both helpers require an allowlisted scoring tool, result verdict, and a
+    # valid persisted step index. Summary text is used only as display content.
+    if source is None or verdict is None:
+        return None
+    decision = {"answer": _text(answer, 4000) or "", "verdict": verdict,
+                "verdict_source": source}
+    evidence = build_evidence_card(findings, goal)
+    if evidence is not None:
+        decision["evidence"] = evidence
+    return decision
+
+
+def _missing_saved_answer_notice(goal: Any) -> str:
+    if isinstance(goal, str) and any("\u0e00" <= char <= "\u0e7f" for char in goal):
+        return "เซสชันนี้เสร็จสิ้นก่อนบันทึกคำตอบ"
+    return "This session completed before an answer was saved."
 
 
 def serialize_agent_session(session: Mapping[str, Any], steps: Optional[Iterable[Mapping[str, Any]]] = None,
@@ -943,6 +1072,7 @@ def serialize_agent_session(session: Mapping[str, Any], steps: Optional[Iterable
     )
     history = []
     goal = _text(session.get("goal"), 4000)
+    has_verdict_source = False
     if goal:
         history.append({"role": "user", "content": goal})
     if steps is not None:
@@ -956,17 +1086,56 @@ def serialize_agent_session(session: Mapping[str, Any], steps: Optional[Iterable
         for step in ordered_steps:
             if step.get("step_type") not in {"final_answer", "error"}:
                 continue
-            content = _agent_history_content(step)
+            if _agent_history_verdict_source(step) is not None and _agent_history_verdict(step) is not None:
+                has_verdict_source = True
+            content = _agent_history_content(step, goal or "")
             if content is not None:
                 history_item = {"role": "agent", "content": content}
                 verdict = _agent_history_verdict(step)
                 if verdict is not None:
                     history_item["verdict"] = verdict
+                    source = _agent_history_verdict_source(step)
+                    if source is not None:
+                        history_item["verdict_source"] = source
                 evidence = _agent_history_evidence(step)
                 if evidence is not None:
                     history_item["evidence"] = evidence
                 history.append(history_item)
     output["history"] = history
+    has_final_answer = bool(
+        steps is not None
+        and any(
+            isinstance(step, Mapping) and step.get("step_type") == "final_answer"
+            for step in raw_steps
+        )
+    )
+    if (
+        output["session_type"] == "agent"
+        and session.get("status") == "completed"
+        and not has_final_answer
+    ):
+        recovered = _legacy_scored_decision(
+            session.get("findings"), goal or "", session.get("summary"),
+        )
+        if recovered is not None:
+            history.append({
+                "role": "agent",
+                "content": recovered["answer"],
+                "verdict": recovered["verdict"],
+                "verdict_source": recovered["verdict_source"],
+                **({"evidence": recovered["evidence"]} if "evidence" in recovered else {}),
+            })
+            has_verdict_source = True
+        else:
+            notice = _missing_saved_answer_notice(goal)
+            history.append({"role": "agent", "content": notice})
+            output["summary"] = notice
+    if (
+        not has_verdict_source
+        and isinstance(output.get("summary"), str)
+        and (has_final_answer or session.get("status") != "completed")
+    ):
+        output["summary"] = _sanitize_legacy_unscored_answer(output["summary"], goal or "")
     if isinstance(live_state, Mapping):
         output["live_state"] = {
             key: live_state[key] for key in ("phase", "step_count", "max_steps", "current_tool")
@@ -1336,9 +1505,21 @@ def serialize_websocket_frame(frame: Mapping[str, Any], *, role: str, flow: str)
             output = {"type": frame_type}
             if frame_type == "completed":
                 output["summary"] = _text(frame.get("summary"), 4000) or ""
+                verdict_source = serialize_verdict_source(frame.get("verdict_source"))
+                findings_count = frame.get("findings_count")
+                if isinstance(findings_count, int) and not isinstance(findings_count, bool) and findings_count >= 0:
+                    output["findings_count"] = findings_count
                 verdict = frame.get("verdict")
-                output["verdict"] = _text(verdict, 32) if isinstance(verdict, str) else None
-                evidence = _safe_evidence(frame.get("evidence"))
+                if verdict_source is not None:
+                    normalized_verdict = verdict.strip().upper() if isinstance(verdict, str) else ""
+                    if normalized_verdict in {"MALICIOUS", "SUSPICIOUS", "CLEAN", "UNKNOWN"}:
+                        output["verdict"] = normalized_verdict
+                        output["verdict_source"] = verdict_source
+                evidence = (
+                    _safe_evidence(frame.get("evidence"))
+                    if verdict_source is not None and verdict_source["tool"] == "investigate_ioc"
+                    else None
+                )
                 if evidence is not None:
                     output["evidence"] = evidence
             elif frame_type == "failed":
@@ -1354,6 +1535,10 @@ def serialize_websocket_frame(frame: Mapping[str, Any], *, role: str, flow: str)
                     output[key] = frame[key][:200]
             if frame_type == "step" and isinstance(frame.get("step"), Mapping):
                 output["step"] = serialize_agent_step(frame["step"], role=role)
+            if frame_type == "tool_result":
+                safe_result = _safe_agent_tool_result(frame.get("result"), role)
+                if safe_result is not None:
+                    output["result"] = safe_result
             if frame_type == "approval_required":
                 description = frame.get("description")
                 if isinstance(description, str):

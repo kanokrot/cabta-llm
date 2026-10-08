@@ -200,12 +200,14 @@ def test_evidence_flows_through_agent_visibility_and_final_answer_history():
     card = build_evidence_card([_finding()], "goal")
     assert card is not None
     completed = serialize_websocket_frame(
-        {"type": "completed", "summary": "done", "verdict": "CLEAN", "evidence": card},
+        {"type": "completed", "summary": "done", "verdict": "CLEAN",
+         "verdict_source": {"tool": "investigate_ioc", "step": 0}, "evidence": card},
         role="admin",
         flow="websocket_agent",
     )
     without_evidence = serialize_websocket_frame(
-        {"type": "completed", "summary": "done", "verdict": "CLEAN"},
+        {"type": "completed", "summary": "done", "verdict": "CLEAN",
+         "verdict_source": {"tool": "investigate_ioc", "step": 0}},
         role="admin",
         flow="websocket_agent",
     )
@@ -222,6 +224,7 @@ def test_evidence_flows_through_agent_visibility_and_final_answer_history():
             "content": json.dumps({
                 "answer": "done",
                 "verdict": "CLEAN",
+                "verdict_source": {"tool": "investigate_ioc", "step": 0},
                 "evidence": card,
             }),
         }],
@@ -245,6 +248,7 @@ def test_history_keeps_evidence_when_final_answer_content_exceeds_4000_chars():
             "content": json.dumps({
                 "answer": "long answer " * 500,
                 "verdict": "CLEAN",
+                "verdict_source": {"tool": "investigate_ioc", "step": 0},
                 "evidence": card,
             }),
         }],
@@ -261,7 +265,11 @@ def test_replayed_agent_evidence_comes_from_final_answer_step():
         {"step_type": "tool_call", "content": json.dumps({"evidence": {"bad": True}})},
         {
             "step_type": "final_answer",
-            "content": json.dumps({"action": "final_answer", "evidence": card}),
+            "content": json.dumps({
+                "action": "final_answer", "verdict": "CLEAN",
+                "verdict_source": {"tool": "investigate_ioc", "step": 0},
+                "evidence": card,
+            }),
         },
     ]
     assert _stored_agent_evidence(steps) == card
@@ -270,19 +278,19 @@ def test_replayed_agent_evidence_comes_from_final_answer_step():
 
 def test_evidence_renderer_uses_text_nodes_and_is_called_in_all_paths():
     template = Path("templates/agent_chat.html").read_text(encoding="utf-8")
-    renderer = template.split("function renderEvidenceCard(evidence)", 1)[1].split(
+    renderer = template.split("function renderEvidenceCard(evidence, verdictSource)", 1)[1].split(
         "function addBubble", 1
     )[0]
 
     assert "innerHTML" not in renderer
     assert "textContent" in renderer
     assert "do not cover this IOC type" in renderer
-    assert "ไม่ครอบคลุม IOC ประเภทนี้" in renderer
+    assert "!sourceLabel || verdictSource.tool !== 'investigate_ioc'" in renderer
     unavailable_filter = renderer.split("var unavailableCount", 1)[1].split(
         "if (unavailableCount", 1
     )[0]
     assert "source.state === 'unavailable'" in unavailable_filter
     assert "source.state === 'missing'" not in unavailable_filter
-    assert template.count("renderEvidenceCard(") == 4
-    assert "renderEvidenceCard(m.evidence)" in template
-    assert "renderEvidenceCard(msg.evidence)" in template
+    assert template.count("renderEvidenceCard(") >= 5
+    assert "renderEvidenceCard(m.evidence, m.verdict_source)" in template
+    assert "renderEvidenceCard(msg.evidence, msg.verdict_source)" in template

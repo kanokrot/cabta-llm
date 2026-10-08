@@ -10,8 +10,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from ..auth import get_current_user, require_role
-from ..chat_intents import build_instant_reply, classify_intent
+from ..auth import get_current_user
+from ..chat_intents import route_chat_message
 from ..visibility import (
     serialize_agent_session,
     serialize_agent_stats,
@@ -24,9 +24,32 @@ from ..visibility import (
 )
 
 logger = logging.getLogger(__name__)
-router = APIRouter(
-    dependencies=[Depends(require_role(["Threat Hunter", "admin"]))]
-)
+
+
+async def _require_agent_access(
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+) -> None:
+    """Allow non-investigative instant replies; retain the agent RBAC gate."""
+    path = request.url.path.rstrip("/")
+    if request.method == "POST" and path.endswith("/investigate"):
+        # These roles may reach the handler's intent gate. Only Threat Hunters
+        # and admins may start an investigation after that gate.
+        if current_user.get("role") in {"Incident Responder", "Threat Hunter", "admin"}:
+            return
+    elif current_user.get("role") in {"Threat Hunter", "admin"}:
+        return
+    role = current_user.get("role", "Your role")
+    if role == "Incident Responder":
+        detail = "Incident Responders can use greeting and help replies and run approved playbooks. Starting an agent investigation requires the Threat Hunter role or administrator access."
+    elif role == "SOC Analyst Tier 1-2":
+        detail = "SOC Analyst Tier 1-2 can use greeting and help replies, but agent investigations require the Threat Hunter role or administrator access."
+    else:
+        detail = f"{role} cannot access agent investigations. Ask an administrator for access."
+    raise HTTPException(status_code=403, detail=detail)
+
+
+router = APIRouter(dependencies=[Depends(_require_agent_access)])
 
 
 def _owner_scope(current_user: dict) -> Optional[int]:
@@ -38,6 +61,7 @@ class InvestigateRequest(BaseModel):
     case_id: Optional[str] = None
     playbook_id: Optional[str] = None
     max_steps: Optional[int] = Field(None, ge=1, le=500, description="Maximum investigation steps")
+    history: List[Dict[str, str]] = Field(default_factory=list)
 
 
 class ApprovalRequest(BaseModel):
@@ -67,12 +91,29 @@ async def start_investigation(
     current_user: dict = Depends(get_current_user),
 ):
     """Start a new agent investigation."""
-    if body.playbook_id is None and body.case_id is None:
-        intent = classify_intent(body.goal, allow_need_ioc=True)
-        if intent:
-            return build_instant_reply(intent, body.goal)
+    role = current_user.get("role")
+    if role not in {"Incident Responder", "Threat Hunter", "admin"}:
+        raise HTTPException(
+            status_code=403,
+            detail=f"{role or 'Your role'} cannot access agent investigations.",
+        )
+
+    # Case/playbook sessions are explicit workflows and retain their direct
+    # dispatch behavior without asking the conversational intent gate.
+    if not body.case_id and not body.playbook_id:
+        agent_loop = _require_agent_loop(request)
+        instant = await route_chat_message(agent_loop, body.goal, body.history)
+        if instant is not None:
+            return instant
+
+    if role not in {"Threat Hunter", "admin"}:
+        raise HTTPException(
+            status_code=403,
+            detail="Starting an agent investigation requires the Threat Hunter role or administrator access.",
+        )
 
     agent_loop = _require_agent_loop(request)
+
     session_id = await agent_loop.investigate(
         body.goal,
         body.case_id,

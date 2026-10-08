@@ -177,6 +177,7 @@
     }
     .evidence-extra-row {
         overflow-wrap: anywhere;
+        color: var(--text-primary);
     }
     #sessionViewAllButton {
         flex: 0 0 auto;
@@ -1618,6 +1619,7 @@ var AgentChat = (function() {
     var SESSION_FETCH_LIMIT = 50;
     var loadedSessions = [];
     var sessionsExpanded = false;
+    var sessionsPollTimer = null;
     var playbookDetailLoaded = false;
     var selectedToolCategory = '';
     var toolSearchQuery = '';
@@ -2195,6 +2197,18 @@ var AgentChat = (function() {
         return normalized.toLowerCase();
     }
 
+    function normalizeVerdictSource(source) {
+        if (!source || typeof source !== 'object') return null;
+        if (['investigate_ioc', 'analyze_malware', 'analyze_email'].indexOf(source.tool) === -1) return null;
+        if (!Number.isInteger(source.step) || source.step < 0) return null;
+        return { tool: source.tool, step: source.step };
+    }
+
+    function verdictSourceLabel(source) {
+        var safeSource = normalizeVerdictSource(source);
+        return safeSource ? safeSource.tool + ' · Step ' + (safeSource.step + 1) : '';
+    }
+
     function detectVerdict(text) {
         if (!text) return null;
         var direct = normalizeVerdict(text);
@@ -2259,6 +2273,7 @@ var AgentChat = (function() {
         initExportModal();
         initToolFilters();
         loadSessions();
+        if (!sessionsPollTimer) sessionsPollTimer = setInterval(loadSessions, 5000);
         loadTools();
         loadPlaybooks();
         checkOllamaHealth();
@@ -2648,6 +2663,34 @@ var AgentChat = (function() {
         return true;
     }
 
+    function parseApiResponse(response, fallback) {
+        if (response.ok) return response.json();
+        return response.json().catch(function() { return {}; }).then(function(data) {
+            var detail = data && (data.detail || data.message);
+            throw new Error(detail || (fallback + ' (HTTP ' + response.status + ')'));
+        });
+    }
+
+    function getRecentChatHistory() {
+        var container = document.getElementById('chatMessages');
+        if (!container) return [];
+        return Array.from(container.children).filter(function(el) {
+            return el.classList.contains('chat-bubble-user') ||
+                (el.classList.contains('chat-bubble-agent') && !el.querySelector('.phase-indicator'));
+        }).map(function(el) {
+            var copy = el.cloneNode(true);
+            copy.querySelectorAll('.bubble-label, .verdict-badge, .evidence-card').forEach(function(node) {
+                node.remove();
+            });
+            return {
+                role: el.classList.contains('chat-bubble-user') ? 'user' : 'assistant',
+                content: (copy.innerText || copy.textContent || '').trim().substring(0, 1200)
+            };
+        }).filter(function(item) {
+            return item.content;
+        }).slice(-6);
+    }
+
     function renderSessionList() {
         var list = document.getElementById('sessionList');
         var viewAllButton = document.getElementById('sessionViewAllButton');
@@ -2681,7 +2724,7 @@ var AgentChat = (function() {
             label.className = 'agent-session-label';
             label.textContent = goal;
             button.appendChild(label);
-            var status = s.status === 'active' ? 'running' : (s.status && s.status !== 'completed' ? s.status : '');
+            var status = s.status === 'active' ? 'running' : (s.status || '');
             if (status) {
                 var statusBadge = document.createElement('span');
                 statusBadge.className = 'agent-session-status' + (status === 'failed' ? ' agent-session-status-failed' : '');
@@ -2803,6 +2846,8 @@ var AgentChat = (function() {
         if (ws) ws.close();
         setConnectionStatus('Disconnected', 'bg-secondary');
         sessionId = null;
+        currentStep = 0;
+        maxSteps = 0;
         stopTimer();
         hideLiveToolIndicator();
         toolCallCounter = 0;
@@ -2824,6 +2869,12 @@ var AgentChat = (function() {
 
     function switchSession(id) {
         if (!id) { newSession(); return; }
+        if (ws) ws.close();
+        stopTimer();
+        currentStep = 0;
+        maxSteps = 0;
+        updateProgress(0, 0);
+        hideLiveToolIndicator();
         sessionId = id;
         if (playbookSessionMode) {
             loadPlaybookSession(id);
@@ -2866,8 +2917,9 @@ var AgentChat = (function() {
         var msgs = document.getElementById('chatMessages');
         while (msgs.firstChild) msgs.removeChild(msgs.firstChild);
         var steps = Array.isArray(data && data.steps) ? data.steps : [];
-        currentStep = steps.length;
-        updateProgress(currentStep, steps.length || 1);
+        currentStep = data && data.status === 'active' ? steps.length : 0;
+        maxSteps = data && data.status === 'active' ? (data.max_steps || 0) : 0;
+        updateProgress(currentStep, maxSteps);
         if (data && data.goal) addBubble(data.goal, 'user');
         if (data && data.summary) addBubble(data.summary, 'agent');
         steps.forEach(function(step) {
@@ -2931,11 +2983,17 @@ var AgentChat = (function() {
                 if (!history.length) restoreEmptyState();
                 history.forEach(function(m) {
                     if (m.role === 'user') addBubble(m.content, 'user');
-                    else addBubble(m.content, 'agent', false, m.verdict);
-                    if (m.role === 'agent') renderEvidenceCard(m.evidence);
+                    else addBubble(m.content, 'agent', false, m.verdict, m.verdict_source);
+                    if (m.role === 'agent') renderEvidenceCard(m.evidence, m.verdict_source);
                 });
-                if (data.steps) {
-                    updateProgress(data.current_step || (data.steps.length || 0), data.max_steps || 50);
+                if (data.status === 'active' && data.steps) {
+                    currentStep = data.current_step || data.steps.length || 0;
+                    maxSteps = data.max_steps || 50;
+                    updateProgress(currentStep, maxSteps);
+                } else {
+                    currentStep = 0;
+                    maxSteps = 0;
+                    updateProgress(0, 0);
                 }
                 if (data.status === 'completed') {
                     document.getElementById('exportDropdownWrap').style.display = 'inline-flex';
@@ -3009,7 +3067,9 @@ var AgentChat = (function() {
                 currentStep = msg.step || (currentStep + 1);
                 updateProgress(currentStep, maxSteps);
                 var obsDuration = stopToolTimer();
-                addToolResult(msg.tool || 'tool', msg.result_preview || msg.result || '', msg.source, obsDuration);
+                if (msg.result_preview || msg.result) {
+                    addToolResult(msg.tool || 'tool', msg.result_preview || msg.result, msg.source, obsDuration);
+                }
                 investigationData.tools_used.push(msg.tool || 'unknown');
                 if (isToolMCP(msg.tool)) investigationData.mcp_tools.push(msg.tool);
                 setCurrentTool('');
@@ -3061,13 +3121,14 @@ var AgentChat = (function() {
                     });
                     if (restoredAgentHistory.length) {
                         restoredAgentHistory.forEach(function(m) {
-                            addBubble(m.content, 'agent', false, m.verdict);
-                            renderEvidenceCard(m.evidence);
+                            addBubble(m.content, 'agent', false, m.verdict, m.verdict_source);
+                            renderEvidenceCard(m.evidence, m.verdict_source);
                         });
                     } else {
                         steps.forEach(function(s) {
                             if (s.step_type === 'final_answer') {
-                                addBubble(s.data || s.summary || 'Investigation complete.', 'agent', false, s.verdict);
+                                addBubble(s.data || s.summary || 'Investigation complete.', 'agent', false, s.verdict, s.verdict_source);
+                                renderEvidenceCard(s.evidence, s.verdict_source);
                             }
                         });
                     }
@@ -3080,10 +3141,10 @@ var AgentChat = (function() {
             case 'completed':
                 stopTimer();
                 hideLiveToolIndicator();
-                addBubble(msg.summary || 'Investigation completed.', 'agent', false, msg.verdict);
-                renderEvidenceCard(msg.evidence);
+                addBubble(msg.summary || 'Investigation completed.', 'agent', false, msg.verdict, msg.verdict_source);
+                renderEvidenceCard(msg.evidence, msg.verdict_source);
                 if (!playbookSessionMode) addInvestigationSummary(msg);
-                updateProgress(maxSteps, maxSteps);
+                updateProgress(0, 0);
                 if (!playbookSessionMode) document.getElementById('exportDropdownWrap').style.display = 'inline-flex';
                 loadSessions();
                 if (!playbookSessionMode) fetch('/api/agent/sessions/' + encodeURIComponent(sessionId))
@@ -3096,11 +3157,13 @@ var AgentChat = (function() {
             case 'failed':
                 stopTimer();
                 hideLiveToolIndicator();
+                updateProgress(0, 0);
                 addBubble('Investigation failed: ' + (msg.error || msg.summary || 'Unknown error'), 'system');
                 loadSessions(); break;
             case 'cancelled':
                 stopTimer();
                 hideLiveToolIndicator();
+                updateProgress(0, 0);
                 addBubble('Investigation cancelled.', 'system');
                 loadSessions(); break;
             case 'complete':
@@ -3119,6 +3182,7 @@ var AgentChat = (function() {
         var input = document.getElementById('chatInput');
         var text = input.value.trim();
         if (!text) return;
+        var history = getRecentChatHistory();
         input.value = '';
         addBubble(text, 'user');
         scrollToBottom();
@@ -3135,13 +3199,14 @@ var AgentChat = (function() {
                 fetch('/api/chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ message: text, playbook_id: selectedPlaybook })
+                    body: JSON.stringify({ message: text, playbook_id: selectedPlaybook, history: history })
                 })
-                .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+                .then(function(r) { return parseApiResponse(r, 'Playbook failed'); })
                 .then(function(data) {
                     if (renderInstantReply(data, btn)) return;
                     btn.disabled = false;
                     sessionId = data.session_id;
+                    currentStep = 0;
                     maxSteps = 200;
                     updateProgress(0, maxSteps);
                     addBubble('<i class="bi bi-journal-code me-1"></i>Playbook <strong>' + esc(selectedPlaybook) + '</strong> started...', 'system', true);
@@ -3161,13 +3226,14 @@ var AgentChat = (function() {
                 fetch('/api/agent/investigate', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ goal: text })
+                    body: JSON.stringify({ goal: text, history: history })
                 })
-                .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+                .then(function(r) { return parseApiResponse(r, 'Failed to start investigation'); })
                 .then(function(data) {
                     if (renderInstantReply(data, btn)) return;
                     btn.disabled = false;
                     sessionId = data.session_id;
+                    currentStep = 0;
                     maxSteps = data.max_steps || 50;
                     updateProgress(0, maxSteps);
                     addBubble('<i class="bi bi-gear-wide-connected me-1"></i>Investigation started. The agent is working autonomously...', 'system', true);
@@ -3185,15 +3251,18 @@ var AgentChat = (function() {
             fetch('/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ message: text, session_id: sessionId })
+                body: JSON.stringify({ message: text, session_id: sessionId, history: history })
             })
-            .then(function(r) { return r.json(); })
+            .then(function(r) { return parseApiResponse(r, 'Message failed'); })
             .then(function(data) {
                 btn.disabled = false;
                 if (renderInstantReply(data, btn)) return;
                 if (data.response) addBubble(data.response, 'agent', false, data.verdict);
                 if (data.status === 'processing' && data.session_id) {
                     sessionId = data.session_id;
+                    currentStep = 0;
+                    maxSteps = 0;
+                    updateProgress(0, 0);
                     connectWebSocket(sessionId);
                     loadSessions();
                 }
@@ -3213,8 +3282,9 @@ var AgentChat = (function() {
         if (emptyState) emptyState.remove();
     }
 
-    function renderEvidenceCard(evidence) {
-        if (!evidence || typeof evidence !== 'object') return;
+    function renderEvidenceCard(evidence, verdictSource) {
+        var sourceLabel = verdictSourceLabel(verdictSource);
+        if (!evidence || typeof evidence !== 'object' || !sourceLabel || verdictSource.tool !== 'investigate_ioc') return;
         var messages = document.getElementById('chatMessages');
         if (!messages) return;
         var isThai = evidence.lang === 'th';
@@ -3234,6 +3304,11 @@ var AgentChat = (function() {
         summary.textContent = String(evidence.verdict || '') + ' · ' +
             String(evidence.threat_score) + '/100';
         card.appendChild(summary);
+
+        var provenance = document.createElement('div');
+        provenance.className = 'evidence-section-title';
+        provenance.textContent = 'Source: ' + sourceLabel;
+        card.appendChild(provenance);
 
         var sectionTitle = document.createElement('div');
         sectionTitle.className = 'evidence-section-title';
@@ -3313,8 +3388,12 @@ var AgentChat = (function() {
             if (!source || typeof source !== 'object') return;
             var item = document.createElement('li');
             item.className = 'evidence-extra-row';
-            item.textContent = String(source.name || '') + ' · ' +
-                (labels[source.state] || '');
+            var sourceName = typeof source.name === 'string' && source.name.trim()
+                ? source.name.trim() : (isThai ? 'แหล่งข้อมูล' : 'Source');
+            var sourceState = labels[source.state] ||
+                (typeof source.state === 'string' && source.state.trim()
+                    ? source.state.trim() : (isThai ? 'ไม่มีข้อมูล' : 'No data'));
+            item.textContent = sourceName + ' · ' + sourceState;
             extraList.appendChild(item);
         });
         details.appendChild(extraList);
@@ -3329,7 +3408,7 @@ var AgentChat = (function() {
         scrollToBottom();
     }
 
-    function addBubble(text, type, trustedHtml = false, verdictOverride = null) {
+    function addBubble(text, type, trustedHtml = false, verdictOverride = null, verdictSource = null) {
         var msgs = document.getElementById('chatMessages');
         removeEmptyState();
         var div = document.createElement('div');
@@ -3338,11 +3417,12 @@ var AgentChat = (function() {
             div.innerHTML = '<div class="bubble-label">You</div>' + esc(text);
         } else if (type === 'agent') {
             div.className = 'chat-bubble chat-bubble-agent';
-            var verdict = normalizeVerdict(verdictOverride);
+            var safeSource = normalizeVerdictSource(verdictSource);
+            var verdict = safeSource ? normalizeVerdict(verdictOverride) : null;
             var verdictHtml = '';
             if (verdict) {
                 var vIcon = verdict === 'malicious' ? 'bi-exclamation-triangle-fill' : verdict === 'suspicious' ? 'bi-exclamation-circle-fill' : verdict === 'unknown' ? 'bi-question-circle-fill' : 'bi-check-circle-fill';
-                verdictHtml = '<div style="margin-bottom:0.4rem;"><span class="verdict-badge verdict-' + verdict + '"><i class="bi ' + vIcon + '"></i> ' + verdict.toUpperCase() + '</span></div>';
+                verdictHtml = '<div style="margin-bottom:0.4rem;"><span class="verdict-badge verdict-' + verdict + '"><i class="bi ' + vIcon + '"></i> ' + verdict.toUpperCase() + '</span> <small class="text-muted">Source: ' + esc(verdictSourceLabel(safeSource)) + '</small></div>';
             }
             div.innerHTML = '<div class="bubble-label">Agent</div>' + verdictHtml + '<div class="agent-content">' + renderMarkdown(text) + '</div>';
         } else {
@@ -3425,14 +3505,18 @@ var AgentChat = (function() {
         html += '</div>';
         html += '<div class="trc-right">';
         html += durationHtml;
-        html += '<button class="btn btn-link btn-sm p-0" style="font-size:0.65rem;color:var(--text-secondary);" onclick="event.stopPropagation();AgentChat.copyIOC(document.getElementById(\'' + blockId + '-raw\').textContent)" title="Copy raw result"><i class="bi bi-clipboard"></i></button>';
+        html += '<button class="btn btn-link btn-sm p-0" style="font-size:0.65rem;color:var(--text-secondary);" onclick="event.stopPropagation();AgentChat.copyIOC(document.getElementById(\'' + blockId + '-raw\').textContent)" title="Copy visible result"><i class="bi bi-clipboard"></i></button>';
         html += '<i class="bi bi-chevron-down" style="font-size:0.65rem;"></i>';
         html += '</div>';
         html += '</div>';
         html += '<div id="' + blockId + '" class="tool-result-card-body">';
         html += richContent;
-        html += '<details style="margin-top:0.4rem;"><summary style="font-size:0.68rem;color:var(--text-muted);cursor:pointer;">Raw output</summary>';
-        html += '<pre id="' + blockId + '-raw" style="margin-top:0.3rem;font-size:0.72rem;max-height:200px;overflow-y:auto;background:var(--code-bg);padding:0.4rem;border-radius:4px;">' + esc(typeof previewText === 'object' ? JSON.stringify(previewText, null, 2) : String(previewText)) + '</pre>';
+        html += '<details style="margin-top:0.4rem;"><summary style="font-size:0.68rem;color:var(--text-muted);cursor:pointer;">Visible output</summary>';
+        var visibleOutput = previewText &&
+            (typeof previewText === 'object' || String(previewText).trim())
+            ? (typeof previewText === 'object' ? JSON.stringify(previewText, null, 2) : String(previewText))
+            : 'No output is available under this view\'s visibility policy.';
+        html += '<pre id="' + blockId + '-raw" style="margin-top:0.3rem;font-size:0.72rem;max-height:200px;overflow-y:auto;background:var(--code-bg);padding:0.4rem;border-radius:4px;">' + esc(visibleOutput) + '</pre>';
         html += '</details>';
         html += '</div>';
         html += '</div>';
@@ -3471,7 +3555,8 @@ var AgentChat = (function() {
         html += '<div class="summary-stat"><div class="stat-value" style="color:#22c55e;">' + (localCount > 0 ? localCount : 0) + '</div><div class="stat-label">Local Tools</div></div>';
         html += '<div class="summary-stat"><div class="stat-value" style="color:#38bdf8;">' + uniqueMcp.length + '</div><div class="stat-label">MCP Tools</div></div>';
         html += '<div class="summary-stat"><div class="stat-value text-warning">' + elapsedStr + '</div><div class="stat-label">Duration</div></div>';
-        html += '<div class="summary-stat"><div class="stat-value text-success">' + (msg.findings_count || '-') + '</div><div class="stat-label">Findings</div></div>';
+        var findingsCount = typeof msg.findings_count === 'number' ? msg.findings_count : '-';
+        html += '<div class="summary-stat"><div class="stat-value text-success">' + findingsCount + '</div><div class="stat-label">Findings</div></div>';
         html += '</div>';
 
         if (uniqueTools.length > 0) {
@@ -3530,6 +3615,7 @@ var AgentChat = (function() {
 
     function updateProgress(step, max) {
         var bar = document.getElementById('investigationProgress');
+        if (!bar) return;
         if (max > 0) {
             bar.classList.remove('d-none');
             document.getElementById('stepCounter').textContent = step + ' / ' + max;

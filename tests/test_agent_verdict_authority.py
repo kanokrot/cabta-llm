@@ -96,12 +96,16 @@ def test_agent_loop_and_bubble_use_only_scored_verdict():
     root = Path(__file__).parents[1]
     agent_loop = (root / "src" / "agent" / "agent_loop.py").read_text(encoding="utf-8")
     template = (root / "templates" / "agent_chat.html").read_text(encoding="utf-8")
-    bubble = template.split("function addBubble(text, type, trustedHtml = false, verdictOverride = null)", 1)[1].split(
+    bubble = template.split("function addBubble(text, type, trustedHtml = false, verdictOverride = null, verdictSource = null)", 1)[1].split(
         "function addPhaseIndicator", 1
     )[0]
 
-    assert "verdict = extract_deterministic_verdict(state.findings)" in agent_loop
-    assert "decision['verdict'] = verdict" in agent_loop
+    assert "verdict_source = extract_deterministic_verdict_source(state.findings)" in agent_loop
+    assert "extract_deterministic_verdict(state.findings)" in agent_loop
+    assert "if verdict_source is not None else None" in agent_loop
+    assert 'final_decision["verdict"] = verdict' in agent_loop
+    assert 'final_decision["verdict_source"] = verdict_source' in agent_loop
     assert 'extract_verdict(raw)' not in agent_loop
-    assert "var verdict = normalizeVerdict(verdictOverride);" in bubble
+    assert "var safeSource = normalizeVerdictSource(verdictSource);" in bubble
+    assert "var verdict = safeSource ? normalizeVerdict(verdictOverride) : null;" in bubble
     assert "detectVerdict(text)" not in bubble

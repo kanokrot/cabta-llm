@@ -63,14 +63,17 @@ def test_agent_session_history_contains_goal_and_final_answer() -> None:
             {
                 "step_number": 2,
                 "step_type": "final_answer",
-                "content": '{"action":"final_answer","answer":"IOC is clean","verdict":"CLEAN"}',
+                "content": '{"action":"final_answer","answer":"IOC is clean","verdict":"CLEAN","verdict_source":{"tool":"investigate_ioc","step":0}}',
             },
         ],
     )
 
     assert serialized["history"] == [
         {"role": "user", "content": "Investigate 8.8.8.8"},
-        {"role": "agent", "content": "IOC is clean", "verdict": "CLEAN"},
+        {
+            "role": "agent", "content": "IOC is clean", "verdict": "CLEAN",
+            "verdict_source": {"tool": "investigate_ioc", "step": 0},
+        },
     ]
 
 
@@ -103,7 +106,8 @@ def test_agent_session_history_handles_invalid_final_answer_json() -> None:
         steps=[{"step_number": 1, "step_type": "final_answer", "content": "plain answer"}],
     )
 
-    assert serialized["history"][-1] == {"role": "agent", "content": "plain answer"}
+    assert serialized["history"][-1]["content"].startswith("plain answer")
+    assert "No scoring-engine result" in serialized["history"][-1]["content"]
 
 
 def test_agent_session_history_normalizes_allowed_verdict() -> None:
@@ -113,7 +117,7 @@ def test_agent_session_history_normalizes_allowed_verdict() -> None:
             {
                 "step_number": 1,
                 "step_type": "final_answer",
-                "content": '{"answer":"Done","verdict":"  suspicious  "}',
+                "content": '{"answer":"Done","verdict":"  suspicious  ","verdict_source":{"tool":"investigate_ioc","step":0}}',
             },
         ],
     )
@@ -122,6 +126,7 @@ def test_agent_session_history_normalizes_allowed_verdict() -> None:
         "role": "agent",
         "content": "Done",
         "verdict": "SUSPICIOUS",
+        "verdict_source": {"tool": "investigate_ioc", "step": 0},
     }
 
 
@@ -132,7 +137,7 @@ def test_agent_session_history_omits_invalid_verdict() -> None:
             {
                 "step_number": 1,
                 "step_type": "final_answer",
-                "content": '{"answer":"Done","verdict":"<script>alert(1)</script>"}',
+                "content": '{"answer":"Done","verdict":"<script>alert(1)</script>","verdict_source":{"tool":"investigate_ioc","step":0}}',
             },
         ],
     )
@@ -148,7 +153,7 @@ def test_agent_session_history_omits_missing_verdict_key() -> None:
             {
                 "step_number": 1,
                 "step_type": "final_answer",
-                "content": '{"answer":"Done"}',
+                "content": '{"answer":"Done","verdict_source":{"tool":"investigate_ioc","step":0}}',
             },
         ],
     )
@@ -169,7 +174,8 @@ def test_chat_session_serializer_includes_history() -> None:
         steps=[{"step_number": 1, "step_type": "final_answer", "content": '{"answer":"Done"}'}],
     )
 
-    assert serialized["history"][-1] == {"role": "agent", "content": "Done"}
+    assert "Done" in serialized["history"][-1]["content"]
+    assert "No scoring-engine result" in serialized["history"][-1]["content"]
 
 
 def test_playbook_session_access_requires_exact_kind_and_matching_non_null_owner() -> None:

@@ -48,6 +48,7 @@ def _agent_app(role: str) -> FastAPI:
     app = _with_user(FastAPI(), role)
     owner_id = _user(role)["id"]
     app.state.agent_loop = SimpleNamespace(
+        _chat_with_tools=AsyncMock(return_value='{"intent":"investigate","reply":""}'),
         investigate=AsyncMock(return_value="session-1"),
         approve_action=AsyncMock(return_value=True),
         reject_action=AsyncMock(return_value=True),
@@ -283,6 +284,7 @@ def _chat_app(role: str) -> FastAPI:
     app = _with_user(FastAPI(), role)
     owner_id = _user(role)["id"]
     app.state.agent_loop = SimpleNamespace(
+        _chat_with_tools=AsyncMock(return_value='{"intent":"investigate","reply":""}'),
         investigate=AsyncMock(return_value="session-1"),
         get_state=lambda _session_id: None,
     )

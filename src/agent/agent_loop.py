@@ -23,6 +23,7 @@ from .agent_store import AgentStore
 from .tool_registry import ToolRegistry
 from .agent_response_parsing import (
     extract_deterministic_verdict,
+    extract_deterministic_verdict_source,
     sanitize_unscored_answer,
     normalise_decision,
     parse_tool_call_response,
@@ -597,6 +598,7 @@ class AgentLoop:
 
         # Track previously called tools to prevent infinite loops
         _prev_tool_calls: list = []
+        final_answer_saved = False
 
         try:
             state.transition(AgentPhase.THINKING)
@@ -638,27 +640,44 @@ class AgentLoop:
                 # ---- Check for final answer ----
                 if decision.get('action') == 'final_answer':
                     summary = decision.get('answer', '')
-                    verdict = extract_deterministic_verdict(state.findings)
+                    verdict_source = extract_deterministic_verdict_source(state.findings)
+                    verdict = (
+                        extract_deterministic_verdict(state.findings)
+                        if verdict_source is not None else None
+                    )
                     from .agent_response_parsing import build_evidence_card
-                    evidence = build_evidence_card(state.findings, state.goal)
+                    evidence = (
+                        build_evidence_card(state.findings, state.goal)
+                        if verdict_source is not None else None
+                    )
                     if verdict is None:
                         summary = sanitize_unscored_answer(summary, state.goal)
-                    decision['answer'] = summary
-                    decision['verdict'] = verdict
-                    if evidence is not None:
-                        decision['evidence'] = evidence
-                    else:
-                        decision.pop('evidence', None)
+                    final_decision = {"answer": summary}
+                    if verdict is not None and verdict_source is not None:
+                        final_decision["verdict"] = verdict
+                        final_decision["verdict_source"] = verdict_source
+                        if evidence is not None:
+                            final_decision["evidence"] = evidence
                     state.add_finding({
                         "type": "final_answer",
                         "answer": summary,
                         "verdict": verdict,
                         "reasoning": decision.get('reasoning', ''),
                     })
-                    self.store.add_step(
-                        session_id, state.step_count, 'final_answer',
-                        json.dumps(decision, default=str),
-                    )
+                    try:
+                        self.store.add_step(
+                            session_id, state.step_count, 'final_answer',
+                            json.dumps(final_decision, default=str),
+                        )
+                        final_answer_saved = True
+                    except Exception:
+                        # A persistence error must not turn a successful run into
+                        # a failed session; the common completion path retries.
+                        logger.warning(
+                            "[AGENT] Could not save final answer for %s",
+                            session_id,
+                            exc_info=True,
+                        )
 
                     # Alert on high-severity verdicts (MALICIOUS/SUSPICIOUS by
                     # default -- configurable via notifications.create_on_verdict).
@@ -981,6 +1000,39 @@ class AgentLoop:
 
             summary = await self._generate_summary(state)
             final_status = 'completed' if state.phase == AgentPhase.COMPLETED else 'failed'
+            verdict_source = extract_deterministic_verdict_source(state.findings)
+            verdict = (
+                extract_deterministic_verdict(state.findings)
+                if verdict_source is not None else None
+            )
+            from .agent_response_parsing import build_evidence_card
+            evidence = (
+                build_evidence_card(state.findings, state.goal)
+                if verdict_source is not None else None
+            )
+            if final_status == 'completed' and not final_answer_saved:
+                final_decision = {"answer": summary}
+                if verdict_source is not None and verdict is not None:
+                    final_decision["verdict"] = verdict
+                    final_decision["verdict_source"] = verdict_source
+                    if evidence is not None:
+                        final_decision["evidence"] = evidence
+                else:
+                    final_decision["answer"] = sanitize_unscored_answer(
+                        summary, state.goal,
+                    )
+                try:
+                    self.store.add_step(
+                        session_id, state.step_count, 'final_answer',
+                        json.dumps(final_decision, default=str),
+                    )
+                    final_answer_saved = True
+                except Exception:
+                    logger.warning(
+                        "[AGENT] Could not save completion answer for %s",
+                        session_id,
+                        exc_info=True,
+                    )
             self.store.update_session_status(session_id, final_status, summary)
             self.store.update_session_findings(session_id, state.findings)
 
@@ -989,10 +1041,11 @@ class AgentLoop:
                 "status": final_status,
                 "summary": summary,
                 "steps": state.step_count,
-                "verdict": extract_deterministic_verdict(state.findings),
+                "findings_count": len(state.findings),
             }
-            from .agent_response_parsing import build_evidence_card
-            evidence = build_evidence_card(state.findings, state.goal)
+            if verdict_source is not None:
+                completed_frame["verdict"] = verdict
+                completed_frame["verdict_source"] = verdict_source
             if evidence is not None:
                 completed_frame["evidence"] = evidence
             self._notify(session_id, completed_frame)

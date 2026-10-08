@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 
 from ...agent.playbook_engine import PlaybookValidationError
 from ..auth import authorize_role, get_current_user, require_role
-from ..chat_intents import build_instant_reply, classify_intent
+from ..chat_intents import route_chat_message
 from ..visibility import serialize_chat_session
 
 logger = logging.getLogger(__name__)
@@ -26,6 +26,7 @@ class ChatMessage(BaseModel):
     message: str = Field(..., min_length=1)
     session_id: Optional[str] = None
     playbook_id: Optional[str] = None
+    history: list[dict[str, str]] = Field(default_factory=list)
 
 
 def _parse_structured_params(message: str) -> dict | None:
@@ -62,18 +63,27 @@ async def send_message(
     If playbook_id is provided, execute the playbook directly.
     Otherwise, a new investigation is started (LLM may auto-select a playbook).
     """
-    if body.playbook_id:
-        authorize_role(current_user, ["Incident Responder", "admin"])
-    else:
-        authorize_role(current_user, ["Threat Hunter", "admin"])
-
-    if not body.playbook_id:
-        intent = classify_intent(
-            body.message,
-            allow_need_ioc=not bool(body.session_id),
+    role = current_user.get("role")
+    if role not in {"Incident Responder", "Threat Hunter", "admin"}:
+        raise HTTPException(
+            status_code=403,
+            detail=f"{role or 'Your role'} cannot access agent chat.",
         )
-        if intent:
-            return build_instant_reply(intent, body.message)
+
+    if body.playbook_id:
+        _authorize_chat_action(current_user, {"Incident Responder", "admin"}, "run incident response playbooks")
+    else:
+        # Incident Responders can reach the gate for instant replies; an
+        # investigation result is rejected by the action authorization below.
+        agent_loop = getattr(request.app.state, "agent_loop", None)
+        if agent_loop is None:
+            raise HTTPException(503, "Agent loop not initialized. Check LLM configuration.")
+        instant = await route_chat_message(
+            agent_loop, body.message, body.history,
+        )
+        if instant is not None:
+            return instant
+        _authorize_chat_action(current_user, {"Threat Hunter", "admin"}, "start agent investigations")
 
     agent_loop = request.app.state.agent_loop
     if agent_loop is None:
@@ -179,6 +189,20 @@ async def list_chat_sessions(
     return {
         "sessions": [serialize_chat_session(session, role=current_user['role']) for session in sessions]
     }
+
+
+def _authorize_chat_action(current_user: dict, allowed_roles: set[str], action: str) -> None:
+    """Keep instant replies available while explaining role-gated chat actions."""
+    if current_user.get("role") in allowed_roles:
+        return
+    role = current_user.get("role", "Your role")
+    if role == "Incident Responder":
+        detail = f"Incident Responders can run approved playbooks, but cannot {action}. Ask a Threat Hunter or administrator for access."
+    elif role == "SOC Analyst Tier 1-2":
+        detail = f"SOC Analyst Tier 1-2 can use help and greeting replies, but cannot {action}. Ask a Threat Hunter or administrator for access."
+    else:
+        detail = f"{role} cannot {action}. Ask an administrator for access."
+    raise HTTPException(status_code=403, detail=detail)
 
 
 @router.get('/sessions/{session_id}')

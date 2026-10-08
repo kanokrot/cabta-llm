@@ -15,7 +15,11 @@ from .security import SESSION_COOKIE_NAME
 from .visibility import (
     INCIDENT_RESPONDER,
     VisibilityError,
+    _legacy_scored_decision,
+    _missing_saved_answer_notice,
+    _sanitize_legacy_unscored_answer,
     can_access_playbook_session,
+    serialize_verdict_source,
     serialize_websocket_frame,
 )
 
@@ -39,8 +43,8 @@ async def _send_visible(websocket: WebSocket, payload: dict, *, role: str, flow:
     await websocket.send_json(visible)
 
 
-def _stored_agent_verdict(steps: Sequence[dict]) -> str | None:
-    """Read the verdict from the persisted final-answer decision, if present."""
+def _stored_agent_decision(steps: Sequence[dict]) -> dict | None:
+    """Read the persisted final-answer decision, if present."""
     for step in reversed(steps):
         if step.get("step_type") != "final_answer":
             continue
@@ -51,30 +55,36 @@ def _stored_agent_verdict(steps: Sequence[dict]) -> str | None:
             decision = json.loads(content)
         except (TypeError, json.JSONDecodeError):
             return None
-        if not isinstance(decision, dict):
-            return None
-        verdict = decision.get("verdict")
-        return verdict if isinstance(verdict, str) and verdict else None
-    return None
+        return decision if isinstance(decision, dict) else None
+
+
+def _stored_agent_verdict_source(steps: Sequence[dict]) -> dict | None:
+    decision = _stored_agent_decision(steps)
+    if decision is None:
+        return None
+    return serialize_verdict_source(decision.get("verdict_source"))
+
+
+def _stored_agent_verdict(steps: Sequence[dict]) -> str | None:
+    """Read a verdict only when its persisted decision has valid provenance."""
+    decision = _stored_agent_decision(steps)
+    if decision is None or serialize_verdict_source(decision.get("verdict_source")) is None:
+        return None
+    verdict = decision.get("verdict")
+    if not isinstance(verdict, str):
+        return None
+    normalized = verdict.strip().upper()
+    return normalized if normalized in {"MALICIOUS", "SUSPICIOUS", "CLEAN", "UNKNOWN"} else None
 
 
 def _stored_agent_evidence(steps: Sequence[dict]) -> dict | None:
     """Read the evidence card from the persisted final-answer decision."""
-    for step in reversed(steps):
-        if step.get("step_type") != "final_answer":
-            continue
-        content = step.get("content")
-        if not isinstance(content, str):
-            return None
-        try:
-            decision = json.loads(content)
-        except (TypeError, json.JSONDecodeError):
-            return None
-        if not isinstance(decision, dict):
-            return None
-        evidence = decision.get("evidence")
-        return evidence if isinstance(evidence, dict) else None
-    return None
+    decision = _stored_agent_decision(steps)
+    source = serialize_verdict_source(decision.get("verdict_source")) if decision else None
+    if source is None or source["tool"] != "investigate_ioc":
+        return None
+    evidence = decision.get("evidence")
+    return evidence if isinstance(evidence, dict) else None
 
 
 async def _authenticate_websocket(
@@ -308,7 +318,26 @@ async def agent_ws(websocket: WebSocket, session_id: str):
             'summary': session.get('summary', ''),
         }
         if flow == "agent" and session.get('status') == 'completed':
-            completed_frame['verdict'] = _stored_agent_verdict(steps)
+            verdict_source = _stored_agent_verdict_source(steps)
+            if verdict_source is not None:
+                completed_frame['verdict'] = _stored_agent_verdict(steps)
+                completed_frame['verdict_source'] = verdict_source
+            else:
+                recovered = _legacy_scored_decision(
+                    session.get('findings'), session.get('goal', ''),
+                    completed_frame['summary'],
+                )
+                if recovered is not None:
+                    completed_frame.update({
+                        key: recovered[key]
+                        for key in ('verdict', 'verdict_source', 'evidence')
+                        if key in recovered
+                    })
+                    completed_frame['summary'] = recovered['answer']
+                else:
+                    completed_frame['summary'] = _missing_saved_answer_notice(
+                        session.get('goal', ''),
+                    )
             evidence = _stored_agent_evidence(steps)
             if evidence is not None:
                 completed_frame['evidence'] = evidence
@@ -388,7 +417,26 @@ async def agent_ws(websocket: WebSocket, session_id: str):
                         'summary': session.get('summary', ''),
                     }
                     if flow == "agent" and session.get('status') == 'completed':
-                        completed_frame['verdict'] = _stored_agent_verdict(current_steps)
+                        verdict_source = _stored_agent_verdict_source(current_steps)
+                        if verdict_source is not None:
+                            completed_frame['verdict'] = _stored_agent_verdict(current_steps)
+                            completed_frame['verdict_source'] = verdict_source
+                        else:
+                            recovered = _legacy_scored_decision(
+                                session.get('findings'), session.get('goal', ''),
+                                completed_frame['summary'],
+                            )
+                            if recovered is not None:
+                                completed_frame.update({
+                                    key: recovered[key]
+                                    for key in ('verdict', 'verdict_source', 'evidence')
+                                    if key in recovered
+                                })
+                                completed_frame['summary'] = recovered['answer']
+                            else:
+                                completed_frame['summary'] = _missing_saved_answer_notice(
+                                    session.get('goal', ''),
+                                )
                         evidence = _stored_agent_evidence(current_steps)
                         if evidence is not None:
                             completed_frame['evidence'] = evidence

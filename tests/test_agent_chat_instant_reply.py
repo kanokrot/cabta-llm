@@ -14,7 +14,23 @@ from src.web.routes import chat as chat_routes
 
 def _client(tmp_path, role="Threat Hunter"):
     store = AgentStore(str(tmp_path / "instant-reply.db"))
-    loop = SimpleNamespace(investigate=AsyncMock(return_value="spy-session"))
+    async def classify(messages, tools=None):
+        import json
+
+        latest = json.loads(messages[-1]["content"])["latest_message"].lower()
+        if latest == "asdfghjkl":
+            intent = "clarify"
+        elif latest in {"hello", "hello there", "help", "สวัสดี"}:
+            intent = "converse"
+        else:
+            intent = "investigate"
+        reply = "Please clarify your request." if intent == "clarify" else "Hello."
+        return json.dumps({"intent": intent, "reply": reply})
+
+    loop = SimpleNamespace(
+        investigate=AsyncMock(return_value="spy-session"),
+        _chat_with_tools=AsyncMock(side_effect=classify),
+    )
     playbook_engine = SimpleNamespace(start=AsyncMock(return_value="playbook-session"))
     app = FastAPI()
     app.state.agent_loop = loop
@@ -35,13 +51,13 @@ def _client(tmp_path, role="Threat Hunter"):
 @pytest.mark.parametrize(
     ("path", "body", "intent"),
     [
-        ("/api/agent/investigate", {"goal": "hello"}, "greeting"),
-        ("/api/agent/investigate", {"goal": "hello there"}, "greeting"),
-        ("/api/agent/investigate", {"goal": "help"}, "help"),
-        ("/api/agent/investigate", {"goal": "สวัสดี"}, "greeting"),
-        ("/api/chat", {"message": "hello"}, "greeting"),
-        ("/api/chat", {"message": "help"}, "help"),
-        ("/api/chat", {"message": "สวัสดี"}, "greeting"),
+        ("/api/agent/investigate", {"goal": "hello"}, "converse"),
+        ("/api/agent/investigate", {"goal": "hello there"}, "converse"),
+        ("/api/agent/investigate", {"goal": "help"}, "converse"),
+        ("/api/agent/investigate", {"goal": "สวัสดี"}, "converse"),
+        ("/api/chat", {"message": "hello"}, "converse"),
+        ("/api/chat", {"message": "help"}, "converse"),
+        ("/api/chat", {"message": "สวัสดี"}, "converse"),
     ],
 )
 def test_common_intents_return_without_investigation(tmp_path, path, body, intent):
@@ -92,6 +108,7 @@ def test_agent_route_case_id_bypasses_intent_shortcut(tmp_path):
     assert response.status_code == 200
     assert response.json()["status"] == "active"
     loop.investigate.assert_awaited_once()
+    loop._chat_with_tools.assert_not_awaited()
 
 
 def test_agent_route_playbook_id_bypasses_intent_shortcut(tmp_path):
@@ -106,6 +123,7 @@ def test_agent_route_playbook_id_bypasses_intent_shortcut(tmp_path):
     assert response.status_code == 200
     assert response.json()["status"] == "active"
     loop.investigate.assert_awaited_once()
+    loop._chat_with_tools.assert_not_awaited()
 
 
 def test_chat_playbook_id_bypasses_intent_shortcut(tmp_path):
@@ -131,6 +149,7 @@ def test_agent_route_keeps_role_authorization_for_greetings(tmp_path):
 
     assert response.status_code == 403
     loop.investigate.assert_not_awaited()
+    loop._chat_with_tools.assert_not_awaited()
 
 
 def test_chat_route_keeps_role_authorization_for_greetings(tmp_path):
@@ -141,9 +160,65 @@ def test_chat_route_keeps_role_authorization_for_greetings(tmp_path):
 
     assert response.status_code == 403
     loop.investigate.assert_not_awaited()
+    loop._chat_with_tools.assert_not_awaited()
 
 
-def test_non_ioc_new_message_returns_need_ioc_without_investigation(tmp_path):
+@pytest.mark.parametrize("path,field", [("/api/agent/investigate", "goal"), ("/api/chat", "message")])
+@pytest.mark.parametrize(
+    "role,message,expected_status,starts_investigation",
+    [
+        ("Incident Responder", "hello", 200, False),
+        ("Incident Responder", "analyze 8.8.8.8", 403, False),
+        ("Threat Hunter", "analyze 8.8.8.8", 200, True),
+        ("admin", "analyze 8.8.8.8", 200, True),
+        ("SOC Analyst Tier 1-2", "hello", 403, False),
+        ("SOC Analyst Tier 1-2", "analyze 8.8.8.8", 403, False),
+        ("SOC Analyst Tier 1-2", "asdfghjkl", 403, False),
+        ("Team Lead", "hello", 403, False),
+        ("Team Lead", "analyze 8.8.8.8", 403, False),
+        ("Team Lead", "asdfghjkl", 403, False),
+    ],
+)
+def test_role_intent_gate_contract(tmp_path, path, field, role, message, expected_status, starts_investigation):
+    app, _, loop, _ = _client(tmp_path, role=role)
+
+    with TestClient(app) as client:
+        response = client.post(path, json={field: message})
+
+    assert response.status_code == expected_status
+    if role in {"SOC Analyst Tier 1-2", "Team Lead"}:
+        loop._chat_with_tools.assert_not_awaited()
+    elif message == "hello":
+        assert response.json()["type"] == "instant"
+        assert response.json()["intent"] == "converse"
+        loop.investigate.assert_not_awaited()
+    else:
+        loop._chat_with_tools.assert_awaited_once()
+        if starts_investigation:
+            loop.investigate.assert_awaited_once()
+        else:
+            loop.investigate.assert_not_awaited()
+
+
+@pytest.mark.parametrize("role", ["SOC Analyst Tier 1-2", "Team Lead"])
+@pytest.mark.parametrize(
+    "path,payload",
+    [
+        ("/api/agent/investigate", {"goal": "analyze 8.8.8.8"}),
+        ("/api/chat", {"message": "analyze 8.8.8.8"}),
+    ],
+)
+def test_denied_roles_get_403_before_missing_agent_loop(tmp_path, role, path, payload):
+    app, _, _, _ = _client(tmp_path, role=role)
+    app.state.agent_loop = None
+
+    with TestClient(app) as client:
+        response = client.post(path, json=payload)
+
+    assert response.status_code == 403
+
+
+def test_non_ioc_new_message_returns_instant_clarify_without_investigation(tmp_path):
     app, store, loop, _ = _client(tmp_path)
 
     with TestClient(app) as client:
@@ -151,7 +226,7 @@ def test_non_ioc_new_message_returns_need_ioc_without_investigation(tmp_path):
 
     assert response.status_code == 200
     assert response.json()["type"] == "instant"
-    assert response.json()["intent"] == "need_ioc"
+    assert response.json()["intent"] == "clarify"
     assert response.json()["session_id"] is None
     loop.investigate.assert_not_awaited()
     assert store.list_sessions() == []
@@ -160,8 +235,8 @@ def test_non_ioc_new_message_returns_need_ioc_without_investigation(tmp_path):
 @pytest.mark.parametrize(
     ("message", "intent", "investigate_calls"),
     [
-        ("asdfghjkl", None, 1),
-        ("hello there", "greeting", 0),
+        ("asdfghjkl", "clarify", 0),
+        ("hello there", "converse", 0),
     ],
 )
 def test_session_followup_classifies_only_greeting_help(
