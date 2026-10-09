@@ -974,7 +974,7 @@ class ThreatIntelligence:
             'malwarebazaar': {'status': '➖', 'message': 'Hash only'},
             'c2_trackers': {'status': '➖', 'message': 'IP/Domain/URL only'},
             'tor_exit_nodes': {'status': '➖', 'message': 'IP only'},
-            'sslblacklist': {'status': '➖', 'message': 'IPv4/SHA1 only'},
+            'sslblacklist': {'status': '➖', 'message': 'SHA1 only'},
             'smet_nrd': {'status': '➖', 'message': 'Domain only'},
             'hagezi_nrd': {'status': '➖', 'message': 'Domain only'},
             'mb_recent_sha256': {'status': '➖', 'message': 'SHA256 only'},
@@ -1018,8 +1018,8 @@ class ThreatIntelligence:
         if source_allowed('threatfox'):
             tasks.append(('threatfox', self.check_threatfox(ioc)))
 
-        # SSL Blacklist supports IPv4 C2 entries and SHA1 certificate fingerprints.
-        if ioc_type in ('ipv4', 'sha1') and source_allowed('sslblacklist'):
+        # SSLBL's active feed contains SHA1 certificate fingerprints only.
+        if ioc_type == 'sha1' and source_allowed('sslblacklist'):
             tasks.append(('sslblacklist', self.threat_feeds.check_ssl_blacklist(ioc)))
         
         # IP-specific sources

@@ -140,13 +140,6 @@ def display_source_status(
     ioc_type: str = "",
 ) -> str:
     """Map a raw status to a visible word badge without changing its class."""
-    if (
-        ioc_type.lower() == "ip"
-        and source_name.lower() == "sslblacklist"
-        and isinstance(source_data, Mapping)
-        and "deprecated" in str(source_data.get("error", "")).lower()
-    ):
-        return "Unavailable (IP feed deprecated)"
     if source_class == "na":
         return "N/A"
     if source_class == "error":
@@ -293,11 +286,11 @@ def _make_row(
     score = float(score) if score is not None else None
     full_summary, summary_keys = _summary_parts(source_name, source_data, source_class)
     if isinstance(score_breakdown, Mapping):
-        if score_breakdown.get("scored") is True and score is not None:
-            weight = score_breakdown.get("weight")
+        if score is not None and score > 0:
+            weight = SOURCE_SCORING_MULTIPLIERS.get(source_name.lower())
             full_summary = (
                 f"Score used {score:g}/100 (weight {weight:.2f})"
-                if isinstance(weight, (int, float)) and not isinstance(weight, bool)
+                if weight is not None
                 else f"Score used {score:g}/100"
             )
         elif score_breakdown.get("flagged") is True:
@@ -345,34 +338,23 @@ def _make_row(
         "score_level": _score_level(score) if score is not None and score > 0 else "",
         "group_key": source_name,
         "score_breakdown": dict(score_breakdown) if isinstance(score_breakdown, Mapping) else None,
-        "scored": (
-            score_breakdown.get("scored") is True
-            if isinstance(score_breakdown, Mapping)
-            else source_name.lower() in SOURCE_SCORING_MULTIPLIERS
-        ),
-        "weight": (
-            score_breakdown.get("weight")
-            if isinstance(score_breakdown, Mapping)
-            else SOURCE_SCORING_MULTIPLIERS.get(source_name.lower())
-        ),
+        "scored": source_name.lower() in SOURCE_SCORING_MULTIPLIERS,
+        "weight": SOURCE_SCORING_MULTIPLIERS.get(source_name.lower()),
         "scoring_title": (
             (
-                f"Score used: {score if score is not None else 'unavailable'}; "
-                + (
-                    f"weight {score_breakdown.get('weight'):.2f}; "
-                    if isinstance(score_breakdown.get("weight"), (int, float))
-                    and not isinstance(score_breakdown.get("weight"), bool)
-                    else "weight unavailable; "
+                (
+                    f"Score used: {score if score is not None else 'unavailable'}; "
+                    f"weight {SOURCE_SCORING_MULTIPLIERS[source_name.lower()]:.2f}; "
+                    f"contributed: {'yes' if score is not None and score > 0 else 'no'}"
                 )
-                + f"contributed: {'yes' if score_breakdown.get('scored') else 'no'}"
+                if isinstance(score_breakdown, Mapping)
+                else (
+                    f"Counted in threat score, weight {SOURCE_SCORING_MULTIPLIERS[source_name.lower()]:.2f}; "
+                    "contributes only when its score is greater than 0"
+                )
             )
-            if isinstance(score_breakdown, Mapping)
-            else (
-                f"Counted in threat score, weight {SOURCE_SCORING_MULTIPLIERS[source_name.lower()]:.2f}; "
-                "contributes only when its score is greater than 0"
-                if source_name.lower() in SOURCE_SCORING_MULTIPLIERS
-                else ""
-            )
+            if source_name.lower() in SOURCE_SCORING_MULTIPLIERS
+            else ""
         ),
         "sort_key": (rank, -(normalized_score if rank in {0, 1} else 0), label.casefold()),
     }
@@ -438,6 +420,8 @@ def build_source_display_rows(
         source_breakdown = score_breakdown.get(source_name)
         if source_class is None:
             source_class = classify_source(source_data, source_breakdown)
+        if str(source_name).lower() == "sslblacklist" and ioc_type.lower() != "sha1":
+            source_class = "na"
         rows_by_name[str(source_name)] = _make_row(
             str(source_name), source_data, source_class, source_breakdown, ioc_type
         )

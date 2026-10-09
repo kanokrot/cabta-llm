@@ -2208,7 +2208,7 @@
        assembly, following the same pattern as analysis.js.
     ======================================================== */
     /* ── Helper: render enhanced source detail for known sources ── */
-    function renderSourceDetail(srcName, srcData, scoreBreakdown) {
+    function renderSourceDetail(srcName, srcData, scoreBreakdown, sourceWeight) {
         if (!srcData || typeof srcData !== 'object') return '';
         var key = srcName.toLowerCase().replace(/[\s_-]/g, '');
         var html = '<div class="source-detail-grid">';
@@ -2287,9 +2287,9 @@
             addField('Listed', srcData.listed === true ? 'YES - Listed' : (srcData.listed === false ? 'Not Listed' : undefined));
             if (scoreBreakdown) {
                 addField('Score used', scoreBreakdown.score_used);
-                addField('Scoring weight', scoreBreakdown.weight);
-                addField('Contributed to threat score', scoreBreakdown.scored === true ? 'Yes' : 'No');
+                addField('Contributed to threat score', Number(scoreBreakdown.score_used) > 0 ? 'Yes' : 'No');
             }
+            addField('Scoring weight', sourceWeight);
             addField('Lists', srcData.lists);
             addField('Message', srcData.message);
         } else if (key === 'talos' || key === 'ciscotalos') {
@@ -2596,6 +2596,8 @@
         var sourcesChecked = (data.sources_checked !== undefined && data.sources_checked !== null)
             ? data.sources_checked : (data.sources ? Object.keys(data.sources).length : 0);
         var hasScoreBreakdown = data.score_breakdown && typeof data.score_breakdown === 'object' && !Array.isArray(data.score_breakdown);
+        var sourceScoringWeights = data.source_scoring_weights && typeof data.source_scoring_weights === 'object' && !Array.isArray(data.source_scoring_weights)
+            ? data.source_scoring_weights : {};
         var sourcesFlagged = 0;
         if (hasScoreBreakdown) {
             Object.keys(data.score_breakdown).forEach(function(name) {
@@ -2674,13 +2676,14 @@
             html += '<h6 class="mt-3 mb-2" style="font-size:0.78rem;"><i class="bi bi-segmented-nav me-1"></i>Source Score Breakdown</h6>';
             Object.keys(data.score_breakdown).forEach(function(sn) {
                 var item = data.score_breakdown[sn];
-                if (!item || item.scored !== true || item.score_used === null || item.score_used === undefined) return;
+                var sourceWeight = sourceScoringWeights[String(sn).toLowerCase()];
+                if (!item || Number(item.score_used) <= 0 || typeof sourceWeight !== 'number') return;
                 var sScore = parseInt(item.score_used, 10) || 0;
                 var barColor = sScore >= 70 ? '#dc3545' : (sScore >= 40 ? '#fd7e14' : '#198754');
                 html += '<div class="source-score-row">' +
                     '<span class="source-score-name">' + escHtml(sn) + '</span>' +
                     '<div class="source-score-bar-bg"><div class="source-score-bar-fg" style="width:' + Math.min(sScore, 100) + '%;background:' + escAttr(barColor) + '"></div></div>' +
-                    '<span class="source-score-val" style="color:' + escAttr(barColor) + '">' + escHtml(String(sScore)) + ' × ' + escHtml(String(item.weight)) + '</span>' +
+                    '<span class="source-score-val" style="color:' + escAttr(barColor) + '">' + escHtml(String(sScore)) + ' × ' + escHtml(String(sourceWeight)) + '</span>' +
                     '</div>';
             });
         } else if (data.source_scores && typeof data.source_scores === 'object') {
@@ -2719,7 +2722,8 @@
                     return item && item.flagged === true;
                 }).map(function(name) {
                     var item = data.score_breakdown[name];
-                    return name + ' (' + (item.scored ? ('score ' + item.score_used + ', weight ' + item.weight) : 'flagged; no score used') + ')';
+                    var sourceWeight = sourceScoringWeights[String(name).toLowerCase()];
+                    return name + ' (' + (Number(item.score_used) > 0 ? ('score ' + item.score_used + ', weight ' + sourceWeight) : 'flagged; no score used') + ')';
                 });
                 html += '<div class="small text-muted mb-2"><strong>Engine scoring evidence:</strong> ' +
                     escHtml(scoringEvidence.length ? scoringEvidence.join('; ') : 'No scored source flagged.') + '</div>';
@@ -2788,7 +2792,7 @@
                 var statusLabel = '';
                 if (!srcData) { statusClass = 'clean'; statusLabel = 'No Data'; }
                 else if ((srcData.status === '⚠' && typeof srcData.error === 'string' && srcData.error.toLowerCase().includes('api key')) || srcData.status === 'No valid API key configured') { statusClass = 'nokey'; statusLabel = 'No API Key'; }
-                else if (srcName.toLowerCase() === 'sslblacklist' && String(data.ioc_type || '').toLowerCase() === 'ip' && /deprecated/i.test(String(srcData.error || ''))) { statusClass = 'warn'; statusLabel = 'Unavailable (IP feed deprecated)'; }
+                else if (srcName.toLowerCase() === 'sslblacklist' && String(data.ioc_type || '').toLowerCase() !== 'sha1') { statusClass = 'info'; statusLabel = 'N/A'; }
                 else if (srcData.error) { statusClass = 'error'; statusLabel = 'Error'; }
                 else if (sourceBreakdown) {
                     if (sourceBreakdown.flagged === true || sourceBreakdown.score_used > 0) { statusClass = 'hit'; statusLabel = 'Flagged'; }
@@ -2814,13 +2818,14 @@
                     if (shownScore > 0) headerExtra += '<span class="badge ' + (shownScore >= 70 ? 'bg-danger' : (shownScore >= 40 ? 'bg-warning text-dark' : 'bg-info')) + ' ms-2" style="font-size:0.68rem;">Score used: ' + escHtml(String(shownScore)) + '</span>';
                     if (srcData.is_c2) headerExtra += '<span class="badge bg-danger ms-2" style="font-size:0.68rem;"><i class="bi bi-radioactive"></i> C2</span>';
                     if (srcData.is_tor === true) headerExtra += '<span class="badge bg-warning text-dark ms-2" style="font-size:0.68rem;"><i class="bi bi-shield-exclamation"></i> TOR</span>';
-                    if (sourceBreakdown && sourceBreakdown.scored === true) headerExtra += '<span class="badge bg-dark ms-2" style="font-size:0.68rem;">Weight: ' + escHtml(String(sourceBreakdown.weight)) + '</span>';
+                    var sourceWeight = sourceScoringWeights[String(srcName).toLowerCase()];
+                    if (typeof sourceWeight === 'number') headerExtra += '<span class="badge bg-dark ms-2" style="font-size:0.68rem;">SCORED · Weight: ' + escHtml(sourceWeight.toFixed(2)) + '</span>';
                     else if (!sourceBreakdown && srcData.listed === true) headerExtra += '<span class="badge bg-danger ms-2" style="font-size:0.68rem;">Listed</span>';
                     if (srcData.ports && Array.isArray(srcData.ports) && srcData.ports.length > 0) headerExtra += '<span class="badge bg-info ms-2" style="font-size:0.68rem;">' + srcData.ports.length + ' ports</span>';
                 }
 
                 var colId = 'srcCollapse' + idx;
-                var detailHtml = renderSourceDetail(srcName, srcData, sourceBreakdown);
+                var detailHtml = renderSourceDetail(srcName, srcData, sourceBreakdown, sourceScoringWeights[String(srcName).toLowerCase()]);
                 html += '<div class="source-result-card">' +
                     '<div class="source-result-header" data-bs-toggle="collapse" data-bs-target="#' + escAttr(colId) + '" aria-expanded="true">' +
                     '<span class="source-status-dot ' + escAttr(statusClass) + '"></span>' +

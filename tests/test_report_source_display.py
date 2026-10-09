@@ -13,7 +13,7 @@ from src.web.report_source_display import (
     display_source_name,
     display_source_status,
 )
-from src.web.source_classification import classify_source
+from src.web.source_classification import classify_source, count_source_classes
 from src.web.visibility import ADMIN, SOC, serialize_analysis_job, serialize_report_job
 from src.scoring.intelligent_scoring import SOURCE_SCORING_MULTIPLIERS
 
@@ -944,6 +944,102 @@ def test_scored_chip_uses_scorer_constant_and_omits_report_only_virustotal(monke
     assert "rv-scored-chip" not in virustotal_row
 
 
+def test_scored_source_error_keeps_scored_badge_without_flagging():
+    sources = {
+        "c2_trackers": {
+            "status": "\u26a0",
+            "error": "DNS feed timeout",
+            "unavailable": True,
+        }
+    }
+    breakdown = {
+        "c2_trackers": {
+            "flagged": False,
+            "score_used": None,
+            "weight": SOURCE_SCORING_MULTIPLIERS["c2_trackers"],
+            "scored": False,
+        }
+    }
+
+    rows = build_source_display_rows(sources, score_breakdown=breakdown)
+    row = rows[0]
+    counts = count_source_classes(sources, breakdown)
+    html = _render_report(sources, report_fields={"score_breakdown": breakdown})
+
+    assert row["scored"] is True
+    assert row["source_class"] == "error"
+    assert row["weight"] == SOURCE_SCORING_MULTIPLIERS["c2_trackers"]
+    assert counts["flagged"] == 0
+    assert counts["errors"] == 1
+    assert ">SCORED</span>" in html
+    assert "0 FLAGGED" in html
+
+    job = {
+        "id": "scored-error-source",
+        "analysis_type": "ioc",
+        "status": "completed",
+        "verdict": "CLEAN",
+        "score": 0,
+        "user_id": 1,
+        "params": {"value": "example.test", "ioc_type": "domain"},
+        "result": {"ioc": "example.test", "ioc_type": "domain", "sources": sources},
+    }
+    serialized = serialize_analysis_job(
+        job, role=ADMIN, include_ioc_result=True, viewer_user_id=1
+    )
+    assert serialized["result"]["score_breakdown"]["c2_trackers"]["scored"] is False
+    assert serialized["result"]["source_scoring_weights"]["c2_trackers"] == SOURCE_SCORING_MULTIPLIERS["c2_trackers"]
+
+
+def test_ai_scoring_evidence_keeps_score_and_reads_weight_from_config():
+    breakdown = {
+        "spamhaus": {
+            "flagged": True,
+            "score_used": 80,
+            # Display weight is configured centrally, not read from breakdown.
+            "weight": -1,
+            "scored": True,
+        }
+    }
+    html = _render_report(
+        {
+            "spamhaus": {
+                "status": "\u2713",
+                "score": 80,
+                "listed": True,
+                "found": True,
+            }
+        },
+        report_fields={"score_breakdown": breakdown},
+    )
+
+    expected_weight = f"{SOURCE_SCORING_MULTIPLIERS['spamhaus']:.2f}"
+    assert f"Engine scoring evidence:</strong> spamhaus score 80 (weight {expected_weight})" in html
+    assert "weight -1.00" not in html
+
+
+def test_zero_score_source_is_not_reported_as_top_source():
+    html = _render_report(
+        {"c2_trackers": {"status": "clean", "score": 0}},
+        report_fields={
+            "score_breakdown": {
+                "c2_trackers": {
+                    "flagged": False,
+                    "score_used": 0,
+                    "weight": SOURCE_SCORING_MULTIPLIERS["c2_trackers"],
+                    "scored": False,
+                }
+            }
+        },
+    )
+
+    assert re.search(
+        r'<div class="rv-tile"><span class="rv-tile-label">Top source</span>'
+        r'<strong class="rv-tile-value">N/A</strong></div>',
+        html,
+    )
+
+
 def test_merged_nrd_row_has_no_scored_chip():
     html = _render_report(
         {
@@ -1003,18 +1099,25 @@ def test_raw_json_print_hides_tree_and_controls():
     assert ".report-v2 #rawJsonTree, .report-v2 .rv-raw-tools { display: none !important; }" in html
 
 
-def test_sslbl_deprecated_ip_status_is_display_only():
+@pytest.mark.parametrize("ioc_type", ["ip", "ipv4", "domain", "url", "md5", "sha256"])
+def test_sslbl_non_sha1_status_is_not_applicable_in_report(ioc_type):
     sources = {
         "sslblacklist": {
+            # Old stored reports may still contain the deprecated IP-feed error.
             "status": "\u26a0",
-            "error": "SSLBL IP feed is deprecated; certificate SHA1 feed remains available",
+            "error": "SSLBL IP feed is deprecated",
         }
     }
 
-    ip_row = build_source_display_rows(sources, ioc_type="ip")[0]
-    domain_row = build_source_display_rows(sources, ioc_type="domain")[0]
+    row = build_source_display_rows(sources, ioc_type=ioc_type)[0]
 
-    assert ip_row["display_status"] == "Unavailable (IP feed deprecated)"
-    assert ip_row["source_class"] == "error"
-    assert domain_row["display_status"] == "Error"
-    assert domain_row["source_class"] == "error"
+    assert row["display_status"] == "N/A"
+    assert row["source_class"] == "na"
+
+
+def test_ioc_page_shows_sslbl_non_sha1_as_not_applicable():
+    template = Path(__file__).resolve().parents[1] / "templates" / "analysis_ioc.html"
+    source = template.read_text(encoding="utf-8")
+
+    assert "srcName.toLowerCase() === 'sslblacklist' && String(data.ioc_type || '').toLowerCase() !== 'sha1'" in source
+    assert "Unavailable (IP feed deprecated)" not in source

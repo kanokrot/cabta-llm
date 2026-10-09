@@ -80,46 +80,70 @@ async def test_circl_reports_partner_authentication_failure():
 
 
 @pytest.mark.asyncio
-async def test_sslbl_parses_active_ip_csv_columns_and_certificate_sha1():
+async def test_sslbl_checks_sha1_certificate_feed_only():
     sha1 = "a" * 40
+    other_sha1 = "b" * 40
     session = _FakeSession(
         {
             ThreatFeeds.SSLBL_CERT_CSV: _FakeResponse(
                 text_data=f"2026-09-15,{sha1},Test C2\n"
-            ),
-            ThreatFeeds.SSLBL_IP_CSV: _FakeResponse(
-                text_data="2026-09-15,203.0.113.7,443\n"
+                f"2026-09-15,{other_sha1},Other C2\n"
             ),
         }
     )
     feed = ThreatFeeds({})
     with patch.object(feed, "_session", return_value=session):
         cert_result = await feed.check_ssl_blacklist(sha1)
-        ip_result = await feed.check_ssl_blacklist("203.0.113.7")
+        not_found_result = await feed.check_ssl_blacklist("c" * 40)
 
     assert cert_result["found"] is True
-    assert ip_result["found"] is True
+    assert "error" not in not_found_result
+    assert not_found_result["found"] is False
+    assert not_found_result["status"] == "✗"
+    assert not_found_result["message"] == "Not found in SSL Blacklist"
 
 
 @pytest.mark.asyncio
-async def test_sslbl_does_not_treat_deprecated_ip_feed_as_clean():
-    session = _FakeSession(
-        {
-            ThreatFeeds.SSLBL_CERT_CSV: _FakeResponse(
-                text_data=f"2026-09-15,{'b' * 40},Test C2\n"
-            ),
-            ThreatFeeds.SSLBL_IP_CSV: _FakeResponse(
-                text_data="# ATTENTION: This list has been deprecated on 2025-01-03\n"
-            ),
-        }
-    )
+async def test_sslbl_non_sha1_is_not_applicable_without_fetching():
     feed = ThreatFeeds({})
-    with patch.object(feed, "_session", return_value=session):
+    with patch.object(feed, "_session") as open_session:
         result = await feed.check_ssl_blacklist("203.0.113.7")
 
     assert result["found"] is False
+    assert result["status"] == "➖"
+    assert result["not_applicable"] is True
+    assert result["message"] == "SHA1 only"
+    open_session.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_sslbl_sha1_http_error_is_reported_as_error():
+    session = _FakeSession({
+        ThreatFeeds.SSLBL_CERT_CSV: _FakeResponse(status=503),
+    })
+    feed = ThreatFeeds({})
+    with patch.object(feed, "_session", return_value=session):
+        result = await feed.check_ssl_blacklist("d" * 40)
+
+    assert result["found"] is False
     assert result["status"] == "\u26a0"
-    assert "deprecated" in result["error"]
+    assert result["error"] == "SSLBL certificate feed returned no usable SHA1 entries"
+
+
+@pytest.mark.asyncio
+async def test_sslbl_sha1_feed_with_no_parseable_entries_is_error():
+    session = _FakeSession({
+        ThreatFeeds.SSLBL_CERT_CSV: _FakeResponse(
+            text_data="# SSLBL certificate feed has no parseable SHA1 rows\n"
+        ),
+    })
+    feed = ThreatFeeds({})
+    with patch.object(feed, "_session", return_value=session):
+        result = await feed.check_ssl_blacklist("e" * 40)
+
+    assert result["found"] is False
+    assert result["status"] == "\u26a0"
+    assert result["error"] == "SSLBL certificate feed returned no usable SHA1 entries"
 
 
 @pytest.mark.asyncio

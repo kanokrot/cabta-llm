@@ -97,7 +97,6 @@ class ThreatFeeds:
 
     USOM_API_URL = "https://siberguvenlik.gov.tr/api/address/index"
     SSLBL_CERT_CSV = "https://sslbl.abuse.ch/blacklist/sslblacklist.csv"
-    SSLBL_IP_CSV = "https://sslbl.abuse.ch/blacklist/sslipblacklist.csv"
 
     SMET_NRD_URL = "https://smet.cz/nrd/data/today.txt"
     HAGEZI_NRD_URL = "https://raw.githubusercontent.com/hagezi/nrd/main/domains/nrd7.txt"
@@ -110,10 +109,8 @@ class ThreatFeeds:
             "feed_cache_ttl", self.DEFAULT_CACHE_TTL
         )
 
-        # SSL Blacklist caches
+        # SSL Blacklist SHA1 certificate cache
         self._sslbl_sha1 = _FeedCache(self._cache_ttl)
-        self._sslbl_ips = _FeedCache(self._cache_ttl)
-        self._sslbl_ip_feed_deprecated = False
 
         # Static-list caches
         self._smet_nrd = _FeedCache(self._cache_ttl)
@@ -214,32 +211,20 @@ class ThreatFeeds:
     # ------------------------------------------------------------------
 
     async def _refresh_sslbl_cache(self) -> None:
-        """Download and parse SSLBL CSVs into sets of SHA1 fingerprints and IPs."""
-        if not self._sslbl_sha1.is_stale() and not self._sslbl_ips.is_stale():
+        """Download and parse SSLBL's active SHA1 certificate feed."""
+        if not self._sslbl_sha1.is_stale():
             return
 
         logger.info("[SSLBL] Refreshing SSL Blacklist cache")
         self._sslbl_sha1.data.clear()
-        self._sslbl_ips.data.clear()
-        self._sslbl_ip_feed_deprecated = False
         async with self._session() as session:
             cert_csv = await self._fetch_text(session, self.SSLBL_CERT_CSV)
             if cert_csv:
                 self._parse_sslbl_cert_csv(cert_csv)
 
-            ip_csv = await self._fetch_text(session, self.SSLBL_IP_CSV)
-            if ip_csv:
-                self._parse_sslbl_ip_csv(ip_csv)
-                self._sslbl_ip_feed_deprecated = "deprecated" in ip_csv.lower()
-
         if cert_csv is not None:
             self._sslbl_sha1.mark_fresh()
-        if ip_csv is not None:
-            self._sslbl_ips.mark_fresh()
-        logger.info(
-            f"[SSLBL] Cache refreshed: {len(self._sslbl_sha1.data)} SHA1, "
-            f"{len(self._sslbl_ips.data)} IPs"
-        )
+        logger.info(f"[SSLBL] Cache refreshed: {len(self._sslbl_sha1.data)} SHA1")
 
     def _parse_sslbl_cert_csv(self, text: str) -> None:
         # Format: Listingdate,SHA1,Listingreason
@@ -252,31 +237,28 @@ class ThreatFeeds:
                 sha1 = parts[1].strip().lower()
                 if len(sha1) == 40:
                     self._sslbl_sha1.data.add(sha1)
-            if parts and _is_ipv4(parts[0].strip()):
-                self._sslbl_ips.data.add(parts[0].strip())
-
-    def _parse_sslbl_ip_csv(self, text: str) -> None:
-        for line in text.splitlines():
-            line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-            for value in line.split(",")[:2]:
-                ip = value.strip()
-                if _is_ipv4(ip):
-                    self._sslbl_ips.data.add(ip)
 
     async def check_ssl_blacklist(self, ioc: str) -> Dict:
         """
         Check IOC against SSL Blacklist (abuse.ch).
 
-        Supports both SHA1 certificate fingerprints and IP addresses.
+        Supports SHA1 certificate fingerprints only.
         """
         try:
-            await self._refresh_sslbl_cache()
             ioc_lower = ioc.strip().lower()
-
             is_sha1 = len(ioc_lower) == 40 and all(c in "0123456789abcdef" for c in ioc_lower)
-            if is_sha1 and not self._sslbl_sha1.data:
+            if not is_sha1:
+                return {
+                    "status": "➖",
+                    "source": "SSL Blacklist",
+                    "found": False,
+                    "score": 0,
+                    "message": "SHA1 only",
+                    "not_applicable": True,
+                }
+
+            await self._refresh_sslbl_cache()
+            if not self._sslbl_sha1.data:
                 return FeedResult(
                     status=chr(0x26A0),
                     source="SSL Blacklist",
@@ -284,38 +266,13 @@ class ThreatFeeds:
                     error="SSLBL certificate feed returned no usable SHA1 entries",
                 ).to_dict()
 
-            if is_sha1 and ioc_lower in self._sslbl_sha1.data:
+            if ioc_lower in self._sslbl_sha1.data:
                 return FeedResult(
                     status="✓",
                     source="SSL Blacklist",
                     found=True,
                     score=90,
                     message="Certificate SHA1 found in SSLBL",
-                ).to_dict()
-
-            if _is_ipv4(ioc_lower) and self._sslbl_ip_feed_deprecated:
-                return FeedResult(
-                    status=chr(0x26A0),
-                    source="SSL Blacklist",
-                    found=False,
-                    error="SSLBL IP feed is deprecated; certificate SHA1 feed remains available",
-                ).to_dict()
-
-            if _is_ipv4(ioc_lower) and not self._sslbl_ips.data:
-                return FeedResult(
-                    status=chr(0x26A0),
-                    source="SSL Blacklist",
-                    found=False,
-                    error="SSLBL IP feed returned no usable IPv4 entries",
-                ).to_dict()
-
-            if ioc_lower in self._sslbl_ips.data:
-                return FeedResult(
-                    status="✓",
-                    source="SSL Blacklist",
-                    found=True,
-                    score=85,
-                    message="IP found in SSLBL C2 blacklist",
                 ).to_dict()
 
             return FeedResult(

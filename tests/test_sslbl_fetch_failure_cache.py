@@ -16,7 +16,7 @@ class _Session:
 @pytest.mark.asyncio
 async def test_sslbl_failed_fetch_is_not_marked_fresh_and_is_retried():
     cert_csv = f"2026-09-15,{'a' * 40},Test C2\n"
-    fetch = AsyncMock(side_effect=[cert_csv, None, cert_csv, None])
+    fetch = AsyncMock(side_effect=[None, cert_csv])
     feed = ThreatFeeds({})
 
     with (
@@ -25,10 +25,10 @@ async def test_sslbl_failed_fetch_is_not_marked_fresh_and_is_retried():
     ):
         await feed._refresh_sslbl_cache()
 
-        assert feed._sslbl_sha1.last_update > 0
-        assert feed._sslbl_ips.last_update == 0
-        assert feed._sslbl_ips.is_stale() is True
+        assert feed._sslbl_sha1.last_update == 0
+        assert feed._sslbl_sha1.is_stale() is True
 
         await feed._refresh_sslbl_cache()
 
-    assert fetch.await_count == 4
+    assert fetch.await_count == 2
+    assert feed._sslbl_sha1.data == {"a" * 40}

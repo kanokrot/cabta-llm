@@ -124,6 +124,7 @@ def _build_wire_test_intelligence():
         "check_phishtank",
         "check_triage",
         "check_threatzone",
+        "check_circl",
     )
     intelligence.extended = SimpleNamespace(
         **{
@@ -133,10 +134,20 @@ def _build_wire_test_intelligence():
     )
     intelligence.threat_feeds = SimpleNamespace(
         check_mb_recent=AsyncMock(
-            return_value={"status": "\u2717", "found": False, "score": 0}
+            return_value={"status": chr(0x2717), "found": False, "score": 0}
         ),
-        check_ssl_blacklist=AsyncMock(return_value={"status": "âœ—", "score": 0}),
-        check_usom=AsyncMock(return_value={"status": "âœ—", "score": 0}),
+        check_ssl_blacklist=AsyncMock(
+            return_value={"status": chr(0x2717), "score": 0}
+        ),
+        check_usom=AsyncMock(
+            return_value={"status": chr(0x2717), "score": 0}
+        ),
+        check_smet_nrd=AsyncMock(
+            return_value={"status": chr(0x2717), "found": False, "score": 0}
+        ),
+        check_hagezi_nrd=AsyncMock(
+            return_value={"status": chr(0x2717), "found": False, "score": 0}
+        ),
     )
     intelligence.misp_feed = SimpleNamespace(
         check_misp=AsyncMock(
@@ -154,7 +165,7 @@ def _build_wire_test_intelligence():
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "ioc,ioc_type",
-    [("192.0.2.1", "ipv4"), ("a" * 40, "sha1")],
+    [("a" * 40, "sha1")],
 )
 async def test_sslblacklist_is_called_for_supported_ioc_types(ioc, ioc_type):
     intelligence = _build_wire_test_intelligence()
@@ -163,6 +174,45 @@ async def test_sslblacklist_is_called_for_supported_ioc_types(ioc, ioc_type):
 
     intelligence.threat_feeds.check_ssl_blacklist.assert_awaited_once_with(ioc)
     assert "sslblacklist" in result["sources"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "ioc,ioc_type",
+    [
+        ("192.0.2.1", "ipv4"),
+        ("example.com", "domain"),
+        ("https://example.com/path", "url"),
+        ("a" * 32, "md5"),
+        ("b" * 64, "sha256"),
+        ("c" * 40, "hash"),
+    ],
+)
+async def test_sslblacklist_is_not_called_for_non_sha1_types(ioc, ioc_type):
+    intelligence = _build_wire_test_intelligence()
+
+    result = await intelligence.investigate_ioc_comprehensive(ioc, ioc_type)
+    coverage = IntelligentScoring.calculate_source_coverage(result)
+
+    intelligence.threat_feeds.check_ssl_blacklist.assert_not_awaited()
+    assert result["sources"]["sslblacklist"]["not_applicable"] is True
+    assert coverage["sources_skipped_not_applicable"] >= 1
+
+
+def test_sslblacklist_not_applicable_does_not_count_as_source_failure():
+    coverage = IntelligentScoring.calculate_source_coverage({
+        "sources": {
+            "sslblacklist": {
+                "status": "➖",
+                "message": "SHA1 only",
+                "not_applicable": True,
+            }
+        }
+    })
+
+    assert coverage["sources_unavailable"] == 0
+    assert coverage["sources_applicable"] == 0
+    assert coverage["sources_skipped_not_applicable"] == 1
 
 
 @pytest.mark.asyncio
@@ -184,8 +234,8 @@ async def test_allowed_sources_filter_task_construction_before_calls():
         allowed_sources=allowed_sources,
     )
 
-    assert result["sources_checked"] == 6
-    intelligence.threat_feeds.check_ssl_blacklist.assert_awaited_once_with("192.0.2.1")
+    assert result["sources_checked"] == 5
+    intelligence.threat_feeds.check_ssl_blacklist.assert_not_awaited()
     intelligence.check_feodotracker.assert_awaited_once_with("192.0.2.1")
     intelligence.check_tor_exit_nodes.assert_awaited_once_with("192.0.2.1")
     intelligence.check_c2_trackers.assert_awaited_once_with("192.0.2.1")
