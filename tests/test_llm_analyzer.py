@@ -167,7 +167,7 @@ async def test_ioc_prompt_uses_engine_verdict_and_coverage_and_aligns_narrative(
         prompts.append(prompt)
         return {
             "verdict": "SUSPICIOUS",
-            "analysis": "SUSPICIOUS, one of 18 sources flagged this IOC.",
+            "analysis": "verdict: SUSPICIOUS, one of 18 sources flagged this IOC.",
         }
 
     monkeypatch.setattr(analyzer, "_call_vllm_api", fake_call)
@@ -183,4 +183,4 @@ async def test_ioc_prompt_uses_engine_verdict_and_coverage_and_aligns_narrative(
     assert '"sources_applicable": 12' in prompts[0]
     assert "If sources_flagged = 0" not in prompts[0]
     assert result["verdict"] == "MALICIOUS"
-    assert result["analysis"].startswith("MALICIOUS,")
+    assert result["analysis"].startswith("verdict: MALICIOUS,")

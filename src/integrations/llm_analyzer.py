@@ -203,6 +203,7 @@ Keep it concise and factual."""
                     ioc_type=ioc_type,
                     rag_context=rag_context,
                     authoritative_verdict=authoritative_verdict,
+                    coverage=coverage_data,
                 )
                 return response_data
             else:

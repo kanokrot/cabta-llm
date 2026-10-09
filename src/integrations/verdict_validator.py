@@ -40,6 +40,8 @@ def compute_authoritative_verdict(threat_score: int) -> str:
 def enforce_verdict_consistency(
     llm_result: Dict,
     authoritative_verdict: str,
+    threat_score: Optional[int] = None,
+    coverage: Optional[Dict] = None,
 ) -> Dict:
     """
     บังคับให้ verdict ของ LLM output ตรงกับ scoring engine เสมอ
@@ -69,24 +71,58 @@ def enforce_verdict_consistency(
             f"This mismatch has been logged for review."
         )
 
-    # scoring engine เป็น source of truth เสมอ ไม่ว่า LLM จะตอบว่าอะไรมา
     analysis = llm_result.get("analysis")
     if isinstance(analysis, str):
-        claim_patterns = (
-            re.compile(
-                r"(?im)(?P<prefix>^\s*(?:\*\*)?|\b(?:verdict|assessment|classification)\s*(?:is|:)\s*)"
-                r"(?P<claim>MALICIOUS|SUSPICIOUS|CLEAN|UNKNOWN)\b"
-            ),
-            re.compile(
-                r"(?i)(?P<prefix>\b(?:this|the)\s+IOC\s+(?:is|was|appears)\s+)"
-                r"(?P<claim>MALICIOUS|SUSPICIOUS|CLEAN|UNKNOWN)\b"
-            ),
+        verdict_word = r"(MALICIOUS|SUSPICIOUS|CLEAN|UNKNOWN)"
+        explicit_label = re.compile(
+            rf"(?i)(\b(?:verdict|assessment|classification)\s*(?:is|:|=)\s*){verdict_word}\b"
         )
-        for pattern in claim_patterns:
-            analysis = pattern.sub(
-                lambda match: f"{match.group('prefix')}{authoritative_verdict}",
-                analysis,
+        analysis = explicit_label.sub(
+            lambda match: f"{match.group(1)}{authoritative_verdict}",
+            analysis,
+        )
+
+        detected_claims = (
+            re.compile(rf"(?i)\bclassified\s+as\s+{verdict_word}\b"),
+            re.compile(rf"(?i)\bresult\s+was\s+{verdict_word}\b"),
+            re.compile(rf"(?i)\brated\s+{verdict_word}\b"),
+            re.compile(rf"(?i)\b(?:is|was)\s+{verdict_word}\b"),
+        )
+        mismatched_claims = []
+        for pattern in detected_claims:
+            mismatched_claims.extend(
+                claim.upper()
+                for claim in pattern.findall(analysis)
+                if claim.upper() != authoritative_verdict.upper()
             )
+
+        if mismatched_claims:
+            score_text = (
+                str(int(threat_score))
+                if isinstance(threat_score, (int, float))
+                else "unknown"
+            )
+            coverage_data = coverage if isinstance(coverage, dict) else {}
+            sources_ok = coverage_data.get("sources_ok")
+            if not isinstance(sources_ok, int) or isinstance(sources_ok, bool):
+                sources_ok = (
+                    coverage_data.get("sources_flagged", 0)
+                    + coverage_data.get("sources_clean", 0)
+                )
+            sources_applicable = coverage_data.get(
+                "sources_applicable",
+                coverage_data.get("total_sources_attempted", 0),
+            )
+            if not isinstance(sources_applicable, int) or isinstance(sources_applicable, bool):
+                sources_applicable = 0
+            engine_line = (
+                f"Engine verdict: {authoritative_verdict.upper()} "
+                f"(score {score_text}/100, coverage {sources_ok}/{sources_applicable})"
+            )
+            if not analysis.startswith(engine_line):
+                analysis = f"{engine_line}\n{analysis}"
+            llm_result["narrative_mismatch"] = True
+
         llm_result["analysis"] = analysis
 
     llm_result["verdict"] = authoritative_verdict
@@ -199,6 +235,7 @@ def validate_llm_analysis(
     ioc_type: Optional[str] = None,
     rag_context: Optional[list] = None,
     authoritative_verdict: Optional[str] = None,
+    coverage: Optional[Dict] = None,
 ) -> Dict:
     """
     Entry point เดียวที่ llm_analyzer.py เรียกใช้
@@ -225,7 +262,12 @@ def validate_llm_analysis(
         authoritative_verdict = compute_authoritative_verdict(threat_score)
 
     if authoritative_verdict is not None:
-        llm_result = enforce_verdict_consistency(llm_result, authoritative_verdict)
+        llm_result = enforce_verdict_consistency(
+            llm_result,
+            authoritative_verdict,
+            threat_score=threat_score,
+            coverage=coverage,
+        )
 
     # ชั้น 2: เช็ค hallucination ของ source names
     if all_known_sources:

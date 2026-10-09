@@ -6,6 +6,70 @@ from src.integrations.verdict_validator import (
 from src.utils.helpers import determine_verdict
 
 
+NARRATIVE_CASES = [
+    ("verdict: SUSPICIOUS", "rewrite", "verdict: {verdict}"),
+    ("classified as suspicious", "mismatch", "classified as suspicious"),
+    ("not suspicious", "unchanged", "not suspicious"),
+    ("no longer suspicious", "unchanged", "no longer suspicious"),
+    (
+        "suspicious activity was observed on the host",
+        "unchanged",
+        "suspicious activity was observed on the host",
+    ),
+    ("The IOC is suspicious.", "mismatch", "The IOC is suspicious."),
+    (
+        "Assessment: suspicious; limited evidence.",
+        "rewrite",
+        "Assessment: {verdict}; limited evidence.",
+    ),
+    (
+        "จากการตรวจสอบ verdict: SUSPICIOUS",
+        "rewrite",
+        "จากการตรวจสอบ verdict: {verdict}",
+    ),
+    (
+        "จากการตรวจสอบพบว่าน่าสงสัย (suspicious)",
+        "unchanged",
+        "จากการตรวจสอบพบว่าน่าสงสัย (suspicious)",
+    ),
+    (
+        "The overall result was suspicious.",
+        "mismatch",
+        "The overall result was suspicious.",
+    ),
+    (
+        "UNKNOWN because coverage is limited.",
+        "unchanged",
+        "UNKNOWN because coverage is limited.",
+    ),
+    (
+        "No malicious activity was observed.",
+        "unchanged",
+        "No malicious activity was observed.",
+    ),
+    (
+        "จากการวิเคราะห์ classification is SUSPICIOUS",
+        "rewrite",
+        "จากการวิเคราะห์ classification is {verdict}",
+    ),
+    (
+        "ผลตรวจ classified as SUSPICIOUS",
+        "mismatch",
+        "ผลตรวจ classified as SUSPICIOUS",
+    ),
+    (
+        "ผลลัพธ์ rated SUSPICIOUS",
+        "mismatch",
+        "ผลลัพธ์ rated SUSPICIOUS",
+    ),
+    (
+        "ผลตรวจชี้ว่า SUSPICIOUS",
+        "unchanged",
+        "ผลตรวจชี้ว่า SUSPICIOUS",
+    ),
+]
+
+
 def _coverage(*, flagged, clean, total):
     return {
         "sources_flagged": flagged,
@@ -105,3 +169,32 @@ class TestPrecomputedAuthoritativeVerdict:
 
         assert result["verdict"] == compute_authoritative_verdict(22) == "CLEAN"
         assert "corrected to 'CLEAN'" in result["verdict_override_note"]
+
+
+@pytest.mark.parametrize("engine_verdict,score", [("MALICIOUS", 80), ("CLEAN", 0)])
+@pytest.mark.parametrize("analysis,mode,expected_template", NARRATIVE_CASES)
+def test_narrative_claims_preserve_or_align_with_engine(
+    engine_verdict, score, analysis, mode, expected_template
+):
+    result = validate_llm_analysis(
+        {"verdict": "SUSPICIOUS", "analysis": analysis},
+        context={},
+        threat_score=score,
+        authoritative_verdict=engine_verdict,
+        coverage={"sources_ok": 12, "sources_applicable": 18},
+    )
+
+    assert result["verdict"] == engine_verdict
+    if mode == "rewrite":
+        assert result["analysis"] == expected_template.format(verdict=engine_verdict)
+        assert "narrative_mismatch" not in result
+    elif mode == "mismatch":
+        engine_line = (
+            f"Engine verdict: {engine_verdict} "
+            f"(score {score}/100, coverage 12/18)"
+        )
+        assert result["analysis"] == f"{engine_line}\n{analysis}"
+        assert result["narrative_mismatch"] is True
+    else:
+        assert result["analysis"] == analysis
+        assert "narrative_mismatch" not in result
