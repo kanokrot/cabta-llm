@@ -424,7 +424,7 @@ html[data-theme="light"] .auth-console {
     color: var(--text-secondary);
     font-size: 0.75rem;
     line-height: 1.5;
-    margin: -0.45rem 0 1rem;
+    margin: 0.5rem 0 1rem;
 }
 
 .auth-console .auth-console-field input::placeholder {
