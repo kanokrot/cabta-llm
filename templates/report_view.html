@@ -1978,7 +1978,7 @@
         </section>
     </div>
     <div class="rv-compare" aria-label="Recommendation comparison">
-        <span class="rv-pill">AGREEMENT: -</span><span class="rv-pill">ONLY IN AI: -</span><span class="rv-pill">ONLY IN RULES: -</span>
+        <span class="rv-pill">AGREEMENT: {{ recommendation_comparison.get('agreement') if recommendation_comparison is mapping and recommendation_comparison.get('comparable') else '-' }}</span><span class="rv-pill">ONLY IN AI: {{ recommendation_comparison.get('only_in_ai') if recommendation_comparison is mapping and recommendation_comparison.get('comparable') else '-' }}</span><span class="rv-pill">ONLY IN RULES: {{ recommendation_comparison.get('only_in_rules') if recommendation_comparison is mapping and recommendation_comparison.get('comparable') else '-' }}</span>
         {% if not (ai_recommendations or recommendations_source == 'llm') %}<span class="rv-compare-note">filled automatically once AI analysis is available</span>{% endif %}
     </div>
 </div>

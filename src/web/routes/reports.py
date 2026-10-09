@@ -20,6 +20,7 @@ from starlette.background import BackgroundTask
 
 from ...detection.rule_validator import validate_rule
 from ...reporting.ioc_pdf import generate_ioc_pdf
+from ...reporting.recommendation_comparison import compare_recommendations
 from ..auth import TEAM_LEAD, get_current_user, require_role
 from ..report_source_display import build_source_display_rows, display_source_name
 from ..visibility import serialize_report_job, serialize_report_mitre, serialize_report_payload
@@ -177,6 +178,31 @@ def _write_rule_temp_file(rule_type: str, content: str) -> str:
         return temp_file.name
 
 
+def _report_recommendation_comparison(serialized_job: dict) -> dict:
+    """Compare recommendations from the role-filtered report projection."""
+    incomparable = compare_recommendations(None, None)
+    if not isinstance(serialized_job, dict) or str(
+        serialized_job.get('analysis_type', '')
+    ).strip().lower() != 'ioc':
+        return incomparable
+
+    result = serialized_job.get('result')
+    if not isinstance(result, dict):
+        return incomparable
+
+    llm_analysis = result.get('llm_analysis')
+    ai_items = (
+        llm_analysis.get('recommendations')
+        if isinstance(llm_analysis, dict)
+        else None
+    )
+    rule_items = result.get('recommendations_rule_based')
+    return compare_recommendations(
+        ai_items if isinstance(ai_items, list) else None,
+        rule_items if isinstance(rule_items, list) else None,
+    )
+
+
 @router.get('/{analysis_id}/json')
 async def get_report_json(request: Request, analysis_id: str, current_user: dict = Depends(get_current_user)):
     """Get raw JSON report."""
@@ -197,11 +223,15 @@ async def get_report_html(request: Request, analysis_id: str, current_user: dict
 
     request.state.user = current_user
     templates = request.app.state.templates
+    serialized_job = serialize_report_job(
+        job,
+        current_user['role'],
+        viewer_user_id=current_user.get('id'),
+    )
     return templates.TemplateResponse(request, 'report_view.html', {
-        'job': serialize_report_job(
-            job,
-            current_user['role'],
-            viewer_user_id=current_user.get('id'),
+        'job': serialized_job,
+        'recommendation_comparison': _report_recommendation_comparison(
+            serialized_job
         ),
         'build_source_display_rows': build_source_display_rows,
         'display_source_name': display_source_name,
@@ -217,14 +247,18 @@ async def download_report_html(request: Request, analysis_id: str, current_user:
         raise HTTPException(404, 'Analysis not found')
 
     templates = request.app.state.templates
+    serialized_job = serialize_report_job(
+        job,
+        current_user['role'],
+        viewer_user_id=current_user.get('id'),
+    )
     return templates.TemplateResponse(
         request,
         'report_view.html',
         {
-            'job': serialize_report_job(
-                job,
-                current_user['role'],
-                viewer_user_id=current_user.get('id'),
+            'job': serialized_job,
+            'recommendation_comparison': _report_recommendation_comparison(
+                serialized_job
             ),
             'build_source_display_rows': build_source_display_rows,
             'display_source_name': display_source_name,

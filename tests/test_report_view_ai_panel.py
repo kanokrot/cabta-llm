@@ -462,3 +462,164 @@ def test_preserved_dom_contracts():
     assert len(re.findall(r'id="rawJsonPre"', html)) == 1
     assert len(re.findall(r'id="rawDataCollapse"', html)) == 1
     assert re.search(r'<canvas[^>]*id="scoreGauge"', html)
+
+
+def _render_report_route(job, role="admin", user_id=1):
+    import asyncio
+    from types import SimpleNamespace
+
+    from fastapi.templating import Jinja2Templates
+    from src.web.routes.reports import get_report_html
+
+    app = SimpleNamespace()
+    app.state = SimpleNamespace(
+        analysis_manager=SimpleNamespace(get_job=lambda analysis_id: job),
+        templates=Jinja2Templates(directory=str(PROJECT_ROOT / "templates")),
+    )
+    scope = {
+        "type": "http",
+        "method": "GET",
+        "path": "/api/reports/job-1/html",
+        "raw_path": b"/api/reports/job-1/html",
+        "query_string": b"",
+        "headers": [],
+        "scheme": "http",
+        "server": ("testserver", 80),
+        "client": ("testclient", 50000),
+        "app": app,
+    }
+    request = Request(scope)
+    current_user = {"role": role, "id": user_id}
+    request.state.user = current_user
+    response = asyncio.run(get_report_html(request, "job-1", current_user))
+    return response.body.decode("utf-8")
+
+
+def _comparison_footer(html):
+    return re.search(
+        r'<div class="rv-compare" aria-label="Recommendation comparison">(.*?)</div>',
+        html,
+        re.DOTALL,
+    ).group(1)
+
+
+def _route_job(result, analysis_type="ioc"):
+    return {
+        "id": "job-1",
+        "analysis_type": analysis_type,
+        "status": "completed",
+        "params": {"value": "example.com", "ioc_type": "domain"},
+        "user_id": 1,
+        "result": result,
+    }
+
+
+def test_report_route_renders_recommendation_category_comparison_for_admin():
+    rules = [
+        "Block IOC at firewall/proxy immediately",
+        "Hunt for connections to this IOC in logs (last 30 days)",
+        "Isolate any affected hosts from network",
+        "Create incident ticket for IR team",
+        "Reset credentials on affected systems",
+    ]
+    ai = [
+        "Immediately investigate internal network logs for any egress or ingress "
+        "traffic associated with 176.120.22.24 ...",
+        "Perform a retrospective search in the SIEM for historical connections "
+        "to this IP ...",
+        "Restore the degraded feeds (specifically AlienVault, C2_trackers, ...) "
+        "and re-run the analysis ...",
+        "Implement temporary block rules on perimeter firewalls or EDR solutions "
+        "for this IP address ...",
+    ]
+    result = _result(
+        ai_status="complete",
+        llm_analysis={
+            "verdict": "suspicious",
+            "analysis": "Analysis summary.",
+            "recommendations": ai,
+        },
+        recommendations_rule_based=rules,
+    )
+
+    footer = _comparison_footer(_render_report_route(_route_job(result)))
+
+    assert "AGREEMENT: 2" in footer
+    assert "ONLY IN AI: 1" in footer
+    assert "ONLY IN RULES: 3" in footer
+
+
+def test_report_route_keeps_dash_chips_and_note_when_ai_is_absent():
+    result = _result()
+    result.pop("llm_analysis", None)
+
+    footer = _comparison_footer(_render_report_route(_route_job(result)))
+
+    assert "AGREEMENT: -" in footer
+    assert "ONLY IN AI: -" in footer
+    assert "ONLY IN RULES: -" in footer
+    assert "filled automatically once AI analysis is available" in footer
+
+
+def test_report_route_does_not_compare_or_leak_stripped_rule_recommendations(
+    monkeypatch,
+):
+    import src.web.routes.reports as report_routes
+
+    raw_job = _route_job(
+        _result(
+            llm_analysis={
+                "verdict": "suspicious",
+                "analysis": "Analysis summary.",
+                "recommendations": ["Hunt for the indicator"],
+            },
+            recommendations_rule_based=["Block the stripped indicator"],
+        )
+    )
+    role_filtered_job = _route_job(
+        _result(
+            ai_status="complete",
+            llm_analysis={
+                "verdict": "suspicious",
+                "analysis": "Analysis summary.",
+                "recommendations": ["Hunt for the indicator"],
+            },
+            recommendations_rule_based=[],
+        )
+    )
+    role_filtered_job["result"].pop("recommendations_rule_based")
+    monkeypatch.setattr(
+        report_routes,
+        "serialize_report_job",
+        lambda job, role, viewer_user_id=None: role_filtered_job,
+    )
+
+    footer = _comparison_footer(
+        _render_report_route(raw_job, role="SOC Analyst Tier 1-2", user_id=2)
+    )
+
+    assert "AGREEMENT: -" in footer
+    assert "ONLY IN AI: -" in footer
+    assert "ONLY IN RULES: -" in footer
+    assert "hunt" not in footer.lower()
+    assert "block" not in footer.lower()
+
+
+def test_report_route_uses_incomparable_default_for_non_ioc_analysis():
+    result = _result(
+        ai_status="complete",
+        llm_analysis={
+            "verdict": "suspicious",
+            "analysis": "Analysis summary.",
+            "recommendations": ["Block the indicator"],
+        },
+        recommendations_rule_based=["Block the indicator"],
+    )
+
+    footer = _comparison_footer(
+        _render_report_route(_route_job(result, analysis_type="file"))
+    )
+
+    assert "AGREEMENT: -" in footer
+    assert "ONLY IN AI: -" in footer
+    assert "ONLY IN RULES: -" in footer
