@@ -5,6 +5,7 @@ import json
 from typing import Dict, Optional
 from src.integrations.verdict_validator import validate_llm_analysis
 import logging
+from src.scoring.intelligent_scoring import SOURCE_SCORING_MULTIPLIERS
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +21,11 @@ ALL_TI_SOURCES = [
     'talos', 'pulsedive', 'threatcrowd', 'criminalip', 'ipqualityscore',
     'spamhaus', 'phishtank', 'circl', 'ip2proxy', 'triage', 'threatzone',
 ]
+
+# These feeds were permanently removed from the supported investigation set.
+# Keep them in one prompt guardrail so degraded legacy payloads never trigger
+# recovery recommendations for feeds that cannot be restored.
+PERMANENTLY_EXCLUDED_SOURCES = frozenset({"talos", "greynoise", "pulsedive", "circl"})
 
 
 class LLMAnalyzer:
@@ -131,6 +137,8 @@ class LLMAnalyzer:
                     f"{json.dumps(context['dga'], indent=2)}\n"
                 )
 
+            source_status = context.get('source_status', {})
+
             prompt = f"""You are a senior SOC analyst specializing in critical infrastructure cybersecurity. 
 
 Analyze this IOC investigation and provide a professional, actionable analysis:
@@ -151,7 +159,7 @@ Scoring Sources Flagged: {sources_flagged}
 **Scorer Source Breakdown (authoritative for source flags and score contributions):**
 {json.dumps(score_breakdown, sort_keys=True)}
 **Source Status:**
-{json.dumps(context.get('source_status', {}), indent=2)}
+{json.dumps(source_status, indent=2)}
 {dga_section}
 {self._format_rag_section(rag_context)}
 **IMPORTANT RULES:**
@@ -164,9 +172,12 @@ Scoring Sources Flagged: {sources_flagged}
 6. If DGA confidence is below 70 or family is None, treat DGA as a weak signal.
 7. Do not recommend allowlisting when any source is degraded.
 8. ONLY reference source names that appear in the "Key Findings" or "Source Status" sections above. Do NOT mention any other source by name.
-9. If any source is degraded, one recommendation MUST be to restore that
-    source (fix its credentials or feed) and re-run the analysis now.
-    Do not suggest waiting days for a degraded source to recover.
+9. Recommend restoring a feed and re-running now only for degraded scored
+    sources listed in scored_degraded. For degraded context sources, mention
+    briefly that they are supporting evidence and do not affect the score.
+    Never recommend restoring a permanently excluded source; permanently
+    excluded sources are: {', '.join(sorted(PERMANENTLY_EXCLUDED_SOURCES))}.
+    Do not suggest waiting days for a degraded scored source to recover.
 10. If any source is degraded, do not recommend "maintaining" or "recording"
     a Clean status; describe the verdict as provisional.
 
@@ -926,7 +937,8 @@ Be specific and reference the tool findings in your analysis."""
             'key_findings': [],
             'source_status': {
                 'responded': [],
-                'degraded': [],
+                'scored_degraded': [],
+                'context_degraded': [],
                 'not_applicable': [],
             },
         }
@@ -968,10 +980,14 @@ Be specific and reference the tool findings in your analysis."""
                     reason = 'feed_status=unavailable'
                 if not reason:
                     reason = 'source returned a degraded status'
-                context['source_status']['degraded'].append({
+                degraded_source = {
                     'source': source_name,
                     'reason': str(reason),
-                })
+                }
+                if source_name.lower() in SOURCE_SCORING_MULTIPLIERS:
+                    context['source_status']['scored_degraded'].append(degraded_source)
+                else:
+                    context['source_status']['context_degraded'].append(degraded_source)
             else:
                 context['source_status']['responded'].append(source_name)
 
