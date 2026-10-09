@@ -460,7 +460,7 @@
             {% set source_class = 'na' %}
         {% elif source_status in ['error', '\u26A0'] or ('error' in source_data) or source_data.get('feed_status') == 'unavailable' %}
             {% set source_class = 'error' %}
-        {% elif source_status in ['found', 'detected', 'flagged'] or source_score >= 50 %}
+        {% elif source_data.get('listed') is sameas true or source_status in ['found', 'detected', 'flagged'] or source_score >= 50 %}
             {% set source_class = 'flagged' %}
         {% elif source_status in ['not found', 'clean', 'ok'] or (source_score == 0 and source_status) %}
             {% set source_class = 'clean' %}

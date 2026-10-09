@@ -33,7 +33,7 @@ def classify_source(source_data: Any) -> str:
         or source_data.get("feed_status") == "unavailable"
     ):
         return "error"
-    if status in {"found", "detected", "flagged"} or score >= 50:
+    if source_data.get("listed") is True or status in {"found", "detected", "flagged"} or score >= 50:
         return "flagged"
     if status in {"not found", "clean", "ok"} or (score == 0 and status):
         return "clean"

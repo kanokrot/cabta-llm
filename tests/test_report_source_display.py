@@ -176,6 +176,22 @@ def test_error_row_displays_error_badge_and_reason():
     assert "check API credentials" in row["summary"]
 
 
+def test_spamhaus_listed_is_flagged_and_counted_as_a_response():
+    sources = {
+        "spamhaus": {"status": "\u2713", "listed": True, "found": True},
+    }
+
+    html = _render_report(sources)
+    row = build_source_display_rows(sources, {"spamhaus": "flagged"})[0]
+
+    assert row["source_class"] == "flagged"
+    assert row["display_status"] == "Flagged"
+    assert row["score_text"] == "-"  # Spamhaus supplies no numeric score.
+    assert "listed True" in row["summary"]
+    assert "1 FLAGGED" in html
+    assert "1 RESPONDED" in html
+
+
 def test_nrd_sources_merge_without_changing_source_class_counts():
     sources = {
         "smet_nrd": {"status": "\u2717", "score": 0, "found": False, "message": "Not found in Smet NRD"},
