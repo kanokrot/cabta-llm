@@ -24,7 +24,8 @@ def test_prepare_ioc_context_groups_source_statuses():
 
     assert context['source_status'] == {
         'responded': ['found', 'not_found'],
-        'degraded': [{'source': 'degraded', 'reason': 'timeout'}],
+        'scored_degraded': [],
+        'context_degraded': [{'source': 'degraded', 'reason': 'timeout'}],
         'not_applicable': ['not_applicable'],
     }
     assert context['dga'] == {
