@@ -378,6 +378,7 @@ class IOCInvestigator:
                     intel_results,
                     rag_context=rag_hits,
                     authoritative_verdict=verdict,
+                    coverage=coverage,
                     dga=dga_result,
                 )
                 if llm_analysis is None:

@@ -7,6 +7,7 @@
 """
 
 import logging
+import re
 from typing import Dict, Optional
 
 logger = logging.getLogger(__name__)
@@ -69,6 +70,25 @@ def enforce_verdict_consistency(
         )
 
     # scoring engine เป็น source of truth เสมอ ไม่ว่า LLM จะตอบว่าอะไรมา
+    analysis = llm_result.get("analysis")
+    if isinstance(analysis, str):
+        claim_patterns = (
+            re.compile(
+                r"(?im)(?P<prefix>^\s*(?:\*\*)?|\b(?:verdict|assessment|classification)\s*(?:is|:)\s*)"
+                r"(?P<claim>MALICIOUS|SUSPICIOUS|CLEAN|UNKNOWN)\b"
+            ),
+            re.compile(
+                r"(?i)(?P<prefix>\b(?:this|the)\s+IOC\s+(?:is|was|appears)\s+)"
+                r"(?P<claim>MALICIOUS|SUSPICIOUS|CLEAN|UNKNOWN)\b"
+            ),
+        )
+        for pattern in claim_patterns:
+            analysis = pattern.sub(
+                lambda match: f"{match.group('prefix')}{authoritative_verdict}",
+                analysis,
+            )
+        llm_result["analysis"] = analysis
+
     llm_result["verdict"] = authoritative_verdict
 
     return llm_result

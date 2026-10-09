@@ -156,3 +156,31 @@ async def test_vllm_success_does_not_retry(monkeypatch):
 
     assert result == {"verdict": "CLEAN"}
     assert attempts[0] == 1
+
+
+@pytest.mark.asyncio
+async def test_ioc_prompt_uses_engine_verdict_and_coverage_and_aligns_narrative(monkeypatch):
+    analyzer = _analyzer()
+    prompts = []
+
+    async def fake_call(prompt, **kwargs):
+        prompts.append(prompt)
+        return {
+            "verdict": "SUSPICIOUS",
+            "analysis": "SUSPICIOUS, one of 18 sources flagged this IOC.",
+        }
+
+    monkeypatch.setattr(analyzer, "_call_vllm_api", fake_call)
+    result = await analyzer.analyze_ioc_results(
+        "39.107.118.55",
+        "ipv4",
+        {"threat_score": 80, "sources_checked": 12, "sources_flagged": 0, "sources": {}},
+        authoritative_verdict="MALICIOUS",
+        coverage={"sources_ok": 6, "sources_applicable": 12, "sources_unavailable": 6},
+    )
+
+    assert "Scoring Engine Verdict: MALICIOUS" in prompts[0]
+    assert '"sources_applicable": 12' in prompts[0]
+    assert "If sources_flagged = 0" not in prompts[0]
+    assert result["verdict"] == "MALICIOUS"
+    assert result["analysis"].startswith("MALICIOUS,")

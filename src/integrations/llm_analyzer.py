@@ -83,6 +83,7 @@ class LLMAnalyzer:
         results: Dict,
         rag_context: Optional[list] = None,
         authoritative_verdict: Optional[str] = None,
+        coverage: Optional[Dict] = None,
         dga: Optional[Dict] = None,
     ) -> Dict:
         """
@@ -95,6 +96,7 @@ class LLMAnalyzer:
             rag_context: Optional list of retrieved knowledge base entries
             authoritative_verdict: Final coverage-aware verdict from the IOC
                 investigator
+            coverage: Coverage-aware source counts from the scoring engine
 
         Returns:
             LLM analysis with verdict and recommendations
@@ -107,13 +109,16 @@ class LLMAnalyzer:
             sources_checked = results.get('sources_checked', 0)
             sources_flagged = results.get('sources_flagged', 0)
 
-            # Build explicit findings summary
-            if sources_flagged == 0:
-                findings_summary = f"✅ **CLEAN**: This IOC was NOT flagged by any of the {sources_checked} sources checked. No malicious activity detected."
-            elif sources_flagged == 1:
-                findings_summary = f"⚠️ **SUSPICIOUS**: 1 out of {sources_checked} sources flagged this IOC."
-            else:
-                findings_summary = f"🚨 **MALICIOUS**: {sources_flagged} out of {sources_checked} sources flagged this IOC."
+            # Findings and source counts explain the engine decision; they do
+            # not independently derive a second verdict.
+            engine_verdict = authoritative_verdict or "not supplied"
+            findings_summary = (
+                f"Scoring engine verdict: {engine_verdict}. "
+                f"{sources_flagged} of {sources_checked} sources flagged the IOC."
+            )
+            coverage_data = coverage if isinstance(coverage, dict) else results.get('coverage', {})
+            if not isinstance(coverage_data, dict):
+                coverage_data = {}
 
             dga_section = ''
             if 'dga' in context:
@@ -129,6 +134,8 @@ Analyze this IOC investigation and provide a professional, actionable analysis:
 IOC: {ioc}
 Type: {ioc_type}
 Threat Score: {results.get('threat_score', 0)}/100
+Scoring Engine Verdict: {engine_verdict}
+Source Coverage: {json.dumps(coverage_data, sort_keys=True)}
 
 **Investigation Summary:**
 {findings_summary}
@@ -142,28 +149,25 @@ Sources Flagged: {sources_flagged}
 {dga_section}
 {self._format_rag_section(rag_context)}
 **IMPORTANT RULES:**
-1. Your verdict MUST match the investigation findings
-2. If sources_flagged = 0, verdict MUST be "CLEAN"
-3. If sources_flagged = 1-2, verdict can be "SUSPICIOUS"  
-4. If sources_flagged >= 3, verdict can be "MALICIOUS"
-5. Do NOT hallucinate findings that don't exist
-6. Base your analysis ONLY on the data provided above
-7. If any source is degraded, state that the verdict is provisional and name the degraded sources.
-8. Do NOT invent playbooks or standards; cite a knowledge-base entry only by its [N] marker.
-9. If DGA confidence is below 70 or family is None, treat DGA as a weak signal.
-10. Do not recommend allowlisting when any source is degraded.
-11. ONLY reference source names that appear in the "Key Findings" or "Source Status" sections above. Do NOT mention any other source by name.
-12. If any source is degraded, one recommendation MUST be to restore that
+1. The scoring engine verdict above is authoritative. Explain that verdict; do not recalculate or replace it based on sources_flagged, score thresholds, or your own assessment.
+2. Do NOT hallucinate findings that don't exist
+3. Base your analysis ONLY on the data provided above
+4. If any source is degraded, state that the engine verdict reflects limited coverage and name the degraded sources.
+5. Do NOT invent playbooks or standards; cite a knowledge-base entry only by its [N] marker.
+6. If DGA confidence is below 70 or family is None, treat DGA as a weak signal.
+7. Do not recommend allowlisting when any source is degraded.
+8. ONLY reference source names that appear in the "Key Findings" or "Source Status" sections above. Do NOT mention any other source by name.
+9. If any source is degraded, one recommendation MUST be to restore that
     source (fix its credentials or feed) and re-run the analysis now.
     Do not suggest waiting days for a degraded source to recover.
-13. If any source is degraded, do not recommend "maintaining" or "recording"
+10. If any source is degraded, do not recommend "maintaining" or "recording"
     a Clean status; describe the verdict as provisional.
 
 Provide your analysis in a clear, professional format. Include:
 
 1. **Threat Assessment** (2-3 sentences)
    - Summarize the investigation results accurately
-   - State verdict (MUST match sources_flagged count)
+   - Explain the scoring engine verdict shown above
    - Mention any specific findings from sources
 
 2. **Recommendations** (3-5 actionable items)
@@ -172,8 +176,8 @@ Provide your analysis in a clear, professional format. Include:
 
 Respond in JSON format:
 {{
-    "verdict": "MALICIOUS/SUSPICIOUS/CLEAN",
-    "analysis": "Your professional analysis here (2-3 sentences). MUST be consistent with sources_flagged count.",
+    "verdict": "{engine_verdict}",
+    "analysis": "Explain the scoring engine verdict in 2-3 sentences.",
     "recommendations": ["rec1", "rec2", "rec3"]
 }}
 
