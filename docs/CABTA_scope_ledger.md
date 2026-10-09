@@ -2418,3 +2418,8 @@ to this one dataset.
 - The initial scoring-only replay changed 25 rows to `UNKNOWN` (24 expected `CLEAN`, one expected `MALICIOUS`). These were an eval-export artifact, not a production coverage failure: production's trusted-infrastructure path returns `CLEAN` before scoring, while the exporter had converted its empty source map into six unavailable placeholders. The replay now honors `trusted_shortcut=true` with `sources_checked=0` using the recorded production verdict. Of the 435 expected-clean rows, 411 were source-scored and 24 used the trusted shortcut. Of 709 expected-malicious rows, 708 were source-scored and one (the Microsoft security blog URL) used the trusted shortcut. The four unsupported domain/URL sources remain an applicability follow-up; they were not provider failures.
 - With trusted-shortcut rows treated as production records, all 1,144 rows have verdict counts 355 `MALICIOUS`, 789 `CLEAN`, 0 `UNKNOWN`, and 0 `SUSPICIOUS`; headline metrics are accuracy 69.1%, precision 100.0%, recall 50.1%, F1 66.7%. The 1,119 source-scored subset has metrics accuracy 68.5%, precision 100.0%, recall 50.1%, F1 66.8%.
 - Reproduce with `scripts/eval/replay_source_error_handling.py`; this comparison is in `scripts/eval/output/source_error_handling_trusted_shortcut_replay.json`.
+
+
+## 2026-10-09: scorer-consistent source display
+
+- Scored-source Flagged/Clean state and Top source come from `score_breakdown` as the single source of truth. AlienVault and VirusTotal are context sources and do not contribute to IOC scoring.
