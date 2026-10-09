@@ -842,7 +842,7 @@
 {% endif %}
 
 <!-- ══ THREAT INTELLIGENCE SOURCES — sources is a DICT keyed by source name ══ -->
-{% set source_display_rows = build_source_display_rows(sources, source_summary.classes, score_breakdown) if build_source_display_rows is defined else [] %}
+{% set source_display_rows = build_source_display_rows(sources, source_summary.classes, score_breakdown, ioc_type) if build_source_display_rows is defined else [] %}
 <div class="rv-card card-print-flow">
     <div class="rv-card-head card-header-collapsible" data-bs-toggle="collapse" data-bs-target="#sourcesCollapse" aria-expanded="true">
         <h2 class="rv-console-title">Threat Intelligence Sources</h2>

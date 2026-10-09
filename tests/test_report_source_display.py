@@ -1001,3 +1001,20 @@ def test_raw_json_print_hides_tree_and_controls():
     html = _render_report({"safe": {"status": "clean", "score": 0}})
 
     assert ".report-v2 #rawJsonTree, .report-v2 .rv-raw-tools { display: none !important; }" in html
+
+
+def test_sslbl_deprecated_ip_status_is_display_only():
+    sources = {
+        "sslblacklist": {
+            "status": "\u26a0",
+            "error": "SSLBL IP feed is deprecated; certificate SHA1 feed remains available",
+        }
+    }
+
+    ip_row = build_source_display_rows(sources, ioc_type="ip")[0]
+    domain_row = build_source_display_rows(sources, ioc_type="domain")[0]
+
+    assert ip_row["display_status"] == "Unavailable (IP feed deprecated)"
+    assert ip_row["source_class"] == "error"
+    assert domain_row["display_status"] == "Error"
+    assert domain_row["source_class"] == "error"

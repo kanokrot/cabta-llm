@@ -2788,6 +2788,7 @@
                 var statusLabel = '';
                 if (!srcData) { statusClass = 'clean'; statusLabel = 'No Data'; }
                 else if ((srcData.status === '⚠' && typeof srcData.error === 'string' && srcData.error.toLowerCase().includes('api key')) || srcData.status === 'No valid API key configured') { statusClass = 'nokey'; statusLabel = 'No API Key'; }
+                else if (srcName.toLowerCase() === 'sslblacklist' && String(data.ioc_type || '').toLowerCase() === 'ip' && /deprecated/i.test(String(srcData.error || ''))) { statusClass = 'warn'; statusLabel = 'Unavailable (IP feed deprecated)'; }
                 else if (srcData.error) { statusClass = 'error'; statusLabel = 'Error'; }
                 else if (sourceBreakdown) {
                     if (sourceBreakdown.flagged === true || sourceBreakdown.score_used > 0) { statusClass = 'hit'; statusLabel = 'Flagged'; }

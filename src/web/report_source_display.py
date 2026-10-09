@@ -131,9 +131,22 @@ def _score_level(score: float) -> str:
 
 
 def display_source_status(
-    source_class: str, raw_status: Any, score: float | None
+    source_class: str,
+    raw_status: Any,
+    score: float | None,
+    *,
+    source_name: str = "",
+    source_data: Mapping[str, Any] | None = None,
+    ioc_type: str = "",
 ) -> str:
     """Map a raw status to a visible word badge without changing its class."""
+    if (
+        ioc_type.lower() == "ip"
+        and source_name.lower() == "sslblacklist"
+        and isinstance(source_data, Mapping)
+        and "deprecated" in str(source_data.get("error", "")).lower()
+    ):
+        return "Unavailable (IP feed deprecated)"
     if source_class == "na":
         return "N/A"
     if source_class == "error":
@@ -267,6 +280,7 @@ def _make_row(
     source_data: Mapping[str, Any],
     source_class: str,
     score_breakdown: Mapping[str, Any] | None = None,
+    ioc_type: str = "",
 ) -> dict[str, Any]:
     label = display_source_name(source_name)
     score = (
@@ -305,7 +319,14 @@ def _make_row(
         "source_names": [source_name],
         "source_class": source_class,
         "display_name": label,
-        "display_status": display_source_status(source_class, source_data.get("status"), score),
+        "display_status": display_source_status(
+            source_class,
+            source_data.get("status"),
+            score,
+            source_name=source_name,
+            source_data=source_data,
+            ioc_type=ioc_type,
+        ),
         "summary": _truncate_summary(full_summary),
         "summary_title": full_summary,
         "summary_keys": summary_keys,
@@ -399,6 +420,7 @@ def build_source_display_rows(
     sources: Mapping[str, Any],
     source_classes: Mapping[str, str] | None = None,
     score_breakdown: Mapping[str, Any] | None = None,
+    ioc_type: str = "",
 ) -> list[dict[str, Any]]:
     """Build sorted display rows using supplied or shared report classes."""
     if not isinstance(sources, Mapping):
@@ -417,7 +439,7 @@ def build_source_display_rows(
         if source_class is None:
             source_class = classify_source(source_data, source_breakdown)
         rows_by_name[str(source_name)] = _make_row(
-            str(source_name), source_data, source_class, source_breakdown
+            str(source_name), source_data, source_class, source_breakdown, ioc_type
         )
 
     smet = rows_by_name.get("smet_nrd")
