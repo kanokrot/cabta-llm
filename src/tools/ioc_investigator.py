@@ -516,7 +516,17 @@ class IOCInvestigator:
         ticket_verdicts = self.config.get("ticketing", {}).get("create_on_verdict", ["MALICIOUS", "SUSPICIOUS"])
         if verdict in ticket_verdicts and analysis_id:
             try:
-                create_incident_ticket(result, analysis_id, owner_id=user_id)
+                create_incident_ticket(
+                    {
+                        **result,
+                        'summary': (
+                            f"{result['ioc']} classified as {result['verdict']} "
+                            f"(threat score {result['threat_score']}/100)"
+                        ),
+                    },
+                    analysis_id,
+                    owner_id=user_id,
+                )
             except Exception as e:
                 logger.error(f"[IOC] Failed to create incident ticket: {e}")
 
