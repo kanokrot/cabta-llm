@@ -411,6 +411,18 @@ def _safe_score_breakdown(value: Any, sources: Mapping[str, Any]) -> dict[str, d
     return output
 
 
+def _safe_source_scoring_weights(sources: Mapping[str, Any]) -> dict[str, float]:
+    """Expose configured scoring-source weights for presentation labels."""
+    from ..scoring.intelligent_scoring import SOURCE_SCORING_MULTIPLIERS
+
+    available_names = {str(name).lower() for name in sources}
+    return {
+        name: float(weight)
+        for name, weight in SOURCE_SCORING_MULTIPLIERS.items()
+        if name in available_names
+    }
+
+
 def _safe_extra_evidence(value: Any) -> list[dict[str, Any]]:
     """Allow only compact summaries from post-score user-key cross-checks."""
     if not isinstance(value, list):
@@ -620,6 +632,9 @@ def _safe_result(
             output["ai_error"] = ai_error
     if isinstance(result.get("sources"), dict):
         output["sources"] = _safe_sources(result["sources"], detailed=detailed)
+        source_scoring_weights = _safe_source_scoring_weights(result["sources"])
+        if source_scoring_weights:
+            output["source_scoring_weights"] = source_scoring_weights
         breakdown = result.get("score_breakdown")
         output["score_breakdown"] = _safe_score_breakdown(
             breakdown, result["sources"]

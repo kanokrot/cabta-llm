@@ -30,7 +30,10 @@ from ..web.source_classification import (
     count_source_classes,
     source_status_label,
 )
-from ..scoring.intelligent_scoring import NON_API_SCORING_SOURCES
+from ..scoring.intelligent_scoring import (
+    NON_API_SCORING_SOURCES,
+    SOURCE_SCORING_MULTIPLIERS,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -290,10 +293,14 @@ def _source_detail_text(
     key = str(source_key).lower()
     detail = "No additional detail"
 
-    if isinstance(score_breakdown, dict) and score_breakdown.get("scored") is True:
-        score = score_breakdown.get("score_used")
-        weight = score_breakdown.get("weight")
-        return f"Score used {score}/100 at weight {weight:.2f}."
+    weight = SOURCE_SCORING_MULTIPLIERS.get(key)
+    score = (
+        score_breakdown.get("score_used")
+        if isinstance(score_breakdown, dict)
+        else None
+    )
+    if weight is not None and isinstance(score, Real) and not isinstance(score, bool) and score > 0:
+        return f"Score used {score:g}/100 at weight {weight:.2f}."
 
     if cls == "error":
         http_status = data.get("http_status")
@@ -312,8 +319,12 @@ def _source_detail_text(
                 return f"Authentication failed (HTTP {code}). Source not evaluated."
             return f"Request failed (HTTP {code}). Source not evaluated."
         if data.get("feed_status") == "unavailable":
-            return "Feed unavailable. Source not evaluated."
-        return "Source error. Source not evaluated."
+            error_detail = "Feed unavailable. Source not evaluated."
+        else:
+            error_detail = "Source error. Source not evaluated."
+        if weight is not None:
+            return f"Scored source (weight {weight:.2f}); {error_detail}"
+        return error_detail
 
     if cls == "clean":
         checked = data.get("sources_checked")

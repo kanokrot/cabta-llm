@@ -15,6 +15,7 @@ from src.reporting.ioc_pdf import (
     _without_emoji,
     generate_ioc_pdf,
 )
+from src.scoring.intelligent_scoring import SOURCE_SCORING_MULTIPLIERS
 from src.web.source_classification import (
     classify_source,
     count_source_classes,
@@ -92,6 +93,19 @@ def test_pdf_source_detail_error_cases_are_safe(source_data, expected):
     assert detail == expected
     assert "<script>" not in detail
     assert "C:\\secret\\key" not in detail
+
+
+def test_pdf_scored_source_error_keeps_config_weight_in_detail():
+    detail = _source_detail_text(
+        "c2_trackers",
+        {"error": "DNS feed timeout", "unavailable": True},
+        "error",
+        "domain",
+        {"flagged": False, "score_used": None, "weight": 99, "scored": False},
+    )
+
+    expected_weight = SOURCE_SCORING_MULTIPLIERS["c2_trackers"]
+    assert detail == f"Scored source (weight {expected_weight:.2f}); Source error. Source not evaluated."
 
 
 def test_pdf_source_detail_uses_safe_http_status_without_error_text():

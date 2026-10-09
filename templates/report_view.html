@@ -488,7 +488,7 @@
         {% else %}
             {% set source_summary.responded = source_summary.responded + 1 %}
         {% endif %}
-        {% if source_breakdown is mapping and source_breakdown.get('scored') and source_score > source_summary.top_score %}
+        {% if source_breakdown is mapping and source_score > 0 and source_score > source_summary.top_score %}
             {% set source_summary.top_score = source_score %}
             {% set source_summary.top_name = source_name | string | title %}
         {% elif not score_breakdown and source_class not in ['na', 'error'] and source_score > source_summary.top_score %}
@@ -1928,13 +1928,11 @@
                 <span class="rv-pill rv-ai-state rv-ai-state--{{ ai_badge_tone | e }}">{{ ai_badge_text | e }}</span>
             </h3>
             {% set ai_scoring_evidence = namespace(items=[]) %}
-            {% for source_name, item in score_breakdown.items() if item is mapping and item.get('flagged') %}
-                {% if item.get('scored') and item.get('weight') is number %}
-                    {% set evidence_text = source_name ~ ' score ' ~ item.get('score_used') ~ ' (weight ' ~ ('%.2f' | format(item.get('weight'))) ~ ')' %}
-                {% elif item.get('scored') %}
-                    {% set evidence_text = source_name ~ ' score ' ~ item.get('score_used') %}
+            {% for row in source_display_rows if row.score_breakdown is mapping and row.score_breakdown.get('flagged') %}
+                {% if row.score is number and row.score > 0 %}
+                    {% set evidence_text = row.source_name ~ ' score ' ~ row.score_text ~ ' (weight ' ~ ('%.2f' | format(row.weight)) ~ ')' %}
                 {% else %}
-                    {% set evidence_text = source_name ~ ' flagged; no score used' %}
+                    {% set evidence_text = row.source_name ~ ' flagged; no score used' %}
                 {% endif %}
                 {% set _ = ai_scoring_evidence.items.append(evidence_text) %}
             {% endfor %}

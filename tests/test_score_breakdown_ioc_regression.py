@@ -191,3 +191,5 @@ def test_ioc_page_reads_flag_state_from_score_breakdown():
     assert "data.score_breakdown[name]" in template
     assert "item.flagged === true" in template
     assert "sourceBreakdown.flagged === true || sourceBreakdown.score_used > 0" in template
+    assert "data.source_scoring_weights" in template
+    assert "SCORED · Weight:" in template
