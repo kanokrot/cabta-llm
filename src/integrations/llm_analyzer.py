@@ -5,7 +5,6 @@ import json
 from typing import Dict, Optional
 from src.integrations.verdict_validator import validate_llm_analysis
 import logging
-from src.scoring.intelligent_scoring import SOURCE_SCORING_MULTIPLIERS
 
 logger = logging.getLogger(__name__)
 
@@ -951,6 +950,7 @@ Be specific and reference the tool findings in your analysis."""
 
             score_breakdown = build_ioc_score_breakdown(results)
         context['score_breakdown'] = score_breakdown
+        scored_source_names = {str(name).lower() for name in score_breakdown}
         context['sources_flagged'] = sum(
             1 for item in score_breakdown.values()
             if isinstance(item, dict) and item.get('flagged') is True
@@ -984,7 +984,7 @@ Be specific and reference the tool findings in your analysis."""
                     'source': source_name,
                     'reason': str(reason),
                 }
-                if source_name.lower() in SOURCE_SCORING_MULTIPLIERS:
+                if source_name.lower() in scored_source_names:
                     context['source_status']['scored_degraded'].append(degraded_source)
                 else:
                     context['source_status']['context_degraded'].append(degraded_source)
