@@ -3049,6 +3049,7 @@
        AUTO-LOAD FROM URL ?id= PARAMETER
     ======================================================== */
     var params = new URLSearchParams(window.location.search);
+    var qParam = (params.get('q') || '').trim();
     analysisId = params.get('id');
     if (analysisId) {
         var capturedAutoLoadRunId = ++runId;
@@ -3108,6 +3109,10 @@
                 setProgressVisual('error');
                 progressSpinner.style.display = '';
             });
+    } else if (qParam) {
+        iocValueInput.value = qParam;
+        saveIOCHistory(qParam, iocTypeSelect.value);
+        runAnalysis(qParam, iocTypeSelect.value);
     }
 
     /* ========================================================
