@@ -180,19 +180,19 @@
     .dash-map-hover-card::before { top: -1px; left: -1px; border-width: 1px 0 0 1px; }
     .dash-map-hover-card::after { right: -1px; bottom: -1px; border-width: 0 1px 1px 0; }
     .dash-map-hover-card.is-visible { opacity: 1; transform: translate(0, 0); }
-    .dash-map-hover-kicker { display: block; overflow: hidden; color: rgb(99 231 255); font: 600 9px ui-monospace, monospace; letter-spacing: .18em; white-space: nowrap; }
-    .dash-map-hover-kicker.is-typing { width: 0; animation: dash-scan-type 650ms steps(8, end) forwards; }
+    .dash-map-hover-kicker { display: block; color: rgb(99 231 255); font: 600 9px ui-monospace, monospace; letter-spacing: .18em; white-space: nowrap; }
     .dash-map-hover-name { margin: 5px 0 1px; color: rgb(240 252 255); font-size: 14px; font-weight: 700; }
     .dash-map-hover-code { color: rgb(120 170 184); font: 10px ui-monospace, monospace; letter-spacing: .12em; }
     .dash-map-hover-row { display: flex; justify-content: space-between; gap: 8px; margin-top: 7px; color: rgb(145 183 193); font-size: 10px; }
     .dash-map-hover-row strong { color: rgb(226 249 255); font-size: 10px; text-align: right; }
     .dash-map-hover-verdict { padding: 2px 5px; border-radius: 4px; font-size: 9px !important; }
+    .dash-map-hover-stats[hidden], .dash-map-hover-empty[hidden] { display: none !important; }
+    .dash-map-hover-empty { margin: 7px 0 0; color: rgb(145 183 193); font-size: 10px; }
     .dash-map-error { position: relative; z-index: 1; display: grid; min-height: 250px; place-items: center; margin: 0; padding: 24px; color: rgb(196 220 226); text-align: center; }
     .dash-page .dash-map[hidden], .dash-page .dash-map-error[hidden] { display: none !important; }
     .dash-country-focus { min-height: 1.25em; margin: 0 0 8px; color: var(--text-secondary); font-size: 12px; text-align: center; }
     @keyframes dash-star-twinkle { from { opacity: .2; } to { opacity: .65; } }
     @keyframes dash-orbit-turn { to { transform: rotate(360deg); } }
-    @keyframes dash-scan-type { to { width: 8ch; } }
     @keyframes dash-ring-pulse { 50% { opacity: .45; transform: scale(1.35); } }
     @media (prefers-reduced-motion: reduce) {
         .dash-map-star.is-twinkling, .dash-map-orbit, .dash-map-hover-ring { animation: none !important; }
@@ -425,10 +425,12 @@
                                 <span class="dash-map-hover-kicker" id="dash-map-hover-kicker">SCANNING</span>
                                 <h3 class="dash-map-hover-name" id="dash-map-hover-name"></h3>
                                 <span class="dash-map-hover-code" id="dash-map-hover-code"></span>
-                                <div class="dash-map-hover-row"><span>Indicators (unique IPs)</span><strong id="dash-map-hover-indicators">—</strong></div>
-                                <div class="dash-map-hover-row"><span>Analyses</span><strong id="dash-map-hover-analyses">—</strong></div>
-                                <div class="dash-map-hover-row"><span>Worst verdict</span><strong id="dash-map-hover-verdict" class="dash-map-hover-verdict">—</strong></div>
-                                <p id="dash-map-hover-empty" hidden>No indicators</p>
+                                <div id="dash-map-hover-stats" class="dash-map-hover-stats">
+                                    <div class="dash-map-hover-row"><span>Indicators (unique IPs)</span><strong id="dash-map-hover-indicators">—</strong></div>
+                                    <div class="dash-map-hover-row"><span>Analyses</span><strong id="dash-map-hover-analyses">—</strong></div>
+                                    <div class="dash-map-hover-row"><span>Worst verdict</span><strong id="dash-map-hover-verdict" class="dash-map-hover-verdict">—</strong></div>
+                                </div>
+                                <p id="dash-map-hover-empty" class="dash-map-hover-empty" hidden>No indicators</p>
                             </aside>
                             <p class="dash-map-error" id="dash-map-error" role="status" hidden></p>
                         </div>

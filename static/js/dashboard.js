@@ -21,6 +21,36 @@ function defangIoc(value, iocType) {
     return prefix + userInfo + host + (hostMatch ? hostMatch[2] : '') + authority[2];
 }
 
+function startScanTyping(kicker, countryCode, state, reducedMotion) {
+    if (state.lastShownCountryCode === countryCode) return;
+    if (state.kickerTimer !== null) window.clearInterval(state.kickerTimer);
+    state.kickerTimer = null;
+    state.lastShownCountryCode = countryCode;
+    kicker.textContent = '';
+    if (reducedMotion) {
+        kicker.textContent = 'SCANNING';
+        return;
+    }
+    let index = 0;
+    const timer = window.setInterval(() => {
+        if (state.lastShownCountryCode !== countryCode) return;
+        index += 1;
+        kicker.textContent = 'SCANNING'.slice(0, index);
+        if (index >= 'SCANNING'.length) {
+            window.clearInterval(timer);
+            if (state.kickerTimer === timer) state.kickerTimer = null;
+        }
+    }, 35);
+    state.kickerTimer = timer;
+}
+
+function stopScanTyping(kicker, state) {
+    if (state.kickerTimer !== null) window.clearInterval(state.kickerTimer);
+    state.kickerTimer = null;
+    state.lastShownCountryCode = null;
+    if (kicker) kicker.textContent = '';
+}
+
 document.addEventListener('DOMContentLoaded', function () {
     const dashboard = document.querySelector('.dash-page');
     if (!dashboard) return;
@@ -349,6 +379,7 @@ document.addEventListener('DOMContentLoaded', function () {
             drawingFrame: null, animationFrame: null, pointers: new Map(), dragPointerId: null,
             pinchStart: null, suppressClick: false, focusedFeature: null, hoverFeature: null,
             pinnedFeature: null, hasStats: false,
+            lastShownCountryCode: null, kickerTimer: null,
         };
         const reducedMotion = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
         const clamp = (value, low, high) => Math.max(low, Math.min(high, value));
@@ -413,11 +444,11 @@ document.addEventListener('DOMContentLoaded', function () {
             const verdict = byId('dash-map-hover-verdict');
             verdict.textContent = stats ? stats.worst_verdict : '\u2014';
             verdict.className = 'dash-map-hover-verdict' + (stats ? ' dash-country-verdict--' + verdictStyle(stats.worst_verdict) : '');
+            byId('dash-map-hover-stats').hidden = !stats;
             byId('dash-map-hover-empty').hidden = Boolean(stats);
             const kicker = byId('dash-map-hover-kicker');
-            kicker.classList.remove('is-typing');
-            void kicker.offsetWidth;
-            if (!reducedMotion()) kicker.classList.add('is-typing');
+            const countryKey = code || ('n3-' + normalizedNumericId(feature.id));
+            startScanTyping(kicker, countryKey, globe, reducedMotion());
             card.classList.add('is-visible');
             card.setAttribute('aria-hidden', 'false');
         }
@@ -435,6 +466,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 globe.pinnedFeature = null;
                 card?.classList.remove('is-visible');
                 card?.setAttribute('aria-hidden', 'true');
+                stopScanTyping(byId('dash-map-hover-kicker'), globe);
             }
             requestRender();
         }

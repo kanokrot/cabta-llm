@@ -189,6 +189,24 @@ def test_dashboard_globe_uses_only_vendored_d3_functions_and_ascii_source() -> N
     assert script.isascii()
 
 
+def test_globe_hover_card_typing_and_no_data_rows() -> None:
+    template = TEMPLATE.read_text(encoding="utf-8")
+    script = SCRIPT.read_text(encoding="utf-8")
+    assert "lastShownCountryCode" in script
+    assert "state.lastShownCountryCode === countryCode" in script
+    assert "window.setInterval" in script and "}, 35);" in script
+    assert "kicker.textContent = 'SCANNING';" in script
+    assert "startScanTyping(kicker, countryKey, globe, reducedMotion());" in script
+    assert "stopScanTyping(byId('dash-map-hover-kicker'), globe);" in script
+    assert 'id="dash-map-hover-stats" class="dash-map-hover-stats"' in template
+    assert "byId('dash-map-hover-stats').hidden = !stats;" in script
+    assert "byId('dash-map-hover-empty').hidden = Boolean(stats);" in script
+    assert 'id="dash-map-hover-empty" class="dash-map-hover-empty" hidden>No indicators</p>' in template
+    assert ".dash-map-hover-stats[hidden]" in template
+    assert "innerHTML" not in script
+    assert script.isascii()
+
+
 def test_weekly_threat_feed_panel_is_safe_and_accessible() -> None:
     template = TEMPLATE.read_text(encoding="utf-8")
     script = SCRIPT.read_text(encoding="utf-8")
