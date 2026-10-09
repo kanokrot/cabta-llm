@@ -2410,3 +2410,11 @@ to this one dataset.
 
 - Malware และ IOC ใช้ key ร่วมกันคือ `ticketing.create_on_verdict`; Malware อ่านที่ `src/tools/malware_analyzer.py:643-646` และ IOC อ่านที่ `src/tools/ioc_investigator.py:427-431`. ค่าใน config ปัจจุบันคือ `MALICIOUS`, `SUSPICIOUS`, `CLEAN`, `UNKNOWN` (`config.yaml:137-142`).
 - ข้อความว่า Email copy ไม่มี `notification_manager` เป็นจริงเฉพาะเมื่อ production wiring มี `email_analyzer` และต้นฉบับ IOC investigator/MalwareAnalyzer ตามเงื่อนไขใน `src/web/app.py:325-334`; ไม่ใช่ guarantee เมื่อ instance ต้นฉบับสร้างไม่สำเร็จ.
+
+
+## 2026-10-09: source errors and coverage accounting
+
+- Scoring now treats explicit source errors/unavailability as unavailable rather than clean. `_is_source_error()` is shared by scoring and source coverage; `_get_source_score()` returns `None` for errors. Coverage exposes `sources_ok` and `sources_applicable`.
+- Offline replay of the stored 1,144 rows changed 25 verdicts: 24 expected `CLEAN` and one expected `MALICIOUS` changed from `CLEAN` to `UNKNOWN`. The records used the trusted-shortcut path with `sources_checked=0`; their six unavailable source placeholders do not establish provider outages. For these domain/URL IOC types, Feodo, Spamhaus, Tor Exit Nodes, and SSL Blacklist are not applicable; C2 Trackers and ThreatFox are applicable but were not checked. This replay leaves type-specific applicability handling unchanged.
+- With `UNKNOWN` treated as a negative, headline metrics are unchanged: accuracy 69.1%, precision 100.0%, recall 50.1%, F1 66.7%. If `UNKNOWN` is treated as abstention, 25/1,144 rows abstain (2.2%); accuracy is 68.5%, precision 100.0%, recall 50.1%, and F1 66.8% on 1,119 evaluated rows.
+- Reproduce with `scripts/eval/replay_source_error_handling.py`; the generated report is `scripts/eval/output/source_error_handling_replay_1144.json`.

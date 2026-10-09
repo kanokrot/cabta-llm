@@ -101,6 +101,21 @@ def test_evidence_card_uses_scoring_result_sources_and_engine_values():
     assert card["not_applicable_count"] == 2
 
 
+def test_evidence_card_maps_error_score_none_to_unavailable():
+    finding = _finding()
+    finding["result"]["sources"]["feodotracker"] = {
+        "status": "Error",
+        "error": "feed failed",
+    }
+
+    card = build_evidence_card([finding], "analyze 8.8.8.8")
+
+    assert card is not None
+    feodo = next(row for row in card["scoring_sources"] if row["name"] == "feodotracker")
+    assert feodo["state"] == "unavailable"
+    assert feodo["score"] == 0
+
+
 def test_tier_map_tracks_the_scoring_engine_and_card_is_bounded():
     card = build_evidence_card([_finding()], "analyze 8.8.8.8")
     assert card is not None

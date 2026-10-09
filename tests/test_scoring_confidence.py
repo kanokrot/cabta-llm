@@ -4,6 +4,7 @@ from src.scoring.intelligent_scoring import (
     IntelligentScoring,
     SOURCE_SCORING_MULTIPLIERS,
 )
+from src.utils.helpers import determine_verdict
 
 
 def test_report_only_sources_do_not_change_ioc_score():
@@ -111,6 +112,8 @@ def test_all_sources_flagged_high_coverage():
         "sources_stale": 0,
         "total_sources_attempted": 2,
         "sources_skipped_not_applicable": 0,
+        "sources_ok": 2,
+        "sources_applicable": 2,
         "group_a": {
             "sources_flagged": 2,
             "sources_clean": 0,
@@ -162,6 +165,8 @@ def test_timeout_without_cache_counted_unavailable():
         "sources_stale": 0,
         "total_sources_attempted": 1,
         "sources_skipped_not_applicable": 0,
+        "sources_ok": 0,
+        "sources_applicable": 1,
         "group_a": {
             "sources_flagged": 0,
             "sources_clean": 0,
@@ -206,6 +211,8 @@ def test_timeout_with_cache_counted_stale_and_scored():
         "sources_stale": 2,
         "total_sources_attempted": 2,
         "sources_skipped_not_applicable": 0,
+        "sources_ok": 2,
+        "sources_applicable": 2,
         "group_a": {
             "sources_flagged": 1,
             "sources_clean": 1,
@@ -223,6 +230,43 @@ def test_timeout_with_cache_counted_stale_and_scored():
             "sources_skipped_not_applicable": 0,
         },
     }
+
+
+@pytest.mark.parametrize("status", ["Error", "\u26a0"])
+def test_all_scoring_sources_error_yields_unknown(status):
+    intel_results = {
+        "sources": {
+            source: {
+                "status": status,
+                "error": "synthetic failure",
+                "score": 0,
+            }
+            for source in SOURCE_SCORING_MULTIPLIERS
+        }
+    }
+
+    assert IntelligentScoring.calculate_ioc_score(intel_results) == 0
+    coverage = IntelligentScoring.calculate_source_coverage(intel_results)
+    assert coverage["sources_unavailable"] == 6
+    assert coverage["sources_clean"] == 0
+    assert coverage["sources_ok"] == 0
+    assert coverage["sources_applicable"] == 6
+    assert determine_verdict(0, coverage) == "UNKNOWN"
+
+
+@pytest.mark.parametrize("error_value", [None, ""])
+def test_empty_error_field_does_not_hide_valid_score(error_value):
+    source_data = {
+        "status": "\u2713",
+        "score": 65,
+        "error": error_value,
+    }
+
+    assert not IntelligentScoring._is_source_error(source_data)
+    assert IntelligentScoring._get_source_score(source_data) == 65
+    assert IntelligentScoring.calculate_ioc_score({
+        "sources": {"feodotracker": source_data}
+    }) == 65
 
 
 def test_extended_integration_missing_api_key_counted_unavailable_not_clean():
@@ -282,6 +326,8 @@ def test_not_applicable_placeholder_status_is_excluded(message):
         "sources_stale": 0,
         "total_sources_attempted": 0,
         "sources_skipped_not_applicable": 1,
+        "sources_ok": 0,
+        "sources_applicable": 0,
         "group_a": {
             "sources_flagged": 0,
             "sources_clean": 0,

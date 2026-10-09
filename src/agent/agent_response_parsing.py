@@ -414,9 +414,11 @@ def _build_evidence_card(findings: list, goal: str) -> Optional[dict]:
         )
 
     def source_state(source_data: dict) -> str:
-        if source_data.get("status") == "\u26a0" and source_data.get("cached") is not True:
+        if IntelligentScoring._is_source_error(source_data):
             return "unavailable"
         score = IntelligentScoring._get_source_score(source_data)
+        if score is None:
+            return "unavailable"
         return "flagged" if score > 0 else "clean"
 
     tier_order = {"high": 0, "medium": 1, "low": 2}
@@ -437,7 +439,7 @@ def _build_evidence_card(findings: list, goal: str) -> Optional[dict]:
             "tier": source_tiers[name],
             "weight": round(float(SOURCE_SCORING_MULTIPLIERS[name]), 2),
             "state": state,
-            "score": int(score),
+            "score": int(score or 0),
         })
     scoring_rows.sort(key=lambda row: (tier_order[row["tier"]], row["name"]))
 

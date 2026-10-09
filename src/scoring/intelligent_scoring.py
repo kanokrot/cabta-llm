@@ -2,7 +2,7 @@
 intelligent_scoring.py
 Author: Ugur AtesIntelligent threat scoring system."""
 
-from typing import Dict
+from typing import Dict, Optional
 import logging
 from ..integrations.threat_intel import GROUP_B_EXCLUDE
 
@@ -35,13 +35,30 @@ class IntelligentScoring:
     """
     
     @staticmethod
-    def _get_source_score(source_data: Dict) -> int:
+    def _is_source_error(source_data: Dict) -> bool:
+        """Return whether a source result represents an error or outage."""
+        if not isinstance(source_data, dict):
+            return False
+
+        status = str(source_data.get('status', '')).strip().lower()
+        return (
+            source_data.get('unavailable') is True
+            or status in {'error', '⚠'}
+            or source_data.get('feed_status') == 'unavailable'
+            or bool(source_data.get('error'))
+        )
+
+    @staticmethod
+    def _get_source_score(source_data: Dict) -> Optional[int]:
         """
         Extract score from various response formats.
         Different APIs return scores in different formats.
         """
         if not isinstance(source_data, dict):
             return 0
+
+        if IntelligentScoring._is_source_error(source_data):
+            return None
         
         status = source_data.get('status', '')
         
@@ -175,7 +192,7 @@ class IntelligentScoring:
             # this round's score.  In particular, ThreatFox timeout handling
             # marks the source unavailable instead of falling back to stale
             # cache data.
-            if not isinstance(source_data, dict) or source_data.get('unavailable') is True:
+            if not isinstance(source_data, dict) or IntelligentScoring._is_source_error(source_data):
                 continue
 
             if isinstance(source_data, dict) and source_data.get('status') in [
@@ -184,6 +201,8 @@ class IntelligentScoring:
                 group_a_sources_flagged += 1
 
             score = IntelligentScoring._get_source_score(source_data)
+            if score is None:
+                continue
 
             if score > 0:
                 mult = SOURCE_SCORING_MULTIPLIERS[source_name_lower]
@@ -224,6 +243,8 @@ class IntelligentScoring:
             "sources_stale": 0,
             "total_sources_attempted": 0,
             "sources_skipped_not_applicable": 0,
+            "sources_ok": 0,
+            "sources_applicable": 0,
             "group_a": {
                 "sources_flagged": 0,
                 "sources_clean": 0,
@@ -271,7 +292,7 @@ class IntelligentScoring:
             group["total_sources_attempted"] += 1
             is_cached = source_data.get('cached') is True
 
-            if source_data.get('status') == '⚠' and not is_cached:
+            if IntelligentScoring._is_source_error(source_data):
                 group["sources_unavailable"] += 1
                 continue
 
@@ -279,6 +300,9 @@ class IntelligentScoring:
                 group["sources_stale"] += 1
 
             score = IntelligentScoring._get_source_score(source_data)
+            if score is None:
+                group["sources_unavailable"] += 1
+                continue
             if score > 0:
                 group["sources_flagged"] += 1
             else:
@@ -290,6 +314,11 @@ class IntelligentScoring:
         # it is retained as supplemental context outside the verdict denominator.
         for metric in coverage["group_a"]:
             coverage[metric] = coverage["group_a"][metric]
+
+        coverage["sources_ok"] = (
+            coverage["sources_flagged"] + coverage["sources_clean"]
+        )
+        coverage["sources_applicable"] = coverage["total_sources_attempted"]
 
         return coverage
     

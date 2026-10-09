@@ -265,15 +265,17 @@ async def test_hash_source_accounting_excludes_unscheduled_placeholders():
     assert result["sources_flagged"] == 0
     assert coverage == {
         "sources_flagged": 0,
-        "sources_clean": 4,
-        "sources_unavailable": 0,
+        "sources_clean": 3,
+        "sources_unavailable": 1,
         "sources_stale": 0,
         "total_sources_attempted": 4,
         "sources_skipped_not_applicable": 11,
+        "sources_ok": 3,
+        "sources_applicable": 4,
         "group_a": {
             "sources_flagged": 0,
-            "sources_clean": 4,
-            "sources_unavailable": 0,
+            "sources_clean": 3,
+            "sources_unavailable": 1,
             "sources_stale": 0,
             "total_sources_attempted": 4,
             "sources_skipped_not_applicable": 11,
