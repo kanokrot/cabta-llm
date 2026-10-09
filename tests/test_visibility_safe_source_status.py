@@ -86,5 +86,5 @@ def test_detailed_role_source_payload_remains_unchanged(role):
     assert json.dumps(payload, ensure_ascii=False, separators=(",", ":")) == (
         '{"sources":{"circl":{"status":"⚠","score":0,'
         '"error":"HTTP 401 <script>x</script> C:\\\\secret\\\\key",'
-        '"feed_status":"unavailable"}}}'
+        '"feed_status":"unavailable"}},"score_breakdown":{}}'
     )

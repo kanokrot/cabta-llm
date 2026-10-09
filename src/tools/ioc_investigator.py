@@ -23,6 +23,7 @@ from ..utils.domain_age_checker import check_domain_age
 from ..utils.dga_detector import detect_dga
 from ..utils.ip_geo import lookup_ip_country
 from ..scoring.intelligent_scoring import IntelligentScoring
+from ..scoring.score_breakdown import build_ioc_score_breakdown
 from ..detection.rule_generator import RuleGenerator
 from ..reporting.html_report_generator import HTMLReportGenerator
 from ..rag.rag_knowledge_base import RAGKnowledgeBase, load_playbooks_from_yaml
@@ -309,6 +310,7 @@ class IOCInvestigator:
         # Calculate base threat score
         threat_score = IntelligentScoring.calculate_ioc_score(intel_results)
         coverage = IntelligentScoring.calculate_source_coverage(intel_results)
+        score_breakdown = build_ioc_score_breakdown(intel_results)
 
         # Domain enrichment (age + DGA) for domain and URL IOCs
         domain_enrichment = {}
@@ -339,6 +341,7 @@ class IOCInvestigator:
 
         # Sync updated threat_score to intel_results before LLM analysis
         intel_results["threat_score"] = threat_score
+        intel_results["score_breakdown"] = score_breakdown
         first_seen, last_seen = self._aggregate_seen_dates(intel_results.get('sources', {}))
 
         # Retrieve relevant knowledge base entries (non-fatal, never affects verdict)
@@ -465,6 +468,7 @@ class IOCInvestigator:
             'ioc_type': ioc_type,
             'threat_score': threat_score,
             'verdict': verdict,
+            'score_breakdown': score_breakdown,
             'malware_family': malware_family,
             'coverage': coverage,
             # Standardized keys

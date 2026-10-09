@@ -577,7 +577,12 @@ async def get_analysis(
     job = _get_readable_job(request, analysis_id, current_user)
     if job is None:
         raise HTTPException(status_code=404, detail='Analysis not found')
-    return serialize_analysis_job(job, role=current_user['role'])
+    return serialize_analysis_job(
+        job,
+        role=current_user['role'],
+        include_ioc_result=job.get('analysis_type') == 'ioc',
+        viewer_user_id=current_user.get('id'),
+    )
 
 
 @router.get('/history/summary')

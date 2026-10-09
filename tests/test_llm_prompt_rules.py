@@ -36,13 +36,13 @@ async def _build_prompt(monkeypatch, sources):
     return provider.prompt
 
 
-RULE_12 = (
-    "12. If any source is degraded, one recommendation MUST be to restore that\n"
+RULE_9 = (
+    "9. If any source is degraded, one recommendation MUST be to restore that\n"
     "    source (fix its credentials or feed) and re-run the analysis now.\n"
     "    Do not suggest waiting days for a degraded source to recover."
 )
-RULE_13 = (
-    "13. If any source is degraded, do not recommend \"maintaining\" or \"recording\"\n"
+RULE_10 = (
+    "10. If any source is degraded, do not recommend \"maintaining\" or \"recording\"\n"
     "    a Clean status; describe the verdict as provisional."
 )
 
@@ -54,8 +54,8 @@ async def test_degraded_source_prompt_contains_rules_and_source_status(monkeypat
         {"credentialed_feed": {"error": "credentials rejected"}},
     )
 
-    assert RULE_12 in prompt
-    assert RULE_13 in prompt
+    assert RULE_9 in prompt
+    assert RULE_10 in prompt
     assert "Source Status" in prompt
     assert "credentialed_feed" in prompt
 
@@ -67,14 +67,16 @@ async def test_prompt_keeps_conditional_rules_without_degraded_sources(monkeypat
         {"healthy_feed": {"status": "ok"}},
     )
 
-    assert RULE_12 in prompt
-    assert RULE_13 in prompt
+    assert RULE_9 in prompt
+    assert RULE_10 in prompt
 
 
 @pytest.mark.asyncio
 async def test_prompt_preserves_distinctive_rules_one_through_eleven(monkeypatch):
     prompt = await _build_prompt(monkeypatch, {})
 
-    assert "1. Your verdict MUST match the investigation findings" in prompt
-    assert "7. If any source is degraded, state that the verdict is provisional and name the degraded sources." in prompt
-    assert "11. ONLY reference source names that appear in the \"Key Findings\" or \"Source Status\" sections above. Do NOT mention any other source by name." in prompt
+    assert "1. The scoring engine verdict above is authoritative." in prompt
+    assert "4. If any source is degraded, state that the engine verdict reflects limited coverage and name the degraded sources." in prompt
+    assert "8. ONLY reference source names that appear in the \"Key Findings\" or \"Source Status\" sections above. Do NOT mention any other source by name." in prompt
+    assert "Scorer Source Breakdown (authoritative for source flags and score contributions)" in prompt
+    assert "sole authority" in prompt

@@ -106,15 +106,19 @@ class LLMAnalyzer:
             context = self._prepare_ioc_context(ioc, ioc_type, results, dga=dga)
 
             # Build prompt
-            sources_checked = results.get('sources_checked', 0)
-            sources_flagged = results.get('sources_flagged', 0)
+            score_breakdown = context.get('score_breakdown', {})
+            sources_checked = len(score_breakdown)
+            sources_flagged = sum(
+                1 for item in score_breakdown.values()
+                if isinstance(item, dict) and item.get('flagged') is True
+            )
 
             # Findings and source counts explain the engine decision; they do
             # not independently derive a second verdict.
             engine_verdict = authoritative_verdict or "not supplied"
             findings_summary = (
                 f"Scoring engine verdict: {engine_verdict}. "
-                f"{sources_flagged} of {sources_checked} sources flagged the IOC."
+                f"{sources_flagged} of {sources_checked} scoring sources flagged the IOC."
             )
             coverage_data = coverage if isinstance(coverage, dict) else results.get('coverage', {})
             if not isinstance(coverage_data, dict):
@@ -139,17 +143,20 @@ Source Coverage: {json.dumps(coverage_data, sort_keys=True)}
 
 **Investigation Summary:**
 {findings_summary}
-Sources Checked: {sources_checked}
-Sources Flagged: {sources_flagged}
+Scoring Sources Checked: {sources_checked}
+Scoring Sources Flagged: {sources_flagged}
 
 **Key Findings:**
 {json.dumps(context.get('key_findings', []), indent=2)}
+**Scorer Source Breakdown (authoritative for source flags and score contributions):**
+{json.dumps(score_breakdown, sort_keys=True)}
 **Source Status:**
 {json.dumps(context.get('source_status', {}), indent=2)}
 {dga_section}
 {self._format_rag_section(rag_context)}
 **IMPORTANT RULES:**
 1. The scoring engine verdict above is authoritative. Explain that verdict; do not recalculate or replace it based on sources_flagged, score thresholds, or your own assessment.
+1a. Use Scorer Source Breakdown as the sole authority for whether a scored source was flagged and which per-source score/weight contributed. Do not infer a scored source is clean or flagged from its raw status, listed, found, or score fields.
 2. Do NOT hallucinate findings that don't exist
 3. Base your analysis ONLY on the data provided above
 4. If any source is degraded, state that the engine verdict reflects limited coverage and name the degraded sources.
@@ -914,7 +921,8 @@ Be specific and reference the tool findings in your analysis."""
             'ioc': ioc,
             'type': ioc_type,
             'threat_score': results.get('threat_score', 0),
-            'sources_flagged': results.get('sources_flagged', 0),
+            'sources_flagged': 0,
+            'score_breakdown': {},
             'key_findings': [],
             'source_status': {
                 'responded': [],
@@ -925,6 +933,25 @@ Be specific and reference the tool findings in your analysis."""
 
         # Extract important findings from each source
         sources = results.get('sources', {})
+        score_breakdown = results.get('score_breakdown')
+        if not isinstance(score_breakdown, dict):
+            from src.scoring.score_breakdown import build_ioc_score_breakdown
+
+            score_breakdown = build_ioc_score_breakdown(results)
+        context['score_breakdown'] = score_breakdown
+        context['sources_flagged'] = sum(
+            1 for item in score_breakdown.values()
+            if isinstance(item, dict) and item.get('flagged') is True
+        )
+        for source_name, item in score_breakdown.items():
+            if isinstance(item, dict) and item.get('flagged') is True:
+                context['key_findings'].append({
+                    'source': source_name,
+                    'flagged': True,
+                    'score_used': item.get('score_used'),
+                    'weight': item.get('weight'),
+                    'scored': item.get('scored') is True,
+                })
         for source_name, source_data in sources.items():
             source_data = source_data or {}
             status = source_data.get('status')
@@ -947,6 +974,9 @@ Be specific and reference the tool findings in your analysis."""
                 })
             else:
                 context['source_status']['responded'].append(source_name)
+
+            if source_name in context['score_breakdown']:
+                continue
 
             if source_data.get('status') == '✓':
                 finding = {'source': source_name}

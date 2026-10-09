@@ -283,11 +283,17 @@ def _source_detail_text(
     source_data: Any,
     cls: str,
     ioc_type: Any,
+    score_breakdown: Any = None,
 ) -> str:
     """Build source detail text only from recorded source fields."""
     data = source_data if isinstance(source_data, dict) else {}
     key = str(source_key).lower()
     detail = "No additional detail"
+
+    if isinstance(score_breakdown, dict) and score_breakdown.get("scored") is True:
+        score = score_breakdown.get("score_used")
+        weight = score_breakdown.get("weight")
+        return f"Score used {score}/100 at weight {weight:.2f}."
 
     if cls == "error":
         http_status = data.get("http_status")
@@ -336,7 +342,7 @@ def _source_detail_text(
             detail += f" {', '.join(fields)}."
 
     if (
-        source_status_label(data) in {"REPORTED", "FLAGGED"}
+        source_status_label(data, score_breakdown) in {"REPORTED", "FLAGGED"}
         and key not in NON_API_SCORING_SOURCES
     ):
         detail += " Context only, not part of the score."
@@ -347,12 +353,20 @@ def _na_label(ioc_type: Any) -> str:
     return NA_LABELS.get(str(ioc_type or "").strip().lower(), "N/A")
 
 
-def _source_rows(sources: Any, ioc_type: Any = None) -> List[List[Any]]:
+def _source_rows(
+    sources: Any,
+    ioc_type: Any = None,
+    score_breakdown: Any = None,
+) -> List[List[Any]]:
     rows: List[List[Any]] = [["Source", "Result", "Detail"]]
     if not isinstance(sources, dict):
         return rows
-    classes = {name: classify_source(value) for name, value in sources.items()}
-    for display_row in build_source_display_rows(sources, classes):
+    breakdown = score_breakdown if isinstance(score_breakdown, dict) else {}
+    classes = {
+        name: classify_source(value, breakdown.get(name))
+        for name, value in sources.items()
+    }
+    for display_row in build_source_display_rows(sources, classes, breakdown):
         if display_row["source_class"] == "na":
             continue
         source_name = display_row["source_names"][0]
@@ -360,14 +374,15 @@ def _source_rows(sources: Any, ioc_type: Any = None) -> List[List[Any]]:
             _source_detail_text(
                 name,
                 sources.get(name, {}),
-                classify_source(sources.get(name, {})),
+                classify_source(sources.get(name, {}), breakdown.get(name)),
                 ioc_type,
+                breakdown.get(name),
             )
             for name in display_row["source_names"]
         )
         rows.append([
             display_row["display_name"],
-            source_status_label(sources.get(source_name, {})),
+            source_status_label(sources.get(source_name, {}), breakdown.get(source_name)),
             detail,
         ])
     return rows
@@ -485,7 +500,8 @@ def generate_ioc_pdf(
         ioc = result.get("ioc") or "N/A"
         ioc_type = result.get("ioc_type") or "Unknown"
         sources = result.get("sources", {})
-        counts = count_source_classes(sources)
+        score_breakdown = result.get("score_breakdown", {})
+        counts = count_source_classes(sources, score_breakdown)
         queried = counts["responded"] + counts["errors"]
         story.extend([
             Paragraph("Investigation Summary", styles["IOCSectionHeader"]),
@@ -519,7 +535,7 @@ def generate_ioc_pdf(
                 styles["IOCBody"],
             ),
         ])
-        source_rows = _source_rows(sources, ioc_type)
+        source_rows = _source_rows(sources, ioc_type, score_breakdown)
         story.append(Paragraph("Source results", styles["IOCSectionHeader"]))
         if len(source_rows) > 1:
             story.append(_data_table(source_rows, [1.25 * inch, 1.1 * inch, 4.15 * inch], styles))

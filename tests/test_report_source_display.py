@@ -3,6 +3,8 @@ from pathlib import Path
 import re
 from types import SimpleNamespace
 
+import pytest
+
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from src.web.report_source_display import (
@@ -11,6 +13,8 @@ from src.web.report_source_display import (
     display_source_name,
     display_source_status,
 )
+from src.web.source_classification import classify_source
+from src.web.visibility import ADMIN, SOC, serialize_analysis_job, serialize_report_job
 from src.scoring.intelligent_scoring import SOURCE_SCORING_MULTIPLIERS
 
 
@@ -190,6 +194,116 @@ def test_spamhaus_listed_is_flagged_and_counted_as_a_response():
     assert "listed True" in row["summary"]
     assert "1 FLAGGED" in html
     assert "1 RESPONDED" in html
+
+
+def test_status_only_checkmark_is_clean_without_scoring_breakdown():
+    assert classify_source({"status": "\u2713"}) == "clean"
+
+
+@pytest.mark.parametrize(
+    ("role", "viewer_user_id", "expected_source_fields"),
+    [
+        (SOC, 99, {"status": "\u2713"}),
+        (ADMIN, 99, {"found": True, "source": "Spamhaus", "status": "\u2713"}),
+    ],
+)
+def test_report_69b5014e_spamhaus_breakdown_survives_both_roles(
+    role, viewer_user_id, expected_source_fields
+):
+    raw_sources = {
+        "spamhaus": {
+            "found": True,
+            "listed": True,
+            "source": "Spamhaus",
+            "status": "\u2713",
+        }
+    }
+    job = {
+        "id": "69b5014e2302",
+        "analysis_type": "ioc",
+        "status": "completed",
+        "verdict": "MALICIOUS",
+        "score": 80,
+        "user_id": 42,
+        "params": {"value": "176.120.22.24", "ioc_type": "ip"},
+        "result": {
+            "ioc": "176.120.22.24",
+            "ioc_type": "ip",
+            "threat_score": 80,
+            "verdict": "MALICIOUS",
+            "sources": raw_sources,
+        },
+    }
+
+    report_result = serialize_report_job(
+        job, role=role, viewer_user_id=viewer_user_id
+    )["result"]
+    assert report_result["sources"]["spamhaus"] == expected_source_fields
+    breakdown = report_result["score_breakdown"]["spamhaus"]
+    assert breakdown == {
+        "flagged": True,
+        "score_used": 80,
+        "weight": SOURCE_SCORING_MULTIPLIERS["spamhaus"],
+        "scored": True,
+    }
+    assert classify_source(report_result["sources"]["spamhaus"], breakdown) == "flagged"
+
+    rows = build_source_display_rows(
+        report_result["sources"], score_breakdown=report_result["score_breakdown"]
+    )
+    spamhaus_row = next(row for row in rows if row["source_name"] == "spamhaus")
+    assert spamhaus_row["source_class"] == "flagged"
+    assert spamhaus_row["display_status"] == "Flagged"
+    assert spamhaus_row["score_text"] == "80"
+    assert spamhaus_row["scored"] is True
+
+    html = _render_report(
+        report_result["sources"],
+        report_fields={"score_breakdown": report_result["score_breakdown"]},
+    )
+    assert "Spamhaus 80" in html
+    assert "Score used 80/100" in html
+    assert "1 FLAGGED" in html
+
+
+def test_ioc_history_serializer_returns_sources_and_breakdown():
+    job = {
+        "id": "69b5014e2302",
+        "analysis_type": "ioc",
+        "status": "completed",
+        "verdict": "MALICIOUS",
+        "score": 80,
+        "user_id": 42,
+        "params": {"value": "176.120.22.24", "ioc_type": "ip"},
+        "result": {
+            "ioc": "176.120.22.24",
+            "ioc_type": "ip",
+            "threat_score": 80,
+            "verdict": "MALICIOUS",
+            "sources": {
+                "spamhaus": {
+                    "found": True,
+                    "listed": True,
+                    "source": "Spamhaus",
+                    "status": "\u2713",
+                }
+            },
+        },
+    }
+
+    loaded = serialize_analysis_job(
+        job,
+        role=SOC,
+        include_ioc_result=True,
+        viewer_user_id=99,
+    )
+
+    assert loaded["result"]["sources"]["spamhaus"] == {"status": "\u2713"}
+    assert loaded["result"]["score_breakdown"]["spamhaus"]["score_used"] == 80
+    assert classify_source(
+        loaded["result"]["sources"]["spamhaus"],
+        loaded["result"]["score_breakdown"]["spamhaus"],
+    ) == "flagged"
 
 
 def test_nrd_sources_merge_without_changing_source_class_counts():

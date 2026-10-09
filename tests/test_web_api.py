@@ -361,6 +361,49 @@ class TestFastAPIEndpoints:
         assert r2.status_code == 200
         assert r2.json()['analysis_type'] == 'ioc'
 
+    def test_history_load_and_report_keep_spamhaus_score_breakdown(self):
+        mgr = self.app.state.analysis_manager
+        aid = mgr.create_job(
+            'ioc',
+            {'value': '176.120.22.24', 'ioc_type': 'ip'},
+            user_id=101,
+        )
+        mgr.complete_job(
+            aid,
+            {
+                'ioc': '176.120.22.24',
+                'ioc_type': 'ip',
+                'threat_score': 80,
+                'verdict': 'MALICIOUS',
+                'sources': {
+                    'spamhaus': {
+                        'found': True,
+                        'listed': True,
+                        'source': 'Spamhaus',
+                        'status': '\u2713',
+                    }
+                },
+            },
+            verdict='MALICIOUS',
+            score=80,
+        )
+
+        history_response = self.client.get(f'/api/analysis/{aid}')
+        assert history_response.status_code == 200
+        history_result = history_response.json()['result']
+        assert history_result['sources']['spamhaus'] == {'found': True, 'source': 'Spamhaus', 'status': '\u2713'}
+        assert history_result['score_breakdown']['spamhaus'] == {
+            'flagged': True,
+            'score_used': 80,
+            'weight': 0.69593,
+            'scored': True,
+        }
+
+        html_response = self.client.get(f'/api/reports/{aid}/html')
+        assert html_response.status_code == 200
+        assert 'Spamhaus 80' in html_response.text
+        assert '1 FLAGGED' in html_response.text
+
     def test_get_analysis_status(self):
         r = self.client.post('/api/analysis/ioc', json={'value': 'test'})
         aid = r.json()['analysis_id']

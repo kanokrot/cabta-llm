@@ -369,6 +369,48 @@ def _safe_sources(value: Any, *, detailed: bool = False) -> dict[str, dict[str, 
     return output
 
 
+def _safe_score_breakdown(value: Any, sources: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
+    """Expose bounded per-source scoring facts for every report role."""
+    from ..scoring.score_breakdown import build_ioc_score_breakdown
+
+    merged = build_ioc_score_breakdown({"sources": sources})
+    if isinstance(value, Mapping):
+        merged.update(value)
+    value = merged
+
+    output: dict[str, dict[str, Any]] = {}
+    for source_name, item in list(value.items())[:100]:
+        if (
+            not isinstance(source_name, str)
+            or source_name not in sources
+            or not isinstance(item, Mapping)
+        ):
+            continue
+        flagged = item.get("flagged")
+        score_used = item.get("score_used")
+        weight = item.get("weight")
+        scored = item.get("scored")
+        if not isinstance(flagged, bool) or not isinstance(scored, bool):
+            continue
+        safe_score = (
+            score_used
+            if isinstance(score_used, (int, float)) and not isinstance(score_used, bool)
+            else None
+        )
+        safe_weight = (
+            weight
+            if isinstance(weight, (int, float)) and not isinstance(weight, bool)
+            else None
+        )
+        output[source_name[:100]] = {
+            "flagged": flagged,
+            "score_used": safe_score,
+            "weight": safe_weight,
+            "scored": scored,
+        }
+    return output
+
+
 def _safe_extra_evidence(value: Any) -> list[dict[str, Any]]:
     """Allow only compact summaries from post-score user-key cross-checks."""
     if not isinstance(value, list):
@@ -578,6 +620,10 @@ def _safe_result(
             output["ai_error"] = ai_error
     if isinstance(result.get("sources"), dict):
         output["sources"] = _safe_sources(result["sources"], detailed=detailed)
+        breakdown = result.get("score_breakdown")
+        output["score_breakdown"] = _safe_score_breakdown(
+            breakdown, result["sources"]
+        )
     if "extra_evidence" in result:
         output["extra_evidence"] = _safe_extra_evidence(result.get("extra_evidence"))
     llm_analysis = result.get("llm_analysis")
@@ -678,7 +724,14 @@ def _safe_agent_tool_result(value: Any, role: str) -> Optional[dict[str, Any]]:
     return compact or {"notice": "Output omitted because it exceeds the display limit."}
 
 
-def serialize_analysis_job(job: Dict[str, Any], role: str = SOC, flow: str = "analysis") -> Dict[str, Any]:
+def serialize_analysis_job(
+    job: Dict[str, Any],
+    role: str = SOC,
+    flow: str = "analysis",
+    *,
+    include_ioc_result: bool = False,
+    viewer_user_id: int | None = None,
+) -> Dict[str, Any]:
     """Serialize an analysis job using the role/flow allowlist."""
     authorize_flow(role, flow)
     params = _as_dict(job.get("params"))
@@ -721,6 +774,12 @@ def serialize_analysis_job(job: Dict[str, Any], role: str = SOC, flow: str = "an
             output["extra_evidence"] = _safe_extra_evidence(
                 result.get("extra_evidence")
             )
+        if include_ioc_result:
+            detailed = role in {INCIDENT_RESPONDER, THREAT_HUNTER, ADMIN} or (
+                viewer_user_id is not None
+                and viewer_user_id == job.get("user_id")
+            )
+            output["result"] = _safe_result(result, detailed=detailed)
     elif job.get("analysis_type") == "email":
         detailed = role in {INCIDENT_RESPONDER, THREAT_HUNTER, ADMIN}
         if detailed:

@@ -266,10 +266,28 @@ def _make_row(
     source_name: str,
     source_data: Mapping[str, Any],
     source_class: str,
+    score_breakdown: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     label = display_source_name(source_name)
-    score = _score_value(source_data)
+    score = (
+        score_breakdown.get("score_used")
+        if isinstance(score_breakdown, Mapping)
+        else _score_value(source_data)
+    )
+    if isinstance(score, bool) or not isinstance(score, (int, float)):
+        score = None
+    score = float(score) if score is not None else None
     full_summary, summary_keys = _summary_parts(source_name, source_data, source_class)
+    if isinstance(score_breakdown, Mapping):
+        if score_breakdown.get("scored") is True and score is not None:
+            weight = score_breakdown.get("weight")
+            full_summary = (
+                f"Score used {score:g}/100 (weight {weight:.2f})"
+                if isinstance(weight, (int, float)) and not isinstance(weight, bool)
+                else f"Score used {score:g}/100"
+            )
+        elif score_breakdown.get("flagged") is True:
+            full_summary = "Flagged by the scoring source; no positive score used"
     detail_fields = [
         {"source_label": label, "key": _humanize(key), "value": _compact_value(value)}
         for key, value in source_data.items()
@@ -305,13 +323,35 @@ def _make_row(
         "score_width": max(0, min(100, score or 0)),
         "score_level": _score_level(score) if score is not None and score > 0 else "",
         "group_key": source_name,
-        "scored": source_name.lower() in SOURCE_SCORING_MULTIPLIERS,
-        "weight": SOURCE_SCORING_MULTIPLIERS.get(source_name.lower()),
+        "score_breakdown": dict(score_breakdown) if isinstance(score_breakdown, Mapping) else None,
+        "scored": (
+            score_breakdown.get("scored") is True
+            if isinstance(score_breakdown, Mapping)
+            else source_name.lower() in SOURCE_SCORING_MULTIPLIERS
+        ),
+        "weight": (
+            score_breakdown.get("weight")
+            if isinstance(score_breakdown, Mapping)
+            else SOURCE_SCORING_MULTIPLIERS.get(source_name.lower())
+        ),
         "scoring_title": (
-            f"Counted in threat score, weight {SOURCE_SCORING_MULTIPLIERS[source_name.lower()]:.2f}; "
-            "contributes only when its score is greater than 0"
-            if source_name.lower() in SOURCE_SCORING_MULTIPLIERS
-            else ""
+            (
+                f"Score used: {score if score is not None else 'unavailable'}; "
+                + (
+                    f"weight {score_breakdown.get('weight'):.2f}; "
+                    if isinstance(score_breakdown.get("weight"), (int, float))
+                    and not isinstance(score_breakdown.get("weight"), bool)
+                    else "weight unavailable; "
+                )
+                + f"contributed: {'yes' if score_breakdown.get('scored') else 'no'}"
+            )
+            if isinstance(score_breakdown, Mapping)
+            else (
+                f"Counted in threat score, weight {SOURCE_SCORING_MULTIPLIERS[source_name.lower()]:.2f}; "
+                "contributes only when its score is greater than 0"
+                if source_name.lower() in SOURCE_SCORING_MULTIPLIERS
+                else ""
+            )
         ),
         "sort_key": (rank, -(normalized_score if rank in {0, 1} else 0), label.casefold()),
     }
@@ -356,22 +396,29 @@ def _merge_nrd_rows(
 
 
 def build_source_display_rows(
-    sources: Mapping[str, Any], source_classes: Mapping[str, str] | None = None
+    sources: Mapping[str, Any],
+    source_classes: Mapping[str, str] | None = None,
+    score_breakdown: Mapping[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     """Build sorted display rows using supplied or shared report classes."""
     if not isinstance(sources, Mapping):
         return []
     if not isinstance(source_classes, Mapping):
         source_classes = {}
+    if not isinstance(score_breakdown, Mapping):
+        score_breakdown = {}
 
     rows_by_name: dict[str, dict[str, Any]] = {}
     for source_name, source_data in sources.items():
         if not isinstance(source_data, Mapping):
             continue
         source_class = source_classes.get(source_name)
+        source_breakdown = score_breakdown.get(source_name)
         if source_class is None:
-            source_class = classify_source(source_data)
-        rows_by_name[str(source_name)] = _make_row(str(source_name), source_data, source_class)
+            source_class = classify_source(source_data, source_breakdown)
+        rows_by_name[str(source_name)] = _make_row(
+            str(source_name), source_data, source_class, source_breakdown
+        )
 
     smet = rows_by_name.get("smet_nrd")
     hagezi = rows_by_name.get("hagezi_nrd")

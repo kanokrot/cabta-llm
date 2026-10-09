@@ -14,7 +14,7 @@ from typing import Any
 SOURCE_CLASSES = ("flagged", "responded", "errors", "na")
 
 
-def classify_source(source_data: Any) -> str:
+def classify_source(source_data: Any, score_breakdown: Any = None) -> str:
     """Return the report class used for one source row."""
     if not isinstance(source_data, Mapping):
         return "na"
@@ -33,6 +33,16 @@ def classify_source(source_data: Any) -> str:
         or source_data.get("feed_status") == "unavailable"
     ):
         return "error"
+    if isinstance(score_breakdown, Mapping):
+        score_used = score_breakdown.get("score_used")
+        if score_breakdown.get("flagged") is True:
+            return "flagged"
+        if (
+            isinstance(score_used, (int, float))
+            and not isinstance(score_used, bool)
+        ):
+            return "flagged" if score_used > 0 else "clean"
+        return "other"
     if source_data.get("listed") is True or status in {"found", "detected", "flagged"} or score >= 50:
         return "flagged"
     if status in {"not found", "clean", "ok"} or (score == 0 and status):
@@ -42,16 +52,22 @@ def classify_source(source_data: Any) -> str:
     return "na"
 
 
-def count_source_classes(sources: Any) -> dict[str, int]:
+def count_source_classes(
+    sources: Any, score_breakdown: Mapping[str, Any] | None = None
+) -> dict[str, int]:
     """Count flagged/responded/errors/N/A using report-template semantics."""
     counts = {key: 0 for key in SOURCE_CLASSES}
     if not isinstance(sources, Mapping):
         return counts
+    if not isinstance(score_breakdown, Mapping):
+        score_breakdown = {}
 
-    for source_data in sources.values():
+    for source_name, source_data in sources.items():
         if not isinstance(source_data, Mapping):
             continue
-        source_class = classify_source(source_data)
+        source_class = classify_source(
+            source_data, score_breakdown.get(source_name)
+        )
         if source_class == "flagged":
             counts["flagged"] += 1
             counts["responded"] += 1
@@ -64,9 +80,9 @@ def count_source_classes(sources: Any) -> dict[str, int]:
     return counts
 
 
-def source_status_label(source_data: Any) -> str:
+def source_status_label(source_data: Any, score_breakdown: Any = None) -> str:
     """Return a clear text status label for a PDF source row."""
-    source_class = classify_source(source_data)
+    source_class = classify_source(source_data, score_breakdown)
     if source_class == "flagged":
         return "FLAGGED"
     if source_class == "error":

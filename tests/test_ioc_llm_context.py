@@ -34,6 +34,40 @@ def test_prepare_ioc_context_groups_source_statuses():
     }
 
 
+def test_ioc_llm_context_uses_scorer_breakdown_for_spamhaus():
+    analyzer = LLMAnalyzer.__new__(LLMAnalyzer)
+    context = analyzer._prepare_ioc_context(
+        '176.120.22.24',
+        'ip',
+        {
+            'threat_score': 80,
+            'sources': {
+                'spamhaus': {
+                    'found': True,
+                    'listed': True,
+                    'source': 'Spamhaus',
+                    'status': '\u2713',
+                }
+            },
+        },
+    )
+
+    assert context['score_breakdown']['spamhaus'] == {
+        'flagged': True,
+        'score_used': 80,
+        'weight': 0.69593,
+        'scored': True,
+    }
+    assert context['sources_flagged'] == 1
+    assert context['key_findings'] == [{
+        'source': 'spamhaus',
+        'flagged': True,
+        'score_used': 80,
+        'weight': 0.69593,
+        'scored': True,
+    }]
+
+
 class _StubLLM:
     def __init__(self, response=None, error=None):
         self.response = response
