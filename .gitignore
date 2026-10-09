@@ -143,6 +143,7 @@ evidence/vt_independent_holdout_2026-09-25/flow_a_comparison.png
 !scripts/adhoc/
 scripts/adhoc/*
 !scripts/adhoc/g3_fire_alerts.py
+scripts/adhoc/flow_abc_smoke.py
 
 # G3 ad hoc run outputs
 /g3_*.csv
