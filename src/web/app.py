@@ -134,7 +134,19 @@ async def _lifespan(app: FastAPI):
         digest_task = asyncio.create_task(run_digest_loop(notification_manager))
         app.state.notification_digest_task = digest_task
 
+    threat_feed_task = None
+    from src.integrations.threat_feed_sync import run_sync_loop, sync_enabled
+    if sync_enabled():
+        threat_feed_task = asyncio.create_task(run_sync_loop(app))
+        app.state.threat_feed_sync_task = threat_feed_task
+
     yield
+    if threat_feed_task is not None:
+        threat_feed_task.cancel()
+        try:
+            await threat_feed_task
+        except asyncio.CancelledError:
+            pass
     if digest_task is not None:
         digest_task.cancel()
         try:

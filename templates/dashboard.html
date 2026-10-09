@@ -31,6 +31,7 @@
         gap: 16px;
     }
     .dash-main, .dash-stack { display: grid; gap: 16px; min-width: 0; }
+    .dash-side-stack { display: grid; gap: 16px; min-width: 0; }
     .dash-analytics-row { grid-template-columns: minmax(0, 1.4fr) minmax(260px, 1fr); }
     .dash-card {
         min-width: 0;
@@ -332,6 +333,21 @@
         border-radius: 10px;
     }
     .dash-empty { margin: 0; padding: 12px 2px; color: var(--text-secondary); font-size: 13px; }
+    .dash-threat-feed-list { display: grid; gap: 10px; }
+    .dash-threat-item { display: grid; gap: 7px; min-width: 0; padding: 12px; background: color-mix(in srgb, var(--bg-card) 82%, var(--border-color)); border: 1px solid var(--border-color); border-radius: 12px; }
+    .dash-threat-meta, .dash-threat-footer-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+    .dash-threat-chip { display: inline-flex; align-items: center; min-height: 24px; padding: 2px 8px; color: var(--text-primary); background: color-mix(in srgb, var(--color-accent) 12%, var(--bg-card)); border: 1px solid color-mix(in srgb, var(--color-accent) 35%, var(--border-color)); border-radius: 999px; font-size: 11px; font-weight: 600; }
+    .dash-threat-type { color: var(--text-secondary); font-size: 11px; }
+    .dash-threat-ioc { display: block; min-width: 0; overflow: hidden; color: var(--text-primary); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+    .dash-threat-detail { color: var(--text-secondary); font-size: 12px; overflow-wrap: anywhere; }
+    .dash-threat-source-status { display: grid; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-color); }
+    .dash-threat-source-row { display: grid; gap: 3px; color: var(--text-secondary); font-size: 12px; }
+    .dash-threat-source-name { color: var(--text-primary); font-weight: 600; }
+    .dash-threat-state { color: var(--text-secondary); }
+    .dash-threat-state--warning { color: var(--color-warning); font-weight: 600; }
+    .dash-threat-chip--warning { color: var(--color-warning); background: color-mix(in srgb, var(--color-warning) 12%, var(--bg-card)); border-color: color-mix(in srgb, var(--color-warning) 40%, var(--border-color)); }
+    .dash-threat-action { width: 100%; margin-top: 12px; }
+    .dash-threat-action-status { min-height: 18px; margin: 7px 0 0; color: var(--text-secondary); font-size: 12px; }
     @media (max-width: 900px) {
         .dash-layout { grid-template-columns: minmax(0, 1fr); }
         .dash-analytics-row { grid-template-columns: minmax(0, 1fr); }
@@ -511,6 +527,7 @@
                 </section>
             </main>
 
+            <div class="dash-side-stack">
             <aside class="dash-card" aria-labelledby="dash-feed-title">
                 <header class="card-header"><div><h2 class="dash-card-title" id="dash-feed-title">Malicious feed</h2><p class="dash-subtitle">Latest malicious analyses</p></div></header>
                 <div class="card-body">
@@ -518,6 +535,18 @@
                     <a class="dash-link dash-feed-all" href="/history">View all analyses</a>
                 </div>
             </aside>
+            <aside class="dash-card" aria-labelledby="dash-threat-feed-title">
+                <header class="card-header"><div><h2 class="dash-card-title" id="dash-threat-feed-title">Threat feed (weekly)</h2><p class="dash-subtitle">External IOCs from ThreatFox and Feodo Tracker, synced weekly</p></div></header>
+                <div class="card-body">
+                    <div class="dash-threat-feed-list" id="dash-threat-feed-items" aria-live="polite"><p class="dash-empty">Loading threat feed&hellip;</p></div>
+                    <div class="dash-threat-source-status" id="dash-threat-feed-sources" role="status" aria-live="polite"></div>
+                    {% if request.state.user is defined and request.state.user.role == 'admin' %}
+                    <button class="dash-button dash-threat-action" id="dash-threat-feed-sync" type="button">Sync now</button>
+                    {% endif %}
+                    <p class="dash-threat-action-status" id="dash-threat-feed-action-status" role="status" aria-live="polite"></p>
+                </div>
+            </aside>
+            </div>
         </div>
     </div>
 </section>

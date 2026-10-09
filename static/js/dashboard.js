@@ -1,3 +1,26 @@
+function defangIoc(value, iocType) {
+    const raw = typeof value === 'string' ? value : String(value ?? '');
+    const type = typeof iocType === 'string' ? iocType.toLowerCase() : 'other';
+    if (type === 'hash' || !['url', 'domain', 'ip', 'ip:port'].includes(type)) return raw;
+    if (type === 'ip' || type === 'ip:port') return raw.replace(/\./g, '[.]');
+
+    let prefix = '';
+    let remainder = raw;
+    const scheme = raw.match(/^([a-z][a-z0-9+.-]*:\/\/)(.*)$/i);
+    if (scheme) {
+        prefix = scheme[1].replace(/^https:/i, 'hxxps:').replace(/^http:/i, 'hxxp:');
+        remainder = scheme[2];
+    }
+    const authority = remainder.match(/^([^/?#]+)(.*)$/);
+    if (!authority) return prefix + remainder;
+    const at = authority[1].lastIndexOf('@');
+    const userInfo = at >= 0 ? authority[1].slice(0, at + 1) : '';
+    const hostPort = at >= 0 ? authority[1].slice(at + 1) : authority[1];
+    const hostMatch = hostPort.match(/^(\[[^\]]+\]|[^:]+)(.*)$/);
+    const host = hostMatch ? hostMatch[1].replace(/\./g, '[.]') : hostPort.replace(/\./g, '[.]');
+    return prefix + userInfo + host + (hostMatch ? hostMatch[2] : '') + authority[2];
+}
+
 document.addEventListener('DOMContentLoaded', function () {
     const dashboard = document.querySelector('.dash-page');
     if (!dashboard) return;
@@ -872,6 +895,165 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
+    const THREAT_FEED_ERROR_MESSAGES = {
+        auth_key_missing: 'API key not configured',
+        http_401: 'API key rejected',
+        timeout: 'Provider unreachable',
+        network_error: 'Provider unreachable',
+        parse_error: 'Provider returned an unexpected response',
+        response_too_large: 'Provider returned an unexpected response',
+    };
+
+    function threatFeedErrorMessage(code) {
+        if (typeof code !== 'string' || !code) return 'Provider status unavailable';
+        if (THREAT_FEED_ERROR_MESSAGES[code]) return THREAT_FEED_ERROR_MESSAGES[code];
+        if (/^http_\d{3}$/.test(code)) return 'Provider returned an unexpected response';
+        return 'Provider status unavailable';
+    }
+
+    function formatRelative(value) {
+        const date = parseUtc(value);
+        if (!date) return formatUtc(value);
+        const seconds = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
+        if (seconds < 60) return 'just now';
+        if (seconds < 3600) return `${Math.floor(seconds / 60)} min ago`;
+        if (seconds < 86400) return `${Math.floor(seconds / 3600)} hr ago`;
+        return `${Math.floor(seconds / 86400)} days ago`;
+    }
+
+    function renderThreatFeedSources(sources, container) {
+        container.replaceChildren();
+        const names = {threatfox: 'ThreatFox', feodo: 'Feodo Tracker'};
+        (Array.isArray(sources) ? sources : []).forEach((source) => {
+            const row = document.createElement('div');
+            row.className = 'dash-threat-source-row';
+            const head = document.createElement('div');
+            head.className = 'dash-threat-footer-head';
+            appendText(head, 'span', 'dash-threat-source-name', names[source?.source] || 'Threat feed');
+
+            const successAt = typeof source?.last_success_at === 'string' ? source.last_success_at : '';
+            const successDate = parseUtc(successAt);
+            const errorCode = typeof source?.error_code === 'string' ? source.error_code : '';
+            let stateText = '';
+            let warning = false;
+            if (errorCode) {
+                stateText = threatFeedErrorMessage(errorCode);
+                warning = true;
+            } else if (!successAt) {
+                stateText = 'Not synced yet';
+            } else if (source?.status === 'ok') {
+                stateText = successDate && Date.now() - successDate.getTime() <= 8 * 86400000
+                    ? 'Up to date'
+                    : 'Stale';
+                warning = stateText === 'Stale';
+            } else {
+                stateText = 'Provider status unavailable';
+                warning = true;
+            }
+
+            if (successAt) {
+                const updated = appendText(head, 'time', 'dash-feed-time', `Updated ${formatRelative(successAt)}`);
+                updated.setAttribute('datetime', successAt);
+                updated.setAttribute('title', formatUtc(successAt));
+            }
+            row.appendChild(head);
+            const staleBadge = stateText === 'Stale';
+            const statusClass = staleBadge
+                ? 'dash-threat-chip dash-threat-chip--warning'
+                : `dash-threat-state${warning ? ' dash-threat-state--warning' : ''}`;
+            const status = appendText(row, 'span', statusClass, stateText);
+            status.setAttribute('role', 'status');
+            if (successAt) status.setAttribute('title', formatUtc(successAt));
+            container.appendChild(row);
+        });
+    }
+
+    function createThreatFeedItem(item) {
+        const card = document.createElement('article');
+        card.className = 'dash-threat-item';
+        const meta = document.createElement('div');
+        meta.className = 'dash-threat-meta';
+        const sourceNames = {threatfox: 'ThreatFox', feodo: 'Feodo'};
+        appendText(meta, 'span', 'dash-threat-chip', sourceNames[item?.source] || 'Threat feed');
+        const typeNames = {ip: 'IP', 'ip:port': 'IP:port', domain: 'Domain', url: 'URL', hash: 'Hash', other: 'Other'};
+        appendText(meta, 'span', 'dash-threat-type', typeNames[item?.ioc_type] || 'Other');
+        card.appendChild(meta);
+
+        const safeIoc = defangIoc(item?.ioc_value, item?.ioc_type);
+        const value = appendText(card, 'div', 'dash-threat-ioc', safeIoc);
+        value.setAttribute('title', safeIoc);
+        value.setAttribute('aria-label', `Defanged indicator: ${safeIoc}`);
+
+        if (typeof item?.malware === 'string' && item.malware.trim()) {
+            appendText(card, 'div', 'dash-threat-detail', `Malware: ${item.malware}`);
+        }
+        if (typeof item?.threat_type === 'string' && item.threat_type.trim()) {
+            appendText(card, 'div', 'dash-threat-detail', `Threat type: ${item.threat_type}`);
+        }
+        const time = appendText(card, 'time', 'dash-threat-detail', `First seen: ${formatUtc(item?.first_seen)}`);
+        if (typeof item?.first_seen === 'string' && item.first_seen) time.setAttribute('datetime', item.first_seen);
+        if (item?.confidence !== null && item?.confidence !== undefined && Number.isFinite(Number(item.confidence))) {
+            appendText(card, 'div', 'dash-threat-detail', `Confidence: ${Number(item.confidence)}%`);
+        }
+        return card;
+    }
+
+    async function fetchThreatFeed() {
+        const list = byId('dash-threat-feed-items');
+        const sources = byId('dash-threat-feed-sources');
+        if (!list || !sources) return;
+        try {
+            const response = await fetch('/api/dashboard/threat-feed?limit=10');
+            if (!response.ok) throw new Error('threat feed unavailable');
+            const data = await response.json();
+            const items = Array.isArray(data.items) ? data.items : [];
+            list.replaceChildren();
+            if (!items.length) {
+                appendText(list, 'p', 'dash-empty', 'No threat feed data yet');
+            } else {
+                items.forEach((item) => list.appendChild(createThreatFeedItem(item || {})));
+            }
+            renderThreatFeedSources(data.sources, sources);
+        } catch (_error) {
+            list.replaceChildren();
+            sources.replaceChildren();
+            appendText(list, 'p', 'dash-empty', 'Could not load threat feed');
+        }
+    }
+
+    const threatFeedSyncButton = byId('dash-threat-feed-sync');
+    if (threatFeedSyncButton) {
+        threatFeedSyncButton.addEventListener('click', async function () {
+            const actionStatus = byId('dash-threat-feed-action-status');
+            const originalLabel = 'Sync now';
+            threatFeedSyncButton.disabled = true;
+            threatFeedSyncButton.textContent = 'Syncing...';
+            if (actionStatus) actionStatus.textContent = '';
+            try {
+                const response = await fetch('/api/dashboard/threat-feed/sync', {method: 'POST'});
+                if (response.status === 403) {
+                    threatFeedSyncButton.hidden = true;
+                    return;
+                }
+                if (response.status === 409) {
+                    if (actionStatus) actionStatus.textContent = 'A sync is already running';
+                    return;
+                }
+                if (!response.ok) {
+                    if (actionStatus) actionStatus.textContent = 'Could not sync threat feed';
+                    return;
+                }
+                if (actionStatus) actionStatus.textContent = '';
+                await fetchThreatFeed();
+            } catch (_error) {
+                if (actionStatus) actionStatus.textContent = 'Could not sync threat feed';
+            } finally {
+                threatFeedSyncButton.disabled = false;
+                threatFeedSyncButton.textContent = originalLabel;
+            }
+        });
+    }
+
     const quickIocForm = byId('quick-ioc-form');
     if (quickIocForm) {
         quickIocForm.addEventListener('submit', function (event) {
@@ -890,5 +1072,6 @@ document.addEventListener('DOMContentLoaded', function () {
     initializeGlobe();
     void fetchDashboardStats();
     void fetchMaliciousFeed();
+    void fetchThreatFeed();
     // setInterval(fetchDashboardStats, 30000);
 });

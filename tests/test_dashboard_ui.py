@@ -189,6 +189,51 @@ def test_dashboard_globe_uses_only_vendored_d3_functions_and_ascii_source() -> N
     assert script.isascii()
 
 
+def test_weekly_threat_feed_panel_is_safe_and_accessible() -> None:
+    template = TEMPLATE.read_text(encoding="utf-8")
+    script = SCRIPT.read_text(encoding="utf-8")
+    panel_start = template.index('<aside class="dash-card" aria-labelledby="dash-threat-feed-title">')
+    panel_end = template.index("</aside>", panel_start) + len("</aside>")
+    panel = template[panel_start:panel_end]
+    item_renderer = script.split("function createThreatFeedItem(item)", 1)[1].split(
+        "async function fetchThreatFeed()", 1
+    )[0]
+
+    for element_id in (
+        "dash-threat-feed-title",
+        "dash-threat-feed-items",
+        "dash-threat-feed-sources",
+        "dash-threat-feed-action-status",
+    ):
+        assert f'id="{element_id}"' in panel
+    assert 'aria-labelledby="dash-threat-feed-title"' in panel
+    assert 'id="dash-threat-feed-items" aria-live="polite"' in panel
+    assert "Threat feed (weekly)" in panel
+    assert "External IOCs from ThreatFox and Feodo Tracker, synced weekly" in panel
+    assert 'id="dash-threat-feed-sync"' in panel
+    assert "request.state.user.role == 'admin'" in panel
+
+    assert "fetch('/api/dashboard/threat-feed?limit=10')" in script
+    assert "fetch('/api/dashboard/threat-feed/sync', {method: 'POST'})" in script
+    assert "function defangIoc(value, iocType)" in script
+    assert "const THREAT_FEED_ERROR_MESSAGES = {" in script
+    assert "response_too_large: 'Provider returned an unexpected response'" in script
+    assert "function threatFeedErrorMessage(code)" in script
+    assert "dash-threat-chip--warning" in script and "stateText === 'Stale'" in script
+    assert "No threat feed data yet" in script
+    assert "Could not load threat feed" in script
+    assert "A sync is already running" in script
+    assert "innerHTML" not in script
+    assert script.isascii()
+    assert panel.isascii()
+    assert "<a " not in panel.lower()
+    assert "appendText(card, 'a'" not in item_renderer
+    assert "createElement('a')" not in item_renderer
+    assert ".href" not in item_renderer
+    assert "void fetchThreatFeed()" in script
+    assert "setInterval(fetchThreatFeed" not in script
+
+
 def test_verdict_distribution_has_six_distinct_color_segments() -> None:
     template = TEMPLATE.read_text(encoding="utf-8")
     script = SCRIPT.read_text(encoding="utf-8")

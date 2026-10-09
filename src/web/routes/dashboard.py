@@ -89,3 +89,35 @@ async def get_sources(request: Request, current_user: dict = Depends(get_current
         {'name': 'AlienVault OTX', 'status': 'healthy', 'avg_response_ms': 410},
     ]
     return {'sources': serialize_dashboard_sources(sources, current_user['role'])}
+
+
+@router.get('/threat-feed')
+async def get_threat_feed(request: Request, limit: int = 10):
+    """Return the globally synchronized public feed data."""
+    # Feed data is global and intentionally is not scoped to the current user.
+    from src.integrations import threat_feed_sync
+
+    bounded_limit = max(1, min(50, limit))
+    return {
+        'items': threat_feed_sync.get_items(
+            getattr(request.app.state, 'threat_feed_db_path', None), bounded_limit
+        ),
+        'sources': threat_feed_sync.get_sources(
+            getattr(request.app.state, 'threat_feed_db_path', None)
+        ),
+    }
+
+
+@router.post('/threat-feed/sync')
+async def post_threat_feed_sync(request: Request, _admin: dict = Depends(require_role('admin'))):
+    """Run a manual synchronization; return 409 while another sync is active."""
+    from fastapi import HTTPException
+    from src.integrations import threat_feed_sync
+
+    result = await threat_feed_sync.sync_all(
+        getattr(request.app.state, 'config', {}),
+        getattr(request.app.state, 'threat_feed_db_path', None),
+    )
+    if result is None:
+        raise HTTPException(status_code=409, detail='Threat feed sync already running')
+    return {'sources': result}
