@@ -40,14 +40,17 @@ def test_integrations_page_role_access(monkeypatch, tmp_path: Path) -> None:
         role_tmp_path.mkdir()
         client = _client_for_role(monkeypatch, role_tmp_path, role)
         with client:
-            response = client.get("/integrations", follow_redirects=False)
+            hub_response = client.get("/integrations", follow_redirects=False)
+            wazuh_response = client.get("/integrations/wazuh", follow_redirects=False)
 
-        assert response.status_code == expected_status
+        assert hub_response.status_code == expected_status
+        assert wazuh_response.status_code == expected_status
         if expected_status == 403:
-            assert response.json() == {"detail": "Insufficient permissions"}
+            assert hub_response.json() == {"detail": "Insufficient permissions"}
+            assert wazuh_response.json() == {"detail": "Insufficient permissions"}
 
 
-def test_integrations_page_shows_bundle_details_without_version_or_copy(
+def test_integrations_page_shows_hub_cards_and_provider_status_placeholders(
     monkeypatch, tmp_path: Path
 ) -> None:
     client = _client_for_role(monkeypatch, tmp_path, "Incident Responder")
@@ -56,6 +59,56 @@ def test_integrations_page_shows_bundle_details_without_version_or_copy(
 
     assert response.status_code == 200
     assert "Wazuh Alert Triage" in response.text
+    assert 'href="/integrations/wazuh"' in response.text
+    assert 'href="/api/integrations/wazuh/download"' in response.text
+    assert "Gmail notifications" in response.text
+    assert "MCP servers" in response.text
+    assert "Threat intelligence" in response.text
+    assert "Malware sandboxes" in response.text
+    assert "Configured means a key passed format validation" in response.text
+    assert 'id="hubThreatSummary"' in response.text
+    assert 'id="hubSandboxSummary"' in response.text
+
+
+def test_incident_responder_hub_has_no_admin_settings_or_mcp_links(
+    monkeypatch, tmp_path: Path
+) -> None:
+    client = _client_for_role(monkeypatch, tmp_path, "Incident Responder")
+    with client:
+        response = client.get("/integrations")
+
+    assert response.status_code == 200
+    assert 'href="/settings' not in response.text
+    assert 'href="/mcp/servers"' not in response.text
+    threat_card = re.search(
+        r"<h3>Threat intelligence</h3>(.*?)</article>", response.text, re.DOTALL
+    )
+    assert threat_card is not None
+    assert 'href="/account"' in threat_card.group(1)
+    assert "System keys are managed by an administrator." in response.text
+    assert "Counts system keys only. Personal keys in My settings are extra evidence and are not included." in response.text
+    assert "Managed by an administrator" in response.text
+
+
+def test_admin_integrations_hub_keeps_system_settings_link(monkeypatch, tmp_path: Path) -> None:
+    client = _client_for_role(monkeypatch, tmp_path, "admin")
+    with client:
+        response = client.get("/integrations")
+
+    assert response.status_code == 200
+    assert 'href="/settings#sources"' in response.text
+
+
+def test_wazuh_setup_page_shows_bundle_details_without_version_or_copy(
+    monkeypatch, tmp_path: Path
+) -> None:
+    client = _client_for_role(monkeypatch, tmp_path, "Incident Responder")
+    with client:
+        response = client.get("/integrations/wazuh")
+
+    assert response.status_code == 200
+    assert "Wazuh Alert Triage" in response.text
+    assert 'href="/integrations">Integrations</a>' in response.text
     assert 'href="/api/integrations/wazuh/download"' in response.text
     for sample in sorted((ROOT / "deploy" / "wazuh" / "samples").glob("*.json")):
         assert sample.name in response.text
@@ -65,6 +118,70 @@ def test_integrations_page_shows_bundle_details_without_version_or_copy(
         response.text,
         re.IGNORECASE,
     ) is None
+
+
+def test_integrations_status_returns_only_key_booleans_and_mcp_counts(monkeypatch, tmp_path: Path) -> None:
+    client = _client_for_role(monkeypatch, tmp_path, "Incident Responder")
+    client.app.state.config = {
+        "api_keys": {
+            "virustotal": "a" * 24,
+            "threatzone": "YOUR_THREATZONE_API_KEY",
+            "triage": "b" * 24,
+        },
+        "mcp_servers": [{"name": "configured-one"}, {"name": "configured-two"}],
+    }
+
+    class Store:
+        def list_mcp_connections(self):
+            return [{"name": "configured-two"}, {"name": "database-only"}]
+
+    class MCPClient:
+        def get_connection_status(self):
+            return {
+                "configured-one": {"connected": True},
+                "configured-two": {"connected": False},
+            }
+
+    client.app.state.agent_store = Store()
+    client.app.state.mcp_client = MCPClient()
+    with client:
+        response = client.get("/api/integrations/status")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["threat_intel"] == [
+        {"name": "VirusTotal", "configured": True},
+        {"name": "AbuseIPDB", "configured": False},
+        {"name": "Shodan", "configured": False},
+        {"name": "AlienVault OTX", "configured": False},
+        {"name": "GreyNoise", "configured": False},
+        {"name": "URLScan", "configured": None},
+    ]
+    assert payload["sandboxes"] == [
+        {"name": "Triage", "configured": True},
+        {"name": "ThreatZone", "configured": False},
+        {"name": "Hybrid Analysis", "configured": False},
+        {"name": "ANY.RUN", "configured": False},
+    ]
+    assert payload["mcp"] == {"configured_count": 3, "connected_count": 1}
+    assert "gmail" not in payload
+    assert "api_keys" not in payload
+    assert "a" * 24 not in response.text
+
+    del client.app.state.mcp_client
+    with client:
+        response_without_runtime = client.get("/api/integrations/status")
+    assert response_without_runtime.json()["mcp"] == {
+        "configured_count": 3,
+        "connected_count": None,
+    }
+
+
+def test_integrations_status_is_unavailable_to_other_roles(monkeypatch, tmp_path: Path) -> None:
+    client = _client_for_role(monkeypatch, tmp_path, "SOC Analyst Tier 1-2")
+    with client:
+        response = client.get("/api/integrations/status")
+    assert response.status_code == 403
 
 
 def test_wazuh_download_contains_expected_bundle_files(monkeypatch, tmp_path: Path) -> None:

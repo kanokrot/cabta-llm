@@ -33,6 +33,7 @@ PAGE_ROLE_REQUIREMENTS = {
     "/agent/investigations": frozenset({"Threat Hunter", "admin"}),
     "/agent/playbooks": frozenset({"Incident Responder", "admin"}),
     "/integrations": frozenset({"Incident Responder", "admin"}),
+    "/integrations/wazuh": frozenset({"Incident Responder", "admin"}),
     "/analysis/ioc": frozenset({"SOC Analyst Tier 1-2", "admin"}),
     "/analysis/file": frozenset({"SOC Analyst Tier 1-2", "admin"}),
     "/analysis/email": frozenset({"SOC Analyst Tier 1-2", "admin"}),

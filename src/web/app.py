@@ -810,7 +810,80 @@ def _register_page_routes(app: FastAPI) -> None:
         redirect = _page_auth_redirect(request)
         if redirect is not None:
             return redirect
-        return templates.TemplateResponse(request, 'integrations.html', {})
+        return templates.TemplateResponse(request, 'integrations_hub.html', {})
+
+    @app.get('/integrations/wazuh', response_class=HTMLResponse, include_in_schema=False)
+    async def wazuh_integration_page(request: Request):
+        redirect = _page_auth_redirect(request)
+        if redirect is not None:
+            return redirect
+        return templates.TemplateResponse(request, 'integrations_wazuh.html', {})
+
+    @app.get('/api/integrations/status', include_in_schema=False)
+    async def integrations_status(
+        request: Request,
+        _current_user: dict = Depends(require_role(["Incident Responder", "admin"])),
+    ):
+        from .settings_registry import settings_sources
+
+        config = getattr(request.app.state, 'config', None) or {}
+        api_keys = config.get('api_keys', {}) if isinstance(config, dict) else {}
+        source_status = {
+            item['id']: bool(item['configured'])
+            for item in settings_sources(api_keys if isinstance(api_keys, dict) else {})
+        }
+        threat_intel = [
+            {'name': name, 'configured': source_status[source_id]}
+            for name, source_id in (
+                ('VirusTotal', 'virustotal'),
+                ('AbuseIPDB', 'abuseipdb'),
+                ('Shodan', 'shodan'),
+                ('AlienVault OTX', 'alienvault'),
+                ('GreyNoise', 'greynoise'),
+            )
+        ]
+        threat_intel.append({'name': 'URLScan', 'configured': None})
+        sandboxes = [
+            {'name': name, 'configured': source_status[source_id]}
+            for name, source_id in (
+                ('Triage', 'triage'),
+                ('ThreatZone', 'threatzone'),
+                ('Hybrid Analysis', 'hybrid_analysis'),
+                ('ANY.RUN', 'anyrun'),
+            )
+        ]
+
+        store = getattr(request.app.state, 'agent_store', None)
+        db_servers = store.list_mcp_connections() if store else []
+        config_servers = config.get('mcp_servers', []) if isinstance(config, dict) else []
+        merged_names = set()
+        for server in config_servers:
+            name = server.get('name', '') if isinstance(server, dict) else ''
+            if name:
+                merged_names.add(name)
+        merged_names.update(server['name'] for server in db_servers if server.get('name'))
+
+        connected_count = None
+        mcp_client = getattr(request.app.state, 'mcp_client', None)
+        if mcp_client:
+            try:
+                live_status = mcp_client.get_connection_status()
+                connected_count = sum(
+                    1 for name in merged_names
+                    if isinstance(live_status.get(name), dict)
+                    and live_status[name].get('connected') is True
+                )
+            except Exception:
+                connected_count = None
+
+        return {
+            'threat_intel': threat_intel,
+            'sandboxes': sandboxes,
+            'mcp': {
+                'configured_count': len(merged_names),
+                'connected_count': connected_count,
+            },
+        }
 
     @app.get('/api/integrations/wazuh/download', include_in_schema=False)
     async def download_wazuh_integration(
