@@ -34,8 +34,9 @@ async def test_spamhaus_resolver_error_is_unavailable():
 
 
 @pytest.mark.asyncio
-async def test_spamhaus_only_127_0_0_x_answer_is_a_listing():
-    with patch("socket.gethostbyname", return_value="127.0.0.2"):
+@pytest.mark.parametrize("answer", ["127.0.0.2", "127.0.0.11"])
+async def test_spamhaus_documented_listing_codes_are_listings(answer):
+    with patch("socket.gethostbyname", return_value=answer):
         result = await ThreatIntelExtended({}).check_spamhaus("198.51.100.9")
 
     assert result["status"] == "\u2713"
@@ -44,7 +45,10 @@ async def test_spamhaus_only_127_0_0_x_answer_is_a_listing():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("answer", ["127.255.255.1", "8.8.8.8"])
+@pytest.mark.parametrize(
+    "answer",
+    ["127.0.0.1", "127.0.0.12", "127.255.255.1", "127.255.255.252", "127.255.255.254", "127.255.255.255", "8.8.8.8"],
+)
 async def test_spamhaus_non_listing_answer_is_unavailable(answer):
     with patch("socket.gethostbyname", return_value=answer):
         result = await ThreatIntelExtended({}).check_spamhaus("198.51.100.9")

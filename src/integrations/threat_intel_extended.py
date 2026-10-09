@@ -261,6 +261,8 @@ class ThreatIntelExtended:
     
     async def check_spamhaus(self, ip: str) -> Dict:
         """Spamhaus - Spam/malware tracking."""
+        # Only 127.0.0.2 through 127.0.0.11 are listing codes. In particular,
+        # 127.255.255.252/.254/.255 are resolver/query errors, not listings.
         # 2026-09-21: DNS resolve สำเร็จเมื่อใดก็ set found=True โดยไม่แยก return code. PBL 127.0.0.10/11
         # เป็นนโยบายอีเมล ไม่ใช่สัญญาณ malware; แต่ status นี้ถูกนับใน scoring เท่า SBL. tests ปัจจุบัน mock
         # เฉพาะ dispatch ไม่มี test ตรวจ code. หลักฐาน: evidence/source_weights_2026-09-21/spamhaus_codes_group_a_2026-09-21.jsonl และ
@@ -290,7 +292,12 @@ class ThreatIntelExtended:
                 }
 
             octets = answer.split('.')
-            if len(octets) == 4 and octets[:3] == ['127', '0', '0']:
+            if (
+                len(octets) == 4
+                and octets[:3] == ['127', '0', '0']
+                and octets[3].isdigit()
+                and 2 <= int(octets[3]) <= 11
+            ):
                 return {
                     'source': 'Spamhaus',
                     'found': True,
