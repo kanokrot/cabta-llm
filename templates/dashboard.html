@@ -157,6 +157,17 @@
     .dash-map-legend-dot--spam { background: var(--dash-verdict-spam); }
     .dash-map-legend-dot--success { background: var(--color-success); }
     .dash-map-legend-dot--neutral { background: var(--text-muted); }
+    .dash-map-threat-feed-toggle { padding: 4px 9px; color: var(--text-secondary); border: 1px solid rgb(63 230 255 / 42%); border-radius: 6px; background: rgb(4 20 30 / 56%); cursor: pointer; font: inherit; transition: border-color 140ms ease, background 140ms ease, opacity 140ms ease; }
+    .dash-map-threat-feed-toggle:hover, .dash-map-threat-feed-toggle:focus-visible { border-color: rgb(63 230 255 / 90%); background: rgb(4 38 52 / 80%); outline: none; }
+    .dash-map-threat-feed-toggle[aria-pressed="true"] { color: var(--text-secondary); opacity: 1; }
+    .dash-map-threat-feed-toggle[aria-pressed="false"] { opacity: .48; }
+    .dash-map-legend-dot--feed-online { background: rgb(63 230 255); box-shadow: 0 0 6px rgb(63 230 255 / 70%); }
+    .dash-map-legend-dot--feed-offline { background: rgb(255 184 77); }
+    .dash-map-legend-dot--feed-threatfox { background: rgb(188 130 255); }
+    .dash-map-threat-feed-online { fill: rgb(63 230 255); stroke: rgb(5 20 29); stroke-width: 1.5px; }
+    .dash-map-threat-feed-offline { fill: none; stroke: rgb(255 184 77); stroke-width: 2px; }
+    .dash-map-threat-feed-threatfox { fill: none; stroke: rgb(188 130 255); stroke-width: 1.5px; stroke-dasharray: 2 2; }
+    .dash-map-threat-feed-label { fill: rgb(218 249 255); font: 700 11px ui-sans-serif, system-ui, sans-serif; paint-order: stroke; stroke: var(--bg-card); stroke-width: 4px; stroke-linejoin: round; }
     .dash-map-marker-halo--danger { fill: color-mix(in srgb, var(--color-danger) 22%, transparent); }
     .dash-map-marker-halo--phishing { fill: color-mix(in srgb, var(--dash-verdict-phishing) 22%, transparent); }
     .dash-map-marker-halo--warning { fill: color-mix(in srgb, var(--color-warning) 22%, transparent); }
@@ -418,6 +429,7 @@
                                 <path id="dash-map-graticule" class="dash-map-graticule"></path>
                                 <g id="dash-map-countries"></g>
                                 <g id="dash-map-markers"></g>
+                                <g id="dash-map-threat-feed"></g>
                                 <g id="dash-map-hover-graphics" class="dash-map-hover-graphics" aria-hidden="true" style="display:none"><line id="dash-map-hover-leader" class="dash-map-hover-leader"></line><circle id="dash-map-hover-ring" class="dash-map-hover-ring" r="10"></circle><path id="dash-map-hover-crosshair" class="dash-map-hover-crosshair" d="M-14 0h8m12 0h8M0-14v8m0 12v8"></path></g>
                             </svg>
                             <div class="dash-map-zoom-controls" aria-label="Globe zoom controls"><button type="button" id="dash-map-zoom-in" aria-label="Zoom in">+</button><button type="button" id="dash-map-zoom-out" aria-label="Zoom out">−</button><button type="button" id="dash-map-zoom-reset" aria-label="Reset zoom">reset</button></div>
@@ -430,6 +442,7 @@
                                     <div class="dash-map-hover-row"><span>Analyses</span><strong id="dash-map-hover-analyses">—</strong></div>
                                     <div class="dash-map-hover-row"><span>Worst verdict</span><strong id="dash-map-hover-verdict" class="dash-map-hover-verdict">—</strong></div>
                                 </div>
+                                <div id="dash-map-hover-threat-feed" class="dash-map-hover-row" hidden><span>Threat feed</span><strong id="dash-map-hover-threat-feed-value">—</strong></div>
                                 <p id="dash-map-hover-empty" class="dash-map-hover-empty" hidden>No indicators</p>
                             </aside>
                             <p class="dash-map-error" id="dash-map-error" role="status" hidden></p>
@@ -442,6 +455,7 @@
                             <span class="dash-map-legend-item"><i class="dash-map-legend-dot dash-map-legend-dot--spam" aria-hidden="true"></i>Spam</span>
                             <span class="dash-map-legend-item"><i class="dash-map-legend-dot dash-map-legend-dot--success" aria-hidden="true"></i>Clean</span>
                             <span class="dash-map-legend-item"><i class="dash-map-legend-dot dash-map-legend-dot--neutral" aria-hidden="true"></i>Other</span>
+                            <button type="button" class="dash-map-legend-item dash-map-threat-feed-toggle" id="dash-map-threat-feed-toggle" aria-pressed="true" aria-label="Toggle threat feed C2 layer"><i class="dash-map-legend-dot dash-map-legend-dot--feed-offline" aria-hidden="true"></i><i class="dash-map-legend-dot dash-map-legend-dot--feed-online" aria-hidden="true"></i><i class="dash-map-legend-dot dash-map-legend-dot--feed-threatfox" aria-hidden="true"></i>Threat feed C2</button>
                         </div>
                         <div class="dash-country-heading">
                             <h3>Top countries</h3>
@@ -538,13 +552,14 @@
                 </div>
             </aside>
             <aside class="dash-card" aria-labelledby="dash-threat-feed-title">
-                <header class="card-header"><div><h2 class="dash-card-title" id="dash-threat-feed-title">Threat feed (weekly)</h2><p class="dash-subtitle">External IOCs from ThreatFox and Feodo Tracker, synced weekly</p></div></header>
-                <div class="card-body">
-                    <div class="dash-threat-feed-list" id="dash-threat-feed-items" aria-live="polite"><p class="dash-empty">Loading threat feed&hellip;</p></div>
-                    <div class="dash-threat-source-status" id="dash-threat-feed-sources" role="status" aria-live="polite"></div>
+                <header class="card-header d-flex justify-content-between align-items-center"><div><h2 class="dash-card-title" id="dash-threat-feed-title">Threat feed (weekly)</h2><p class="dash-subtitle">External IOCs from ThreatFox and Feodo Tracker, synced weekly</p></div>
                     {% if request.state.user is defined and request.state.user.role == 'admin' %}
                     <button class="dash-button dash-threat-action" id="dash-threat-feed-sync" type="button">Sync now</button>
                     {% endif %}
+                </header>
+                <div class="card-body">
+                    <div class="dash-threat-feed-list" id="dash-threat-feed-items" aria-live="polite"><p class="dash-empty">Loading threat feed&hellip;</p></div>
+                    <div class="dash-threat-source-status" id="dash-threat-feed-sources" role="status" aria-live="polite"></div>
                     <p class="dash-threat-action-status" id="dash-threat-feed-action-status" role="status" aria-live="polite"></p>
                 </div>
             </aside>

@@ -211,6 +211,35 @@ document.addEventListener('DOMContentLoaded', function () {
         return element;
     }
 
+    const THREAT_FEED_LABEL_MIN_COUNT = 3;
+    const THREAT_FEED_RADIUS_SCALE = 1.6;
+
+    function threatFeedRadius(count, minimum, maximum) {
+        return count > 0
+            ? Math.max(minimum, Math.min(maximum, Math.sqrt(count) * THREAT_FEED_RADIUS_SCALE))
+            : 0;
+    }
+
+    function updateThreatFeedCountries(rows) {
+        if (!globe) return;
+        globe.feedStatsByCode = new Map();
+        (Array.isArray(rows) ? rows : []).forEach((item) => {
+            if (!item || typeof item.code !== 'string' || !/^[A-Za-z]{2}$/.test(item.code)) return;
+            const code = item.code.toUpperCase();
+            globe.feedStatsByCode.set(code, {
+                count: safeCount(item.count),
+                online_count: item.online_count === null || item.online_count === undefined
+                    ? null : safeCount(item.online_count),
+                feodo_count: safeCount(item.feodo_count),
+                threatfox_count: safeCount(item.threatfox_count),
+                top_malware: typeof item.top_malware === 'string' ? item.top_malware : '',
+            });
+        });
+        globe.renderThreatFeedLayer?.();
+        const active = globe.pinnedFeature || globe.hoverFeature;
+        if (active) globe.fillHoverCard?.(active);
+    }
+
     function updateDailyChart(rows) {
         const chart = byId('dash-daily-chart');
         if (!chart) return;
@@ -335,7 +364,8 @@ document.addEventListener('DOMContentLoaded', function () {
         const focusLabel = byId('dash-country-focus');
         const countriesGroup = byId('dash-map-countries');
         const markersGroup = byId('dash-map-markers');
-        if (!map || !countriesGroup || !markersGroup) return;
+        const feedLayerGroup = byId('dash-map-threat-feed');
+        if (!map || !countriesGroup || !markersGroup || !feedLayerGroup) return;
         if (!window.d3) {
             console.error('Dashboard globe requires the d3 global; globe controls are disabled.');
             mapError('The country globe could not be initialized.');
@@ -372,15 +402,23 @@ document.addEventListener('DOMContentLoaded', function () {
         const ring = byId('dash-map-hover-ring');
         const crosshair = byId('dash-map-hover-crosshair');
         globe = {
-            map, projection, path: window.d3.geoPath(projection), countriesGroup, markersGroup, focusLabel,
+            map, projection, path: window.d3.geoPath(projection), countriesGroup, markersGroup, feedLayerGroup, focusLabel,
             countryFeatures: [], countryNodes: [], countryNodeByNumericId: new Map(),
             featureByNumericId: new Map(), statsByCode: new Map(), markerNodes: [],
+            feedStatsByCode: new Map(), feedMarkerNodes: [], feedLayerVisible: true,
             rotation: [0, 20, 0], zoom: 1, topologyLoaded: false, initialViewSet: false,
             drawingFrame: null, animationFrame: null, pointers: new Map(), dragPointerId: null,
             pinchStart: null, suppressClick: false, focusedFeature: null, hoverFeature: null,
             pinnedFeature: null, hasStats: false,
             lastShownCountryCode: null, kickerTimer: null,
         };
+        const feedToggle = byId('dash-map-threat-feed-toggle');
+        feedToggle?.addEventListener('click', () => {
+            globe.feedLayerVisible = !globe.feedLayerVisible;
+            feedToggle.setAttribute('aria-pressed', String(globe.feedLayerVisible));
+            feedLayerGroup.style.display = globe.feedLayerVisible ? '' : 'none';
+            requestRender();
+        });
         const reducedMotion = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
         const clamp = (value, low, high) => Math.max(low, Math.min(high, value));
         const clampZoom = (value) => clamp(value, 1, 6);
@@ -437,6 +475,7 @@ document.addEventListener('DOMContentLoaded', function () {
             const code = COUNTRY_CODES_BY_NUMERIC_ID[numericId] || '';
             const name = (code && countryName(code)) || feature.properties?.name || 'Country';
             const stats = code ? globe.statsByCode.get(code) : null;
+            const feedStats = code ? globe.feedStatsByCode.get(code) : null;
             byId('dash-map-hover-name').textContent = name;
             byId('dash-map-hover-code').textContent = code ? 'ISO ' + code : 'ISO \u2014';
             byId('dash-map-hover-indicators').textContent = stats ? String(stats.ips) : '\u2014';
@@ -446,12 +485,31 @@ document.addEventListener('DOMContentLoaded', function () {
             verdict.className = 'dash-map-hover-verdict' + (stats ? ' dash-country-verdict--' + verdictStyle(stats.worst_verdict) : '');
             byId('dash-map-hover-stats').hidden = !stats;
             byId('dash-map-hover-empty').hidden = Boolean(stats);
+            const feedRow = byId('dash-map-hover-threat-feed');
+            const feedValue = byId('dash-map-hover-threat-feed-value');
+            if (feedRow && feedValue) {
+                feedRow.hidden = !feedStats;
+                if (feedStats) {
+                    const feedParts = [
+                        `${feedStats.count} total`,
+                        `Feodo ${feedStats.feodo_count}`,
+                        `ThreatFox ${feedStats.threatfox_count}`,
+                    ];
+                    if (feedStats.online_count !== null) feedParts.push(`${feedStats.online_count} online`);
+                    if (feedStats.top_malware) feedParts.push(`Top: ${feedStats.top_malware}`);
+                    feedValue.textContent = feedParts.join(' \u00b7 ');
+                } else {
+                    feedValue.textContent = '\u2014';
+                }
+                if (feedStats) byId('dash-map-hover-empty').hidden = true;
+            }
             const kicker = byId('dash-map-hover-kicker');
             const countryKey = code || ('n3-' + normalizedNumericId(feature.id));
             startScanTyping(kicker, countryKey, globe, reducedMotion());
             card.classList.add('is-visible');
             card.setAttribute('aria-hidden', 'false');
         }
+        globe.fillHoverCard = fillCard;
 
         function setHover(feature, pin) {
             if (globe.hoverFeature && globe.hoverFeature !== feature) {
@@ -498,6 +556,34 @@ document.addEventListener('DOMContentLoaded', function () {
                     label.setAttribute('x', projected[0] > width / 2 ? projected[0] - 14 : projected[0] + 14);
                     label.setAttribute('y', projected[1] + 4);
                     label.setAttribute('text-anchor', projected[0] > width / 2 ? 'end' : 'start');
+                }
+            });
+            globe.feedMarkerNodes.forEach(({point, group, onlineCircle, offlineCircle, threatfoxCircle, label}) => {
+                const projected = projection(point);
+                const visible = projected && center && window.d3.geoDistance(point, center) <= Math.PI / 2 + 1e-6;
+                group.style.display = visible && globe.feedLayerVisible ? '' : 'none';
+                if (!visible) return;
+                const stats = globe.feedStatsByCode.get(group.getAttribute('data-country-code'));
+                const offlineCount = stats?.online_count === null
+                    ? 0 : Math.max(0, (stats?.feodo_count || 0) - (stats?.online_count || 0));
+                const offlineRadius = threatFeedRadius(offlineCount, 4, 9);
+                const onlineRadius = threatFeedRadius(stats?.online_count || 0, 3, 8);
+                const threatfoxRadius = threatFeedRadius(stats?.threatfox_count || 0, 5, 10);
+                const markerX = projected[0] + 18;
+                const markerY = projected[1] - 18;
+                offlineCircle.setAttribute('cx', markerX);
+                offlineCircle.setAttribute('cy', markerY);
+                offlineCircle.setAttribute('r', offlineRadius);
+                onlineCircle.setAttribute('cx', markerX);
+                onlineCircle.setAttribute('cy', markerY);
+                onlineCircle.setAttribute('r', onlineRadius);
+                threatfoxCircle.setAttribute('cx', markerX);
+                threatfoxCircle.setAttribute('cy', markerY);
+                threatfoxCircle.setAttribute('r', threatfoxRadius);
+                if (label) {
+                    label.setAttribute('x', projected[0] > width / 2 ? markerX + 14 : markerX - 14);
+                    label.setAttribute('y', markerY + 4);
+                    label.setAttribute('text-anchor', projected[0] > width / 2 ? 'start' : 'end');
                 }
             });
 
@@ -773,6 +859,33 @@ document.addEventListener('DOMContentLoaded', function () {
                 markersGroup.appendChild(group);
                 globe.markerNodes.push({point: centroid.slice(0, 2), group, circle, halo});
             });
+            function renderThreatFeedLayer() {
+                if (!globe?.topologyLoaded) return;
+                feedLayerGroup.replaceChildren();
+                globe.feedMarkerNodes = [];
+                globe.feedStatsByCode.forEach((stats, code) => {
+                    const point = countryCenter(code);
+                    const numericId = COUNTRY_NUMERIC_IDS[code];
+                    if (!point || !numericId || !globe.featureByNumericId.has(numericId)) return;
+                    const group = svgElement('g', {'aria-hidden': 'true', 'data-country-code': code});
+                    const threatfoxCircle = svgElement('circle', {class: 'dash-map-threat-feed-threatfox'});
+                    const offlineCircle = svgElement('circle', {class: 'dash-map-threat-feed-offline'});
+                    const onlineCircle = svgElement('circle', {class: 'dash-map-threat-feed-online'});
+                    const label = stats.count >= THREAT_FEED_LABEL_MIN_COUNT
+                        ? svgElement('text', {class: 'dash-map-threat-feed-label'}, `C2 \u00d7${stats.count}`)
+                        : null;
+                    group.appendChild(threatfoxCircle);
+                    group.appendChild(offlineCircle);
+                    group.appendChild(onlineCircle);
+                    if (label) group.appendChild(label);
+                    feedLayerGroup.appendChild(group);
+                    globe.feedMarkerNodes.push({point: point.slice(0, 2), group, onlineCircle, offlineCircle, threatfoxCircle, label});
+                });
+                feedLayerGroup.style.display = globe.feedLayerVisible ? '' : 'none';
+                requestRender();
+            }
+            globe.renderThreatFeedLayer = renderThreatFeedLayer;
+            renderThreatFeedLayer();
             const missingCodes = [...new Set([...globe.statsByCode.keys()].filter((code) =>
                 !COUNTRY_NUMERIC_IDS[code] || !globe.featureByNumericId.has(COUNTRY_NUMERIC_IDS[code])
             ))];
@@ -1053,6 +1166,17 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
+    async function fetchThreatFeedCountries() {
+        try {
+            const response = await fetch('/api/dashboard/threat-feed/countries');
+            if (!response.ok) throw new Error('threat feed countries unavailable');
+            const data = await response.json();
+            updateThreatFeedCountries(data.countries);
+        } catch (_error) {
+            updateThreatFeedCountries([]);
+        }
+    }
+
     const threatFeedSyncButton = byId('dash-threat-feed-sync');
     if (threatFeedSyncButton) {
         threatFeedSyncButton.addEventListener('click', async function () {
@@ -1077,6 +1201,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
                 if (actionStatus) actionStatus.textContent = '';
                 await fetchThreatFeed();
+                await fetchThreatFeedCountries();
             } catch (_error) {
                 if (actionStatus) actionStatus.textContent = 'Could not sync threat feed';
             } finally {
@@ -1105,5 +1230,6 @@ document.addEventListener('DOMContentLoaded', function () {
     void fetchDashboardStats();
     void fetchMaliciousFeed();
     void fetchThreatFeed();
+    void fetchThreatFeedCountries();
     // setInterval(fetchDashboardStats, 30000);
 });

@@ -108,6 +108,18 @@ async def get_threat_feed(request: Request, limit: int = 10):
     }
 
 
+@router.get('/threat-feed/countries')
+async def get_threat_feed_countries(request: Request):
+    """Return global Feodo country aggregates from the local feed database."""
+    from src.integrations import threat_feed_sync
+
+    return {
+        'countries': threat_feed_sync.get_country_aggregates(
+            getattr(request.app.state, 'threat_feed_db_path', None)
+        )
+    }
+
+
 @router.post('/threat-feed/sync')
 async def post_threat_feed_sync(request: Request, _admin: dict = Depends(require_role('admin'))):
     """Run a manual synchronization; return 409 while another sync is active."""

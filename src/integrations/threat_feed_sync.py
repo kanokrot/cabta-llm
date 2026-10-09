@@ -6,12 +6,14 @@ them without contacting either provider.
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import json
 import logging
 import os
 import re
 import sqlite3
 import sys
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable
@@ -19,15 +21,18 @@ from typing import Any, Callable
 import aiohttp
 
 from src.utils.api_key_validator import get_valid_key
+from src.utils.ip_geo import lookup_ip_country
 
 logger = logging.getLogger(__name__)
 
 THREATFOX_URL = "https://threatfox-api.abuse.ch/api/v1/"
-FEODO_URL = "https://feodotracker.abuse.ch/downloads/ipblocklist_recommended.json"
+FEODO_URL = "https://feodotracker.abuse.ch/downloads/ipblocklist.json"
 THREATFOX_DAYS = 1
 MAX_RESPONSE_BYTES = 16 * 1024 * 1024
 THREATFOX_LIMIT = 500
 FEODO_LIMIT = 1000
+THREATFOX_COUNTRY_LOOKUP_LIMIT = 100
+GEOIP_LOOKUPS_PER_MINUTE = 45
 RETENTION = timedelta(days=30)
 SYNC_INTERVAL = timedelta(days=7)
 RETRY_INTERVAL = timedelta(hours=1)
@@ -70,7 +75,7 @@ def _connect(path: str | Path) -> sqlite3.Connection:
         CREATE TABLE IF NOT EXISTS threat_feed_items (
             source TEXT NOT NULL, ioc_type TEXT NOT NULL, ioc_value TEXT NOT NULL,
             malware TEXT, threat_type TEXT, confidence INTEGER, first_seen TEXT,
-            last_seen TEXT, country TEXT, fetched_at TEXT NOT NULL,
+            last_seen TEXT, country TEXT, status TEXT, fetched_at TEXT NOT NULL,
             PRIMARY KEY(source, ioc_type, ioc_value)
         );
         CREATE TABLE IF NOT EXISTS threat_feed_state (
@@ -80,6 +85,9 @@ def _connect(path: str | Path) -> sqlite3.Connection:
         );
         """
     )
+    item_columns = {row[1] for row in conn.execute("PRAGMA table_info(threat_feed_items)")}
+    if "status" not in item_columns:
+        conn.execute("ALTER TABLE threat_feed_items ADD COLUMN status TEXT")
     return conn
 
 
@@ -142,6 +150,7 @@ def normalize_threatfox(payload: Any, fetched_at: str) -> tuple[list[dict[str, A
             "first_seen": _safe_text(row.get("first_seen_utc") or row.get("first_seen"), 80) or "",
             "last_seen": _safe_text(row.get("last_seen_utc") or row.get("last_seen"), 80),
             "country": _safe_text(row.get("country"), 100),
+            "status": None,
             "fetched_at": fetched_at,
         })
     result.sort(
@@ -170,6 +179,8 @@ def normalize_feodo(payload: Any, fetched_at: str) -> tuple[list[dict[str, Any]]
         port = _safe_text(row.get("port"), 10)
         if port and port.isdigit() and ":" not in value:
             value = f"{value}:{port}"[:300]
+        status = _safe_text(row.get("status"), 20)
+        status = status.lower() if status and status.lower() in {"online", "offline"} else None
         result.append({
             "source": "feodo",
             "ioc_type": "ip:port" if ":" in value and value.rsplit(":", 1)[1].isdigit() else "ip",
@@ -180,10 +191,82 @@ def normalize_feodo(payload: Any, fetched_at: str) -> tuple[list[dict[str, Any]]
             "first_seen": _safe_text(row.get("first_seen"), 80) or "",
             "last_seen": _safe_text(row.get("last_online"), 80),
             "country": _safe_text(row.get("country"), 100),
+            "status": status,
             "fetched_at": fetched_at,
         })
     result.sort(key=lambda item: item["first_seen"], reverse=True)
     return result[:FEODO_LIMIT], skipped
+
+
+def _threatfox_public_ip(item: dict[str, Any]) -> str | None:
+    if item.get("ioc_type") not in {"ip", "ip:port"}:
+        return None
+    value = item.get("ioc_value")
+    if not isinstance(value, str) or not value:
+        return None
+    if item.get("ioc_type") == "ip:port":
+        if value.startswith("[") and "]" in value:
+            value = value[1:value.index("]")]
+        else:
+            value = value.rsplit(":", 1)[0]
+    try:
+        address = ipaddress.ip_address(value)
+    except ValueError:
+        return None
+    if not address.is_global or any((
+        address.is_private, address.is_loopback, address.is_link_local,
+        address.is_reserved, address.is_multicast, address.is_unspecified,
+    )):
+        return None
+    return str(address)
+
+
+def _lookup_threatfox_countries(ips: list[str]) -> dict[str, str]:
+    """Perform paced country lookups in a worker thread; failures are per-IP."""
+    countries: dict[str, str] = {}
+    interval = 60.0 / GEOIP_LOOKUPS_PER_MINUTE
+    last_started: float | None = None
+    for ip in ips[:THREATFOX_COUNTRY_LOOKUP_LIMIT]:
+        if last_started is not None:
+            time.sleep(max(0.0, interval - (time.monotonic() - last_started)))
+        last_started = time.monotonic()
+        try:
+            code = lookup_ip_country(ip)
+        except Exception:
+            continue
+        if isinstance(code, str) and re.fullmatch(r"[A-Za-z]{2}", code.strip()):
+            countries[ip] = code.strip().upper()
+    return countries
+
+
+async def _enrich_threatfox_countries(items: list[dict[str, Any]], path: str | Path) -> None:
+    """Fill ThreatFox IP country fields, using stored rows as a persistent cache."""
+    ips_by_item = [_threatfox_public_ip(item) for item in items]
+    candidate_ips = list(dict.fromkeys(ip for ip in ips_by_item if ip))
+    if not candidate_ips:
+        return
+
+    conn = _connect(path)
+    try:
+        cached_rows = conn.execute(
+            "SELECT ioc_type, ioc_value, country FROM threat_feed_items "
+            "WHERE source='threatfox' AND country IS NOT NULL AND TRIM(country) != '' "
+            "AND ioc_type IN ('ip','ip:port')"
+        ).fetchall()
+    finally:
+        conn.close()
+    cached: dict[str, str] = {}
+    for row in cached_rows:
+        ip = _threatfox_public_ip({"ioc_type": row["ioc_type"], "ioc_value": row["ioc_value"]})
+        if ip and ip not in cached:
+            cached[ip] = row["country"].strip()
+
+    uncached_ips = [ip for ip in candidate_ips if ip not in cached]
+    looked_up = await asyncio.to_thread(_lookup_threatfox_countries, uncached_ips)
+    country_by_ip = {**cached, **looked_up}
+    for item, ip in zip(items, ips_by_item):
+        if ip and not (isinstance(item.get("country"), str) and item["country"].strip()):
+            item["country"] = country_by_ip.get(ip)
 
 
 async def _read_response(response: aiohttp.ClientResponse) -> bytes:
@@ -278,6 +361,44 @@ def get_items(path: str | Path | None = None, limit: int = 10) -> list[dict[str,
         conn.close()
 
 
+def get_country_aggregates(path: str | Path | None = None) -> list[dict[str, Any]]:
+    conn = _connect(path or db_path_default())
+    try:
+        rows = conn.execute(
+            "SELECT UPPER(TRIM(country)) AS code, source, malware, COUNT(*) AS count, "
+            "SUM(CASE WHEN source='feodo' AND LOWER(status)='online' THEN 1 ELSE 0 END) AS online_count, "
+            "SUM(CASE WHEN source='feodo' AND status IS NOT NULL AND TRIM(status) != '' THEN 1 ELSE 0 END) AS feodo_status_count "
+            "FROM threat_feed_items WHERE (source='feodo' OR "
+            "(source='threatfox' AND ioc_type IN ('ip','ip:port'))) "
+            "AND country IS NOT NULL AND TRIM(country) != '' "
+            "GROUP BY UPPER(TRIM(country)), source, malware"
+        ).fetchall()
+        grouped: dict[str, dict[str, Any]] = {}
+        for row in rows:
+            country = grouped.setdefault(row["code"], {
+                "code": row["code"], "count": 0, "online_count": 0, "feodo_count": 0,
+                "threatfox_count": 0, "feodo_status_count": 0, "malware_counts": {},
+            })
+            country["count"] += row["count"]
+            country["online_count"] += row["online_count"] or 0
+            country["feodo_status_count"] += row["feodo_status_count"] or 0
+            country[row["source"] + "_count"] += row["count"]
+            malware = row["malware"]
+            if isinstance(malware, str) and malware.strip():
+                malware_counts = country["malware_counts"]
+                malware_counts[malware.strip()] = malware_counts.get(malware.strip(), 0) + row["count"]
+        result = []
+        for country in grouped.values():
+            malware_counts = country.pop("malware_counts")
+            status_count = country.pop("feodo_status_count")
+            top_malware = min(malware_counts, key=lambda name: (-malware_counts[name], name)) if malware_counts else None
+            country["online_count"] = country["online_count"] if status_count else None
+            result.append({**country, "top_malware": top_malware})
+        return sorted(result, key=lambda item: (-item["count"], item["code"]))
+    finally:
+        conn.close()
+
+
 def due(source: str, path: str | Path | None = None, *, now: datetime | None = None) -> bool:
     if source not in SOURCES:
         return False
@@ -326,11 +447,11 @@ def _store_success(path: str | Path, source: str, items: list[dict[str, Any]], a
                 else:
                     conn.execute("DELETE FROM threat_feed_items WHERE source='feodo'")
             conn.executemany(
-                "INSERT INTO threat_feed_items(source,ioc_type,ioc_value,malware,threat_type,confidence,first_seen,last_seen,country,fetched_at) "
-                "VALUES(:source,:ioc_type,:ioc_value,:malware,:threat_type,:confidence,:first_seen,:last_seen,:country,:fetched_at) "
+                "INSERT INTO threat_feed_items(source,ioc_type,ioc_value,malware,threat_type,confidence,first_seen,last_seen,country,status,fetched_at) "
+                "VALUES(:source,:ioc_type,:ioc_value,:malware,:threat_type,:confidence,:first_seen,:last_seen,:country,:status,:fetched_at) "
                 "ON CONFLICT(source,ioc_type,ioc_value) DO UPDATE SET malware=excluded.malware, threat_type=excluded.threat_type, "
                 "confidence=excluded.confidence, first_seen=excluded.first_seen, last_seen=excluded.last_seen, "
-                "country=excluded.country, fetched_at=excluded.fetched_at", items,
+                "country=excluded.country, status=excluded.status, fetched_at=excluded.fetched_at", items,
             )
             cutoff = _iso((utc_now() if not attempted else _parse_time(attempted) or utc_now()) - RETENTION)
             conn.execute("DELETE FROM threat_feed_items WHERE source=? AND fetched_at < ?", (source, cutoff))
@@ -356,6 +477,8 @@ async def sync_source(source: str, config: dict[str, Any] | None, path: str | Pa
     try:
         payload = await fetch_threatfox(api_keys) if source == "threatfox" else await fetch_feodo()
         items, skipped = normalize_threatfox(payload, now) if source == "threatfox" else normalize_feodo(payload, now)
+        if source == "threatfox":
+            await _enrich_threatfox_countries(items, target)
         count = _store_success(target, source, items, now)
         if skipped:
             logger.info("Threat feed %s skipped %d malformed rows", source, skipped)

@@ -79,6 +79,109 @@ async def test_normalize_threatfox_and_feodo_sanitize_skip_and_bound_fields():
     assert feodo_rows[1]["country"] is None
 
 
+def test_feodo_status_persists_and_legacy_schema_migrates(tmp_path):
+    db = tmp_path / "legacy-feed.db"
+    conn = feeds._connect(db)
+    conn.execute("ALTER TABLE threat_feed_items DROP COLUMN status")
+    conn.commit()
+    conn.close()
+
+    stamp = NOW.isoformat()
+    rows, _skipped = feeds.normalize_feodo([
+        {**_feodo("1.2.3.4")[0], "status": "online", "country": "US"},
+        {**_feodo("5.6.7.8")[0], "status": "offline", "country": "GB"},
+        {**_feodo("9.10.11.12")[0], "status": "unknown", "country": "JP"},
+    ], stamp)
+    feeds._store_success(db, "feodo", rows, stamp)
+
+    conn = feeds._connect(db)
+    try:
+        statuses = dict(conn.execute(
+            "SELECT ioc_value, status FROM threat_feed_items WHERE source='feodo'"
+        ).fetchall())
+    finally:
+        conn.close()
+    assert statuses == {
+        "1.2.3.4:443": "online",
+        "5.6.7.8:443": "offline",
+        "9.10.11.12:443": None,
+    }
+
+
+@pytest.mark.asyncio
+async def test_threatfox_country_enrichment_deduplicates_uses_db_cache_and_keeps_failures(tmp_path, monkeypatch):
+    import threading
+
+    db = tmp_path / "feeds.db"
+    cached, _skipped = feeds.normalize_threatfox({
+        "query_status": "ok",
+        "data": [{
+            "ioc": "1.1.1.1:443", "ioc_type": "ipv4:port", "country": "CA",
+            "malware_printable": "Cached", "first_seen_utc": "2026-10-08",
+        }],
+    }, NOW.isoformat())
+    feeds._store_success(db, "threatfox", cached, NOW.isoformat())
+    payload = {
+        "query_status": "ok",
+        "data": [
+            {"ioc": "1.1.1.1:80", "ioc_type": "ipv4:port", "malware_printable": "Cached", "first_seen_utc": "2026-10-08"},
+            {"ioc": "8.8.8.8:80", "ioc_type": "ipv4:port", "malware_printable": "Lookup", "first_seen_utc": "2026-10-08"},
+            {"ioc": "8.8.8.8:443", "ioc_type": "ipv4:port", "malware_printable": "Lookup", "first_seen_utc": "2026-10-08"},
+            {"ioc": "9.9.9.9:443", "ioc_type": "ipv4:port", "malware_printable": "Failed", "first_seen_utc": "2026-10-08"},
+        ],
+    }
+    calls = []
+    main_thread = threading.get_ident()
+
+    def lookup(ip):
+        calls.append((ip, threading.get_ident()))
+        return "us" if ip == "8.8.8.8" else None
+
+    monkeypatch.setattr(feeds, "fetch_threatfox", lambda _keys: _async_value(payload))
+    monkeypatch.setattr(feeds, "lookup_ip_country", lookup)
+    monkeypatch.setattr(feeds.time, "sleep", lambda _seconds: None)
+    state = await feeds.sync_source("threatfox", {}, db, now_fn=lambda: NOW + timedelta(minutes=1))
+
+    assert state["status"] == "ok"
+    assert [ip for ip, _thread_id in calls] == ["8.8.8.8", "9.9.9.9"]
+    assert all(thread_id != main_thread for _ip, thread_id in calls)
+    conn = feeds._connect(db)
+    try:
+        countries = dict(conn.execute(
+            "SELECT ioc_value,country FROM threat_feed_items WHERE source='threatfox'"
+        ).fetchall())
+    finally:
+        conn.close()
+    assert countries["1.1.1.1:80"] == "CA"
+    assert countries["8.8.8.8:80"] == "US"
+    assert countries["8.8.8.8:443"] == "US"
+    assert countries["9.9.9.9:443"] is None
+
+
+@pytest.mark.asyncio
+async def test_threatfox_country_enrichment_caps_lookups_per_sync(tmp_path, monkeypatch):
+    import ipaddress
+
+    db = tmp_path / "feeds.db"
+    first_ip = ipaddress.ip_address("8.8.0.1")
+    payload = {
+        "query_status": "ok",
+        "data": [{
+            "ioc": f"{first_ip + index}:443", "ioc_type": "ipv4:port",
+            "malware_printable": "Batch", "first_seen_utc": "2026-10-08",
+        } for index in range(feeds.THREATFOX_COUNTRY_LOOKUP_LIMIT + 1)],
+    }
+    calls = []
+    monkeypatch.setattr(feeds, "fetch_threatfox", lambda _keys: _async_value(payload))
+    monkeypatch.setattr(feeds, "lookup_ip_country", lambda ip: calls.append(ip) or "US")
+    monkeypatch.setattr(feeds.time, "sleep", lambda _seconds: None)
+
+    result = await feeds.sync_source("threatfox", {}, db, now_fn=lambda: NOW)
+    assert result["status"] == "ok"
+    assert len(calls) == feeds.THREATFOX_COUNTRY_LOOKUP_LIMIT
+    assert len(set(calls)) == feeds.THREATFOX_COUNTRY_LOOKUP_LIMIT
+
+
 @pytest.mark.asyncio
 async def test_upsert_idempotence_snapshot_deletion_and_retention(tmp_path, monkeypatch):
     db = tmp_path / "feeds.db"

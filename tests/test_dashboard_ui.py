@@ -124,7 +124,7 @@ def test_indicator_locations_map_and_country_centroids() -> None:
     vendor_positions = [template.index(script_tag) for script_tag in vendor_scripts]
     assert vendor_positions == sorted(vendor_positions)
     extra_head_position = base.index("{% block extra_head %}")
-    dashboard_script_position = base.index('src="/static/js/dashboard.js?v=9"')
+    dashboard_script_position = base.index('src="/static/js/dashboard.js?v=11"')
     scripts_block_position = base.index("{% block scripts %}")
     assert extra_head_position < dashboard_script_position < scripts_block_position
     assert 'COUNTRY_CENTROIDS' in script and 'COUNTRY_NUMERIC_IDS' in script
@@ -207,6 +207,42 @@ def test_globe_hover_card_typing_and_no_data_rows() -> None:
     assert script.isascii()
 
 
+def test_globe_threat_feed_layer_is_separate_toggleable_and_safe() -> None:
+    template = TEMPLATE.read_text(encoding="utf-8")
+    script = SCRIPT.read_text(encoding="utf-8")
+    assert 'id="dash-map-threat-feed"' in template
+    assert 'id="dash-map-markers"' in template
+    assert 'id="dash-map-threat-feed-toggle" aria-pressed="true"' in template
+    assert 'dash-map-threat-feed-toggle[aria-pressed="false"]' in template
+    assert 'dash-map-threat-feed-toggle[aria-pressed="true"]' in template
+    assert "border: 1px solid rgb(63 230 255 / 42%)" in template
+    assert ".dash-map-threat-feed-toggle:hover" in template
+    assert "dash-map-threat-feed-online" in template
+    assert "dash-map-threat-feed-offline" in template
+    assert "dash-map-threat-feed-threatfox" in template
+    assert "countryCenter(code)" in script
+    assert "C2 \\u00d7${stats.count}" in script
+    assert "fetch('/api/dashboard/threat-feed/countries')" in script
+    assert 'id="dash-map-hover-threat-feed"' in template
+    assert 'id="dash-map-hover-threat-feed-value"' in template
+    assert "feedValue.textContent = feedParts.join(' \\u00b7 ')" in script
+    assert "`Feodo ${feedStats.feodo_count}`" in script
+    assert "`ThreatFox ${feedStats.threatfox_count}`" in script
+    assert "if (feedStats.online_count !== null)" in script
+    assert "const markerX = projected[0] + 18;" in script
+    assert "const markerY = projected[1] - 18;" in script
+    assert "stats?.feodo_count || 0" in script
+    assert "stats?.threatfox_count" in script
+    assert "const THREAT_FEED_LABEL_MIN_COUNT = 3;" in script
+    assert "stats.count >= THREAT_FEED_LABEL_MIN_COUNT" in script
+    assert "const THREAT_FEED_RADIUS_SCALE = 1.6;" in script
+    assert "Math.sqrt(count) * THREAT_FEED_RADIUS_SCALE" in script
+    assert "threatFeedRadius(offlineCount, 4, 9)" in script
+    assert "threatFeedRadius(stats?.online_count || 0, 3, 8)" in script
+    assert 'src="/static/js/dashboard.js?v=11"' in (ROOT / "templates" / "base.html").read_text(encoding="utf-8")
+    assert "geoDistance(point, center) <= Math.PI / 2 + 1e-6" in script
+
+
 def test_weekly_threat_feed_panel_is_safe_and_accessible() -> None:
     template = TEMPLATE.read_text(encoding="utf-8")
     script = SCRIPT.read_text(encoding="utf-8")
@@ -230,6 +266,8 @@ def test_weekly_threat_feed_panel_is_safe_and_accessible() -> None:
     assert "External IOCs from ThreatFox and Feodo Tracker, synced weekly" in panel
     assert 'id="dash-threat-feed-sync"' in panel
     assert "request.state.user.role == 'admin'" in panel
+    panel_header = panel.split("<header", 1)[1].split("</header>", 1)[0]
+    assert 'id="dash-threat-feed-sync"' in panel_header
 
     assert "fetch('/api/dashboard/threat-feed?limit=10')" in script
     assert "fetch('/api/dashboard/threat-feed/sync', {method: 'POST'})" in script
