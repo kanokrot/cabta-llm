@@ -92,11 +92,48 @@ def test_dashboard_keeps_lookup_and_report_navigation() -> None:
 def test_indicator_locations_map_and_country_centroids() -> None:
     template = TEMPLATE.read_text(encoding="utf-8")
     script = SCRIPT.read_text(encoding="utf-8")
+    base = (ROOT / "templates" / "base.html").read_text(encoding="utf-8")
     partial = ROOT / "templates" / "partials" / "world_map_paths.html"
     partial_text = partial.read_text(encoding="utf-8") if partial.is_file() else ""
 
-    assert 'id="dash-country-map" viewBox="0 0 1050 414"' in template
-    assert '{% include "partials/world_map_paths.html" %}' in template
+    assert 'id="dash-country-map" viewBox="0 0 720 500"' in template
+    assert 'id="dash-country-map"' in template and 'tabindex="0"' in template
+    assert 'aria-label="Interactive orthographic globe of indicator countries"' in template
+    assert 'id="dash-country-map-title"' in template
+    assert 'id="dash-map-sphere"' in template
+    assert 'id="dash-map-graticule"' in template
+    assert 'id="dash-map-countries"' in template
+    assert 'id="dash-map-markers"' in template
+    assert 'id="dash-country-focus"' in template
+    assert 'id="dash-map-rotation"' not in template
+    assert 'Rotate map' not in template
+    assert 'type="range"' not in template[template.index('id="dash-country-title"'):template.index('id="dash-country-list"')]
+    assert 'id="dash-map-zoom-in"' in template and 'aria-label="Zoom in"' in template
+    assert 'id="dash-map-zoom-out"' in template and 'aria-label="Zoom out"' in template
+    assert 'id="dash-map-zoom-reset"' in template and 'aria-label="Reset zoom"' in template
+    assert 'id="dash-map-hover-card"' in template
+    assert 'id="dash-map-hover-leader"' in template
+    assert 'aria-hidden="true"' in template[template.index('id="dash-map-stars"'):template.index('id="dash-map-atmosphere"')]
+    assert 'aria-hidden="true"' in template[template.index('class="dash-map-orbits"'):template.index('class="dash-map-hud-marks"')]
+    assert 'prefers-reduced-motion: reduce' in template
+    vendor_scripts = (
+        '/static/vendor/d3-array.min.js?v=1',
+        '/static/vendor/d3-geo.min.js?v=1',
+        '/static/vendor/topojson-client.min.js?v=1',
+    )
+    vendor_positions = [template.index(script_tag) for script_tag in vendor_scripts]
+    assert vendor_positions == sorted(vendor_positions)
+    extra_head_position = base.index("{% block extra_head %}")
+    dashboard_script_position = base.index('src="/static/js/dashboard.js?v=9"')
+    scripts_block_position = base.index("{% block scripts %}")
+    assert extra_head_position < dashboard_script_position < scripts_block_position
+    assert 'COUNTRY_CENTROIDS' in script and 'COUNTRY_NUMERIC_IDS' in script
+    assert 'geoOrthographic()' in script and '.clipAngle(90)' in script
+    assert 'setPointerCapture(event.pointerId)' in script
+    assert 'd3.geoDistance(point, center)' in script
+    assert 'wheel' in script and 'pinchStart' in script and 'baseScale * globe.zoom' in script
+    assert 'Math.random' not in script
+    assert '{% include "partials/world_map_paths.html" %}' not in template
     assert partial.is_file()
     assert len(partial_text.encode("utf-8")) < 200_000
     assert 'class="dash-map-land dash-map-country"' in partial_text
@@ -133,6 +170,23 @@ def test_indicator_locations_map_and_country_centroids() -> None:
     assert {code for code, numeric_id in current_codes.items() if numeric_id in partial_ids} == {
         "US", "AU", "FR", "NL", "PK",
     }
+
+
+def test_dashboard_globe_uses_only_vendored_d3_functions_and_ascii_source() -> None:
+    script = SCRIPT.read_text(encoding="utf-8")
+    vendored_d3_functions = {
+        "geoCentroid",
+        "geoOrthographic",
+        "geoPath",
+        "geoGraticule10",
+        "geoDistance",
+        "geoContains",
+    }
+    d3_calls = set(re.findall(r"(?:window\.)?d3\.([A-Za-z_$][A-Za-z0-9_$]*)", script))
+
+    assert "interpolateArray" not in script
+    assert d3_calls == vendored_d3_functions
+    assert script.isascii()
 
 
 def test_verdict_distribution_has_six_distinct_color_segments() -> None:
