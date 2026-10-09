@@ -171,6 +171,11 @@ def classify_scoring_sources(row: dict[str, Any], scorer) -> dict[str, list[str]
     }
 
 
+def is_trusted_shortcut_row(row: dict[str, Any]) -> bool:
+    """Recognize production's early-return trusted infrastructure results."""
+    return row.get("trusted_shortcut") is True and row.get("sources_checked") == 0
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base", type=Path, default=DEFAULT_BASE)
@@ -186,7 +191,22 @@ def main() -> None:
     OldScorer = load_baseline_scorer(args.baseline_revision)
     rows = load_jsonl(args.base) + load_jsonl(args.additions)
     replayed: dict[str, list[dict[str, Any]]] = {"old": [], "new": []}
+    scored_replayed: dict[str, list[dict[str, Any]]] = {"old": [], "new": []}
     changed_rows = []
+    label_splits: dict[str, dict[str, Any]] = {}
+
+    for expected in ("CLEAN", "MALICIOUS", "SUSPICIOUS", "UNKNOWN"):
+        labeled_rows = [
+            row for row in rows
+            if str(row.get("expected_verdict") or "UNKNOWN").upper() == expected
+        ]
+        trusted_rows = [row for row in labeled_rows if is_trusted_shortcut_row(row)]
+        label_splits[expected] = {
+            "total": len(labeled_rows),
+            "scored_by_sources": len(labeled_rows) - len(trusted_rows),
+            "trusted_shortcut": len(trusted_rows),
+            "trusted_shortcut_iocs": [row["ioc"] for row in trusted_rows],
+        }
 
     for input_row in rows:
         sources = input_row.get("sources")
@@ -194,14 +214,28 @@ def main() -> None:
             sources = {}
         intel = {"sources": sources}
         expected = str(input_row.get("expected_verdict") or "UNKNOWN").upper()
+        trusted_shortcut = is_trusted_shortcut_row(input_row)
 
-        old_score = OldScorer.calculate_ioc_score(intel)
-        old_coverage = OldScorer.calculate_source_coverage(intel)
-        old_verdict = determine_verdict(old_score, old_coverage)
+        if trusted_shortcut:
+            # Production returns directly from the trusted-infrastructure path;
+            # the eval export's unavailable placeholders were never scored.
+            recorded_verdict = str(input_row.get("predicted_verdict") or "CLEAN").upper()
+            if recorded_verdict not in VERDICTS:
+                raise ValueError(
+                    f"invalid recorded trusted-shortcut verdict for {input_row['ioc']}: "
+                    f"{recorded_verdict}"
+                )
+            old_score = new_score = input_row.get("threat_score", 0) or 0
+            old_coverage = new_coverage = NewScorer.calculate_source_coverage({"sources": {}})
+            old_verdict = new_verdict = recorded_verdict
+        else:
+            old_score = OldScorer.calculate_ioc_score(intel)
+            old_coverage = OldScorer.calculate_source_coverage(intel)
+            old_verdict = determine_verdict(old_score, old_coverage)
 
-        new_score = NewScorer.calculate_ioc_score(intel)
-        new_coverage = NewScorer.calculate_source_coverage(intel)
-        new_verdict = determine_verdict(new_score, new_coverage)
+            new_score = NewScorer.calculate_ioc_score(intel)
+            new_coverage = NewScorer.calculate_source_coverage(intel)
+            new_verdict = determine_verdict(new_score, new_coverage)
 
         old_row = {
             "ioc": input_row["ioc"],
@@ -215,6 +249,9 @@ def main() -> None:
         }
         replayed["old"].append(old_row)
         replayed["new"].append(new_row)
+        if not trusted_shortcut:
+            scored_replayed["old"].append(old_row)
+            scored_replayed["new"].append(new_row)
 
         if old_verdict != new_verdict or old_score != new_score:
             changed_rows.append({
@@ -235,7 +272,7 @@ def main() -> None:
                     "ratio": coverage_ratio(new_coverage),
                 },
                 "scoring_source_accounting": classify_scoring_sources(input_row, NewScorer),
-                "trusted_shortcut": input_row.get("trusted_shortcut", False),
+                "trusted_shortcut": trusted_shortcut,
                 "sources_checked": input_row.get("sources_checked"),
                 "label_source": input_row.get("source"),
             })
@@ -251,12 +288,17 @@ def main() -> None:
             "positive_class": "MALICIOUS",
             "unknown_as_negative": "UNKNOWN is included as a negative prediction",
             "unknown_as_abstain": "UNKNOWN rows are removed from metric denominators",
+            "trusted_shortcut": (
+                "Rows with trusted_shortcut=true and sources_checked=0 use their "
+                "recorded production verdict and are excluded from scored-only metrics"
+            ),
             "source_accounting_note": (
-                "not_applicable_by_ioc_type is annotated for review; the changed scorer "
-                "uses each stored unavailable marker as an error"
+                "not_applicable_by_ioc_type is annotated for review; source error "
+                "accounting applies only to rows actually scored"
             ),
         },
         "logic": {},
+        "expected_label_split": label_splits,
         "changed_rows": changed_rows,
     }
 
@@ -266,6 +308,15 @@ def main() -> None:
             "verdict_counts": {verdict: verdict_counts.get(verdict, 0) for verdict in VERDICTS},
             "metrics_unknown_as_negative": binary_metrics(result_rows, exclude_unknown=False),
             "metrics_unknown_as_abstain": binary_metrics(result_rows, exclude_unknown=True),
+        }
+        scored_rows = scored_replayed[label]
+        scored_counts = Counter(row["predicted_verdict"] for row in scored_rows)
+        report["logic"][label]["scored_only"] = {
+            "verdict_counts": {
+                verdict: scored_counts.get(verdict, 0) for verdict in VERDICTS
+            },
+            "metrics_unknown_as_negative": binary_metrics(scored_rows, exclude_unknown=False),
+            "metrics_unknown_as_abstain": binary_metrics(scored_rows, exclude_unknown=True),
         }
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
@@ -287,6 +338,17 @@ def main() -> None:
                 f"abstain_rate={metrics['abstain_rate'] * 100:.1f}% "
                 f"evaluated={metrics['count_evaluated']}"
             )
+        scored_metrics = logic["scored_only"]["metrics_unknown_as_negative"]
+        print(
+            f"{label} scored_only: "
+            f"verdict_counts={json.dumps(logic['scored_only']['verdict_counts'], ensure_ascii=False)} "
+            f"accuracy={scored_metrics['accuracy'] * 100:.1f}% "
+            f"precision={scored_metrics['precision'] * 100:.1f}% "
+            f"recall={scored_metrics['recall'] * 100:.1f}% "
+            f"f1={scored_metrics['f1'] * 100:.1f}% "
+            f"evaluated={scored_metrics['count_evaluated']}"
+        )
+    print("expected_label_split=" + json.dumps(label_splits, ensure_ascii=False))
     print("changed_rows_detail=" + json.dumps(changed_rows, ensure_ascii=False))
     print(f"wrote={args.output}")
 

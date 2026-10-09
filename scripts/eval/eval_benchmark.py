@@ -53,6 +53,11 @@ SCORING_SOURCES = (
 
 def export_scoring_sources(result, observed_at):
     """Export the six active scoring-source fields for each eval record."""
+    if result.get("trusted_shortcut") is True or result.get("trusted_hostname"):
+        # The production path returned before source checks. Do not fabricate
+        # unavailable source results for a policy-based trusted shortcut.
+        return {}
+
     raw_sources = result.get("sources")
     if not isinstance(raw_sources, dict):
         raw_sources = {}
@@ -201,7 +206,10 @@ async def evaluate(
                     "sources_checked": result.get("sources_checked"),
                     "sources_flagged": result.get("sources_flagged"),
                     "sources": export_scoring_sources(result, observed_at),
-                    "trusted_shortcut": "trusted_hostname" in result,
+                    "trusted_shortcut": (
+                        result.get("trusted_shortcut") is True
+                        or bool(result.get("trusted_hostname"))
+                    ),
                     "evaluation_path": evaluation_path(result),
                     "error": result.get("error"),
                 }

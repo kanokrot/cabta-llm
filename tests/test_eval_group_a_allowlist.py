@@ -66,3 +66,15 @@ def test_default_eval_mode_passes_no_allowlist(monkeypatch):
     module.main()
 
     assert captured["allowed_sources"] is None
+
+
+def test_trusted_shortcut_export_keeps_flag_and_does_not_create_placeholders():
+    module = _load_eval_module()
+    result = {
+        "trusted_hostname": "google.com",
+        "trusted_shortcut": True,
+        "sources": {},
+    }
+
+    assert module.export_scoring_sources(result, "2026-10-09T00:00:00Z") == {}
+    assert result["trusted_shortcut"] is True
