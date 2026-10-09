@@ -76,6 +76,7 @@ class IOCInvestigator:
         """Initialize IOC investigator."""
         self.config = config
         self.notification_manager = notification_manager
+        self._progress_callback = None
         self.threat_intel = ThreatIntelligence(config)
         self.llm_analyzer = LLMAnalyzer(config)
 
@@ -87,6 +88,9 @@ class IOCInvestigator:
             except Exception as exc:
                 logger.warning(f"[IOC] RAG knowledge base unavailable (non-fatal): {exc}")
                 self.rag_kb = None
+
+    def set_progress_callback(self, cb):
+        self._progress_callback = cb
 
     @staticmethod
     def _extract_malware_family(sources: Dict) -> str:
@@ -281,14 +285,26 @@ class IOCInvestigator:
         # Run threat intelligence checks. Preserve the historical call shape
         # when no allowlist is supplied so existing integrations remain
         # backward compatible.
+        progress_callback = getattr(self, '_progress_callback', None)
         if allowed_sources is None:
-            intel_results = await self.threat_intel.investigate_ioc_comprehensive(
-                ioc, ioc_type
-            )
+            if progress_callback is not None:
+                intel_results = await self.threat_intel.investigate_ioc_comprehensive(
+                    ioc, ioc_type, progress_callback=progress_callback
+                )
+            else:
+                intel_results = await self.threat_intel.investigate_ioc_comprehensive(
+                    ioc, ioc_type
+                )
         else:
-            intel_results = await self.threat_intel.investigate_ioc_comprehensive(
-                ioc, ioc_type, allowed_sources=allowed_sources
-            )
+            if progress_callback is not None:
+                intel_results = await self.threat_intel.investigate_ioc_comprehensive(
+                    ioc, ioc_type, allowed_sources=allowed_sources,
+                    progress_callback=progress_callback,
+                )
+            else:
+                intel_results = await self.threat_intel.investigate_ioc_comprehensive(
+                    ioc, ioc_type, allowed_sources=allowed_sources
+                )
 
         # Calculate base threat score
         threat_score = IntelligentScoring.calculate_ioc_score(intel_results)

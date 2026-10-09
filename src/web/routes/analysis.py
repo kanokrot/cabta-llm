@@ -301,11 +301,19 @@ def _run_ioc_analysis_bg(
 
         # Register a progress callback so each source query is reported
         _source_count = [0]
+        _last_progress = [10]
 
-        def _on_source_progress(source_name, status):
+        def _on_source_progress(source_name, status, done=None, total=None):
             _source_count[0] += 1
-            pct = min(10 + int((_source_count[0] / 25) * 75), 85)
-            mgr.update_progress(job_id, pct, f'Querying {source_name}...')
+            if done is not None and total:
+                pct = min(10 + int((done / total) * 75), 85)
+                message = f'{source_name} done ({done}/{total})'
+            else:
+                pct = min(10 + int((_source_count[0] / 25) * 75), 85)
+                message = f'Querying {source_name}...'
+            pct = max(_last_progress[0], pct)
+            _last_progress[0] = pct
+            mgr.update_progress(job_id, pct, message)
 
         # Set callback if investigator supports it
         if hasattr(investigator, 'set_progress_callback'):

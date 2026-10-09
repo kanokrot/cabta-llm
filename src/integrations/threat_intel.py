@@ -944,6 +944,7 @@ class ThreatIntelligence:
         ioc: str,
         ioc_type: str,
         allowed_sources: Optional[Set[str]] = None,
+        progress_callback=None,
     ) -> Dict:
         """
         Comprehensive IOC investigation across all 22 sources.
@@ -1128,16 +1129,29 @@ class ThreatIntelligence:
         # Execute all checks with timeout
         import asyncio
         
+        completed_sources = [0]
+        total_sources = len(tasks)
+
         async def safe_execute(name: str, coro, ioc: str, ioc_type: str) -> tuple:
             """Execute with timeout and error handling."""
+            status = 'ok'
             try:
                 result = await asyncio.wait_for(
                     coro, timeout=SOURCE_EXECUTION_TIMEOUT_SECONDS
                 )
+                if isinstance(result, dict) and (
+                    result.get('error')
+                    or result.get('timeout')
+                    or result.get('unavailable')
+                    or result.get('status') == '⚠'
+                    or result.get('status') in {'error', 'failed'}
+                ):
+                    status = 'error'
                 if result and result.get('status') != '⚠':
                     self._ioc_cache.set(ioc, ioc_type, name, result)
                 return name, result
             except asyncio.TimeoutError:
+                status = 'error'
                 logger.warning(
                     f"[INTEL] {name}: Timeout after "
                     f"{SOURCE_EXECUTION_TIMEOUT_SECONDS:g}s"
@@ -1163,6 +1177,7 @@ class ThreatIntelligence:
                     return name, cached_copy
                 return name, {'status': '⚠', 'error': 'Timeout', 'cached': False}
             except Exception as e:
+                status = 'error'
                 logger.error(f"[INTEL] {name} failed: {e}")
                 cached = self._ioc_cache.get(ioc, ioc_type, name)
                 if cached is not None:
@@ -1171,6 +1186,19 @@ class ThreatIntelligence:
                     cached_copy['cache_reason'] = 'error'
                     return name, cached_copy
                 return name, {'status': '⚠', 'error': str(e), 'cached': False}
+            finally:
+                completed_sources[0] += 1
+                if progress_callback is not None:
+                    try:
+                        progress_callback(
+                            name, status, completed_sources[0], total_sources
+                        )
+                    except Exception as callback_error:
+                        logger.debug(
+                            "[INTEL] Progress callback failed for %s: %s",
+                            name,
+                            callback_error,
+                        )
         
         # Run all tasks concurrently
         safe_tasks = [
