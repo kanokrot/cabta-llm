@@ -338,11 +338,15 @@
     }
     .dash-link:hover { text-decoration: underline; }
     .dash-feed-all {
-        justify-content: center;
-        color: var(--text-primary);
-        border: 1px solid var(--border-color);
-        border-radius: 10px;
+        min-height: auto;
+        padding: 2px 0;
+        color: var(--color-accent);
+        border: 0;
+        border-radius: 0;
+        background: none;
+        box-shadow: none;
     }
+    .dash-feed-all:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; border-radius: 2px; }
     .dash-empty { margin: 0; padding: 12px 2px; color: var(--text-secondary); font-size: 13px; }
     .dash-threat-feed-list { display: grid; gap: 10px; }
     .dash-threat-item { display: grid; gap: 7px; min-width: 0; padding: 12px; background: color-mix(in srgb, var(--bg-card) 82%, var(--border-color)); border: 1px solid var(--border-color); border-radius: 12px; }

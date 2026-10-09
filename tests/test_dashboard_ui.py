@@ -85,8 +85,17 @@ def test_dashboard_keeps_lookup_and_report_navigation() -> None:
     assert "fetch('/api/dashboard/recent?limit=50')" in script
     assert "const score = item.threat_score ?? item.score;" in script
     assert 'href="/history"' in template
+    assert '<a class="dash-link dash-feed-all" href="/history">View all analyses</a>' in template
     assert 'href="/api/reports/{{ job.id }}/html"' in template
     assert "`/api/reports/${encodeURIComponent(String(item.id))}/html`" in script
+
+    feed_link_style = re.search(r"\.dash-feed-all\s*\{([^}]*)\}", template)
+    assert feed_link_style is not None
+    assert "color: var(--color-accent)" in feed_link_style.group(1)
+    assert "border: 0" in feed_link_style.group(1)
+    assert "background: none" in feed_link_style.group(1)
+    assert "box-shadow: none" in feed_link_style.group(1)
+    assert ".dash-feed-all:focus-visible" in template
 
 
 def test_indicator_locations_map_and_country_centroids() -> None:
