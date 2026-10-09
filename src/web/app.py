@@ -746,7 +746,7 @@ def _register_page_routes(app: FastAPI) -> None:
         except Exception as e:
             logger.warning(f"[WEB] Failed to load tickets: {e}")
             raw_tickets = []
-        tickets = []
+        ticket_rows = []
         for t in raw_tickets:
             t = dict(t)
             recs = t.get('recommendations')
@@ -755,9 +755,9 @@ def _register_page_routes(app: FastAPI) -> None:
                     t['recommendations'] = _json.loads(recs)
                 except Exception:
                     t['recommendations'] = []
-            tickets.append(t)
+            ticket_rows.append(t)
         return templates.TemplateResponse(request, 'tickets.html', {
-            'tickets': tickets,
+            'tickets': ticket_rows,
         })
     @app.get('/report/{job_id}', response_class=HTMLResponse, include_in_schema=False)
     async def report_page(request: Request, job_id: str):
