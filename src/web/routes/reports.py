@@ -23,6 +23,7 @@ from ...reporting.ioc_pdf import generate_ioc_pdf
 from ...reporting.recommendation_comparison import compare_recommendations
 from ..auth import TEAM_LEAD, get_current_user, require_role
 from ..report_source_display import build_source_display_rows, display_source_name
+from ..source_classification import build_report_source_summary
 from ..visibility import serialize_report_job, serialize_report_mitre, serialize_report_payload
 
 logger = logging.getLogger(__name__)
@@ -33,6 +34,7 @@ REPORT_ROLES = [
     TEAM_LEAD,
     'admin',
 ]
+
 
 router = APIRouter(
     dependencies=[Depends(require_role(REPORT_ROLES))]
@@ -228,8 +230,10 @@ async def get_report_html(request: Request, analysis_id: str, current_user: dict
         current_user['role'],
         viewer_user_id=current_user.get('id'),
     )
+    source_summary = build_report_source_summary(serialized_job.get('result'))
     return templates.TemplateResponse(request, 'report_view.html', {
         'job': serialized_job,
+        'source_summary': source_summary,
         'recommendation_comparison': _report_recommendation_comparison(
             serialized_job
         ),
@@ -252,11 +256,13 @@ async def download_report_html(request: Request, analysis_id: str, current_user:
         current_user['role'],
         viewer_user_id=current_user.get('id'),
     )
+    source_summary = build_report_source_summary(serialized_job.get('result'))
     return templates.TemplateResponse(
         request,
         'report_view.html',
         {
             'job': serialized_job,
+            'source_summary': source_summary,
             'recommendation_comparison': _report_recommendation_comparison(
                 serialized_job
             ),

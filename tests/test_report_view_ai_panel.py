@@ -2,6 +2,7 @@ import re
 from pathlib import Path
 
 from src.tools.ioc_investigator import IOCInvestigator
+from src.web.source_classification import build_report_source_summary
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from starlette.requests import Request
@@ -87,7 +88,9 @@ def _render(result, role="admin", analysis_type="ioc", print_mode=False, created
         autoescape=select_autoescape(["html", "xml"]),
     )
     return environment.get_template("report_view.html").render(
-        request=_request(role, print_mode), job=job
+        request=_request(role, print_mode),
+        job=job,
+        source_summary=build_report_source_summary(result),
     )
 
 

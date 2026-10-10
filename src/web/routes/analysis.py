@@ -26,6 +26,7 @@ from ..models import (
 from ..auth import TEAM_LEAD, get_current_user, get_user_ids_by_role, require_role
 from ..email_capabilities import get_email_capabilities
 from ..oversight import record_cross_user_read
+from ..source_classification import count_source_classes
 from ..upload_validation import (
     EMAIL_ALLOWED_EXTENSIONS,
     FILE_ALLOWED_EXTENSIONS,
@@ -577,12 +578,22 @@ async def get_analysis(
     job = _get_readable_job(request, analysis_id, current_user)
     if job is None:
         raise HTTPException(status_code=404, detail='Analysis not found')
-    return serialize_analysis_job(
+    serialized = serialize_analysis_job(
         job,
         role=current_user['role'],
         include_ioc_result=job.get('analysis_type') == 'ioc',
         viewer_user_id=current_user.get('id'),
     )
+    detailed_result = serialized.get('result')
+    if (
+        isinstance(detailed_result, dict)
+        and isinstance(detailed_result.get('sources'), dict)
+    ):
+        detailed_result['source_counts'] = count_source_classes(
+            detailed_result.get('sources'),
+            detailed_result.get('score_breakdown'),
+        )
+    return serialized
 
 
 @router.get('/history/summary')

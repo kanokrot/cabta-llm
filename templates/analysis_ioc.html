@@ -144,6 +144,11 @@
         letter-spacing: 0.05em;
         text-transform: uppercase;
     }
+    .ioc-hero-stat-sub {
+        margin-top: 0.2rem;
+        color: var(--text-muted);
+        font-size: 0.7rem;
+    }
 
     /* ── Threat Score Gauge ── */
     .threat-gauge-wrap {
@@ -2593,26 +2598,16 @@
         var lastSeen = data.last_seen || data.lastSeen || '-';
         var hasSeenData = (firstSeen !== '' && firstSeen !== '-') || (lastSeen !== '' && lastSeen !== '-');
 
-        var sourcesChecked = (data.sources_checked !== undefined && data.sources_checked !== null)
-            ? data.sources_checked : (data.sources ? Object.keys(data.sources).length : 0);
+        var sourceCounts = data.source_counts && typeof data.source_counts === 'object' && !Array.isArray(data.source_counts)
+            ? data.source_counts : null;
         var hasScoreBreakdown = data.score_breakdown && typeof data.score_breakdown === 'object' && !Array.isArray(data.score_breakdown);
         var sourceScoringWeights = data.source_scoring_weights && typeof data.source_scoring_weights === 'object' && !Array.isArray(data.source_scoring_weights)
             ? data.source_scoring_weights : {};
-        var sourcesFlagged = 0;
-        if (hasScoreBreakdown) {
-            Object.keys(data.score_breakdown).forEach(function(name) {
-                var item = data.score_breakdown[name];
-                if (item && item.flagged === true) sourcesFlagged++;
-            });
-        } else {
-            sourcesFlagged = data.sources_flagged || 0;
-        }
-        if (!hasScoreBreakdown && !data.sources_flagged && data.sources && typeof data.sources === 'object') {
-            Object.keys(data.sources).forEach(function(sn) {
-                var sd = data.sources[sn];
-                if (sd && (sd.malicious || sd.detected || (sd.found === true && sd.malicious !== false))) sourcesFlagged++;
-            });
-        }
+        var sourcesResponded = sourceCounts && Number.isInteger(sourceCounts.responded) ? sourceCounts.responded : '—';
+        var sourceErrors = sourceCounts && Number.isInteger(sourceCounts.errors) ? sourceCounts.errors : null;
+        var sourcesFlagged = sourceCounts && Number.isInteger(sourceCounts.flagged) ? sourceCounts.flagged : '—';
+        var scoredFlagged = sourceCounts && Number.isInteger(sourceCounts.scored_flagged) ? sourceCounts.scored_flagged : '—';
+        var contextFlagged = sourceCounts && Number.isInteger(sourceCounts.context_flagged) ? sourceCounts.context_flagged : '—';
 
         html += '<div class="ioc-results-hero ioc-hero-tone-' + escAttr(verdictTone) + '">' +
             '<div class="ioc-hero-gauge"><div class="threat-gauge-wrap">' +
@@ -2633,8 +2628,8 @@
             '<i class="bi bi-clipboard" aria-hidden="true"></i></button></div>' +
             '<span class="badge ioc-hero-type ioc-type-badge">' + escHtml(iocType) + '</span></div>' +
             '<div class="ioc-hero-stats">' +
-            '<div class="ioc-hero-stat"><div class="ioc-hero-stat-value">' + escHtml(String(sourcesChecked)) + '</div><div class="ioc-hero-stat-label">Sources checked</div></div>' +
-            '<div class="ioc-hero-stat"><div class="ioc-hero-stat-value">' + escHtml(String(sourcesFlagged)) + '</div><div class="ioc-hero-stat-label">Sources flagged</div></div>' +
+            '<div class="ioc-hero-stat"><div class="ioc-hero-stat-value">' + escHtml(String(sourcesResponded)) + '</div><div class="ioc-hero-stat-label">Sources responded</div>' + (sourceErrors > 0 ? '<div class="ioc-hero-stat-sub">' + escHtml(String(sourceErrors)) + ' errors</div>' : '') + '</div>' +
+            '<div class="ioc-hero-stat"><div class="ioc-hero-stat-value">' + escHtml(String(sourcesFlagged)) + '</div><div class="ioc-hero-stat-label">Sources flagged</div><div class="ioc-hero-stat-sub">' + escHtml(String(scoredFlagged)) + ' scored · ' + escHtml(String(contextFlagged)) + ' context</div></div>' +
             '</div>';
         if (hasSeenData) {
             html += '<div class="ioc-detail-row"><span class="ioc-detail-label">First Seen</span><span>' + escHtml(firstSeen) + '</span></div>' +

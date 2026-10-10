@@ -37,6 +37,9 @@ def test_source_counts_match_report_template_categories():
         "responded": 3,
         "errors": 1,
         "na": 2,
+        "scored_flagged": 0,
+        "context_flagged": 1,
+        "attempted": 4,
     }
 
 

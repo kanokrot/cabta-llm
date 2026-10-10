@@ -9,7 +9,10 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from src.scoring.intelligent_scoring import IntelligentScoring
 from src.web.report_source_display import build_source_display_rows, display_source_name
-from src.web.source_classification import count_source_classes
+from src.web.source_classification import (
+    build_report_source_summary,
+    count_source_classes,
+)
 from src.web.visibility import ADMIN, serialize_report_job
 
 
@@ -90,6 +93,7 @@ def _render_report(result):
             "completed_at": "2026-10-08T06:51:00+00:00",
             "result": result,
         },
+        source_summary=build_report_source_summary(result),
         build_source_display_rows=build_source_display_rows,
         display_source_name=display_source_name,
     )

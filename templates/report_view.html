@@ -435,8 +435,6 @@
 {% set mitre_mapping    = result.mitre_mapping | default([]) %}
 {% set ioc_value        = result.ioc | default('') %}
 {% set ioc_type         = result.ioc_type | default('') %}
-{% set sources_checked  = result.sources_checked | default(0) %}
-{% set sources_flagged  = result.sources_flagged | default(0) %}
 {% set ai_status = result.get('ai_status') %}
 {% set ai_error = result.get('ai_error') %}
 {% set recommendations_source = result.get('recommendations_source') %}
@@ -452,51 +450,7 @@
     {% set _ = safe_llm_analysis.pop('error', None) %}
     {% set _ = raw_report_result.update({'llm_analysis': safe_llm_analysis}) %}
 {% endif %}
-{% set source_summary = namespace(flagged=0, responded=0, errors=0, na=0, classes={}, top_name='N/A', top_score=-1) %}
-{% for source_name, source_data in sources.items() %}
-    {% if source_data is mapping %}
-        {% set source_status = source_data.get('status', '') | string %}
-        {% set source_breakdown = score_breakdown.get(source_name) if score_breakdown is mapping else none %}
-        {% set source_score = (source_breakdown.get('score_used') if source_breakdown is mapping else source_data.get('score', 0)) | int(0) %}
-        {% if source_data.get('not_applicable') or source_status in ['\u2796', 'not_applicable'] %}
-            {% set source_class = 'na' %}
-        {% elif source_status in ['error', '\u26A0'] or ('error' in source_data) or source_data.get('feed_status') == 'unavailable' %}
-            {% set source_class = 'error' %}
-        {% elif source_breakdown is mapping and (source_breakdown.get('flagged') or source_score > 0) %}
-            {% set source_class = 'flagged' %}
-        {% elif source_breakdown is mapping and source_breakdown.get('score_used') is not none %}
-            {% set source_class = 'clean' %}
-        {% elif source_breakdown is mapping %}
-            {% set source_class = 'other' %}
-        {% elif source_data.get('listed') is sameas true or source_status in ['found', 'detected', 'flagged'] or source_score >= 50 %}
-            {% set source_class = 'flagged' %}
-        {% elif source_status in ['not found', 'clean', 'ok'] or (source_score == 0 and source_status) %}
-            {% set source_class = 'clean' %}
-        {% elif source_status %}
-            {% set source_class = 'other' %}
-        {% else %}
-            {% set source_class = 'na' %}
-        {% endif %}
-        {% set _ = source_summary.classes.update({source_name: source_class}) %}
-        {% if source_class == 'flagged' %}
-            {% set source_summary.flagged = source_summary.flagged + 1 %}
-            {% set source_summary.responded = source_summary.responded + 1 %}
-        {% elif source_class == 'error' %}
-            {% set source_summary.errors = source_summary.errors + 1 %}
-        {% elif source_class == 'na' %}
-            {% set source_summary.na = source_summary.na + 1 %}
-        {% else %}
-            {% set source_summary.responded = source_summary.responded + 1 %}
-        {% endif %}
-        {% if source_breakdown is mapping and source_score > 0 and source_score > source_summary.top_score %}
-            {% set source_summary.top_score = source_score %}
-            {% set source_summary.top_name = source_name | string | title %}
-        {% elif not score_breakdown and source_class not in ['na', 'error'] and source_score > source_summary.top_score %}
-            {% set source_summary.top_score = source_score %}
-            {% set source_summary.top_name = source_name | string | title %}
-        {% endif %}
-    {% endif %}
-{% endfor %}
+{% set source_summary = source_summary | default({}) %}
 
 {# File-specific #}
 {% set file_info          = result.file_info | default({}) %}
@@ -652,10 +606,10 @@
         </div>
         {% if file_info and (file_info.filename or file_info.name) %}<span class="rv-pill">FILE {{ (file_info.filename | default(file_info.name)) | e }}</span>{% endif %}
         {% if email_data and email_data.subject %}<span class="rv-pill">SUBJECT {{ email_data.subject | e | truncate(60) }}</span>{% endif %}
-        {% set top_source_display_name = display_source_name(source_summary.top_name) if display_source_name is defined else source_summary.top_name %}
+        {% set top_source_display_name = display_source_name(source_summary.get('top_name', 'N/A')) if display_source_name is defined else source_summary.get('top_name', 'N/A') %}
         <div class="rv-tiles">
-            <div class="rv-tile"><span class="rv-tile-label">Flagged / responded</span><strong class="rv-tile-value">{{ source_summary.flagged }} / {{ source_summary.responded }}</strong></div>
-            <div class="rv-tile"><span class="rv-tile-label">Top source</span><strong class="rv-tile-value">{% if source_summary.top_score >= 0 %}{{ top_source_display_name | e }} {{ source_summary.top_score }}{% else %}N/A{% endif %}</strong></div>
+            <div class="rv-tile"><span class="rv-tile-label">Flagged / responded</span><strong class="rv-tile-value">{{ source_summary.get('flagged', 0) }} / {{ source_summary.get('responded', 0) }}</strong></div>
+            <div class="rv-tile"><span class="rv-tile-label">Top source</span><strong class="rv-tile-value">{% if source_summary.get('top_score', -1) >= 0 %}{{ top_source_display_name | e }} {{ source_summary.get('top_score') }}{% else %}N/A{% endif %}</strong></div>
             <div class="rv-tile"><span class="rv-tile-label">DGA heuristic</span><strong class="rv-tile-value">{% if dga_analysis.get('confidence') is not none %}{{ dga_analysis.get('confidence') | e }}%{% else %}N/A{% endif %}</strong></div>
             <div class="rv-tile"><span class="rv-tile-label">Domain age</span><strong class="rv-tile-value">{% if domain_age.get('age_days') is not none %}{{ domain_age.get('age_days') | e }} days{% else %}N/A{% endif %}</strong></div>
         </div>
@@ -842,14 +796,15 @@
 {% endif %}
 
 <!-- ══ THREAT INTELLIGENCE SOURCES — sources is a DICT keyed by source name ══ -->
-{% set source_display_rows = build_source_display_rows(sources, source_summary.classes, score_breakdown, ioc_type) if build_source_display_rows is defined else [] %}
+{% set source_display_rows = build_source_display_rows(sources, source_summary.get('classes', {}), score_breakdown, ioc_type) if build_source_display_rows is defined else [] %}
 <div class="rv-card card-print-flow">
     <div class="rv-card-head card-header-collapsible" data-bs-toggle="collapse" data-bs-target="#sourcesCollapse" aria-expanded="true">
         <h2 class="rv-console-title">Threat Intelligence Sources</h2>
-        <span class="rv-pill rv-pill--flag">{{ source_summary.flagged }} FLAGGED</span>
-        <span class="rv-pill rv-pill--ok">{{ source_summary.responded }} RESPONDED</span>
-        <span class="rv-pill rv-pill--error">{{ source_summary.errors }} ERRORS</span>
-        <span class="rv-pill">{{ source_summary.na }} N/A</span>
+        <span class="rv-pill rv-pill--flag">{{ source_summary.get('flagged', 0) }} FLAGGED</span>
+        <span class="rv-pill">{{ source_summary.get('scored_flagged', 0) }} scored · {{ source_summary.get('context_flagged', 0) }} context</span>
+        <span class="rv-pill rv-pill--ok">{{ source_summary.get('responded', 0) }} RESPONDED</span>
+        <span class="rv-pill rv-pill--error">{{ source_summary.get('errors', 0) }} ERRORS</span>
+        <span class="rv-pill">{{ source_summary.get('na', 0) }} N/A</span>
         <span class="rv-spacer"></span><span class="rv-muted">Applicable sources only</span>
         <span class="rv-score-legend">SCORED = counted in the threat score &middot; other sources are context only</span>
     </div>
@@ -883,7 +838,7 @@
             {% else %}
             {% for source_name, source_data in sources.items() %}
                 {% if source_data is mapping %}
-                    {% set source_class = source_summary.classes.get(source_name, 'na') %}
+                    {% set source_class = source_summary.get('classes', {}).get(source_name, 'na') %}
                     {% set source_status = source_data.get('status', '') | string %}
                     {% if source_class != 'na' %}
                     <tr class="{% if source_class == 'flagged' %}rv-hit{% endif %}">
@@ -909,11 +864,11 @@
             </tbody>
         </table></div>
     </div>
-    {% if source_summary.na %}<details class="rv-na"><summary>{{ source_summary.na }} sources not applicable to this IOC</summary><div class="rv-na-list">
+    {% if source_summary.get('na', 0) %}<details class="rv-na"><summary>{{ source_summary.get('na') }} sources not applicable to this IOC</summary><div class="rv-na-list">
         {% if build_source_display_rows is defined %}
             {% for row in source_display_rows if row.source_class == 'na' %}<div class="rv-na-chip"><strong>{{ row.display_name | e }}</strong> <span class="rv-pill badge badge-secondary">{{ row.display_status | e }}</span>{% if row.scored %}<span class="rv-scored-chip" title="{{ row.scoring_title | e }}">SCORED</span>{% endif %}</div>{% endfor %}
         {% else %}
-            {% for source_name, source_data in sources.items() if source_data is mapping %}{% if source_summary.classes.get(source_name) == 'na' %}<div class="rv-na-chip"><strong>{{ source_name | string | title | e }}</strong> <span class="rv-pill badge badge-secondary"><span class="badge badge-secondary">N/A</span></span></div>{% endif %}{% endfor %}
+            {% for source_name, source_data in sources.items() if source_data is mapping %}{% if source_summary.get('classes', {}).get(source_name) == 'na' %}<div class="rv-na-chip"><strong>{{ source_name | string | title | e }}</strong> <span class="rv-pill badge badge-secondary"><span class="badge badge-secondary">N/A</span></span></div>{% endif %}{% endfor %}
         {% endif %}
     </div></details>{% endif %}
 </div>

@@ -13,7 +13,11 @@ from src.web.report_source_display import (
     display_source_name,
     display_source_status,
 )
-from src.web.source_classification import classify_source, count_source_classes
+from src.web.source_classification import (
+    build_report_source_summary,
+    classify_source,
+    count_source_classes,
+)
 from src.web.visibility import ADMIN, SOC, serialize_analysis_job, serialize_report_job
 from src.scoring.intelligent_scoring import SOURCE_SCORING_MULTIPLIERS
 
@@ -60,6 +64,7 @@ def _render_report(
     return environment.get_template("report_view.html").render(
         request=request,
         job=job,
+        source_summary=build_report_source_summary(job["result"]),
         build_source_display_rows=build_source_display_rows,
         display_source_name=display_source_name,
     )

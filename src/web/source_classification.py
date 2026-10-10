@@ -1,9 +1,4 @@
-"""Shared report-source classification and counts.
-
-Keep these rules aligned with the report template's source_summary logic.
-The HTML template remains unchanged; PDF reporting uses this helper to mirror
-its classes and counters.
-"""
+"""Shared source classification and counts for IOC result displays."""
 
 from __future__ import annotations
 
@@ -55,29 +50,101 @@ def classify_source(source_data: Any, score_breakdown: Any = None) -> str:
 def count_source_classes(
     sources: Any, score_breakdown: Mapping[str, Any] | None = None
 ) -> dict[str, int]:
-    """Count flagged/responded/errors/N/A using report-template semantics."""
-    counts = {key: 0 for key in SOURCE_CLASSES}
-    if not isinstance(sources, Mapping):
-        return counts
+    """Count source classes plus scored/context split and attempted total."""
+    counts = {
+        **{key: 0 for key in SOURCE_CLASSES},
+        "scored_flagged": 0,
+        "context_flagged": 0,
+        "attempted": 0,
+    }
+    classes = classify_sources(sources, score_breakdown)
     if not isinstance(score_breakdown, Mapping):
         score_breakdown = {}
 
-    for source_name, source_data in sources.items():
-        if not isinstance(source_data, Mapping):
-            continue
-        source_class = classify_source(
-            source_data, score_breakdown.get(source_name)
-        )
+    for source_name, source_class in classes.items():
         if source_class == "flagged":
             counts["flagged"] += 1
             counts["responded"] += 1
+            breakdown = score_breakdown.get(source_name)
+            if isinstance(breakdown, Mapping) and breakdown.get("scored") is True:
+                counts["scored_flagged"] += 1
+            else:
+                counts["context_flagged"] += 1
         elif source_class == "error":
             counts["errors"] += 1
         elif source_class == "na":
             counts["na"] += 1
         else:  # HTML classes "clean" and "other" both count as responded.
             counts["responded"] += 1
+    counts["attempted"] = counts["responded"] + counts["errors"]
     return counts
+
+
+def classify_sources(
+    sources: Any, score_breakdown: Mapping[str, Any] | None = None
+) -> dict[str, str]:
+    """Return the shared display class for each source mapping."""
+    if not isinstance(sources, Mapping):
+        return {}
+    if not isinstance(score_breakdown, Mapping):
+        score_breakdown = {}
+
+    return {
+        str(source_name): classify_source(
+            source_data, score_breakdown.get(source_name)
+        )
+        for source_name, source_data in sources.items()
+        if isinstance(source_data, Mapping)
+    }
+
+
+def build_report_source_summary(result: Any) -> dict[str, Any]:
+    """Build the shared source-count and top-source summary for report views."""
+    if not isinstance(result, dict):
+        result = {}
+    sources = result.get("sources", {})
+    score_breakdown = result.get("score_breakdown", {})
+    counts = count_source_classes(sources, score_breakdown)
+    classes = classify_sources(sources, score_breakdown)
+
+    top_name = "N/A"
+    top_score = -1
+    has_breakdown = isinstance(score_breakdown, dict) and bool(score_breakdown)
+    if isinstance(sources, dict):
+        for source_name, source_data in sources.items():
+            if not isinstance(source_data, dict):
+                continue
+            breakdown = (
+                score_breakdown.get(source_name)
+                if isinstance(score_breakdown, dict)
+                else None
+            )
+            raw_score = (
+                breakdown.get("score_used")
+                if isinstance(breakdown, dict)
+                else source_data.get("score", 0)
+            )
+            try:
+                score = int(raw_score or 0)
+            except (TypeError, ValueError):
+                score = 0
+            if isinstance(breakdown, dict):
+                is_top_candidate = score > 0
+            else:
+                is_top_candidate = (
+                    not has_breakdown
+                    and classes.get(source_name) not in {"na", "error"}
+                )
+            if is_top_candidate and score > top_score:
+                top_score = score
+                top_name = str(source_name).title()
+
+    return {
+        **counts,
+        "classes": classes,
+        "top_name": top_name,
+        "top_score": top_score,
+    }
 
 
 def source_status_label(source_data: Any, score_breakdown: Any = None) -> str:
