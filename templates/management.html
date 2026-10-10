@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}{% if current_user.role == 'admin' %}Access Requests{% else %}Team Management{% endif %} - Blue Team Assistant{% endblock %}
+{% block title %}{% if current_user.role == 'admin' %}Access Requests{% else %}Team Management{% endif %} - {{ BRAND_NAME }}{% endblock %}
 {% block page_title %}{% endblock %}
 {% block page_subtitle %}{% endblock %}
 

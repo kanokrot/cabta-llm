@@ -2,7 +2,7 @@
 {# Case Detail - single case view with status management, notes, and linked analyses #}
 {% extends "base.html" %}
 
-{% block title %}Case {{ case.id | default('N/A') | e }} - Blue Team Assistant{% endblock %}
+{% block title %}Case {{ case.id | default('N/A') | e }} - {{ BRAND_NAME }}{% endblock %}
 {% block page_title %}Case Detail{% endblock %}
 {% block page_subtitle %}<span class="page-subtitle">{{ case.title | default('') | e }}</span>{% endblock %}
 

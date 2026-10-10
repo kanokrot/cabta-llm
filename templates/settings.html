@@ -1,7 +1,7 @@
 {# Application settings. #}
 {% extends "base.html" %}
 
-{% block title %}Settings - Blue Team Assistant{% endblock %}
+{% block title %}Settings - {{ BRAND_NAME }}{% endblock %}
 {% block page_title %}{% endblock %}
 {% block page_subtitle %}{% endblock %}
 
@@ -224,7 +224,7 @@ var Settings = (function() {
     function saveAnalysis() { saveConfig({ analysis: { enable_llm: byId('enableLLM').checked, enable_rag: byId('enableRAG').checked } }, 'analysisSaveIndicator'); }
     function loadSystemInfo() {
         fetch('/api/config/info').then(function(r) { if (!r.ok) throw new Error(); return r.json(); }).then(function(info) {
-            byId('systemVersion').textContent = (info.app || 'Blue Team Assistant') + ' v' + (info.version || '');
+            byId('systemVersion').textContent = (info.app || {{ BRAND_NAME|tojson }}) + ' v' + (info.version || '');
             byId('systemConfigPath').textContent = info.config_path;
             byId('systemDataDir').textContent = info.data_dir;
         }).catch(function() { byId('systemVersion').textContent = 'System information unavailable'; byId('systemConfigPath').textContent = 'System information unavailable'; byId('systemDataDir').textContent = 'System information unavailable'; });

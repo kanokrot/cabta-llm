@@ -1,4 +1,5 @@
 import re
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -12,7 +13,10 @@ from src.reporting import (
     ioc_pdf,
     markdown_generator,
 )
+from src.web import page_auth
+from src.web.analysis_manager import AnalysisManager
 from src.web.app import _register_page_routes, create_app
+from src.web.page_auth import PageAuthMiddleware
 
 
 def test_shared_templates_expose_brand_globals():
@@ -46,6 +50,43 @@ def test_login_page_displays_brand_and_tagline():
     assert "CABTA" not in title.group(1)
     assert f'<small class="d-block text-muted fw-normal">{BRAND_TAGLINE}</small>' in response.text
     assert "Cyan Agent Blue Team Assistant" not in response.text
+
+
+def test_no_old_brand_in_templates():
+    templates_dir = Path(__file__).parents[1] / "templates"
+    jinja_comment = re.compile(r"{#.*?#}", re.DOTALL)
+
+    for template_path in templates_dir.glob("*.html"):
+        content = jinja_comment.sub("", template_path.read_text(encoding="utf-8"))
+        assert "Blue Team Assistant" not in content, template_path.name
+        assert "Cyan Agent" not in content, template_path.name
+
+
+def test_agent_chat_page_uses_branded_agent_name(monkeypatch, tmp_path):
+    user = {
+        "id": 1,
+        "email": "hunter@example.test",
+        "username": "hunter",
+        "role": "Threat Hunter",
+        "is_active": 1,
+    }
+    monkeypatch.setattr(page_auth, "get_current_user", lambda token, request=None: user)
+
+    app = FastAPI()
+    app.add_middleware(PageAuthMiddleware)
+    app.state.analysis_manager = AnalysisManager(db_path=str(tmp_path / "analysis.db"))
+    _register_page_routes(app)
+
+    with TestClient(app) as client:
+        client.cookies.set("cabta_session", "test-token")
+        response = client.get("/")
+
+    assert response.status_code == 200
+    assert f"{BRAND_NAME} Agent" in response.text
+    assert "Cyan Agent" not in response.text
+    title = re.search(r"<title>(.*?)</title>", response.text, re.DOTALL)
+    assert title is not None
+    assert "Blue Team Assistant" not in title.group(1)
 
 
 def _flowable_text(flowables):
