@@ -16,6 +16,8 @@ import json
 import html as html_lib
 import logging
 
+from src.branding import BRAND_NAME
+
 logger = logging.getLogger(__name__)
 class HTMLReportGenerator:
     """Generate comprehensive HTML reports with ALL analysis data."""
@@ -333,7 +335,7 @@ function downloadJSON() {{
     <div class="report-header file-header">
         <h1>🔬 MALWARE ANALYSIS REPORT</h1>
         <h3>{e(filename)}</h3>
-        <p>Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')} | Blue Team Assistant.0</p>
+        <p>Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')} | {BRAND_NAME}</p>
     </div>
     
     <div class="container">
@@ -482,7 +484,7 @@ function downloadJSON() {{
     <div class="report-header email-header">
         <h1>📧 EMAIL FORENSIC ANALYSIS REPORT</h1>
         <h3>Subject: {e(email_data.get('subject', 'Unknown'))[:80]}</h3>
-        <p>Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')} | Blue Team Assistant.0</p>
+        <p>Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')} | {BRAND_NAME}</p>
     </div>
     
     <div class="container">

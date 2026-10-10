@@ -5,7 +5,13 @@ from fastapi.testclient import TestClient
 
 from src.branding import BRAND_NAME, BRAND_TAGLINE
 from src.integrations.stix_generator import STIXGenerator
-from src.reporting import incident_report_pdf, ioc_pdf
+from src.reporting import (
+    executive_pdf,
+    html_generator,
+    incident_report_pdf,
+    ioc_pdf,
+    markdown_generator,
+)
 from src.web.app import _register_page_routes, create_app
 
 
@@ -93,6 +99,34 @@ def test_pdf_generators_use_central_brand_in_builder_inputs(monkeypatch, tmp_pat
     assert BRAND_NAME in incident_text
     assert "Cyan Agent Blue Team Assistant" not in ioc_text
     assert "Cyan Agent Blue Team Assistant" not in incident_text
+
+
+def test_executive_markdown_and_html_reports_use_central_brand(monkeypatch, tmp_path):
+    captured_story = []
+
+    class CapturingDocument:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def build(self, story):
+            captured_story.extend(story)
+
+    monkeypatch.setattr(
+        executive_pdf,
+        "SimpleDocTemplate",
+        lambda *args, **kwargs: CapturingDocument(),
+    )
+    pdf_result = executive_pdf.generate_executive_pdf(
+        {}, str(tmp_path / "executive.pdf")
+    )
+    pdf_text = " ".join(_flowable_text(captured_story))
+    markdown_text = markdown_generator.MarkdownReportGenerator.generate_ioc_report({})
+    html_text = html_generator.HTMLReportGenerator.generate_ioc_report({})
+
+    assert pdf_result is not None
+    for output in (pdf_text, markdown_text, html_text):
+        assert BRAND_NAME in output
+        assert "Blue Team Assistant" not in output
 
 
 def test_stix_identity_uses_brand_name_without_deriving_id_from_name():

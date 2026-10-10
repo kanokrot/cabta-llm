@@ -7,6 +7,7 @@ import json
 import pytest
 from pathlib import Path
 
+from src.branding import BRAND_NAME
 from src.web.analysis_manager import AnalysisManager
 from src.web.auth import get_current_user
 from src.web.case_store import CaseStore
@@ -336,7 +337,7 @@ class TestFastAPIEndpoints:
     def test_system_info(self):
         r = self.client.get('/api/config/info')
         assert r.status_code == 200
-        assert 'Blue Team Assistant' in r.json()['app']
+        assert BRAND_NAME in r.json()['app']
 
     def test_tool_status(self):
         r = self.client.get('/api/config/tools')

@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from ..auth import require_role
 from ..health_probes import get_detailed_health
 from ..settings_registry import primary_config_key, registered_config_keys, settings_sources
+from ...branding import BRAND_NAME
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -69,7 +70,7 @@ async def info(
     if not data_path.is_absolute():
         data_path = data_path.resolve()
     return {
-        'app': 'Blue Team Assistant',
+        'app': BRAND_NAME,
         'version': '2.0.0',
         'python': sys.version,
         'platform': platform.platform(),

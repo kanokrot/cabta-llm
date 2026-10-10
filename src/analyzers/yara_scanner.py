@@ -10,6 +10,8 @@ import logging
 from typing import Dict, List
 import json
 
+from src.branding import BRAND_NAME
+
 logger = logging.getLogger(__name__)
 
 # Check YARA availability
@@ -350,7 +352,7 @@ class YARARuleGenerator:
         """
         meta = {
             'description': f'Auto-generated rule for {rule_name}',
-            'author': 'Blue Team Assistant',
+            'author': BRAND_NAME,
             'date': '2026-01-06'
         }
         

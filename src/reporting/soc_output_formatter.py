@@ -8,6 +8,8 @@ from typing import Dict, List
 from datetime import datetime
 import logging
 
+from src.branding import BRAND_NAME
+
 logger = logging.getLogger(__name__)
 class SOCOutputFormatter:
     """
@@ -736,7 +738,7 @@ class SOCOutputFormatter:
         lines.append("")
         lines.append(f"Report Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}")
         # TODO: Stale version literal (1.0.0) — should reflect canonical product version (2.0.0). See also lines 1739, 1924.
-        lines.append("Blue Team Assistant Version: 1.0.0")
+        lines.append(f"{BRAND_NAME} Version: 1.0.0")
         lines.append("")
         
         return '\n'.join(lines)
@@ -1738,7 +1740,7 @@ class SOCOutputFormatter:
         lines.append("")
         lines.append(f"Report Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}")
         # TODO: Stale version literal (1.0.0), same issue as line 738.
-        lines.append("Blue Team Assistant Version: 1.0.0")
+        lines.append(f"{BRAND_NAME} Version: 1.0.0")
         lines.append("")
         
         return '\n'.join(lines)
@@ -1924,7 +1926,7 @@ class SOCOutputFormatter:
         lines.append("")
         lines.append(f"Report Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}")
         # TODO: Stale version literal (1.0.0), same issue as line 738.
-        lines.append("Blue Team Assistant Version: 1.0.0")
+        lines.append(f"{BRAND_NAME} Version: 1.0.0")
         lines.append("")
         
         return '\n'.join(lines)

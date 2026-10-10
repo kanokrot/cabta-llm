@@ -27,6 +27,8 @@ from fastapi.templating import Jinja2Templates
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import RedirectResponse, Response
 
+from src.branding import BRAND_NAME
+
 from .routes import analysis, dashboard, reports, config_api, cases, tickets
 from .routes import agent as agent_routes
 from .routes import auth as auth_routes
@@ -175,7 +177,7 @@ def create_app() -> FastAPI:
     """Create and configure the FastAPI application."""
 
     app = FastAPI(
-        title='Blue Team Assistant',
+        title=BRAND_NAME,
         description='SOC Analysis Toolkit - Web Dashboard',
         version='2.0.0',
         docs_url='/api/docs',

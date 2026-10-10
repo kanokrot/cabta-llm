@@ -11,6 +11,8 @@ from typing import Dict, List, Optional
 import logging
 import uuid
 
+from src.branding import BRAND_NAME
+
 logger = logging.getLogger(__name__)
 class LLMRuleGenerator:
     """
@@ -365,7 +367,7 @@ DeviceFileEvents
         return f"""rule BTA_Detection_{int(hashlib.sha256(sha256.encode()).hexdigest()[:8], 16) % 10000:04d} {{
     meta:
         description = "Detects {family_name} malware"
-        author = "Blue Team Assistant"
+        author = "{BRAND_NAME}"
         date = "{datetime.now().strftime('%Y-%m-%d')}"
         hash = "{sha256}"
     
