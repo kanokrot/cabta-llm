@@ -1,0 +1,2 @@
+BRAND_NAME = "SOCPOW"
+BRAND_TAGLINE = "Every IOC gets the POW"

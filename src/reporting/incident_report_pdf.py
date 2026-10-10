@@ -25,6 +25,7 @@ from src.utils.thai_fonts import (
     THAI_FONT_REGULAR,
     register_thai_fonts,
 )
+from src.branding import BRAND_NAME
 
 
 logger = logging.getLogger(__name__)
@@ -263,7 +264,7 @@ def generate_incident_report_pdf(
             ),
             Spacer(1, 6),
             Paragraph(
-                "สร้างโดย CABTA - Cyan Agent Blue Team Assistant",
+                "สร้างโดย " + BRAND_NAME,
                 styles["IncidentBody"],
             ),
         ])

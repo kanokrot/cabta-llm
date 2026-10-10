@@ -48,6 +48,7 @@ from .page_auth import (
 )
 from .security import safe_relative_path
 from src.integrations.ticketing import initialize_database as initialize_ticketing_db
+from src.branding import BRAND_NAME, BRAND_TAGLINE
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -83,6 +84,13 @@ def _load_config() -> dict:
 
 TEMPLATES_DIR = PROJECT_ROOT / 'templates'
 STATIC_DIR = PROJECT_ROOT / 'static'
+
+
+def _register_brand_globals(templates: Jinja2Templates) -> None:
+    templates.env.globals.update(
+        BRAND_NAME=BRAND_NAME,
+        BRAND_TAGLINE=BRAND_TAGLINE,
+    )
 
 
 def _page_auth_redirect(request: Request):
@@ -189,6 +197,7 @@ def create_app() -> FastAPI:
     app.state.analysis_manager = AnalysisManager()
     app.state.case_store = CaseStore()
     app.state.templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+    _register_brand_globals(app.state.templates)
 
     # Agent components (lazy-initialized; set to None so routes can check availability)
     app.state.agent_store = None
@@ -490,7 +499,11 @@ def _register_page_routes(app: FastAPI) -> None:
     from fastapi import Request
     from fastapi.responses import HTMLResponse
 
-    templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+    templates = getattr(app.state, 'templates', None)
+    if templates is None:
+        templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+        app.state.templates = templates
+        _register_brand_globals(templates)
 
     @app.get('/', response_class=HTMLResponse, include_in_schema=False)
     async def index(request: Request):

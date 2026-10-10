@@ -22,6 +22,8 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
+from src.branding import BRAND_NAME
+
 logger = logging.getLogger(__name__)
 
 
@@ -31,7 +33,7 @@ class STIXGenerator:
 
     Usage::
 
-        gen = STIXGenerator(organization_name="CABTA")
+        gen = STIXGenerator(organization_name=BRAND_NAME)
         indicator = gen.ioc_to_indicator('ipv4-addr', '192.168.1.1',
                                          name='Suspicious IP', tlp='AMBER')
         bundle = gen.analysis_to_bundle(analysis_result)
@@ -84,7 +86,7 @@ class STIXGenerator:
         'domain-name': re.compile(r'^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$'),
     }
 
-    def __init__(self, organization_name: str = "CABTA"):
+    def __init__(self, organization_name: str = BRAND_NAME):
         self.organization_name = organization_name
         self._identity_id = f'identity--{uuid.uuid4()}'
 
