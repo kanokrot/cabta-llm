@@ -70,6 +70,26 @@ def test_integrations_page_shows_hub_cards_and_provider_status_placeholders(
     assert 'id="hubSandboxSummary"' in response.text
 
 
+def test_integrations_page_describes_circl_public_misp_feed_without_status(
+    monkeypatch, tmp_path: Path
+) -> None:
+    client = _client_for_role(monkeypatch, tmp_path, "Incident Responder")
+    with client:
+        response = client.get("/integrations")
+
+    assert response.status_code == 200
+    assert "CIRCL public MISP feed" in response.text
+    misp_card = re.search(
+        r'<article class="hub-card hub-compact-card">\s*'
+        r'<div class="hub-card-top">.*?</div>\s*'
+        r'<h3>CIRCL public MISP feed</h3>.*?</article>',
+        response.text,
+        re.DOTALL,
+    )
+    assert misp_card is not None
+    assert "Configured" not in misp_card.group(0)
+
+
 def test_incident_responder_hub_has_no_admin_settings_or_mcp_links(
     monkeypatch, tmp_path: Path
 ) -> None:
