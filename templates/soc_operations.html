@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}SOC Operations - CABTA{% endblock %}
+{% block title %}SOC Operations - {{ BRAND_NAME }}{% endblock %}
 {% block page_title %}{% endblock %}
 {% block page_subtitle %}{% endblock %}
 
@@ -21,12 +21,12 @@
 {% endblock %}
 
 {% block content %}
-<div class="soc-operations-page">
+<div class="soc-operations-page" data-brand="{{ BRAND_NAME }}">
 <div class="container-fluid pb-4">
     <section class="soc-office-panel" aria-labelledby="soc-office-title">
         <header class="soc-office-header">
             <div>
-                <div class="soc-office-kicker">CABTA VISUALIZATION</div>
+                <div class="soc-office-kicker">{{ BRAND_NAME|upper }} VISUALIZATION</div>
                 <h2 id="soc-office-title" class="soc-office-title">SOC Analyst Pixel Office</h2>
                 <p class="soc-office-subtitle">Hermes-style Canvas renderer · Frontend-only Demo Mode</p>
             </div>
@@ -53,7 +53,7 @@
                     height="512"
                     data-asset-base="/static/img/soc/pixel-office"
                     role="img"
-                    aria-label="Animated pixel office showing CABTA analysts processing an IOC"
+                    aria-label="Animated pixel office showing {{ BRAND_NAME }} analysts processing an IOC"
                 >Your browser does not support HTML Canvas.</canvas>
                 <div class="soc-crt-lines" aria-hidden="true"></div>
 
@@ -62,12 +62,12 @@
                     <span id="soc-status-label">STATUS: IDLE</span>
                 </div>
 
-                <div class="soc-live-pill" title="Live Mode will be connected to CABTA events in a later phase">
+                <div class="soc-live-pill" title="Live Mode will be connected to {{ BRAND_NAME }} events in a later phase">
                     LIVE: COMING LATER
                 </div>
 
                 <div class="soc-monitor-card" aria-live="polite">
-                    <span>CABTA MONITOR</span>
+                    <span>{{ BRAND_NAME|upper }} MONITOR</span>
                     <strong id="soc-monitor-stage">AWAITING IOC</strong>
                     <small id="soc-monitor-case">CASE: DEMO-0001</small>
                 </div>

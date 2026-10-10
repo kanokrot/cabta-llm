@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Integrations - CABTA{% endblock %}
+{% block title %}Integrations - {{ BRAND_NAME }}{% endblock %}
 
 {% block extra_head %}
 <link rel="stylesheet" href="/static/css/integrations.css?v=4">
@@ -12,7 +12,7 @@
         <div>
             <div class="hub-kicker">PLATFORM CONNECTIONS</div>
             <h1 id="integrationsTitle">Integrations</h1>
-            <p>Review connected services, enrichment sources, and notification options for CABTA.</p>
+            <p>Review connected services, enrichment sources, and notification options for {{ BRAND_NAME }}.</p>
         </div>
         <div class="hub-legend" aria-label="Status legend">
             <span><i class="hub-dot configured" aria-hidden="true"></i>Configured</span>
@@ -26,7 +26,7 @@
         <article class="hub-card hub-feature-card">
             <div class="hub-card-top"><span class="hub-icon"><i class="bi bi-shield-check" aria-hidden="true"></i></span><span class="hub-tag">BUNDLE</span></div>
             <h3>Wazuh Alert Triage</h3>
-            <p>Forward Wazuh alerts to CABTA for automated triage. Install the bundle on your Wazuh manager.</p>
+            <p>Forward Wazuh alerts to {{ BRAND_NAME }} for automated triage. Install the bundle on your Wazuh manager.</p>
             <div class="hub-actions">
                 <a class="hub-button" href="/integrations/wazuh">Open setup guide <i class="bi bi-arrow-right" aria-hidden="true"></i></a>
                 <a class="hub-button hub-button-secondary" href="/api/integrations/wazuh/download"><i class="bi bi-download" aria-hidden="true"></i> Download .zip</a>
@@ -87,7 +87,7 @@
         <article class="hub-card hub-compact-card">
             <div class="hub-card-top"><span class="hub-icon"><i class="bi bi-rss" aria-hidden="true"></i></span><span class="hub-tag hub-tag-built-in">BUILT-IN</span></div>
             <h3>CIRCL public MISP feed</h3>
-            <p>Uses CIRCL's public feed, downloaded and cached by CABTA. No setup needed.<br>
+            <p>Uses CIRCL's public feed, downloaded and cached by {{ BRAND_NAME }}. No setup needed.<br>
             Checks IPv4, domain, URL and hash IOCs it supports.<br>
             Matches appear as evidence in reports. They do not affect the score or verdict, and this is not a connection to your own MISP server.</p>
         </article>

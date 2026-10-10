@@ -1,4 +1,7 @@
+import re
+
 from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
 from src.branding import BRAND_NAME, BRAND_TAGLINE
 from src.integrations.stix_generator import STIXGenerator
@@ -25,6 +28,18 @@ def test_fallback_templates_expose_brand_globals():
 
     assert app.state.templates.env.globals["BRAND_NAME"] == BRAND_NAME
     assert app.state.templates.env.globals["BRAND_TAGLINE"] == BRAND_TAGLINE
+
+
+def test_login_page_displays_brand_and_tagline():
+    response = TestClient(create_app()).get("/login")
+
+    assert response.status_code == 200
+    title = re.search(r"<title>(.*?)</title>", response.text, re.DOTALL)
+    assert title is not None
+    assert BRAND_NAME in title.group(1)
+    assert "CABTA" not in title.group(1)
+    assert f'<small class="d-block text-muted fw-normal">{BRAND_TAGLINE}</small>' in response.text
+    assert "Cyan Agent Blue Team Assistant" not in response.text
 
 
 def _flowable_text(flowables):

@@ -5,7 +5,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}CABTA - Cyan Agent Blue Team Assistant{% endblock %}</title>
+    <title>{% block title %}{{ BRAND_NAME }} - {{ BRAND_TAGLINE }}{% endblock %}</title>
 
     <!-- Favicon -->
     <link rel="icon" type="image/svg+xml" href="/static/img/logo.svg">
@@ -436,10 +436,10 @@
 
             <!-- Brand -->
             <a class="navbar-brand me-3" href="{{ logo_href }}">
-                <img src="/static/img/logo.svg" alt="CABTA" class="brand-logo">
+                <img src="/static/img/logo.svg" alt="{{ BRAND_NAME }}" class="brand-logo">
                 <span class="brand-label">
-                    CABTA
-                    <small>Cyan Agent Blue Team Assistant</small>
+                    {{ BRAND_NAME }}
+                    <small>{{ BRAND_TAGLINE }}</small>
                 </span>
             </a>
 
@@ -457,8 +457,8 @@
                 <!-- Offcanvas header (mobile only) -->
                 <div class="offcanvas-header d-lg-none">
                     <a class="navbar-brand" href="{{ logo_href }}">
-                        <img src="/static/img/logo.svg" alt="CABTA" class="brand-logo">
-                        <span class="brand-label">CABTA</span>
+                        <img src="/static/img/logo.svg" alt="{{ BRAND_NAME }}" class="brand-logo">
+                        <span class="brand-label">{{ BRAND_NAME }}</span>
                     </a>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Close"></button>
                 </div>

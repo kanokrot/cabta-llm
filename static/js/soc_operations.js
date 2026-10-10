@@ -1,6 +1,8 @@
 (() => {
     "use strict";
 
+    const brand = document.querySelector(".soc-operations-page")?.dataset.brand || "SOCPOW";
+
     const canvas = document.getElementById("soc-office-canvas");
     if (!canvas) return;
 
@@ -78,7 +80,7 @@
             { id: "idle", label: "Idle", duration: Infinity, activity: "Waiting for demo", monitor: "AWAITING IOC", event: "SOC room ready" },
             { id: "queued", label: "Queued", duration: 2.8, activity: `Dispatching IOC ${scenario.ioc} to SOC analysts`, monitor: "IOC QUEUED", event: "analysis.queued" },
             { id: "enrichment", label: "Enrich", duration: 4.4, activity: "Querying threat-intelligence sources", monitor: "ENRICHMENT", event: "enrichment.started" },
-            { id: "correlation", label: "Correlate", duration: 4.2, activity: "Correlating IOC with CABTA evidence", monitor: "CORRELATING", event: "correlation.started" },
+            { id: "correlation", label: "Correlate", duration: 4.2, activity: `Correlating IOC with ${brand} evidence`, monitor: "CORRELATING", event: "correlation.started" },
             { id: "scoring", label: "Score", duration: 3.8, activity: "Calculating risk score", monitor: `RISK SCORE: ${scenario.score}`, event: "scoring.started" },
             { id: "classification", label: "Classify", duration: 4.0, activity: `Verdict reached — ${scenario.verdict} (${scenario.severity})`, monitor: scenario.verdict, event: "threat.detected" },
             { id: "reporting", label: "Report", duration: 4.2, activity: "Generating Threat Intelligence Report", monitor: "BUILDING REPORT", event: "report.generated" },

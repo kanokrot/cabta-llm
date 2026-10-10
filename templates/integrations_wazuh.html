@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Integrations - CABTA{% endblock %}
+{% block title %}Integrations - {{ BRAND_NAME }}{% endblock %}
 
 {% block extra_head %}
 <link rel="stylesheet" href="/static/css/integrations.css?v=3">
@@ -16,10 +16,10 @@
     <header class="integration-hero">
         <div class="integration-hero-copy">
             <h1>Wazuh Alert Triage <span class="integration-tag">BUNDLE</span></h1>
-            <p>Forward Wazuh alerts to CABTA for automated triage. Download the integration files and install them on your Wazuh manager — CABTA never connects to Wazuh on its own.</p>
+            <p>Forward Wazuh alerts to {{ BRAND_NAME }} for automated triage. Download the integration files and install them on your Wazuh manager — {{ BRAND_NAME }} never connects to Wazuh on its own.</p>
             <div class="integration-meta" aria-label="Bundle details">
                 <span>Format <strong>ZIP</strong></span>
-                <span>Direction <strong>Wazuh <span aria-hidden="true">→</span> CABTA</strong></span>
+                <span>Direction <strong>Wazuh <span aria-hidden="true">→</span> {{ BRAND_NAME }}</strong></span>
             </div>
         </div>
         <div class="integration-download">
@@ -42,7 +42,7 @@
         </li>
         <li class="integration-step">
             <span class="integration-step-number">3</span>
-            <div><strong>Validate</strong><span>Replay the five sample alerts and check the results in CABTA.</span></div>
+            <div><strong>Validate</strong><span>Replay the five sample alerts and check the results in {{ BRAND_NAME }}.</span></div>
         </li>
     </ol>
 
@@ -79,7 +79,7 @@
             <h2 id="integrationChecklistTitle">Before you connect</h2>
             <ul class="integration-checklist">
                 <li><i aria-hidden="true">✓</i><span>An administrator creates a <strong>scoped API key</strong> for the Wazuh service account.</span></li>
-                <li><i aria-hidden="true">✓</i><span>Use a <strong>CABTA URL the Wazuh host can reach</strong> (not 127.0.0.1).</span></li>
+                <li><i aria-hidden="true">✓</i><span>Use a <strong>{{ BRAND_NAME }} URL the Wazuh host can reach</strong> (not 127.0.0.1).</span></li>
                 <li><i aria-hidden="true">✓</i><span>Install and configure the files on the Wazuh manager.</span></li>
             </ul>
             <aside class="integration-security-note">

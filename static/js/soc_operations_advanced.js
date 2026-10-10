@@ -1,6 +1,8 @@
 (() => {
     "use strict";
 
+    const brand = document.querySelector(".soc-operations-page")?.dataset.brand || "SOCPOW";
+
     const shell = document.getElementById("soc-room-shell");
     const canvas = document.getElementById("soc-office-canvas");
     const badge = document.getElementById("soc-status-badge");
@@ -115,7 +117,7 @@
 
         return {
             idle: [
-                { type: "muted", text: "[system] CABTA terminal ready" },
+                { type: "muted", text: `[system] ${brand} terminal ready` },
                 { type: "muted", text: "[system] waiting for IOC event..." },
             ],
             queued: [
@@ -192,13 +194,13 @@
         networkMap.setAttribute("aria-label", "Mini network map");
         networkMap.innerHTML = `
             <div class="soc-overlay-title">NETWORK MAP</div>
-            <svg viewBox="0 0 220 104" role="img" aria-label="CABTA analysis network flow">
+            <svg viewBox="0 0 220 104" role="img" aria-label="${brand} analysis network flow">
                 <path class="soc-net-link link-input" d="M28 52 H80" />
                 <path class="soc-net-link link-intel" d="M110 42 L160 19" />
                 <path class="soc-net-link link-server" d="M110 61 L160 83" />
                 <path class="soc-net-link link-report" d="M184 25 V77" />
                 <g class="soc-net-node node-ioc" transform="translate(8 39)"><rect width="40" height="25" rx="3"/><text x="20" y="15">IOC</text></g>
-                <g class="soc-net-node node-cabta" transform="translate(80 34)"><rect width="42" height="36" rx="3"/><text x="21" y="21">CABTA</text></g>
+                <g class="soc-net-node node-cabta" transform="translate(80 34)"><rect width="42" height="36" rx="3"/><text x="21" y="21">${brand.toUpperCase()}</text></g>
                 <g class="soc-net-node node-intel" transform="translate(158 7)"><rect width="52" height="24" rx="3"/><text x="26" y="15">INTEL</text></g>
                 <g class="soc-net-node node-server" transform="translate(158 73)"><rect width="52" height="24" rx="3"/><text x="26" y="15">SERVER</text></g>
             </svg>`;
@@ -220,7 +222,7 @@
         head.className = "soc-terminal-head";
         head.innerHTML = `
             <span class="soc-terminal-lights"><i></i><i></i><i></i></span>
-            <strong>CABTA SOC TERMINAL</strong>
+            <strong>${brand.toUpperCase()} SOC TERMINAL</strong>
             <small>CASE-1024</small>`;
         terminalState.caseLabel = head.querySelector("small");
 
@@ -231,7 +233,7 @@
 
         const prompt = document.createElement("div");
         prompt.className = "soc-terminal-prompt";
-        prompt.innerHTML = '<span>cabta@soc:~$</span><i class="soc-terminal-cursor"></i>';
+        prompt.innerHTML = `<span>${brand.toLowerCase()}@soc:~$</span><i class="soc-terminal-cursor"></i>`;
 
         monitor.append(head, output, prompt, legacyWrap);
     }

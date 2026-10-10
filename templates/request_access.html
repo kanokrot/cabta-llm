@@ -1,6 +1,6 @@
 {% extends "base_auth.html" %}
 
-{% block title %}Request access - CABTA{% endblock %}
+{% block title %}Request access - {{ BRAND_NAME }}{% endblock %}
 {% block body_class %} auth-console auth-request{% endblock %}
 {% block extra_head %}
 <link href="/static/css/auth.css?v=4" rel="stylesheet">
@@ -11,7 +11,7 @@
     <section class="auth-console-intro" aria-labelledby="auth-console-headline">
         <div>
             <p class="auth-console-eyebrow"><span class="auth-console-idx">[01]</span> Access request</p>
-            <h1 id="auth-console-headline">Tell an administrator <span class="auth-console-accent">how you will use CABTA</span><span class="auth-console-cursor" aria-hidden="true"></span></h1>
+            <h1 id="auth-console-headline">Tell an administrator <span class="auth-console-accent">how you will use {{ BRAND_NAME }}</span><span class="auth-console-cursor" aria-hidden="true"></span></h1>
             <p class="auth-console-description">Send a short request. An administrator reviews it before you get access.</p>
         </div>
 
@@ -48,7 +48,7 @@
             <div class="auth-console-card-meta" aria-hidden="true"><span>auth</span><span>request</span></div>
             <header class="auth-console-card-heading">
                 <h2 id="auth-console-title">Request access<span class="auth-console-cursor-mark" aria-hidden="true">_</span></h2>
-                <p>Tell an administrator how you will use CABTA.</p>
+                <p>Tell an administrator how you will use {{ BRAND_NAME }}.</p>
             </header>
 
             {% if submitted %}
