@@ -10,7 +10,7 @@ Features:
 - TLP marking definitions (RED, AMBER, GREEN, CLEAR)
 - Create STIX bundles from full analysis results
 - JSON export for sharing with STIX-compatible platforms (TAXII, OpenCTI, MISP)
-- Identity object for CABTA attribution
+- Identity object for SOCPOW attribution
 
 Reference: https://docs.oasis-open.org/cti/stix/v2.1/os/stix-v2.1-os.html
 """
@@ -22,7 +22,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from src.branding import BRAND_NAME
+from src.branding import BRAND_NAME, BRAND_TAGLINE
 
 logger = logging.getLogger(__name__)
 
@@ -104,7 +104,7 @@ class STIXGenerator:
             'created': now,
             'modified': now,
             'name': self.organization_name,
-            'description': f'{self.organization_name} - Cyber Blue Team Assistant',
+            'description': f'{self.organization_name} - {BRAND_TAGLINE}',
             'identity_class': 'organization',
         }
 

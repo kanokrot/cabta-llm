@@ -84,5 +84,6 @@ def test_stix_identity_uses_brand_name_without_deriving_id_from_name():
     identity = STIXGenerator().create_identity()
 
     assert identity["name"] == BRAND_NAME
-    assert identity["description"] == "SOCPOW - Cyber Blue Team Assistant"
+    assert identity["description"] == f"{BRAND_NAME} - {BRAND_TAGLINE}"
+    assert "Cyber Blue Team Assistant" not in identity["description"]
     assert identity["id"].startswith("identity--")
