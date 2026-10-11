@@ -287,13 +287,15 @@ def validate_llm_analysis(
                 if isinstance(names, list):
                     valid_sources.update(name for name in names if isinstance(name, str))
 
-            degraded = source_status.get("degraded")
-            if isinstance(degraded, list):
-                valid_sources.update(
-                    item["source"]
-                    for item in degraded
-                    if isinstance(item, dict) and isinstance(item.get("source"), str)
-                )
+            for status_key in ("degraded", "scored_degraded", "context_degraded"):
+                degraded = source_status.get(status_key)
+                if isinstance(degraded, list):
+                    valid_sources.update(
+                        item if isinstance(item, str) else item["source"]
+                        for item in degraded
+                        if isinstance(item, str)
+                        or (isinstance(item, dict) and isinstance(item.get("source"), str))
+                    )
         llm_result = check_source_hallucination(llm_result, valid_sources, all_known_sources)
 
     # ชั้น 3: เช็ค RAG relevance กับ ioc_type
