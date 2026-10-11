@@ -37,17 +37,22 @@
 ### Step 0 — เตรียมและ commit ก่อน pull ใด ๆ
 
 - [ ] เขียนและ commit `scripts/eval/build_independent_url_holdout.py` ใน tracked location: pull/freeze OpenPhish และ PhishTank, eligibility filter, seeded sampling ด้วย `random.Random(20261011)`, dedup keys, per-row fields `sampling_source` และ `label_source`; เก็บ IOC URL ตามต้นฉบับ ห้ามแก้หรือ normalize URL
+- [ ] เขียนและ commit `scripts/eval/measure_url_overlap.py` ใน tracked location: freeze C2 feeds และเก็บ ThreatFox raw lookup ต่อ IOC ก่อน eval; ทำ overlap โดยไม่เรียก scoring pipeline
 - [ ] เขียนและ commit `scripts/eval/label_clean_urls_vt.py` ใน tracked location: ใช้ VT 3-tier rule; log ทุก candidate ที่ drop พร้อม reason (เช่น no report, missing `last_analysis_results`, AMBIGUOUS หรือ MALICIOUS)
 - [ ] เขียนและ commit `scripts/eval/compute_holdout_metrics.py` ใน tracked location: Precision/Recall/F1 พร้อม Wilson 95% CI; แยก OpenPhish/PhishTank, overlap strata, 3-class counts และจำนวน rows ที่ source unavailable
+- [ ] เขียนและ commit `scripts/eval/combine_independent_url_holdout.py` ใน tracked location: รวม `malicious_openphish.json`, `malicious_phishtank.json` และ `clean_labeled.json` ตามลำดับ; ปฏิเสธ label ที่ยังไม่ final และ IOC ซ้ำ
 - [ ] เตรียม dated evidence folder เช่น `evidence/independent_url_holdout_2026-10-11/` สำหรับ frozen source data, manifests และ checksums; `evidence/` ถูก ignore เว้นแต่ allowlist ไว้ใน `.gitignore`; เพิ่ม rule `!evidence/independent_url_holdout_2026-10-11/` หลัง `evidence/*` ก่อนเริ่ม pull (งานนี้ไม่แก้ `.gitignore`)
+- [ ] วาง Tranco full-list CSV ใน `evidence/independent_url_holdout_2026-10-11/` และบันทึก SHA-256 ก่อนสร้าง clean candidates
 - [ ] ก่อน pull ยืนยันว่า scripts และ `.gitignore` exception ถูก tracked/committed แล้ว
 
-1. ดึงข้อมูลแต่ละรอบ บันทึก **วันเวลาที่ดึง (UTC)** และ URL ของแหล่ง
-2. Freeze เป็นไฟล์ แล้วเก็บ SHA-256 ของไฟล์ไว้ในหัวข้อ 7
-3. Dedup (ภายในรอบ และข้ามรอบ) บันทึกว่ารายการไหนอยู่ทั้งสองแหล่ง
-4. วัด overlap **ก่อน eval และไม่ใช้ verdict/score ของระบบ** กับสอง source ที่ใช้กับ URL IOC ใน scoring path: C2 Trackers และ ThreatFox. สำหรับ C2 ให้ freeze raw copies ของ feed ทั้ง 10 ไฟล์ ณ pull time พร้อม UTC timestamp, source URL และ SHA-256 ต่อไฟล์; คำนวณ exact-URL match และ host-level match กับข้อมูลใน feed. สำหรับ ThreatFox แนะนำให้เก็บ raw API response ต่อ candidate โดยส่ง URL ต้นฉบับที่ไม่แก้ไข พร้อม UTC timestamp, request URL/query metadata และ SHA-256 ของ response; วิธีนี้รักษาความสัมพันธ์ระหว่าง IOC กับ query ต้นฉบับ และหลีกเลี่ยงการอาศัย export ที่จำกัด `THREATFOX_LIMIT=500` ต่อ fetch (`src/integrations/threat_feed_sync.py:28-38, 283-299`) หรือ export เก่า `evidence_raw/threatfox/threatfox_export_2026-09-16.json`. วัด exact-URL และ host-level match แยกกัน; บันทึก snapshot date, source URL/hash และแถวที่ไม่มี offline source data. URL IOC ไม่มี overlap check สำหรับ FeodoTracker, Spamhaus, Tor exit nodes และ SSLBL เพราะเป็น IP/hash-only sources (`src/integrations/threat_intel.py:1021-23, 1025-39, 1052-53`)
-5. รัน eval ครั้งเดียวด้วยระบบตามที่เป็นอยู่
-6. คำนวณและรายงานผลตามหัวข้อ 5
+1. ดาวน์โหลด OpenPhish และ PhishTank แยกแหล่ง; ดาวน์โหลด Tranco full-list CSV ด้วยตนเองและบันทึก URL, UTC time และ SHA-256 ในหัวข้อ 7
+2. Freeze raw response/files ก่อนกรอง แล้วบันทึก SHA-256 และ metadata ในหัวข้อ 7
+3. ทำ eligibility filter และ dedup ภายใน/ข้ามรอบ; บันทึกจำนวนทุก stage และ shortfall โดยห้าม backfill ข้ามแหล่ง
+4. ทำ VT clean screening ตาม 3-tier rule และเก็บ candidate order เดิม; เลือก CLEAN 200 รายการแรก
+5. รวม `malicious_openphish.json`, `malicious_phishtank.json` และ VT labeler output `clean_labeled.json` ตามลำดับด้วย `combine_independent_url_holdout.py`; ตรวจว่าไม่มี label ที่ยังไม่ final หรือ IOC ซ้ำ
+6. วัด overlap **ก่อน eval และไม่ใช้ verdict/score ของระบบ** กับสอง source ที่ใช้กับ URL IOC ใน scoring path: C2 Trackers และ ThreatFox. สำหรับ C2 ให้ freeze raw copies ของ feed ทั้ง 10 ไฟล์ ณ pull time พร้อม UTC timestamp, source URL และ SHA-256 ต่อไฟล์; คำนวณ exact-URL match และ host-level match กับข้อมูลใน feed. สำหรับ ThreatFox แนะนำให้เก็บ raw API response ต่อ candidate โดยส่ง URL ต้นฉบับที่ไม่แก้ไข พร้อม UTC timestamp, request URL/query metadata และ SHA-256 ของ response; วิธีนี้รักษาความสัมพันธ์ระหว่าง IOC กับ query ต้นฉบับ และหลีกเลี่ยงการอาศัย export ที่จำกัด `THREATFOX_LIMIT=500` ต่อ fetch (`src/integrations/threat_feed_sync.py:28-38, 283-299`) หรือ export เก่า `evidence_raw/threatfox/threatfox_export_2026-09-16.json`. วัด exact-URL และ host-level match แยกกัน; บันทึก snapshot date, source URL/hash และแถวที่ไม่มี offline source data. URL IOC ไม่มี overlap check สำหรับ FeodoTracker, Spamhaus, Tor exit nodes และ SSLBL เพราะเป็น IP/hash-only sources (`src/integrations/threat_intel.py:1021-23, 1025-39, 1052-53`)
+7. รัน eval เพียงครั้งเดียวด้วยระบบตามที่เป็นอยู่และไฟล์ `combined_holdout.json`
+8. คำนวณและรายงานผลตามหัวข้อ 5
 
 สถานะข้อมูลสำหรับ overlap (ผลตรวจ read-only):
 
@@ -62,7 +67,7 @@
 ## 4. การประเมิน
 
 - ใช้ Flow A ครบ 6 scoring sources ตาม config ปัจจุบัน
-- ก่อน full run ให้ทำ smoke test 5 rows ภายใต้ isolated `USERPROFILE`; ยืนยันว่า API key โหลดจาก isolated profile โดยบันทึกเพียงว่าพบ key (ห้าม log ค่า key) และ ThreatFox/C2 Trackers query ไม่เป็น `unavailable` (บันทึก hit/miss และสถานะ source); เก็บผลและเวลา UTC ในหัวข้อ 7
+- ก่อน full run ให้ทำ smoke test จาก 5 rows แรกของ **old holdout** (`evidence/vt_independent_holdout_2026-09-25/vt_holdout_eval_results_batch3_21.jsonl`); ทั้งห้าเป็น URL IOC และมี `expected_verdict`. สร้าง benchmark JSON array ด้วย fields `ioc`, `ioc_type`, `expected_verdict`, `source`, `collected_at`; รันภายใต้ isolated `USERPROFILE` และห้ามใช้ rows จาก new frozen set. ยืนยันว่า API key โหลดจาก isolated profile โดยบันทึกเพียงว่าพบ key (ห้าม log ค่า key) และ ThreatFox/C2 Trackers query ไม่เป็น `unavailable` (บันทึก hit/miss และสถานะ source); เก็บผลและเวลา UTC ในหัวข้อ 7
 - บันทึก git commit hash ของระบบ ณ ตอนรัน: [TBD]
 - **ไม่แก้** น้ำหนัก AHP, multiplier, threshold หรือ config ใด ๆ ระหว่างขั้นตอนนี้
 - Positive class = MALICIOUS; ใน binary metrics ให้นับ `SUSPICIOUS` และ `UNKNOWN` เป็น non-MALICIOUS/negative ตาม convention ของผล 91.0% เดิม และรายงานจำนวนทั้งสอง verdict แยกเป็น 3-class counts
@@ -71,7 +76,23 @@
 - [VERIFIED — `src/integrations/threat_intel.py:1129-1188`; `src/integrations/threat_feeds.py:64-76, 213-269`; `src/integrations/threat_feed_sync.py:470-519`] IOC cache lookup ใช้เป็น exception fallback; ThreatFeeds มี in-memory cache สำหรับ SSLBL SHA1 (default TTL 1 ชั่วโมง) ในการเรียกปกติ แต่ไม่ใช้กับ URL IOC; threat-feed DB ไม่ใช่ cache ที่ evaluator ใช้
 - [INFERRED — estimate] เวลาประเมิน **ประมาณ 118 นาทีสำหรับ 400 rows ที่ `--delay 16`** (ประมาณการจาก timestamp proxy ของ URL ใน run เดิม ไม่ใช่เวลาที่วัดจริง); VT clean screening **ประมาณ 75–80 นาทีสำหรับ ~300 lookups** ที่ 4 requests/minute หรือ 16 วินาทีต่อ request
 - ไม่ตั้งเกณฑ์ผ่าน/ไม่ผ่านล่วงหน้า (เช่น 80%) รายงานผลตามจริง
-- คำสั่งประเมินที่ใช้ (แทน path ด้วยไฟล์ frozen ใน dated evidence folder): `python scripts/eval/eval_benchmark.py --benchmark <frozen-input.json> --output <dated-evidence/eval_results.jsonl> --group-a-only --delay 16`; `--group-a-only` รวม ThreatFox ตาม allowlist ปัจจุบัน
+- คำสั่งสำหรับรอบใหม่ (ThreatFox overlap ใช้ default delay 2 วินาที; `--delay 16` ใช้กับ VT/eval เท่านั้น):
+
+```powershell
+$evidence = "evidence/independent_url_holdout_2026-10-11"
+$oldHoldout = "evidence/vt_independent_holdout_2026-09-25/vt_holdout_eval_results_batch3_21.jsonl"
+.venv\Scripts\python.exe -c "import json,pathlib; p=pathlib.Path('$oldHoldout'); rows=[json.loads(x) for x in p.read_text(encoding='utf-8').splitlines()[:5]]; records=[{'ioc':r['ioc'],'ioc_type':r['expected_ioc_type'],'expected_verdict':r['expected_verdict'],'source':r['source'],'collected_at':r['label_collected_at']} for r in rows]; out=pathlib.Path('$evidence/smoke_old_holdout.json'); out.write_text(json.dumps(records), encoding='utf-8')"
+$env:USERPROFILE = "$evidence\smoke_userprofile"
+.venv\Scripts\python.exe scripts/eval/eval_benchmark.py --benchmark "$evidence/smoke_old_holdout.json" --output "$evidence/smoke_eval_results.jsonl" --group-a-only --delay 0
+.venv\Scripts\python.exe scripts/eval/build_independent_url_holdout.py --source openphish --out-dir $evidence --target 100 --seed 20261011
+.venv\Scripts\python.exe scripts/eval/build_independent_url_holdout.py --source phishtank --out-dir $evidence --target 100 --seed 20261011 --dedup-against-round "$evidence/malicious_openphish.json"
+.venv\Scripts\python.exe scripts/eval/build_independent_url_holdout.py --source tranco --out-dir $evidence --target 300 --seed 20261011 --input-file "$evidence/tranco_full_list.csv" --dedup-against-round "$evidence/malicious_openphish.json" "$evidence/malicious_phishtank.json"
+.venv\Scripts\python.exe scripts/eval/label_clean_urls_vt.py --input-file "$evidence/clean_candidates_tranco.json" --out-dir $evidence --target 200 --delay 16 --seed 20261011
+.venv\Scripts\python.exe scripts/eval/combine_independent_url_holdout.py --openphish "$evidence/malicious_openphish.json" --phishtank "$evidence/malicious_phishtank.json" --clean "$evidence/clean_labeled.json" --out-dir $evidence
+.venv\Scripts\python.exe scripts/eval/measure_url_overlap.py --input-file "$evidence/combined_holdout.json" --out-dir "$evidence/overlap" --seed 20261011
+.venv\Scripts\python.exe scripts/eval/eval_benchmark.py --benchmark "$evidence/combined_holdout.json" --output "$evidence/eval_results.jsonl" --group-a-only --delay 16
+.venv\Scripts\python.exe scripts/eval/compute_holdout_metrics.py --eval-results "$evidence/eval_results.jsonl" --overlap-flags "$evidence/overlap/url_overlap_flags.json" --output "$evidence/holdout_metrics.json"
+```
 
 ## 5. การรายงาน
 
@@ -99,7 +120,8 @@
 | Clean หลัง VT labeling | | | | | |
 | C2 Trackers overlap snapshots (10 feed files; บันทึก URL, UTC time, SHA-256 แยกทุกไฟล์) | | | | | |
 | ThreatFox per-candidate raw API results (query ด้วย original URL; UTC time และ SHA-256) | | | | | |
-| Smoke test (5 rows; isolated `USERPROFILE`; key loaded flag; ThreatFox/C2 status) | | | | | |
+| Tranco full-list CSV (manual download; URL, UTC time, SHA-256) | | | | | |
+| Smoke test (5 URL rows from old `vt_holdout_eval_results_batch3_21.jsonl`; isolated `USERPROFILE`; key loaded flag; ThreatFox/C2 status) | | | | | |
 
 ผลการวัด overlap ของ URL กับ C2 Trackers และ ThreatFox: [กรอกหลังขั้นตอน 4; แยก exact-URL และ host-level counts, ระบุ snapshot date/source hash, และรายงาน rows ที่ตรวจจาก source evidence ไม่ได้เป็น NOT FOUND]
 PhishTank snapshot เดิมใน repo มี 76,125 records; ทุก record ที่ตรวจมี `verified=yes` และ `online=yes` (0 offline/invalid rows ในไฟล์นี้). [VERIFIED — count parsed from `evidence_raw/phishtank/verified_online.json`]
