@@ -67,7 +67,8 @@
 ## 4. การประเมิน
 
 - ใช้ Flow A ครบ 6 scoring sources ตาม config ปัจจุบัน
-- ก่อน full run ให้ทำ smoke test จาก 5 rows แรกของ **old holdout** (`evidence/vt_independent_holdout_2026-09-25/vt_holdout_eval_results_batch3_21.jsonl`); ทั้งห้าเป็น URL IOC และมี `expected_verdict`. สร้าง benchmark JSON array ด้วย fields `ioc`, `ioc_type`, `expected_verdict`, `source`, `collected_at`; รันภายใต้ isolated `USERPROFILE` และห้ามใช้ rows จาก new frozen set. ยืนยันว่า API key โหลดจาก isolated profile โดยบันทึกเพียงว่าพบ key (ห้าม log ค่า key) และ ThreatFox/C2 Trackers query ไม่เป็น `unavailable` (บันทึก hit/miss และสถานะ source); เก็บผลและเวลา UTC ในหัวข้อ 7
+- ก่อน full run ให้ทำ smoke test จาก 5 rows แรกของ **old holdout** (`evidence/vt_independent_holdout_2026-09-25/vt_holdout_eval_results_batch3_21.jsonl`); ทั้งห้าเป็น URL IOC และมี `expected_verdict`. สร้าง benchmark JSON array ด้วย fields `ioc`, `ioc_type`, `expected_verdict`, `source`, `collected_at`; รันภายใต้ isolated `USERPROFILE` และห้ามใช้ rows จาก new frozen set. ยืนยันว่า API key โหลดจาก isolated profile โดยบันทึกเพียงว่าพบ key (ห้าม log ค่า key); สำหรับ URL rows คาดว่า C2 Trackers เป็น `unavailable` ตามสถานะ 9/10 feeds ที่บันทึกไว้ ส่วน ThreatFox ให้บันทึก hit/miss และสถานะตามจริง. เก็บผล เวลา UTC จำนวนแถวที่ C2 Trackers เป็น `unavailable` และสถานะ ThreatFox ในหัวข้อ 7
+- บันทึก environment ของ run: `LLM_DGA_VLLM_CANARY_PERCENT=100`, `BTA_CONFIG` unset. LLM-DGA ถูกเรียกใน environment นี้ แต่ไม่ส่งผลต่อ `threat_score` หรือ `predicted_verdict` สำหรับ URL IOC
 - บันทึก git commit hash ของระบบ ณ ตอนรัน: [TBD]
 - **ไม่แก้** น้ำหนัก AHP, multiplier, threshold หรือ config ใด ๆ ระหว่างขั้นตอนนี้
 - Positive class = MALICIOUS; ใน binary metrics ให้นับ `SUSPICIOUS` และ `UNKNOWN` เป็น non-MALICIOUS/negative ตาม convention ของผล 91.0% เดิม และรายงานจำนวนทั้งสอง verdict แยกเป็น 3-class counts
@@ -131,11 +132,12 @@ IOC cache ก่อน run: path `[กรอก path ของ process USERPROFI
 
 ## 8. บันทึกการเบี่ยงเบนจากโปรโตคอล
 
-(ว่างไว้ — ถ้ามีให้ใส่วันที่, สิ่งที่เปลี่ยน, เหตุผล)
+- **2026-10-11 — สถานะ C2 Trackers และผลต่อ URL:** จาก 10 feeds ที่กำหนดใน `src/integrations/threat_intel.py:786-832`, 9 feeds ตอบ HTTP 404 และมีเพียง `drb-ra` `IPC2s-30day.csv` ที่ตอบ HTTP 200 (เป็น IP list). หลักฐานใน repo ที่เก่าที่สุดที่พบคือ snapshot เวลา `2026-09-15T18:35:57Z` (`evidence/source_weights_2026-09-16/independent_external_proxy_holdout_overlap_2026-09-16.json:2,54-151`) และ `docs/CABTA_scope_ledger.md:1839-1840`. `montysecurity/C2-Tracker` ถูก archive (last push 2026-04-13) และไม่มี `data/` แล้ว. ประวัติ Git ระบุว่า URL ทั้ง 10 ถูกเพิ่มใน `e12e768` (2026-03-19); กฎ “no match + >=1 failed feed => unavailable” เพิ่มใน `21577ff` (2026-10-09). ก่อนหน้านั้น partial failures ถูกส่งกลับเป็น plain misses จึงเห็น `unavailable:false` ในผล holdout เก่า. **การตัดสินใจ:** ไม่เปลี่ยนระบบและไม่ซ่อม feed; ระบบที่ประเมินจึงยังเป็นระบบเดียวกับที่ให้ผล 91.0% และเป็นระบบตาม paper. ผลที่ต้องบันทึก: คาดว่า `c2_trackers` เป็น `unavailable=true` บน URL rows และ ThreatFox เป็น effective URL source; บันทึกจำนวน URL rows ที่ C2 unavailable และให้ overlap script เก็บ failed feed freezes โดยระบุว่า `scripts/eval/measure_url_overlap.py` มีสำเนา feed list ของตนเอง. Environment ของ run: `LLM_DGA_VLLM_CANARY_PERCENT=100`, `BTA_CONFIG` unset; LLM-DGA ไม่ส่งผลต่อ `threat_score` หรือ verdict.
 
 ## 9. ข้อจำกัดที่ประกาศล่วงหน้า
 
 - ครอบคลุมเฉพาะ URL
+- C2 Trackers มี 10 feeds ตาม config; หลักฐานที่เก่าที่สุดใน repo (snapshot `2026-09-15T18:35:57Z`) บันทึก 9 feeds เป็น HTTP 404 และ `drb-ra` `IPC2s-30day.csv` เป็น HTTP 200 ซึ่งเป็น IP list. คาดว่า URL rows จะมี `c2_trackers unavailable=true`; ดังนั้น effective URL source ในสภาวะนี้คือ ThreatFox. ระบบไม่ถูกแก้หรือซ่อม feed เพื่อคงระบบที่ประเมินให้ตรงกับผล 91.0% และ paper (`evidence/source_weights_2026-09-16/independent_external_proxy_holdout_overlap_2026-09-16.json:2,54-151`; `docs/CABTA_scope_ledger.md:1839-1840`; `src/integrations/threat_intel.py:786-832`). `measure_url_overlap.py` เก็บ feed list แยกไว้เอง จึงต้องบันทึก failed feed freezes จาก script นั้นด้วย
 - FeodoTracker, Spamhaus และ Tor exit nodes อาจตรงได้ผ่าน IP ของ URL host เท่านั้น; ระบบไม่ใช้แหล่งเหล่านี้กับ URL IOC. SSLBL เป็น SHA1-only และไม่ใช้กับ URL IOC. [VERIFIED — `src/integrations/threat_intel.py:1021-23, 1025-39, 1052-53`]
 - แหล่ง malicious เป็นข้อมูล phishing เท่านั้น ซึ่งต่างจากประเภทภัยที่ 6 scoring sources เน้น (C2/malware) ผล recall ต่ำจึงอาจสะท้อนความไม่ตรงของประเภทภัยด้วย ไม่ใช่แค่คุณภาพของระบบ
 - Clean URL ไม่ได้ครอบคลุมทุกลักษณะของ URL ปกติ โดยเฉพาะ URL บนแพลตฟอร์มที่ถูกใช้ทั้งโดย phishing และผู้ใช้ปกติ
