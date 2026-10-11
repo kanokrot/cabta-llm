@@ -2272,7 +2272,7 @@
             addField('Country', srcData.country);
             addField('Message', srcData.message);
         } else if (key === 'c2trackers' || key === 'c2_trackers') {
-            addField('Sources Checked', srcData.sources_checked);
+            addField('Feeds checked', srcData.sources_checked);
             addField('Sources Found', srcData.sources_found);
             if (srcData.malware_families && Array.isArray(srcData.malware_families) && srcData.malware_families.length > 0) {
                 hasDetail = true;
