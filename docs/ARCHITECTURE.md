@@ -17,12 +17,13 @@ Each module has a single responsibility:
 - **Reporting**: Generate output formats
 
 ### 2. Data-Driven Decisions
-All verdicts are based on:
-- Threat intelligence API responses
-- Static analysis findings
-- Behavioral indicators
+Direct-analysis verdicts are produced by the deterministic scoring and
+validation path for that analysis type. IOC, file, and email analyses use
+different evidence and scoring paths; the IOC scoring allowlist is documented
+separately below.
 
-AI/LLM is used only for **interpretation**, never for **decision making**.
+The Agent LLM can plan tool calls and summarize observations. It does not
+replace or override a deterministic analysis verdict.
 
 ### 3. Fail-Safe Behavior
 - Missing API keys = reduced functionality, not failure
@@ -34,44 +35,120 @@ AI/LLM is used only for **interpretation**, never for **decision making**.
 
 ## Component Architecture
 
+```mermaid
+flowchart TB
+    SOC["SOC Analyst / API client"] --> WEB["FastAPI Web App and API<br/>Authentication / RBAC / routes"]
+    CLI["CLI / Python API"] --> A
+    MCP_SERVER["Standalone CABTA MCP server"] --> IOC
+    MCP_SERVER --> MALWARE
+    MCP_SERVER --> EMAIL
+    WEB --> A["Flow A: Direct analysis"]
+    WEB --> B["Flow B: AgentLoop"]
+    WEB --> C["Flow C: PlaybookEngine"]
+
+    subgraph DIRECT["Flow A — Direct analysis"]
+        A --> IOC["IOCInvestigator"]
+        IOC --> TI["Threat Intelligence lookups"]
+        TI --> SCORE_SOURCES["IOC scoring allowlist<br/>FeodoTracker · SSL Blacklist · Spamhaus<br/>Tor Exit Nodes · C2 Trackers · ThreatFox"]
+        TI --> OTHER_SOURCES["Supplemental / report-only sources<br/>e.g. VirusTotal · AlienVault OTX<br/>AbuseIPDB · Shodan · other configured feeds"]
+        SCORE_SOURCES --> IOC_SCORE["AHP-weighted IOC score"]
+        TI --> COVERAGE["Source coverage<br/>availability and applicable results"]
+        IOC_SCORE --> VERDICT["Verdict validation<br/>score + coverage"]
+        COVERAGE --> VERDICT
+        OTHER_SOURCES --> IOC_RESULT["IOC result and evidence"]
+        VERDICT --> IOC_RESULT
+
+        A --> MALWARE["MalwareAnalyzer"]
+        MALWARE --> FILE_ANALYSIS["Hash reputation · type-specific analysis<br/>YARA · extracted IOCs · optional sandbox"]
+        FILE_ANALYSIS --> FILE_SCORE["ToolBasedScoring"]
+        FILE_SCORE --> FILE_RESULT["File result and evidence"]
+
+        A --> EMAIL["EmailAnalyzer"]
+        EMAIL --> EMAIL_ANALYSIS["Headers · SPF/DKIM/DMARC<br/>phishing/BEC · URLs · attachments"]
+        EMAIL_ANALYSIS --> EMAIL_RESULT["Email result and evidence"]
+    end
+
+    subgraph INVESTIGATION["Agent and playbook tools"]
+        B --> AGENT_LLM["Configured LLM backend<br/>tool planning and response"]
+        B --> DISPATCH["ToolRegistry / MCPClientManager"]
+        AGENT_LLM --> DISPATCH
+        C --> PLAYBOOK["YAML steps · conditions · for_each"]
+        PLAYBOOK --> DISPATCH
+        DISPATCH --> TOOLS["Registered local tools and MCP tools"]
+        TOOLS --> OBS["Tool observations"]
+        OBS --> AGENT_RESULT["Agent response / playbook result"]
+        APPROVAL["Human approval for protected steps"] --> PLAYBOOK
+    end
+
+    IOC_RESULT --> OUTPUT["Reports and result views"]
+    FILE_RESULT --> OUTPUT
+    EMAIL_RESULT --> OUTPUT
+    AGENT_RESULT --> OUTPUT
+    OUTPUT --> EXPORT["JSON / HTML / PDF · STIX 2.1<br/>MITRE Navigator · detection rules"]
+    OUTPUT --> RECORDS["Cases / tickets"]
+    WEB --> STORAGE["SQLite-backed jobs, sessions,<br/>cases/tickets, and audit records"]
+    B --> STORAGE
+    C --> STORAGE
+    WEB --> CORR["Correlation API / engine"]
+    WEB --> MEMORY["Investigation memory"]
+    IOC_RESULT -. configured verdict events .-> NOTIFY["Configured notifications<br/>e.g. email / LINE"]
+    FILE_RESULT -. configured verdict events .-> NOTIFY
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                              ENTRY POINTS                                    │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
-│  ┌──────────────────┐    ┌──────────────────┐    ┌──────────────────┐      │
-│  │   CLI            │    │   MCP Server     │    │   Direct Import  │      │
-│  │   soc_agent.py   │    │   server.py      │    │   Python API     │      │
-│  └────────┬─────────┘    └────────┬─────────┘    └────────┬─────────┘      │
-│           │                       │                       │                 │
-│           └───────────────────────┼───────────────────────┘                 │
-│                                   ▼                                         │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                              ANALYSIS TOOLS                                  │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
-│  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │                         IOCInvestigator                              │   │
-│  │  ├── Input: IP, Domain, URL, Hash                                   │   │
-│  │  ├── Process: Query 20+ TI sources                                  │   │
-│  │  └── Output: Verdict + Sources + Rules                              │   │
-│  └─────────────────────────────────────────────────────────────────────┘   │
-│                                                                             │
-│  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │                         MalwareAnalyzer                              │   │
-│  │  ├── Input: File path                                               │   │
-│  │  ├── Process: Type detection → Static analysis → TI lookup          │   │
-│  │  └── Output: Verdict + Indicators + Rules + MITRE mapping           │   │
-│  └─────────────────────────────────────────────────────────────────────┘   │
-│                                                                             │
-│  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │                         EmailAnalyzer                                │   │
-│  │  ├── Input: .eml or .msg file                                       │   │
-│  │  ├── Process: Header analysis → URL extraction → Attachment scan   │   │
-│  │  └── Output: Verdict + Phishing indicators + IOCs                   │   │
-│  └─────────────────────────────────────────────────────────────────────┘   │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
+
+The IOC scoring branch contains exactly six admitted sources. Supplemental
+results remain available as evidence; source coverage is calculated separately
+from score admission. Coverage classifies applicable source results, while the
+Group B sources are excluded from the verdict coverage denominator. The
+allowlist and multipliers are defined in
+`src/scoring/intelligent_scoring.py`.
+
+In the diagram, “Verdict Validator” refers to deterministic verdict
+determination from score and coverage (`determine_verdict`). The separate
+`verdict_validator.py` module enforces consistency between that verdict and
+optional LLM-generated text.
+
+### IOC scoring components
+
+```text
+                    +--------------------------+
+                    | IOC Investigator         |
+                    | จำแนก IOC / เรียกแหล่งข้อมูล |
+                    +------------+-------------+
+                                 |
+                    +------------v-------------+
+                    | Threat Intel Lookups     |
+                    +-------+-----------+------+
+                            |           |
+              +-------------v--+    +---v------------------+
+              | แหล่งที่เข้า IOC |    | แหล่งเสริม /        |
+              | scoring โดยตรง  |    | report-only         |
+              |                 |    | เช่น VT, OTX,       |
+              | FeodoTracker    |    | AbuseIPDB, Shodan   |
+              | SSL Blacklist   |    +---+------------------+
+              | Spamhaus        |        |
+              | Tor Exit Nodes  |        +----------+
+              | C2 Trackers     |                   |
+              | ThreatFox       |                   |
+              +--------+--------+                   |
+                       |                            |
+                       v                            |
+              +-------------------+                  |
+              | IOC Scoring       |                  |
+              | AHP multipliers   |                  |
+              +--------+----------+                  |
+                       |                             |
+                       +-------------+---------------+
+                                     |
+                         +-----------v-----------+
+                         | Source Coverage       |
+                         | แยกสถานะ source และ   |
+                         | คำนวณ coverage        |
+                         +-----------+-----------+
+                                     |
+                         +-----------v-----------+
+                         | Verdict Validator     |
+                         | ใช้ score + coverage  |
+                         +-----------------------+
 ```
 
 ---
@@ -80,79 +157,44 @@ AI/LLM is used only for **interpretation**, never for **decision making**.
 
 ### IOC Investigation Flow
 
-```
-┌──────────┐     ┌────────────────┐     ┌─────────────────┐     ┌──────────┐
-│  Input   │────▶│  IOC Extractor │────▶│  ThreatIntel    │────▶│ Scoring  │
-│  IOC     │     │  (categorize)  │     │  (20+ sources)  │     │          │
-└──────────┘     └────────────────┘     └─────────────────┘     └────┬─────┘
-                                                                      │
-                        ┌─────────────────────────────────────────────┘
-                        ▼
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│  Rule Generator │────▶│  LLM Analyzer   │────▶│  Report         │
-│  (YARA/SIGMA)   │     │  (interpret)    │     │  Generator      │
-└─────────────────┘     └─────────────────┘     └─────────────────┘
-```
+1. `IOCInvestigator` normalizes and categorizes the submitted IP, domain, URL,
+   or file hash, then checks trusted-infrastructure exclusions.
+2. `ThreatIntelligence.investigate_ioc_comprehensive()` dispatches only the
+   lookups applicable to that IOC type and configured source allowlist.
+3. `IntelligentScoring.calculate_ioc_score()` admits only
+   `NON_API_SCORING_SOURCES`: FeodoTracker, C2 Trackers, Spamhaus, Tor Exit
+   Nodes, SSL Blacklist, and ThreatFox. API/query sources and other feeds can
+   remain report evidence without contributing to this score.
+4. AHP multipliers are applied to positive source scores. The weighted average
+   divides by the sum of the multipliers for the contributing sources. The
+   scorer applies a 20% boost when at least two admitted sources are flagged,
+   or a 30% boost when at least three are flagged, then clamps the result to
+   0–100.
+5. Source coverage is calculated independently from score admission. It tracks
+   applicable, clean, flagged, unavailable, and stale results; Group B sources
+   are excluded from the main coverage denominator. The verdict uses the score
+   and coverage together. Unavailable results are not treated as clean.
+6. Domain-age and DGA enrichment are returned as analyst context and do not
+   enter the IOC score. Optional LLM analysis can explain findings, but the
+   deterministic verdict remains authoritative.
 
 ### Malware Analysis Flow
 
-```
-┌──────────────────────────────────────────────────────────────────────────────┐
-│                          MALWARE ANALYSIS PIPELINE                            │
-├──────────────────────────────────────────────────────────────────────────────┤
-│                                                                              │
-│  STAGE 1: File Identification                                                │
-│  ┌────────────────────────────────────────────────────────────────────────┐ │
-│  │  FileTypeRouter                                                        │ │
-│  │  ├── Magic bytes detection                                             │ │
-│  │  ├── Extension validation                                              │ │
-│  │  └── Route to appropriate analyzer                                     │ │
-│  └────────────────────────────────────────────────────────────────────────┘ │
-│                              │                                               │
-│                              ▼                                               │
-│  STAGE 2: Hash Reputation                                                    │
-│  ┌────────────────────────────────────────────────────────────────────────┐ │
-│  │  ThreatIntelligence.investigate_hash()                                 │ │
-│  │  ├── VirusTotal lookup                                                 │ │
-│  │  ├── MalwareBazaar check                                               │ │
-│  │  ├── Hybrid Analysis search                                            │ │
-│  │  └── Triage search                                                     │ │
-│  └────────────────────────────────────────────────────────────────────────┘ │
-│                              │                                               │
-│                              ▼                                               │
-│  STAGE 3: Static Analysis                                                    │
-│  ┌────────────────────────────────────────────────────────────────────────┐ │
-│  │  Type-Specific Analyzer (PE/ELF/Office/PDF/Script)                     │ │
-│  │  ├── Header parsing                                                    │ │
-│  │  ├── Section analysis                                                  │ │
-│  │  ├── Import/Export extraction                                          │ │
-│  │  ├── String extraction                                                 │ │
-│  │  └── Entropy calculation                                               │ │
-│  └────────────────────────────────────────────────────────────────────────┘ │
-│                              │                                               │
-│                              ▼                                               │
-│  STAGE 4: Deep Analysis                                                      │
-│  ┌────────────────────────────────────────────────────────────────────────┐ │
-│  │  EntropyAnalyzer    : Packing/encryption detection                     │ │
-│  │  StringExtractor    : IOC extraction from strings                      │ │
-│  │  YARAScanner        : Pattern matching                                 │ │
-│  │  MITREMapper        : Technique identification                         │ │
-│  └────────────────────────────────────────────────────────────────────────┘ │
-│                              │                                               │
-│                              ▼                                               │
-│  STAGE 5: Scoring & Output                                                   │
-│  ┌────────────────────────────────────────────────────────────────────────┐ │
-│  │  ToolBasedScoring   : Aggregate all signals                            │ │
-│  │  RuleGenerator      : Create detection rules                           │ │
-│  │  HTMLReportGenerator: Generate HTML report                             │ │
-│  │  SOCOutputFormatter : Generate CLI output                              │ │
-│  └────────────────────────────────────────────────────────────────────────┘ │
-│                                                                              │
-└──────────────────────────────────────────────────────────────────────────────┘
-```
+`MalwareAnalyzer.analyze()` computes file hashes, checks SHA-256 reputation via
+`ThreatIntelligence.investigate_ioc_comprehensive()`, and queries configured
+sandbox integrations. It then routes the file to its type-specific analyzer,
+runs applicable static and behavioral analyzers (including YARA), extracts
+and investigates IOCs, and calculates the file score with `ToolBasedScoring`.
+It can also generate MITRE ATT&CK mappings, detection rules, and reports.
+
+### Email Analysis Flow
+
+`EmailAnalyzer` parses message headers, checks email-authentication signals,
+inspects phishing/BEC indicators, and analyzes URLs and attachments. Related
+IOC and attachment findings are supplemental evidence in the email analysis;
+they do not feed the email base score.
 
 ---
-
 ## Module Descriptions
 
 ### tools/
@@ -233,21 +275,20 @@ Microsoft Office document analysis using oletools.
 ### integrations/
 
 #### `threat_intel.py`
-Core threat intelligence integration.
+Core threat intelligence dispatcher. It selects IOC lookups by indicator type
+and configured source allowlist.
 
-**Sources:**
-- VirusTotal (file/URL/IP/domain)
-- AbuseIPDB (IP reputation)
-- Shodan (IP data)
-- AlienVault OTX (pulses)
-- URLhaus (malicious URLs)
-- ThreatFox (IOCs)
-- MalwareBazaar (samples)
+**IOC scoring allowlist:** FeodoTracker, C2 Trackers, Spamhaus, Tor Exit Nodes,
+SSL Blacklist, and ThreatFox. Other configured IOC integrations provide
+supplemental/report evidence and do not enter the IOC scoring formula unless
+added to the explicit allowlist. See `docs/API_SOURCES.md` for the current
+integration inventory and classifications.
 
 #### `threat_intel_extended.py`
-Extended sources for comprehensive coverage.
+Supplemental reputation, scanning, and sandbox integrations. Being implemented
+here does not by itself admit a source to IOC scoring.
 
-**Additional Sources:**
+**Examples:**
 - GreyNoise (scanner detection)
 - Censys (certificate data)
 - IPQualityScore (fraud detection)
@@ -257,13 +298,13 @@ Extended sources for comprehensive coverage.
 - Joe Sandbox (sandbox)
 
 #### `llm_analyzer.py`
-Local LLM integration via Ollama.
+LLM integration supports configured Ollama, vLLM, and Anthropic backends.
 
 **Usage:**
 - Interpret technical findings
 - Generate natural language summaries
 - Explain MITRE techniques
-- **NOT for decision making**
+- Does not set or override direct-analysis verdicts
 
 ### scoring/
 
@@ -297,26 +338,34 @@ class IntelligentScoring:
     def calculate_ioc_score(intel_results: Dict) -> int:
         sources = intel_results.get('sources', {})
         weighted_scores = []
+        weight_sum = 0.0
+        flagged_sources = 0
         for source, result in sources.items():
             source_name = source.lower()
             if source_name not in NON_API_SCORING_SOURCES:
                 continue
-            if not isinstance(result, dict) or result.get('unavailable'):
+            if not isinstance(result, dict) or IntelligentScoring._is_source_error(result):
                 continue
+            if result.get('status') in ('✓', '✓ FLAGGED', 'FLAGGED', 'flagged'):
+                flagged_sources += 1
             source_score = IntelligentScoring._get_source_score(result)
             if source_score > 0:
-                weighted_scores.append(
-                    source_score * SOURCE_SCORING_MULTIPLIERS[source_name]
-                )
-        # The application implementation applies the documented multi-source
-        # boost before clamping 0-100. Domain-age/DGA enrichment remains
-        # analyst-facing metadata/recommendation context, not score input.
-        return max(0, min(100, int(sum(weighted_scores) / len(weighted_scores))))
+                multiplier = SOURCE_SCORING_MULTIPLIERS[source_name]
+                weighted_scores.append(source_score * multiplier)
+                weight_sum += multiplier
+
+        base_score = sum(weighted_scores) / weight_sum if weight_sum else 0
+        if flagged_sources >= 3:
+            base_score = min(100, base_score * 1.30)
+        elif flagged_sources >= 2:
+            base_score = min(100, base_score * 1.20)
+        return max(0, min(100, int(base_score)))
 ```
 
-The score formula consumes admitted IOC-source results only. Domain-age,
-DGA, and LLM-DGA enrichment remain outside this score formula and are exposed
-as enrichment or interpretation context.
+Only positive scores from admitted IOC sources enter the weighted average;
+its denominator is the sum of their multipliers. Source coverage is calculated
+separately. Domain-age, DGA, and LLM-DGA enrichment remain analyst context and
+do not enter the IOC score.
 
 #### `false_positive_filter.py`
 Reduces false positives through:
@@ -343,7 +392,7 @@ Generates detection rules from analysis results.
 ### config.yaml Structure
 
 ```yaml
-# API Keys
+# Illustrative subset; config.yaml.example is the canonical full template.
 api_keys:
   virustotal: ""
   abuseipdb: ""
@@ -351,14 +400,16 @@ api_keys:
   alienvault: ""
   hybrid_analysis: ""
   greynoise: ""
-  urlscan: ""
 
 # LLM Configuration
 llm:
-  provider: "ollama"    # ollama, openai, anthropic
+  provider: "ollama"    # ollama, vllm, anthropic
   model: "llama3.2:3b"
   api_key: ""
   base_url: "http://localhost:11434"
+  vllm_api_key: ""
+  vllm_base_url: ""
+  vllm_model: ""
 
 # Analysis Settings
 analysis:
