@@ -99,6 +99,35 @@ async def test_prompt_separates_scored_and_context_degraded_sources(monkeypatch)
 
 
 @pytest.mark.asyncio
+async def test_prompt_adds_plain_language_source_and_virustotal_engine_rules(monkeypatch):
+    prompt = await _build_prompt(
+        monkeypatch,
+        {
+            "spamhaus": {"error": "feed timeout"},
+            "alienvault": {"error": "credentials rejected"},
+        },
+    )
+
+    assert (
+        "Do not mention internal field names or JSON keys (including source_status,"
+        in prompt
+    )
+    assert "Copy each source name exactly as written in the Source Status section." in prompt
+    assert (
+        "VirusTotal detections formatted as M/N (for example, 11/92) mean M"
+        in prompt
+    )
+    source_status_json = re.search(
+        r"\*\*Source Status:\*\*\n(.*?)\n\*\*IMPORTANT RULES:\*\*",
+        prompt,
+        re.DOTALL,
+    ).group(1)
+    source_status = json.loads(source_status_json)
+    assert "scored_degraded" in source_status
+    assert "context_degraded" in source_status
+
+
+@pytest.mark.asyncio
 async def test_prompt_names_permanently_excluded_sources(monkeypatch):
     prompt = await _build_prompt(
         monkeypatch,
