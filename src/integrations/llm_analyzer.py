@@ -179,6 +179,15 @@ Scoring Sources Flagged: {sources_flagged}
     Do not suggest waiting days for a degraded scored source to recover.
 10. If any source is degraded, do not recommend "maintaining" or "recording"
     a Clean status; describe the verdict as provisional.
+11. Do not mention internal field names or JSON keys (including source_status,
+    scored_degraded, context_degraded, responded, and not_applicable) in your
+    user-facing analysis or recommendations. Describe these groups in plain
+    language, such as degraded scoring sources or degraded context sources.
+12. Copy each source name exactly as written in the Source Status section. Do
+    not correct, alter, abbreviate, or concatenate source names.
+13. VirusTotal detections formatted as M/N (for example, 11/92) mean M
+    detections out of N VirusTotal scanning engines. Refer to N as engines,
+    never as sources, and never call it "total sources".
 
 Provide your analysis in a clear, professional format. Include:
 
