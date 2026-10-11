@@ -1824,6 +1824,26 @@ var Investigations = (function() {
                     var PAGE_SIZE = 15;
                     var _stepsShown = 0;
 
+                    function renderSourceCountSummary(sourceCounts) {
+                        var hasSourceCounts = sourceCounts && typeof sourceCounts === 'object';
+                        var flagged = hasSourceCounts ? sourceCounts.flagged : null;
+                        var scored = hasSourceCounts ? sourceCounts.scored_flagged : null;
+                        var context = hasSourceCounts ? sourceCounts.context_flagged : null;
+                        var responded = hasSourceCounts ? sourceCounts.responded : null;
+                        var errors = hasSourceCounts ? sourceCounts.errors : null;
+                        var summaryText = hasSourceCounts
+                            ? flagged + ' flagged (' + scored + ' scored · ' + context + ' context) · ' + responded + ' responded' +
+                                (Number(errors) > 0 ? ' · ' + errors + ' errors' : '')
+                            : '—';
+                        var summary = el('div', '');
+                        summary.style.cssText = 'margin:0.3rem 0; font-size:0.78rem; color:var(--text-primary, #e0e0e0);';
+                        summary.innerHTML = '<i class="bi bi-flag-fill me-1" style="color:' + (Number(flagged) > 0 ? '#f85149' : '#3fb950') + ';"></i>';
+                        var text = document.createElement('strong');
+                        text.textContent = summaryText;
+                        summary.appendChild(text);
+                        return summary;
+                    }
+
                     // ── Rich tool result renderer for SOC analysts (ENHANCED) ──
                     function renderToolResult(toolName, resultRaw) {
                         var result;
@@ -1874,15 +1894,6 @@ var Investigations = (function() {
                             verdictWrap.style.cssText = 'margin:0.4rem 0;';
                             verdictWrap.appendChild(buildVerdictBadge(result.verdict));
                             addElement(verdictWrap);
-
-                            // Source summary line
-                            var srcSummary = el('div', '');
-                            srcSummary.style.cssText = 'margin:0.3rem 0; font-size:0.78rem; color:var(--text-primary, #e0e0e0);';
-                            var flagged = result.sources_flagged || 0;
-                            var checked = result.sources_checked || 0;
-                            srcSummary.innerHTML = '<i class="bi bi-flag-fill me-1" style="color:' + (flagged > 0 ? '#f85149' : '#3fb950') + ';"></i>' +
-                                '<strong>' + flagged + '</strong> / ' + checked + ' sources flagged';
-                            addElement(srcSummary);
 
                             // C2 detection alert
                             var sources = result.sources || {};
@@ -2437,6 +2448,9 @@ var Investigations = (function() {
                         }
 
                         // Render rich tool result if tool_call
+                        if (isToolCall && toolName === 'investigate_ioc') {
+                            detailArea.appendChild(renderSourceCountSummary(step.source_counts));
+                        }
                         if (isToolCall && step.tool_result && toolName) {
                             var richResult = renderToolResult(toolName, step.tool_result);
                             if (richResult) detailArea.appendChild(richResult);
