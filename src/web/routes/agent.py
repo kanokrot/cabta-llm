@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 
 from ..auth import get_current_user
 from ..chat_intents import route_chat_message
+from ..source_classification import count_source_classes
 from ..visibility import (
     serialize_agent_session,
     serialize_agent_stats,
@@ -279,9 +280,38 @@ async def get_session(
         live_state = agent_loop.get_state(session_id)
         if live_state:
             session['live_state'] = live_state
-    return serialize_agent_session(
+    serialized = serialize_agent_session(
         session, steps=steps, live_state=session.get('live_state'), role=current_user['role']
     )
+    visible_steps = serialized.get("steps")
+    if isinstance(visible_steps, list):
+        raw_steps_by_id = {
+            raw_step.get("id"): raw_step
+            for raw_step in steps
+            if isinstance(raw_step, dict) and raw_step.get("id") is not None
+        }
+        for visible_step in visible_steps:
+            if (
+                not isinstance(visible_step, dict)
+                or visible_step.get("id") is None
+            ):
+                continue
+            raw_step = raw_steps_by_id.get(visible_step.get("id"))
+            if (
+                not isinstance(raw_step, dict)
+                or raw_step.get("step_type") != "tool_call"
+                or raw_step.get("tool_name") != "investigate_ioc"
+            ):
+                continue
+            safe_result = serialize_result_payload(
+                raw_step.get("tool_result"), current_user["role"]
+            )
+            safe_sources = safe_result.get("sources")
+            if isinstance(safe_sources, dict):
+                visible_step["source_counts"] = count_source_classes(
+                    safe_sources, safe_result.get("score_breakdown")
+                )
+    return serialized
 
 
 @router.post('/sessions/{session_id}/approve')
